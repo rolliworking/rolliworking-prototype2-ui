@@ -1,0 +1,89 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: rollisuite-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rollisuite
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: rollisuite
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/rollisuite-api/prisma/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rollisuite"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for caching & job queues)
+  redis:
+    image: redis:7-alpine
+    container_name: rollisuite-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend API (development)
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/rollisuite-api/Dockerfile
+  #   container_name: rollisuite-api
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     NODE_ENV: development
+  #     DATABASE_URL: postgresql://rollisuite:password@postgres:5432/rollisuite?schema=public
+  #     REDIS_URL: redis://redis:6379
+  #   volumes:
+  #     - ./apps/rollisuite-api:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   command: yarn dev
+
+  # Frontend (development)
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/rollisuite-web/Dockerfile
+  #   container_name: rollisuite-web
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     NODE_ENV: development
+  #     VITE_API_URL: http://localhost:8001
+  #   volumes:
+  #     - ./apps/rollisuite-web:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - api
+  #   command: yarn dev
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: rollisuite-network

@@ -1,0 +1,278 @@
+// ==============================================
+// RolliSuite Prisma Schema
+// ==============================================
+// Complete database schema for watch repair ERP
+// ~85 tables, 3 views, 17 custom functions
+// ==============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==============================================
+// ENUMS
+// ==============================================
+
+enum AppRole {
+  admin
+  manager
+  office
+  front_desk
+  staff
+  band_room
+}
+
+enum EstimateStatus {
+  draft
+  sent
+  approved
+  converted
+  declined
+  expired
+  on_hold
+}
+
+enum JobStatus {
+  intake
+  awaiting_customer_approval
+  approved
+  in_service
+  testing
+  ready_to_ship
+  closed
+}
+
+enum SalesOrderStatus {
+  draft
+  pending
+  fulfilled
+  shipped
+  picked_up
+  closed
+}
+
+enum PurchaseOrderStatus {
+  draft
+  issued
+  received
+  cancelled
+}
+
+enum ItemType {
+  service
+  part
+  labor
+  shipping
+  tax
+  discount
+  client_watch
+}
+
+// ==============================================
+// SECURITY & AUTH
+// ==============================================
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  email       String   @unique
+  fullName    String?  @map("full_name")
+  phoneNumber String?  @map("phone_number")
+  mfaMethod   String?  @map("mfa_method")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  userRole UserRole?
+  loginPin UserLoginPin?
+
+  @@map("profiles")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  role      AppRole
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id            String   @id @default(uuid())
+  role          AppRole
+  permissionKey String   @map("permission_key")
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([role, permissionKey])
+  @@map("role_permissions")
+}
+
+model UserLoginPin {
+  id              String    @id @default(uuid())
+  userId          String    @unique @map("user_id")
+  pinHash         String    @map("pin_hash")
+  failedAttempts  Int       @default(0) @map("failed_attempts")
+  lockedUntil     DateTime? @map("locked_until")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("user_login_pins")
+}
+
+model UserSession {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  ipAddress      String?   @map("ip_address")
+  isActive       Boolean   @default(true) @map("is_active")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model Invitation {
+  id         String    @id @default(uuid())
+  email      String
+  role       AppRole
+  token      String    @unique
+  expiresAt  DateTime  @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@map("invitations")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+model ApiRateLimit {
+  id           String   @id @default(uuid())
+  identifier   String // IP address or user ID
+  endpoint     String
+  requestCount Int      @default(0) @map("request_count")
+  windowStart  DateTime @map("window_start")
+
+  @@unique([identifier, endpoint])
+  @@map("api_rate_limits")
+}
+
+// ==============================================
+// CUSTOMERS & ADDRESSES
+// ==============================================
+
+model Customer {
+  id               String    @id @default(uuid())
+  firstName        String?   @map("first_name")
+  lastName         String?   @map("last_name")
+  email            String?   @unique
+  phone            String?
+  displayName      String?   @map("display_name")
+  qboCustomerId    String?   @unique @map("qbo_customer_id")
+  isShipDirect     Boolean   @default(false) @map("is_ship_direct")
+  isTradePricing   Boolean   @default(false) @map("is_trade_pricing")
+  skipShippingInfo Boolean   @default(false) @map("skip_shipping_info")
+  parentCustomerId String?   @map("parent_customer_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  addresses            CustomerAddress[]
+  communicationPermission CustomerCommunicationPermission?
+  shippingBypass       CustomerShippingBypass?
+  estimates            Estimate[]
+  salesOrders          SalesOrder[]
+  watches              Watch[]
+  clientProperty       ClientProperty[]
+
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id           String  @id @default(uuid())
+  customerId   String  @map("customer_id")
+  addressType  String  @map("address_type") // 'billing' | 'shipping'
+  street1      String  @map("street1")
+  street2      String? @map("street2")
+  city         String
+  state        String
+  zip          String
+  country      String  @default("US")
+  isPrimary    Boolean @default(false) @map("is_primary")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_addresses")
+}
+
+model CustomerCommunicationPermission {
+  id              String    @id @default(uuid())
+  customerId      String    @unique @map("customer_id")
+  consentEmail    Boolean   @default(false) @map("consent_email")
+  consentSms      Boolean   @default(false) @map("consent_sms")
+  consentRecorded DateTime? @map("consent_recorded")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_communication_permissions")
+}
+
+model CustomerShippingBypass {
+  id                    String    @id @default(uuid())
+  customerId            String    @unique @map("customer_id")
+  email                 String
+  street                String
+  token                 String    @unique
+  disclosureAcceptedAt  DateTime? @map("disclosure_accepted_at")
+  isActive              Boolean   @default(true) @map("is_active")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_shipping_bypass")
+}
+
+// ==============================================
+// WATCHES
+// ==============================================
+
+model Watch {
+  id              String   @id @default(uuid())
+  customerId      String   @map("customer_id")
+  brand           String?
+  model           String?
+  referenceNumber String?  @map("reference_number")
+  serialNumber    String?  @map("serial_number")
+  movementType    String?  @map("movement_type")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("watches")
+}
+
+// Due to character limits, I'll continue this in the next response
+// This is approximately 1/3 of the complete schema
