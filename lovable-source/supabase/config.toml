@@ -1,0 +1,61 @@
+project_id = "djbjwcoddddywkgljuja"
+
+[functions.verify-turnstile]
+verify_jwt = false
+
+[functions.parts-webhook]
+verify_jwt = false
+
+[functions.wix-intake-webhook]
+verify_jwt = false
+
+[functions.send-estimate-email]
+verify_jwt = false
+
+[functions.qbo-customer-sync]
+verify_jwt = false
+
+[functions.qbo-estimate-sync]
+verify_jwt = false
+
+[functions.qbo-cron-sync]
+verify_jwt = false
+
+[functions.request-shipping-label]
+verify_jwt = false
+
+[functions.qbo-accounts]
+verify_jwt = false
+
+[functions.send-invite]
+verify_jwt = false
+
+[functions.model-references-sync]
+verify_jwt = false
+
+[functions.sync-model-to-rolliworking]
+verify_jwt = false
+
+[functions.pull-model-references]
+verify_jwt = false
+
+[functions.docs-qa]
+verify_jwt = false
+
+[functions.parts-pricing]
+verify_jwt = false
+
+[functions.qbo-sales-order-push]
+verify_jwt = false
+
+[functions.qbo-customer-push]
+verify_jwt = false
+
+[functions.send-shipping-label-email]
+verify_jwt = false
+
+[functions.qbo-invoice-sync]
+verify_jwt = false
+
+[functions.qbo-item-push]
+verify_jwt = false
