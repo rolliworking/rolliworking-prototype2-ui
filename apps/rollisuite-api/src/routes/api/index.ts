@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { authRoutes } from '../../modules/auth';
 import { qboRoutes } from '../../modules/qbo';
 import { customersRoutes } from '../../modules/customers';
 import { estimatesRoutes } from '../../modules/estimates';
@@ -12,13 +13,16 @@ export default async function apiRoutes(server: FastifyInstance) {
     return { message: 'API routes working', timestamp: new Date().toISOString() };
   });
   
-  // Core CRUD APIs
+  // Authentication (public routes)
+  await server.register(authRoutes, { prefix: '/auth' });
+  
+  // Core CRUD APIs (authenticated)
   await server.register(customersRoutes, { prefix: '/customers' });
   await server.register(estimatesRoutes, { prefix: '/estimates' });
   await server.register(salesOrdersRoutes, { prefix: '/sales-orders' });
   await server.register(jobsRoutes, { prefix: '/jobs' });
   
-  // QuickBooks Online Integration
+  // QuickBooks Online Integration (authenticated)
   await server.register(qboRoutes, { prefix: '/qbo' });
   
   // TODO: Register additional API route modules
