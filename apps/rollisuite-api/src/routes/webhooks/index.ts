@@ -1,15 +1,17 @@
 import { FastifyInstance } from 'fastify';
+import rolliWorkingWebhooks from './rolliworking';
 
 export default async function webhookRoutes(server: FastifyInstance) {
-  // External webhook endpoints (authenticated via API keys)
+  // External webhook endpoints (authenticated via API keys or signatures)
   
   server.post('/test', async (request, reply) => {
-    return { message: 'Webhook routes working' };
+    return { message: 'Webhook routes working', timestamp: new Date().toISOString() };
   });
   
-  // TODO: Register all webhook route modules
-  // await server.register(qboWebhooks, { prefix: '/qbo' });
-  // await server.register(rwWebhooks, { prefix: '/rw' });
+  // RolliWorking webhooks (8 event types)
+  await server.register(rolliWorkingWebhooks, { prefix: '/rw' });
+  
+  // TODO: Register additional webhook handlers
   // await server.register(wixWebhooks, { prefix: '/wix' });
   // await server.register(partsWebhooks, { prefix: '/parts' });
 }
