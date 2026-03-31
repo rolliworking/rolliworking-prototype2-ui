@@ -36,7 +36,8 @@ services:
       timeout: 3s
       retries: 5
 
-  # Backend API (development)
+  # Backend API (development) - Commented out for local dev
+  # Uncomment when using Docker for backend
   # api:
   #   build:
   #     context: .
@@ -59,7 +60,8 @@ services:
   #       condition: service_healthy
   #   command: yarn dev
 
-  # Frontend (development)
+  # Frontend (development) - Commented out for local dev
+  # Uncomment when using Docker for frontend
   # web:
   #   build:
   #     context: .
