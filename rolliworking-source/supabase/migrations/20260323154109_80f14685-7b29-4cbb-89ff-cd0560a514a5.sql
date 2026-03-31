@@ -1,0 +1,1 @@
+UPDATE inspection_questions SET required_for_submission = true WHERE key = 'Q4';

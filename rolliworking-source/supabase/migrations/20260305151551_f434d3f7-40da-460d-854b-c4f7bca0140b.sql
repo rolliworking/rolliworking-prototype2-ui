@@ -1,0 +1,1 @@
+ALTER TABLE public.approval_read_status DROP CONSTRAINT IF EXISTS approval_read_status_approval_id_fkey;

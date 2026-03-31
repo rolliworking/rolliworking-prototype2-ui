@@ -1,0 +1,1 @@
+ALTER TABLE public.inspection_approvals ADD COLUMN client_notes text DEFAULT NULL;

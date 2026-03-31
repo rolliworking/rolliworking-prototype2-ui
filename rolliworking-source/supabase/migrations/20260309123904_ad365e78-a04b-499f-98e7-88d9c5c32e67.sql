@@ -1,0 +1,1 @@
+ALTER TABLE public.inspection_approvals ADD COLUMN confirmation_sent_at timestamp with time zone DEFAULT NULL;

@@ -1,0 +1,70 @@
+project_id = "pkgnrcfqrldwjibghefm"
+
+[functions.manage-users]
+verify_jwt = true
+
+[functions.get-waiver]
+verify_jwt = false
+
+[functions.sign-waiver]
+verify_jwt = false
+
+[functions.rollisuite-intake]
+verify_jwt = false
+
+[functions.rollisuite-sync]
+verify_jwt = false
+
+[functions.rollisuite-webhook]
+verify_jwt = false
+
+[functions.rollisuite-model-sync]
+verify_jwt = false
+
+[functions.rollisuite-part-allocation]
+verify_jwt = false
+
+[functions.rollisuite-price-lookup]
+verify_jwt = false
+
+[functions.rollisuite-job-finished]
+verify_jwt = false
+
+[functions.security]
+verify_jwt = false
+
+[functions.job-status]
+verify_jwt = false
+
+[functions.rollisuite-status-push]
+verify_jwt = false
+ 
+[functions.rollisuite-parts-approved]
+verify_jwt = false
+ 
+ [functions.job-status-update]
+ verify_jwt = false
+
+[functions.get-inspection-approval]
+verify_jwt = false
+
+[functions.submit-inspection-approval]
+verify_jwt = false
+
+[functions.hit-list]
+verify_jwt = false
+
+[functions.hit-list-push]
+verify_jwt = false
+
+[functions.rollisuite-customer-sync]
+verify_jwt = false
+
+[functions.ai-assistant]
+verify_jwt = false
+
+[functions.scanner-upload]
+verify_jwt = false
+
+[functions.rollisuite-watchmaker-assign]
+verify_jwt = false
