@@ -16,6 +16,7 @@ import JobDetailPage from './pages/JobDetailPage';
 import JobFormPage from './pages/JobFormPage';
 import SalesOrdersPage from './pages/SalesOrdersPage';
 import SalesOrderDetailPage from './pages/SalesOrderDetailPage';
+import SalesOrderFormPage from './pages/SalesOrderFormPage';
 
 function App() {
   return (
@@ -42,8 +43,9 @@ function App() {
           <Route path="/jobs/:id" element={<JobDetailPage />} />
           <Route path="/jobs/:id/edit" element={<JobFormPage />} />
           <Route path="/sales-orders" element={<SalesOrdersPage />} />
+          <Route path="/sales-orders/new" element={<SalesOrderFormPage />} />
           <Route path="/sales-orders/:id" element={<SalesOrderDetailPage />} />
-          {/* Enhanced features coming next */}
+          <Route path="/sales-orders/:id/edit" element={<SalesOrderFormPage />} />
         </Route>
       </Routes>
     </AuthProvider>
