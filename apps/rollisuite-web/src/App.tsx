@@ -20,6 +20,9 @@ import SalesOrderFormPage from './pages/SalesOrderFormPage';
 import WatchesPage from './pages/WatchesPage';
 import WatchDetailPage from './pages/WatchDetailPage';
 import WatchFormPage from './pages/WatchFormPage';
+import PartsPage from './pages/PartsPage';
+import PartDetailPage from './pages/PartDetailPage';
+import PartFormPage from './pages/PartFormPage';
 
 function App() {
   return (
@@ -53,6 +56,10 @@ function App() {
           <Route path="/watches/new" element={<WatchFormPage />} />
           <Route path="/watches/:id" element={<WatchDetailPage />} />
           <Route path="/watches/:id/edit" element={<WatchFormPage />} />
+          <Route path="/parts" element={<PartsPage />} />
+          <Route path="/parts/new" element={<PartFormPage />} />
+          <Route path="/parts/:id" element={<PartDetailPage />} />
+          <Route path="/parts/:id/edit" element={<PartFormPage />} />
         </Route>
       </Routes>
     </AuthProvider>

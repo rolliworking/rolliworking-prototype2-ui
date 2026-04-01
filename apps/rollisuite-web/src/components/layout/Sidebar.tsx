@@ -19,7 +19,7 @@ const navigation = [
   { name: 'Jobs', href: '/jobs', icon: Briefcase },
   { name: 'Sales Orders', href: '/sales-orders', icon: ShoppingCart },
   { name: 'Watches', href: '/watches', icon: Watch },
-  { name: 'Parts & Inventory', href: '/inventory', icon: Package },
+  { name: 'Parts & Inventory', href: '/parts', icon: Package },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
