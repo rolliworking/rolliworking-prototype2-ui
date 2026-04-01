@@ -6,6 +6,8 @@ import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import CustomersPage from './pages/CustomersPage';
+import CustomerDetailPage from './pages/CustomerDetailPage';
+import CustomerFormPage from './pages/CustomerFormPage';
 
 function App() {
   return (
@@ -20,7 +22,10 @@ function App() {
         }>
           <Route path="/" element={<Dashboard />} />
           <Route path="/customers" element={<CustomersPage />} />
-          {/* More routes will be added in Day 3-5 */}
+          <Route path="/customers/new" element={<CustomerFormPage />} />
+          <Route path="/customers/:id" element={<CustomerDetailPage />} />
+          <Route path="/customers/:id/edit" element={<CustomerFormPage />} />
+          {/* More routes will be added later */}
         </Route>
       </Routes>
     </AuthProvider>
