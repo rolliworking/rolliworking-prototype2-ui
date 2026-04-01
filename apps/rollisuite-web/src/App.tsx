@@ -17,6 +17,9 @@ import JobFormPage from './pages/JobFormPage';
 import SalesOrdersPage from './pages/SalesOrdersPage';
 import SalesOrderDetailPage from './pages/SalesOrderDetailPage';
 import SalesOrderFormPage from './pages/SalesOrderFormPage';
+import WatchesPage from './pages/WatchesPage';
+import WatchDetailPage from './pages/WatchDetailPage';
+import WatchFormPage from './pages/WatchFormPage';
 
 function App() {
   return (
@@ -46,6 +49,10 @@ function App() {
           <Route path="/sales-orders/new" element={<SalesOrderFormPage />} />
           <Route path="/sales-orders/:id" element={<SalesOrderDetailPage />} />
           <Route path="/sales-orders/:id/edit" element={<SalesOrderFormPage />} />
+          <Route path="/watches" element={<WatchesPage />} />
+          <Route path="/watches/new" element={<WatchFormPage />} />
+          <Route path="/watches/:id" element={<WatchDetailPage />} />
+          <Route path="/watches/:id/edit" element={<WatchFormPage />} />
         </Route>
       </Routes>
     </AuthProvider>
