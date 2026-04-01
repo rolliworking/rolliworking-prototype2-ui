@@ -10,6 +10,7 @@ import CustomerDetailPage from './pages/CustomerDetailPage';
 import CustomerFormPage from './pages/CustomerFormPage';
 import EstimatesPage from './pages/EstimatesPage';
 import EstimateDetailPage from './pages/EstimateDetailPage';
+import EstimateFormPage from './pages/EstimateFormPage';
 
 function App() {
   return (
@@ -28,7 +29,9 @@ function App() {
           <Route path="/customers/:id" element={<CustomerDetailPage />} />
           <Route path="/customers/:id/edit" element={<CustomerFormPage />} />
           <Route path="/estimates" element={<EstimatesPage />} />
+          <Route path="/estimates/new" element={<EstimateFormPage />} />
           <Route path="/estimates/:id" element={<EstimateDetailPage />} />
+          <Route path="/estimates/:id/edit" element={<EstimateFormPage />} />
           {/* More routes will be added later */}
         </Route>
       </Routes>
