@@ -109,8 +109,8 @@ export default async function customersRoutes(server: FastifyInstance) {
       const query = request.query as any;
       const filters = {
         search: query.search,
-        isShipDirect: query.isShipDirect === 'true',
-        isTradePricing: query.isTradePricing === 'true',
+        isShipDirect: query.isShipDirect === 'true' ? true : query.isShipDirect === 'false' ? false : undefined,
+        isTradePricing: query.isTradePricing === 'true' ? true : query.isTradePricing === 'false' ? false : undefined,
         page: parseInt(query.page || '1'),
         perPage: parseInt(query.perPage || '50'),
       };
