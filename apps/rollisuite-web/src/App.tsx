@@ -11,6 +11,8 @@ import CustomerFormPage from './pages/CustomerFormPage';
 import EstimatesPage from './pages/EstimatesPage';
 import EstimateDetailPage from './pages/EstimateDetailPage';
 import EstimateFormPage from './pages/EstimateFormPage';
+import JobsPage from './pages/JobsPage';
+import JobDetailPage from './pages/JobDetailPage';
 
 function App() {
   return (
@@ -32,7 +34,9 @@ function App() {
           <Route path="/estimates/new" element={<EstimateFormPage />} />
           <Route path="/estimates/:id" element={<EstimateDetailPage />} />
           <Route path="/estimates/:id/edit" element={<EstimateFormPage />} />
-          {/* More routes will be added later */}
+          <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/jobs/:id" element={<JobDetailPage />} />
+          {/* Sales Orders & more coming next */}
         </Route>
       </Routes>
     </AuthProvider>
