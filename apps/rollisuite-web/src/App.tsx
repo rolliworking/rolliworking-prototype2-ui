@@ -1,31 +1,31 @@
-import { Routes, Route } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import AppLayout from './components/layout/AppLayout';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import CustomersPage from './pages/CustomersPage';
 
 function App() {
   return (
-    <div className="min-h-screen bg-background">
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        {/* TODO: Add all 112 routes */}
-      </Routes>
-    </div>
-  );
-}
-
-function HomePage() {
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">
-          🔧 RolliSuite ERP
-        </h1>
-        <p className="text-muted-foreground">
-          Watch Repair Shop Management System
-        </p>
-        <p className="mt-4 text-sm text-muted-foreground">
-          Frontend scaffold ready. Start building! 🚀
-        </p>
-      </div>
-    </div>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            {/* More routes will be added in Day 3-5 */}
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 
