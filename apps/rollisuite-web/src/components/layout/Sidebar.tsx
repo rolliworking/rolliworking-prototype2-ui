@@ -6,7 +6,9 @@ import {
   FileText, 
   Briefcase, 
   ShoppingCart,
+  Watch,
   Package,
+  BarChart3,
   Settings
 } from 'lucide-react';
 
@@ -16,7 +18,9 @@ const navigation = [
   { name: 'Estimates', href: '/estimates', icon: FileText },
   { name: 'Jobs', href: '/jobs', icon: Briefcase },
   { name: 'Sales Orders', href: '/sales-orders', icon: ShoppingCart },
-  { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'Watches', href: '/watches', icon: Watch },
+  { name: 'Parts & Inventory', href: '/inventory', icon: Package },
+  { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
