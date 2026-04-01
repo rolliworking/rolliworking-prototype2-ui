@@ -8,6 +8,7 @@ import { jobsRoutes } from '../../modules/jobs';
 import { dailyHitListRoutes } from '../../modules/daily-hit-list';
 import { dashboardRoutes } from '../../modules/dashboard';
 import watchesRoutes from '../../modules/watches';
+import partsRoutes from '../../modules/parts';
 
 export default async function apiRoutes(server: FastifyInstance) {
   // Internal API routes (authenticated)
@@ -29,6 +30,7 @@ export default async function apiRoutes(server: FastifyInstance) {
   await server.register(salesOrdersRoutes, { prefix: '/sales-orders' });
   await server.register(jobsRoutes, { prefix: '/jobs' });
   await server.register(watchesRoutes, { prefix: '/v1/watches' });
+  await server.register(partsRoutes, { prefix: '/v1/parts' });
   
   // QuickBooks Online Integration (authenticated)
   await server.register(qboRoutes, { prefix: '/qbo' });
