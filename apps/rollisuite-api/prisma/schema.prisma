@@ -248,6 +248,18 @@ model CacheStore {
   @@map("cache_store")
 }
 
+model DailyHitList {
+  id          String   @id @default(uuid())
+  date        DateTime @db.Date
+  generatedAt DateTime @default(now()) @map("generated_at")
+  items       Json     // Array of { jobId, estimateNumber, priority, reason, dueDate }
+  metadata    Json?    // { totalJobs, urgentCount, overdueCount }
+
+  @@unique([date])
+  @@index([date])
+  @@map("daily_hit_lists")
+}
+
 model JobQueue {
   id         String   @id @default(uuid())
   jobType    String   @map("job_type")
@@ -539,13 +551,29 @@ model SalesOrder {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  job         Job?     @relation(fields: [jobId], references: [id])
-  lineItems   SoLine[]
+  customer      Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  job           Job?            @relation(fields: [jobId], references: [id])
+  lineItems     SoLine[]
+  tcAcceptances TcAcceptance[]
 
   @@index([status])
   @@index([customerId])
   @@map("sales_orders")
+}
+
+model TcAcceptance {
+  id            String   @id @default(uuid())
+  salesOrderId  String   @map("sales_order_id")
+  customerEmail String   @map("customer_email")
+  ipAddress     String   @map("ip_address")
+  userAgent     String   @map("user_agent")
+  tcVersion     String   @map("tc_version") @default("1.0")
+  acceptedAt    DateTime @default(now()) @map("accepted_at")
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  @@index([salesOrderId])
+  @@map("tc_acceptances")
 }
 
 model SoLine {

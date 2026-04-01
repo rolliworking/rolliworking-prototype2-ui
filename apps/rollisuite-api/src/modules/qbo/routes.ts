@@ -1,5 +1,6 @@
 // QuickBooks Online Routes
 import { FastifyInstance } from 'fastify';
+import crypto from 'crypto';
 import {
   getAuthorizationUrl,
   exchangeCodeForTokens,
@@ -9,6 +10,31 @@ import { pushCustomerToQbo } from './customers';
 import { pushSalesOrderToQbo, syncInvoiceStatus } from './invoices';
 import { config } from '../../config';
 import { authenticateJWT, requireRole } from '../../middleware/auth';
+
+/**
+ * Verify QuickBooks webhook signature
+ * QBO uses HMAC-SHA256 with the webhook verifier token
+ */
+function verifyQBOWebhookSignature(
+  payload: string,
+  signature: string,
+  verifierToken: string
+): boolean {
+  try {
+    const hmac = crypto.createHmac('sha256', verifierToken);
+    hmac.update(payload);
+    const expectedSignature = hmac.digest('base64');
+    
+    // Use timing-safe comparison to prevent timing attacks
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch (error) {
+    console.error('[QBO] Signature verification error:', error);
+    return false;
+  }
+}
 
 export default async function qboRoutes(server: FastifyInstance) {
   // OAuth2 Flow - Initiate
@@ -155,10 +181,29 @@ export default async function qboRoutes(server: FastifyInstance) {
   // Payment Webhook (from QuickBooks)
   server.post('/webhook/payment', async (request, reply) => {
     try {
-      // TODO: Verify webhook signature using QBO_WEBHOOK_VERIFIER_TOKEN
+      // Verify webhook signature
+      const signature = request.headers['intuit-signature'] as string;
+      const rawPayload = JSON.stringify(request.body);
+      
+      if (!signature) {
+        console.error('[QBO Webhook] Missing signature header');
+        return reply.status(401).send({ error: 'Missing signature' });
+      }
+      
+      const isValid = verifyQBOWebhookSignature(
+        rawPayload,
+        signature,
+        config.qbo.webhookVerifierToken
+      );
+      
+      if (!isValid) {
+        console.error('[QBO Webhook] Invalid signature');
+        return reply.status(401).send({ error: 'Invalid signature' });
+      }
+      
       const payload = request.body as any;
 
-      console.log('[QBO Webhook] Payment received:', payload);
+      console.log('[QBO Webhook] Payment received (verified):', payload);
 
       // Extract invoice IDs from webhook
       const invoiceIds = payload.eventNotifications?.map(
