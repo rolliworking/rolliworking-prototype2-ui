@@ -32,7 +32,7 @@ async function start() {
   try {
     // Register plugins
     await server.register(cors, {
-      origin: config.webUrl,
+      origin: [config.webUrl, config.webUrlProduction],
       credentials: true,
     });
 

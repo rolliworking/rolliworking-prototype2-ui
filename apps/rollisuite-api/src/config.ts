@@ -9,6 +9,7 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
   apiPort: parseInt(process.env.API_PORT || '8001', 10),
   webUrl: process.env.WEB_URL || 'http://localhost:3000',
+  webUrlProduction: process.env.WEB_URL_PRODUCTION || 'https://YOUR-WEB.up.railway.app',
   apiUrl: process.env.API_URL || 'http://localhost:8001',
 
   // Database
@@ -47,7 +48,7 @@ export const config = {
   // RolliWorking
   rolliworking: {
     apiKey: process.env.ROLLIWORKING_API_KEY!,
-    rollisuite ApiKey: process.env.ROLLISUITE_API_KEY!,
+    rollisuiteApiKey: process.env.ROLLISUITE_API_KEY!,
     baseUrl:
       process.env.ROLLIWORKING_BASE_URL ||
       'https://pkgnrcfqrldwjibghefm.supabase.co/functions/v1',

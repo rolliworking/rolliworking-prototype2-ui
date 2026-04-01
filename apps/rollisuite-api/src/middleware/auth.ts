@@ -128,3 +128,6 @@ export async function verifyIP(
     return reply.status(500).send({ error: 'Internal server error' });
   }
 }
+
+// Export authenticateJWT as authenticate for convenience
+export const authenticate = authenticateJWT;

@@ -241,4 +241,93 @@ export default async function rolliWorkingWebhooks(server: FastifyInstance) {
         },
       });
 
-      return reply.send({\n        success: true,\n        message: 'Hit list cached',\n        itemCount: items.length,\n      });\n    } catch (error: any) {\n      console.error('[RW Webhook] Hit list error:', error);\n      return reply.status(500).send({ error: error.message });\n    }\n  });\n\n  // 7. Inspection Completed\n  server.post('/inspection', async (request, reply) => {\n    try {\n      const event = request.body as WebhookEvent<InspectionEvent>;\n      const { jobId, inspectionType, notes } = event.payload;\n\n      console.log('[RW Webhook] Inspection:', jobId, inspectionType);\n\n      await logWebhook(EVENT_TYPES.INSPECTION_COMPLETED, event.payload);\n\n      // Log inspection activity\n      const job = await prisma.job.findFirst({\n        where: { jobId },\n      });\n\n      if (job) {\n        await prisma.jobActivityLog.create({\n          data: {\n            jobId: job.id,\n            userId: event.payload.performedBy || 'system',\n            action: `inspection_${inspectionType}`,\n            details: notes,\n          },\n        });\n      }\n\n      return reply.send({ success: true, message: 'Inspection recorded' });\n    } catch (error: any) {\n      console.error('[RW Webhook] Inspection error:', error);\n      return reply.status(500).send({ error: error.message });\n    }\n  });\n\n  // 8. Test Completed\n  server.post('/test', async (request, reply) => {\n    try {\n      const event = request.body as WebhookEvent<TestResultsEvent>;\n      const { jobId, testType, passed, results } = event.payload;\n\n      console.log('[RW Webhook] Test:', jobId, testType, passed ? 'PASS' : 'FAIL');\n\n      await logWebhook(EVENT_TYPES.TEST_COMPLETED, event.payload);\n\n      const job = await prisma.job.findFirst({\n        where: { jobId },\n      });\n\n      if (job) {\n        // Store test results\n        if (testType === 'timing' && results.timing) {\n          await prisma.timingTest.create({\n            data: {\n              jobId: job.id,\n              position: results.timing.position,\n              rate: results.timing.rate,\n              beatError: results.timing.beatError,\n              amplitude: results.timing.amplitude,\n              performedBy: event.payload.performedBy || 'system',\n            },\n          });\n        } else if (testType === 'pressure' && results.pressure) {\n          await prisma.pressureTest.create({\n            data: {\n              jobId: job.id,\n              pressure: results.pressure.pressure,\n              result: results.pressure.result,\n              performedBy: event.payload.performedBy || 'system',\n            },\n          });\n        }\n      }\n\n      return reply.send({ success: true, message: 'Test results recorded' });\n    } catch (error: any) {\n      console.error('[RW Webhook] Test error:', error);\n      return reply.status(500).send({ error: error.message });\n    }\n  });\n}\n
+      return reply.send({
+        success: true,
+        message: 'Hit list cached',
+        itemCount: items.length,
+      });
+    } catch (error: any) {
+      console.error('[RW Webhook] Hit list error:', error);
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+
+  // 7. Inspection Completed
+  server.post('/inspection', async (request, reply) => {
+    try {
+      const event = request.body as WebhookEvent<InspectionEvent>;
+      const { jobId, inspectionType, notes } = event.payload;
+
+      console.log('[RW Webhook] Inspection:', jobId, inspectionType);
+
+      await logWebhook(EVENT_TYPES.INSPECTION_COMPLETED, event.payload);
+
+      // Log inspection activity
+      const job = await prisma.job.findFirst({
+        where: { jobId },
+      });
+
+      if (job) {
+        await prisma.jobActivityLog.create({
+          data: {
+            jobId: job.id,
+            userId: event.payload.performedBy || 'system',
+            action: `inspection_${inspectionType}`,
+            details: notes,
+          },
+        });
+      }
+
+      return reply.send({ success: true, message: 'Inspection recorded' });
+    } catch (error: any) {
+      console.error('[RW Webhook] Inspection error:', error);
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+
+  // 8. Test Completed
+  server.post('/test', async (request, reply) => {
+    try {
+      const event = request.body as WebhookEvent<TestResultsEvent>;
+      const { jobId, testType, passed, results } = event.payload;
+
+      console.log('[RW Webhook] Test:', jobId, testType, passed ? 'PASS' : 'FAIL');
+
+      await logWebhook(EVENT_TYPES.TEST_COMPLETED, event.payload);
+
+      const job = await prisma.job.findFirst({
+        where: { jobId },
+      });
+
+      if (job) {
+        // Store test results
+        if (testType === 'timing' && results.timing) {
+          await prisma.timingTest.create({
+            data: {
+              jobId: job.id,
+              position: results.timing.position,
+              rate: results.timing.rate,
+              beatError: results.timing.beatError,
+              amplitude: results.timing.amplitude,
+              performedBy: event.payload.performedBy || 'system',
+            },
+          });
+        } else if (testType === 'pressure' && results.pressure) {
+          await prisma.pressureTest.create({
+            data: {
+              jobId: job.id,
+              pressure: results.pressure.pressure,
+              result: results.pressure.result,
+              performedBy: event.payload.performedBy || 'system',
+            },
+          });
+        }
+      }
+
+      return reply.send({ success: true, message: 'Test results recorded' });
+    } catch (error: any) {
+      console.error('[RW Webhook] Test error:', error);
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+}

@@ -5,6 +5,8 @@ import { customersRoutes } from '../../modules/customers';
 import { estimatesRoutes } from '../../modules/estimates';
 import { salesOrdersRoutes } from '../../modules/sales-orders';
 import { jobsRoutes } from '../../modules/jobs';
+import { dailyHitListRoutes } from '../../modules/daily-hit-list';
+import { dashboardRoutes } from '../../modules/dashboard';
 
 export default async function apiRoutes(server: FastifyInstance) {
   // Internal API routes (authenticated)
@@ -15,6 +17,10 @@ export default async function apiRoutes(server: FastifyInstance) {
   
   // Authentication (public routes)
   await server.register(authRoutes, { prefix: '/auth' });
+  
+  // Dashboard & Daily Hit List
+  await server.register(dashboardRoutes, { prefix: '/v1/dashboard' });
+  await server.register(dailyHitListRoutes, { prefix: '/v1/daily-hit-list' });
   
   // Core CRUD APIs (authenticated)
   await server.register(customersRoutes, { prefix: '/customers' });
