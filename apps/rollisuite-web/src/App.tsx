@@ -13,6 +13,8 @@ import EstimateDetailPage from './pages/EstimateDetailPage';
 import EstimateFormPage from './pages/EstimateFormPage';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
+import SalesOrdersPage from './pages/SalesOrdersPage';
+import SalesOrderDetailPage from './pages/SalesOrderDetailPage';
 
 function App() {
   return (
@@ -36,7 +38,9 @@ function App() {
           <Route path="/estimates/:id/edit" element={<EstimateFormPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<JobDetailPage />} />
-          {/* Sales Orders & more coming next */}
+          <Route path="/sales-orders" element={<SalesOrdersPage />} />
+          <Route path="/sales-orders/:id" element={<SalesOrderDetailPage />} />
+          {/* Enhanced features coming next */}
         </Route>
       </Routes>
     </AuthProvider>
