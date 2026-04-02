@@ -24,6 +24,8 @@ import PartsPage from './pages/PartsPage';
 import PartDetailPage from './pages/PartDetailPage';
 import PartFormPage from './pages/PartFormPage';
 import WaitlistPage from './pages/WaitlistPage';
+import WaitlistDetailPage from './pages/WaitlistDetailPage';
+import WaitlistFormPage from './pages/WaitlistFormPage';
 
 function App() {
   return (
@@ -62,6 +64,9 @@ function App() {
           <Route path="/parts/:id" element={<PartDetailPage />} />
           <Route path="/parts/:id/edit" element={<PartFormPage />} />
           <Route path="/waitlist" element={<WaitlistPage />} />
+          <Route path="/waitlist/new" element={<WaitlistFormPage />} />
+          <Route path="/waitlist/:id" element={<WaitlistDetailPage />} />
+          <Route path="/waitlist/:id/edit" element={<WaitlistFormPage />} />
         </Route>
       </Routes>
     </AuthProvider>
