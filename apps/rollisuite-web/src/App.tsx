@@ -30,6 +30,7 @@ import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import EmailTemplateFormPage from './pages/EmailTemplateFormPage';
 import JobTemplatesPage from './pages/JobTemplatesPage';
 import JobTemplateFormPage from './pages/JobTemplateFormPage';
+import ReportsPage from './pages/ReportsPage';
 
 function App() {
   return (
@@ -77,6 +78,7 @@ function App() {
           <Route path="/job-templates" element={<JobTemplatesPage />} />
           <Route path="/job-templates/new" element={<JobTemplateFormPage />} />
           <Route path="/job-templates/:id/edit" element={<JobTemplateFormPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
         </Route>
       </Routes>
     </AuthProvider>
