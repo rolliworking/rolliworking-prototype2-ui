@@ -13,6 +13,7 @@ import { notificationsRoutes } from '../../modules/notifications/routes';
 import { waitlistRoutes } from '../../modules/waitlist';
 import { emailTemplatesRoutes } from '../../modules/email-templates';
 import { jobTemplatesRoutes } from '../../modules/job-templates';
+import { reportsRoutes } from '../../modules/reports';
 
 export default async function apiRoutes(server: FastifyInstance) {
   // Internal API routes (authenticated)
@@ -38,6 +39,7 @@ export default async function apiRoutes(server: FastifyInstance) {
   await server.register(waitlistRoutes, { prefix: '/v1/waitlist' });
   await server.register(emailTemplatesRoutes, { prefix: '/v1/email-templates' });
   await server.register(jobTemplatesRoutes, { prefix: '/v1/job-templates' });
+  await server.register(reportsRoutes, { prefix: '/v1/reports' });
   
   // QuickBooks Online Integration (authenticated)
   await server.register(qboRoutes, { prefix: '/qbo' });
