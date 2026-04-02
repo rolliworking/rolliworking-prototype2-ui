@@ -28,6 +28,8 @@ import WaitlistDetailPage from './pages/WaitlistDetailPage';
 import WaitlistFormPage from './pages/WaitlistFormPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import EmailTemplateFormPage from './pages/EmailTemplateFormPage';
+import JobTemplatesPage from './pages/JobTemplatesPage';
+import JobTemplateFormPage from './pages/JobTemplateFormPage';
 
 function App() {
   return (
@@ -72,6 +74,9 @@ function App() {
           <Route path="/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/email-templates/new" element={<EmailTemplateFormPage />} />
           <Route path="/email-templates/:id" element={<EmailTemplateFormPage />} />
+          <Route path="/job-templates" element={<JobTemplatesPage />} />
+          <Route path="/job-templates/new" element={<JobTemplateFormPage />} />
+          <Route path="/job-templates/:id/edit" element={<JobTemplateFormPage />} />
         </Route>
       </Routes>
     </AuthProvider>
