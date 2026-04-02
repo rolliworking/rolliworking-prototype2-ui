@@ -154,6 +154,16 @@ enum WaitlistStatus {
   cancelled
 }
 
+enum PhotoType {
+  intake
+  during_service
+  completed
+  damage
+  before
+  after
+  reference
+}
+
 // ==============================================
 // SECURITY & AUTH
 // ==============================================
@@ -317,6 +327,7 @@ model Customer {
   clientProperty    ClientProperty[]
   appraisals        Appraisal[]
   waitlistEntries   Waitlist[]
+  inspectionPhotos  InspectionPhoto[]
 
   @@index([emailNormalized])
   @@index([phoneNormalized])
@@ -374,8 +385,33 @@ model Watch {
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   jobs     Job[]
+  inspectionPhotos InspectionPhoto[]
 
   @@map("watches")
+}
+
+model InspectionPhoto {
+  id          String   @id @default(uuid())
+  watchId     String?  @map("watch_id")
+  jobId       String?  @map("job_id")
+  customerId  String?  @map("customer_id")
+  fileName    String   @map("file_name")
+  filePath    String   @map("file_path")
+  fileSize    Int      @map("file_size")
+  mimeType    String   @map("mime_type")
+  photoType   PhotoType @default(intake) @map("photo_type")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  watch    Watch?    @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  job      Job?      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([watchId])
+  @@index([jobId])
+  @@index([customerId])
+  @@map("inspection_photos")
 }
 
 model ClientProperty {
@@ -426,6 +462,7 @@ model Job {
   timingTests    TimingTest[]
   pressureTests  PressureTest[]
   salesOrders    SalesOrder[]
+  inspectionPhotos InspectionPhoto[]
 
   @@map("jobs")
 }
