@@ -1349,6 +1349,35 @@ model ReceivedWebhookEvent {
 }
 
 // ==============================================
+// NOTIFICATION TEMPLATES
+// ==============================================
+
+model EmailTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  subject     String
+  htmlBody    String   @map("html_body")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("email_templates")
+}
+
+model SmsTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  message     String
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("sms_templates")
+}
+
+// ==============================================
 // DATABASE FUNCTIONS (Implemented in raw SQL)
 // ==============================================
 

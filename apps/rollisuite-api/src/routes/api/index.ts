@@ -9,6 +9,7 @@ import { dailyHitListRoutes } from '../../modules/daily-hit-list';
 import { dashboardRoutes } from '../../modules/dashboard';
 import watchesRoutes from '../../modules/watches';
 import partsRoutes from '../../modules/parts';
+import { notificationsRoutes } from '../../modules/notifications/routes';
 
 export default async function apiRoutes(server: FastifyInstance) {
   // Internal API routes (authenticated)
@@ -34,6 +35,9 @@ export default async function apiRoutes(server: FastifyInstance) {
   
   // QuickBooks Online Integration (authenticated)
   await server.register(qboRoutes, { prefix: '/qbo' });
+  
+  // Notifications (Email/SMS)
+  await server.register(notificationsRoutes, { prefix: '/v1/notifications' });
   
   // TODO: Register additional API route modules
   // await server.register(inventoryRoutes, { prefix: '/inventory' });
