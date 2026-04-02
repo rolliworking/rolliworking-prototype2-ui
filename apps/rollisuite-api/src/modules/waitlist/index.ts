@@ -1,0 +1,1 @@
+export { waitlistRoutes } from './routes';

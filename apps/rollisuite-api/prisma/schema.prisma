@@ -145,6 +145,15 @@ enum ReceivedWebhookStatus {
   failed
 }
 
+enum WaitlistStatus {
+  waiting
+  contacted
+  scheduled
+  converted
+  declined
+  cancelled
+}
+
 // ==============================================
 // SECURITY & AUTH
 // ==============================================
@@ -307,6 +316,7 @@ model Customer {
   communicationPermission CustomerCommunicationPermission?
   clientProperty    ClientProperty[]
   appraisals        Appraisal[]
+  waitlistEntries   Waitlist[]
 
   @@index([emailNormalized])
   @@index([phoneNormalized])
@@ -1191,11 +1201,31 @@ model Settings {
 }
 
 model Waitlist {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  notes     String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String        @id @default(uuid())
+  customerId     String?       @map("customer_id")
+  firstName      String        @map("first_name")
+  lastName       String        @map("last_name")
+  email          String
+  phone          String?
+  brand          String?       // Watch brand they're interested in
+  model          String?       // Watch model
+  serviceType    ServiceType?  @map("service_type")
+  priority       PriorityLevel @default(normal)
+  status         WaitlistStatus @default(waiting)
+  estimatedValue Decimal?      @map("estimated_value") @db.Decimal(10, 2)
+  notes          String?
+  contactedAt    DateTime?     @map("contacted_at")
+  convertedAt    DateTime?     @map("converted_at")
+  convertedToId  String?       @map("converted_to_id") // Job/Estimate ID
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([priority])
+  @@index([customerId])
+  @@index([email])
   @@map("waitlist")
 }
 

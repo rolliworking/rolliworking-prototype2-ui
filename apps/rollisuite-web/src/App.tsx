@@ -23,6 +23,7 @@ import WatchFormPage from './pages/WatchFormPage';
 import PartsPage from './pages/PartsPage';
 import PartDetailPage from './pages/PartDetailPage';
 import PartFormPage from './pages/PartFormPage';
+import WaitlistPage from './pages/WaitlistPage';
 
 function App() {
   return (
@@ -60,6 +61,7 @@ function App() {
           <Route path="/parts/new" element={<PartFormPage />} />
           <Route path="/parts/:id" element={<PartDetailPage />} />
           <Route path="/parts/:id/edit" element={<PartFormPage />} />
+          <Route path="/waitlist" element={<WaitlistPage />} />
         </Route>
       </Routes>
     </AuthProvider>
