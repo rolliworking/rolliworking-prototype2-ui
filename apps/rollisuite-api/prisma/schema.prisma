@@ -430,6 +430,24 @@ model Job {
   @@map("jobs")
 }
 
+model JobTemplate {
+  id               String        @id @default(uuid())
+  name             String        @unique
+  description      String?
+  serviceType      ServiceType?  @map("service_type")
+  priority         PriorityLevel @default(normal)
+  estimatedDays    Int?          @map("estimated_days")
+  defaultPrice     Decimal?      @map("default_price") @db.Decimal(12, 2)
+  intakeNotes      String?       @map("intake_notes")
+  conditionNotes   String?       @map("condition_notes")
+  instructions     String?
+  isActive         Boolean       @default(true) @map("is_active")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@map("job_templates")
+}
+
 model JobStatusHistory {
   id         String     @id @default(uuid())
   jobId      String     @map("job_id")

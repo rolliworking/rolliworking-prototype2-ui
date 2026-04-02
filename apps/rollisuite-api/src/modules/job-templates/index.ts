@@ -1,0 +1,1 @@
+export { jobTemplatesRoutes } from './routes';
