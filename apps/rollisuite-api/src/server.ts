@@ -2,7 +2,9 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
+import staticFiles from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
+import path from 'path';
 import { config } from './config';
 import { prisma } from './db/client';
 import { initializeCronJobs } from './cron';
@@ -49,6 +51,12 @@ async function start() {
     await server.register(rateLimit, {
       max: config.rateLimitMaxRequests,
       timeWindow: config.rateLimitWindowMs,
+    });
+
+    // Serve static files (uploaded photos)
+    await server.register(staticFiles, {
+      root: path.join(process.cwd(), 'uploads'),
+      prefix: '/uploads/',
     });
 
     // Register routes

@@ -14,6 +14,7 @@ import { waitlistRoutes } from '../../modules/waitlist';
 import { emailTemplatesRoutes } from '../../modules/email-templates';
 import { jobTemplatesRoutes } from '../../modules/job-templates';
 import { reportsRoutes } from '../../modules/reports';
+import { inspectionPhotosRoutes } from '../../modules/inspection-photos';
 
 export default async function apiRoutes(server: FastifyInstance) {
   // Internal API routes (authenticated)
@@ -40,6 +41,7 @@ export default async function apiRoutes(server: FastifyInstance) {
   await server.register(emailTemplatesRoutes, { prefix: '/v1/email-templates' });
   await server.register(jobTemplatesRoutes, { prefix: '/v1/job-templates' });
   await server.register(reportsRoutes, { prefix: '/v1/reports' });
+  await server.register(inspectionPhotosRoutes, { prefix: '/v1/inspection-photos' });
   
   // QuickBooks Online Integration (authenticated)
   await server.register(qboRoutes, { prefix: '/qbo' });
