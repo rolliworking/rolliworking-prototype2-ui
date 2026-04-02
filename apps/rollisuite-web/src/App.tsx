@@ -26,6 +26,8 @@ import PartFormPage from './pages/PartFormPage';
 import WaitlistPage from './pages/WaitlistPage';
 import WaitlistDetailPage from './pages/WaitlistDetailPage';
 import WaitlistFormPage from './pages/WaitlistFormPage';
+import EmailTemplatesPage from './pages/EmailTemplatesPage';
+import EmailTemplateFormPage from './pages/EmailTemplateFormPage';
 
 function App() {
   return (
@@ -67,6 +69,9 @@ function App() {
           <Route path="/waitlist/new" element={<WaitlistFormPage />} />
           <Route path="/waitlist/:id" element={<WaitlistDetailPage />} />
           <Route path="/waitlist/:id/edit" element={<WaitlistFormPage />} />
+          <Route path="/email-templates" element={<EmailTemplatesPage />} />
+          <Route path="/email-templates/new" element={<EmailTemplateFormPage />} />
+          <Route path="/email-templates/:id" element={<EmailTemplateFormPage />} />
         </Route>
       </Routes>
     </AuthProvider>
