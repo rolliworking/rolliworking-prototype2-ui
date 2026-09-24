@@ -10,7 +10,7 @@ import { useHitHighlight } from '@/hooks/useHitHighlight';
 // Client 360 — the screen that answers the phone. Everything about one client, newest first, every row a link.
 export default function Client360Page() {
   const { id = '' } = useParams();
-  const { data, loading } = useAsync(() => api.getClient360(id), [id]);
+  const { data, loading, reload } = useAsync(() => api.getClient360(id), [id]);
   useHitHighlight(!loading && !!data);
 
   if (loading) return <div className="text-xs text-ink-400" data-testid="client360-loading">Loading client…</div>;
@@ -33,7 +33,7 @@ export default function Client360Page() {
           <InvoicesSection salesOrders={data.salesOrders} payments={data.payments} />
         </div>
         <div className="col-span-12 space-y-4 xl:col-span-5">
-          <RequestsSection requests={data.requests} watches={data.watches} />
+          <RequestsSection requests={data.requests} watches={data.watches} reload={reload} />
           <NotesTasksSection notes={data.notes} tasks={data.tasks} />
           <CustodySection custody={data.custody} />
           <EmailsSection emails={data.emails} />

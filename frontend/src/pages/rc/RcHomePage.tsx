@@ -5,6 +5,7 @@ import type { NeedsYouKind, PortalWatch } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
+import { RcRequestsCard } from './RcRequestsCard';
 
 const NY_ICON: Record<NeedsYouKind, LucideIcon> = { approve_estimate: FileCheck2, pay_balance: CreditCard, confirm_pickup: PackageCheck, shipping_info: MapPin, staff_reply: MessageCircle };
 
@@ -34,7 +35,7 @@ const WatchRow = ({ pw }: { pw: PortalWatch }) => {
 
 export default function RcHomePage() {
   const { client } = useRcSession();
-  const { data } = useAsync(() => api.portalGetHome(client!.id), [client!.id]);
+  const { data, reload } = useAsync(() => api.portalGetHome(client!.id), [client!.id]);
   if (!data) return null;
   const active = data.watches.filter((w) => w.status.active);
   const rest = data.watches.filter((w) => !w.status.active);
@@ -69,6 +70,8 @@ export default function RcHomePage() {
           <p className="text-[15px] text-rc-muted">We’ll list anything that needs a decision or a detail from you here.</p>
         )}
       </RcCard>
+
+      <RcRequestsCard requests={data.requests} reload={reload} />
 
       <section className="space-y-4" data-testid="rc-watches">
         <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Your watches</div>

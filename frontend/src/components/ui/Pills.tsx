@@ -39,6 +39,9 @@ const TONE: Record<string, string> = {
   shipped: 'bg-slate-100 text-slate-600',
   released: 'bg-slate-100 text-slate-500',
   expected: 'bg-slate-100 text-slate-500',
+  closed_by_client: 'bg-slate-100 text-slate-500',
+  quoted: 'bg-brand-50 text-brand',
+  new: 'bg-amber-50 text-amber-800',
   // packages
   arrived: 'bg-amber-50 text-amber-800',
   processed: 'bg-brand-50 text-brand',
@@ -48,6 +51,7 @@ const TONE: Record<string, string> = {
 };
 
 const LABEL: Record<string, string> = {
+  closed_by_client: 'Closed by client',
   qc: 'QC',
   testing: 'Testing / QC',
   ready_to_ship: 'Ready to ship',

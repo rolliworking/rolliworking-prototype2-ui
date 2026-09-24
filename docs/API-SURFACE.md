@@ -165,6 +165,9 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `portalGetInvoice` / `portalPayBalance` | `SalesOrderWithRefs` | pay = full balance, card, stub note |
 | `portalConfirmPickupWindow(clientId, soId, date, slot, note?)` | `SalesOrderWithRefs` | sets `pickupWindow`, creates concierge task |
 | `portalSubmitShippingInfo(clientId, soId, address, phone)` | `SalesOrderWithRefs` | via `setShippingAddress`; phone appended to memo |
+| `portalCloseRequest(clientId, requestId, reason, duplicateOfId?)` | `PortalRequest` | only `new` requests; duplicate needs a sibling request |
+| `closeRequest(id, reason, note?, duplicateOfId?)` | `ServiceRequest` | staff; any open status; never deletes |
+| `REQUEST_CLOSE_REASONS` | lookup | duplicate · no_longer_needed · mistake |
 | `portalGetMessages(clientId)` / `portalSendMessage(clientId, text, watchId?)` | `Message[]` / `Message` | reading marks staff replies read |
 | `getStaffInbox()` / `getStaffInboxUnread()` / `markThreadRead(clientId)` / `replyToClient(clientId, text, watchId?)` | threads / number / void / `Message` | staff side; reply queues Outbox email |
 | `PORTAL_STATUS` | lookup | 14 plain-language statuses (label, blurb, active) |

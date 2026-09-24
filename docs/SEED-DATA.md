@@ -129,7 +129,8 @@ Search smoke identifiers: `Naomi`, `naomi.castellanos`, `555-0110`, `E01040`, `E
 | Eleanor Vance c-02 | eleanor.vance@example.com | **awaiting approval** | Needs you: approve/decline E01042 (rev 2, $2,850). Daytona = "Waiting for your approval". Approve → estimate approved + j-11 E02021 → approved → "Queued for the bench" |
 | Harrison Whitfield c-01 | harrison.whitfield@example.com | **on the bench** | Submariner = "On the bench" (j-01 in_service, ETA due), unread staff reply msg-02 in Needs you; 3 documents, 15 history rows |
 | Grace Nakamura c-14 | grace.nakamura@example.com | **ready for pickup** | Tudor Chrono = "Ready for pickup"; Needs you: pay $470 balance on SO-26-0103 (now $1,000 of $1,470 paid), choose pickup window; unread client message msg-03 in staff Inbox |
-Messages seeded: msg-01/02 (c-01), msg-03 (c-14, unread by staff). `e-12 E01052` is now a **draft** (was sent).
+Messages seeded: msg-01/02 (c-01), msg-03 (c-14, unread by staff).
+Requests for portal close (E8-4): Harrison rq-06 RQ-26-0044 (new, call) + rq-07 RQ-26-0045 (new, web — closable as duplicate of rq-06); Grace rq-08 RQ-26-0038 (quoted → message-us only) + rq-09 RQ-26-0037 (staff-closed duplicate of rq-08, folded). `e-12 E01052` is now a **draft** (was sent).
 
 ## Testing honesty notes
 - Numbers, names and dates are fabricated; no real customer data.

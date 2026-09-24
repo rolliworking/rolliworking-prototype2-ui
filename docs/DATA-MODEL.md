@@ -141,7 +141,8 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 | id, number | string | `RQ-26-nnnn` |
 | clientId, watchId? | ref | |
 | source | `call \| email \| web \| walk_in` | lookup, not enum in spirit |
-| status | `new \| quoted \| closed` | quoted = estimateId set |
+| status | `new \| quoted \| closed \| closed_by_client` | quoted = estimateId set |
+| closedBy?, closeReason?, duplicateOfId? | `staff \| client`, `duplicate \| no_longer_needed \| mistake`, ref | E8-4 |
 | summary | string | the ask, in the client's words |
 | estimateId? | ref | |
 | createdAt/By, station, closedAt?, closedNote? | Stamp-ish | |

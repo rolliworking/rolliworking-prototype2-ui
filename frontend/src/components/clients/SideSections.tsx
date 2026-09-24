@@ -1,7 +1,8 @@
 import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, Globe, Mail, PackageCheck, PauseCircle, Phone, PlayCircle, ShieldAlert, Truck, User, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
+import * as api from '@/api/client';
 import { Link } from 'react-router-dom';
-import type { Client360, CustodyKind, RequestSource } from '@/api/client';
+import type { Client360, CustodyKind, RequestCloseReason, RequestSource, ServiceRequest } from '@/api/client';
 import { assigneeLabel } from '@/api/client';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
@@ -11,14 +12,37 @@ const when = (iso: string) => { const d = new Date(iso); const y = d.getFullYear
 
 const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User };
 
-export const RequestsSection = ({ requests, watches }: { requests: Client360['requests']; watches: Client360['watches'] }) => (
-  <Card title="Requests" subtitle={`${requests.filter((r) => r.status !== 'closed').length} open · call / email / web / walk-in`} bodyClassName="p-0" testId="client360-requests">
+const StaffClose = ({ r, all, onDone }: { r: ServiceRequest; all: ServiceRequest[]; onDone: () => void }) => {
+  const [reason, setReason] = useState<RequestCloseReason>('no_longer_needed');
+  const [dup, setDup] = useState('');
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => { setErr(null); try { await api.closeRequest(r.id, reason, note, dup || undefined); onDone(); } catch (ex) { setErr(ex instanceof Error ? ex.message : 'Failed'); } };
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-sm bg-canvas p-2" data-testid={`request-close-form-${r.id}`}>
+      <select data-testid={`request-close-reason-${r.id}`} value={reason} onChange={(e) => setReason(e.target.value as RequestCloseReason)} className="h-7 rounded-sm border border-line bg-surface px-1.5 text-xs">{api.REQUEST_CLOSE_REASONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>
+      {reason === 'duplicate' && <select data-testid={`request-close-dup-${r.id}`} value={dup} onChange={(e) => setDup(e.target.value)} className="h-7 rounded-sm border border-line bg-surface px-1.5 text-xs"><option value="">Duplicate of…</option>{all.filter((x) => x.id !== r.id).map((x) => <option key={x.id} value={x.id}>{x.number}</option>)}</select>}
+      <input data-testid={`request-close-note-${r.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-7 flex-1 min-w-[120px] rounded-sm border border-line bg-surface px-1.5 text-xs" />
+      <button type="button" data-testid={`request-close-confirm-${r.id}`} onClick={submit} className="h-7 rounded-sm bg-ink px-2 text-xs font-medium text-white">Close</button>
+      <button type="button" data-testid={`request-close-cancel-${r.id}`} onClick={onDone} className="h-7 px-2 text-xs text-ink-500">Cancel</button>
+      {err && <span className="text-xs text-rose-700">{err}</span>}
+    </div>
+  );
+};
+
+const isOpenReq = (r: ServiceRequest) => r.status === 'new' || r.status === 'quoted';
+
+export const RequestsSection = ({ requests, watches, reload }: { requests: Client360['requests']; watches: Client360['watches']; reload?: () => void }) => {
+  const [closing, setClosing] = useState<string | null>(null);
+  return (
+  <Card title="Requests" subtitle={`${requests.filter(isOpenReq).length} open · call / email / web / walk-in · closed ones are kept, never deleted`} bodyClassName="p-0" testId="client360-requests">
     <ul className="divide-y divide-line/60">
       {requests.map((r) => {
         const Icon = SOURCE_ICON[r.source];
         const w = r.watchId ? watches.find((g) => g.watch.id === r.watchId)?.watch : undefined;
+        const dupOf = r.duplicateOfId ? requests.find((x) => x.id === r.duplicateOfId) : undefined;
         return (
-          <li key={r.id} data-hit={`req-${r.id}`} data-testid={`client360-request-${r.id}`} className="px-3 py-2 text-xs transition-colors hover:bg-canvas">
+          <li key={r.id} data-hit={`req-${r.id}`} data-testid={`client360-request-${r.id}`} className={`px-3 py-2 text-xs transition-colors hover:bg-canvas ${isOpenReq(r) ? '' : 'opacity-70'}`}>
             <div className="flex items-center gap-2">
               <Icon size={12} className="shrink-0 text-ink-400" />
               <span className="font-mono text-[11px] font-medium text-ink">{r.number}</span>
@@ -30,15 +54,18 @@ export const RequestsSection = ({ requests, watches }: { requests: Client360['re
             <div className="mt-0.5 flex gap-3 text-[11px] text-ink-400">
               <span>{r.source.replace('_', '-')} · {r.createdBy}</span>
               {r.estimateId && <Link to={`/estimates/${r.estimateId}`} className="text-brand hover:underline" data-testid={`request-estimate-link-${r.id}`}>→ estimate</Link>}
-              {r.closedNote && <span>{r.closedNote}</span>}
+              {r.closedNote && <span data-testid={`request-closed-note-${r.id}`}>{r.closedBy === 'client' ? 'Client closed via RolliConnect' : 'Closed by staff'}{r.closedAt ? ` ${fmtDate(r.closedAt)}` : ''} · {r.closedNote}{dupOf && !r.closedNote.includes(dupOf.number) ? ` (${dupOf.number})` : ''}</span>}
+              {isOpenReq(r) && reload && closing !== r.id && <button type="button" data-testid={`request-close-${r.id}`} onClick={() => setClosing(r.id)} className="ml-auto text-ink-400 hover:text-rose-700">Close…</button>}
             </div>
+            {closing === r.id && reload && <StaffClose r={r} all={requests} onDone={() => { setClosing(null); reload(); }} />}
           </li>
         );
       })}
       {requests.length === 0 && <li className="px-3 py-4 text-center text-xs text-ink-400">No requests on file.</li>}
     </ul>
   </Card>
-);
+  );
+};
 
 export const NotesTasksSection = ({ notes, tasks }: { notes: Client360['notes']; tasks: Client360['tasks'] }) => (
   <Card title="Notes & tasks" subtitle={`${tasks.filter((t) => t.status === 'open').length} open tasks · ${notes.length} notes`} bodyClassName="p-0" testId="client360-notes-tasks">

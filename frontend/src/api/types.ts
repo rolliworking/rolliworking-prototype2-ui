@@ -628,7 +628,8 @@ export interface FloorMap { lanes: { key: FloorLane; label: string; jobs: JobWit
 // ---- E7 Client 360 ---------------------------------------------------------------
 
 export type RequestSource = 'call' | 'email' | 'web' | 'walk_in';
-export type RequestStatus = 'new' | 'quoted' | 'closed';
+export type RequestStatus = 'new' | 'quoted' | 'closed' | 'closed_by_client';
+export type RequestCloseReason = 'duplicate' | 'no_longer_needed' | 'mistake';
 
 export interface ServiceRequest {
   id: string;
@@ -644,6 +645,9 @@ export interface ServiceRequest {
   station: string;
   closedAt?: string;
   closedNote?: string;
+  closedBy?: 'staff' | 'client';
+  closeReason?: RequestCloseReason;
+  duplicateOfId?: string;
 }
 
 export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request';
@@ -787,6 +791,7 @@ export interface PortalWatch {
   documents: PortalDocument[];
 }
 
-export interface PortalHome { client: Client; needsYou: NeedsYouItem[]; watches: PortalWatch[]; unreadMessages: number }
+export interface PortalRequest { request: ServiceRequest; statusLabel: string; canClose: boolean; watch?: Watch; duplicateOf?: ServiceRequest }
+export interface PortalHome { client: Client; needsYou: NeedsYouItem[]; watches: PortalWatch[]; requests: PortalRequest[]; unreadMessages: number }
 
 export interface StaffInboxThread { client: Client; messages: Message[]; unread: number; lastAt: string; watch?: Watch }

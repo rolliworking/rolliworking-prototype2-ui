@@ -11,7 +11,10 @@ const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'sh
 export default function RcMessagesPage() {
   const { client } = useRcSession();
   const [params] = useSearchParams();
-  const watchId = params.get('watch') ?? undefined;
+  const requestId = params.get('request') ?? undefined;
+  const { data: home } = useAsync(() => api.portalGetHome(client!.id), []);
+  const req = requestId ? home?.requests.find((r) => r.request.id === requestId)?.request : undefined;
+  const watchId = params.get('watch') ?? req?.watchId ?? undefined;
   const { data: msgs, reload } = useAsync(() => api.portalGetMessages(client!.id), []);
   const { data: watches } = useAsync(() => api.getWatchesForClient(client!.id), []);
   const [text, setText] = useState('');
@@ -23,7 +26,8 @@ export default function RcMessagesPage() {
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    try { await api.portalSendMessage(client!.id, text, watchId); setText(''); reload(); } catch (ex) { setErr(ex instanceof Error ? ex.message : 'Something went wrong'); }
+    const body = req && !text.startsWith(`Re ${req.number}`) ? `Re ${req.number}: ${text}` : text;
+    try { await api.portalSendMessage(client!.id, body, watchId); setText(''); reload(); } catch (ex) { setErr(ex instanceof Error ? ex.message : 'Something went wrong'); }
   };
 
   return (
@@ -46,7 +50,7 @@ export default function RcMessagesPage() {
         </ol>
         <div ref={endRef} />
         <form onSubmit={send} className="mt-6 border-t border-rc-line pt-4">
-          {watch && <div className="mb-2 text-xs text-rc-muted" data-testid="rc-message-context">About your {watch.brand} {watch.model}</div>}
+          {(watch || req) && <div className="mb-2 text-xs text-rc-muted" data-testid="rc-message-context">About {req ? `request ${req.number}` : ''}{req && watch ? ' · ' : ''}{watch ? `your ${watch.brand} ${watch.model}` : ''}</div>}
           <div className="flex gap-2">
             <textarea data-testid="rc-message-input" value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Write to our team…" className="flex-1 resize-none rounded-md border border-rc-line bg-white px-3 py-2 text-[15px] focus:border-rc-accent focus:outline-none focus:ring-2 focus:ring-rc-accent/20" />
             <RcButton type="submit" data-testid="rc-message-send" disabled={!text.trim()}><Send size={15} /> Send</RcButton>

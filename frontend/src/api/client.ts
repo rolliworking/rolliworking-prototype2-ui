@@ -63,6 +63,7 @@ import type {
   Watch,
   WatchMatch,
   ServiceRequest,
+  RequestStatus,
   SearchHit,
   SearchGroup,
   SearchResults,
@@ -73,6 +74,8 @@ import type {
   ClientNoteRow,
   Client360,
   ClientDirectoryRow,
+  RequestCloseReason,
+  PortalRequest,
   MagicLink,
   Message,
   NeedsYouItem,
@@ -2154,7 +2157,7 @@ export async function getClient360(clientId: string): Promise<Client360 | null> 
     lifetimeSpend: payments.reduce((t, p) => t + p.amount, 0),
     openEstimates: estimates.filter((e) => e.status === 'draft' || e.status === 'sent' || e.status === 'approved').length,
     activeJobs: jobs.filter(isActiveJob).length,
-    openRequests: requests.filter((r) => r.status !== 'closed').length,
+    openRequests: requests.filter((r) => r.status === 'new' || r.status === 'quoted').length,
     openTasks: tasks.filter((t) => t.status === 'open').length,
     lastContactAt,
   };
@@ -2200,7 +2203,8 @@ type RcEvent =
   | { t: 'ship'; clientId: string; id: string; address: Address; phone: string }
   | { t: 'msg'; clientId: string; text: string; watchId?: string }
   | { t: 'reply'; clientId: string; text: string; watchId?: string; by: string }
-  | { t: 'read'; clientId: string; side: 'client' | 'staff' };
+  | { t: 'read'; clientId: string; side: 'client' | 'staff' }
+  | { t: 'closereq'; clientId: string; id: string; reason: RequestCloseReason; duplicateOfId?: string };
 const recordRcEvent = (ev: RcEvent) => { if (!replaying) writeJson(KEYS.rcEvents, [...readJson<RcEvent[]>(KEYS.rcEvents, []), ev]); };
 export function replayRcEvents(): number {
   const events = readJson<RcEvent[]>(KEYS.rcEvents, []);
@@ -2216,6 +2220,7 @@ export function replayRcEvents(): number {
         else if (ev.t === 'msg') void portalSendMessage(ev.clientId, ev.text, ev.watchId);
         else if (ev.t === 'reply') void replyToClient(ev.clientId, ev.text, ev.watchId, ev.by);
         else if (ev.t === 'read') void (ev.side === 'client' ? portalGetMessages(ev.clientId) : markThreadRead(ev.clientId));
+        else if (ev.t === 'closereq') void portalCloseRequest(ev.clientId, ev.id, ev.reason, ev.duplicateOfId);
       } catch { /* stale event against reset fixtures — ignore */ }
     });
   } finally {
@@ -2371,10 +2376,61 @@ const needsYouFor = (clientId: string, watches: PortalWatch[]): NeedsYouItem[] =
   return items.sort((a, b) => b.at.localeCompare(a.at));
 };
 
+export const REQUEST_CLOSE_REASONS: { key: RequestCloseReason; label: string }[] = [
+  { key: 'duplicate', label: 'Duplicate of another request' },
+  { key: 'no_longer_needed', label: 'No longer needed' },
+  { key: 'mistake', label: 'Submitted by mistake' },
+];
+const REQUEST_PLAIN: Record<RequestStatus, string> = { new: 'Received — we’re reviewing it', quoted: 'Quoted — see your estimate', closed: 'Closed by our team', closed_by_client: 'Closed by you' };
+const isRequestOpen = (r: ServiceRequest) => r.status === 'new' || r.status === 'quoted';
+
+// Client may close only their own, still-early (not yet quoted) requests; quoted-or-later is staff-only
+const portalRequestsFor = (clientId: string): PortalRequest[] =>
+  store.requests.filter((r) => r.clientId === clientId).sort((a, b) => Number(isRequestOpen(b)) - Number(isRequestOpen(a)) || b.createdAt.localeCompare(a.createdAt)).map((r) => ({
+    request: r,
+    statusLabel: REQUEST_PLAIN[r.status],
+    canClose: r.status === 'new',
+    watch: r.watchId ? store.watches.find((w) => w.id === r.watchId) : undefined,
+    duplicateOf: r.duplicateOfId ? store.requests.find((x) => x.id === r.duplicateOfId) : undefined,
+  }));
+
+export async function portalCloseRequest(clientId: string, id: string, reason: RequestCloseReason, duplicateOfId?: string): Promise<PortalRequest> {
+  const r = requireOwner(clientId, store.requests.find((x) => x.id === id), 'request');
+  if (r.status !== 'new') throw new Error('This request has already been quoted — message us and we’ll take care of it');
+  if (!REQUEST_CLOSE_REASONS.some((x) => x.key === reason)) throw new Error('Pick a reason');
+  let dup: ServiceRequest | undefined;
+  if (reason === 'duplicate') {
+    dup = store.requests.find((x) => x.id === duplicateOfId && x.clientId === clientId && x.id !== id);
+    if (!dup) throw new Error('Tell us which of your requests this duplicates');
+  }
+  recordRcEvent({ t: 'closereq', clientId, id, reason, duplicateOfId: dup?.id });
+  r.status = 'closed_by_client';
+  r.closedAt = new Date().toISOString();
+  r.closedBy = 'client';
+  r.closeReason = reason;
+  r.duplicateOfId = dup?.id;
+  r.closedNote = `${REQUEST_CLOSE_REASONS.find((x) => x.key === reason)!.label}${dup ? ` — ${dup.number}` : ''} · closed by client in RolliConnect`;
+  portalStamp(clientId, `Closed request ${r.number} · ${r.closedNote}`);
+  return resolve(portalRequestsFor(clientId).find((x) => x.request.id === id)!);
+}
+
+// Staff close — any open status, reason + optional note; never deletes
+export async function closeRequest(id: string, reason: RequestCloseReason, note?: string, duplicateOfId?: string): Promise<ServiceRequest> {
+  const r = byId(store.requests, id);
+  if (!isRequestOpen(r)) throw new Error('Request is already closed');
+  const dup = reason === 'duplicate' ? store.requests.find((x) => x.id === duplicateOfId && x.clientId === r.clientId && x.id !== id) : undefined;
+  if (reason === 'duplicate' && !dup) throw new Error('Pick which request it duplicates');
+  const a = actor();
+  r.status = 'closed'; r.closedAt = new Date().toISOString(); r.closedBy = 'staff'; r.closeReason = reason; r.duplicateOfId = dup?.id;
+  r.closedNote = `${REQUEST_CLOSE_REASONS.find((x) => x.key === reason)!.label}${dup ? ` of ${dup.number}` : ''}${note?.trim() ? ` · ${note.trim()}` : ''}`;
+  appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${r.number} · Request closed by staff · ${r.closedNote}` });
+  return resolve({ ...r });
+}
+
 export async function portalGetHome(clientId: string): Promise<PortalHome> {
   const client = byId(fx.clients, clientId);
   const watches = store.watches.filter((w) => w.clientId === clientId).map((w) => portalWatchFor(clientId, w)).sort((a, b) => Number(b.status.active) - Number(a.status.active) || b.watch.receivedAt.localeCompare(a.watch.receivedAt));
-  return resolve({ client, needsYou: needsYouFor(clientId, watches), watches, unreadMessages: store.messages.filter((m) => m.clientId === clientId && m.from === 'staff' && !m.readByClient).length });
+  return resolve({ client, needsYou: needsYouFor(clientId, watches), watches, requests: portalRequestsFor(clientId), unreadMessages: store.messages.filter((m) => m.clientId === clientId && m.from === 'staff' && !m.readByClient).length });
 }
 
 export async function portalGetWatch(clientId: string, watchId: string): Promise<PortalWatch> {
