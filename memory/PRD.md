@@ -42,6 +42,13 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
+## Implemented — E4+ Kind / Owner / Today / Tasks (2026-06) — tested via testing agent, iteration_8.json, all pass
+- `Job.kind` service | small_job | warranty (orthogonal to workflow/status). `JOB_KIND_CONFIG` lookup: label, defaultOwnerRole (small_job & warranty → concierge), skipStages (small_job skips awaiting_customer_approval — provisional). `legalJobActions` applies skips.
+- `Job.owner: Role` (accountable, role-based, resolved to holders via `roleHolders`) ≠ `Job.assignees: string[]` (working techs, toggle multi). "PM" reserved for precious-metals DeptCode. `User.roles[]` added (concierge/manager/inspector/watchmaker).
+- `/today` (nav "Today", pinned; /hit-list → redirect): DERIVED per-user view = owner-action jobs (intake/awaiting/ready_to_ship) + bench jobs assigned to me (approved/in_service/testing) + holds I own/placed + discrepancy packages (concierge role / flagging inspector) + open tasks to me or my roles. Dashboard panel shows same rows. Manual hit-list fixture removed.
+- Tasks (`fixtures/tasks.ts`, 10): title, assignedTo user|role, createdBy, optional job/watch/client link, due, open|done; "Send a task" form on /today; waiting-on list for creator; linked tasks on job timeline card; audit type 'task'.
+- Docs written for handoff: `/app/docs/{DATA-MODEL,STATE-MACHINES,API-SURFACE,DESIGN-PRINCIPLES,DECISIONS,SEED-DATA}.md` (P-17 flags: job_kind ✅, party roles ✅, telemetry ◐, portal grants ✗).
+
 ## Implemented — Session E4 Jobs (2026-06) — tested via testing agent, iteration_7.json, all pass
 Built to the user's PROMPT-PACK-jobs.md (pack wins over brief). Reconciliations & provisional (amber) items:
 - Status enum (DB): intake | in_review | awaiting_customer_approval | approved | in_service | testing | ready_to_ship | closed. Linear machine in `JOB_ACTIONS` (client.ts); only legal actions render as buttons (`legalJobActions`). Extra provisional action: in_review → approved "estimate pre-approved". Testing: qc_pass → ready_to_ship; qc_fail (reason required) → in_service.
@@ -91,7 +98,8 @@ Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Re
 - Daily Hit List page (owner filters, show-completed), Estimates & Jobs tables with status filter chips (?status=), Client detail page
 
 ## Backlog
-- P0: SESSION E5 Invoicing / Pickup — wire `invoiceJob` stub, pickup/ship flow from ready_to_ship, "Convert to invoice" estimate stub. Await user PROMPT-PACK-invoicing.md (pack wins).
+- P0: SESSION E5 Invoicing / Pickup — wire `invoiceJob` stub, pickup/ship flow from ready_to_ship, "Convert to invoice" estimate stub. Await user PROMPT-PACK-invoicing.md (pack wins). Keep /app/docs/*.md updated after each module.
+- P1: Portal grants (P-17 ✗), telemetry beyond who/when/station, tier-gated job actions, confirm per-kind skipStages with the user
 - P1: Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake/jobs store to localStorage, sales-order convert target
 - P1: Repoint `src/api/client.ts` at the real RolliSuite API (Fastify) when ready
 - P2: Inspection photos gallery mock, Reports charts, Sales/Purchasing/Inventory tables from fixtures
