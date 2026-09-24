@@ -111,18 +111,14 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
               {!noCamera && <Camera size={14} />}
               {busy ? 'Verifying…' : noCamera ? 'Sign in' : 'Sign in & capture photo'}
             </button>
-            <p className="mt-2 text-[11px] text-ink-400">
-              Prototype password: <span className="font-mono">{user.firstName}123</span>
-              {' · '}
-              <button
-                type="button"
-                data-testid="fill-prototype-password"
-                onClick={() => { setPassword(`${user.firstName}123`); setError(null); pwRef.current?.focus(); }}
-                className="underline hover:text-ink"
-              >
-                fill in
-              </button>
-            </p>
+            <button
+              type="button"
+              data-testid="fill-prototype-password"
+              onClick={() => { setPassword(`${user.firstName}123`); setError(null); setTimeout(() => pwRef.current?.focus(), 0); }}
+              className="mt-2 inline-flex w-full items-center justify-center rounded-sm border border-dashed border-ink-300 py-1.5 text-[11px] text-ink-500 hover:border-ink-500 hover:text-ink"
+            >
+              Prototype: click to fill password ({user.firstName}123)
+            </button>
           </div>
           {!noCamera && <CameraPreview videoRef={videoRef} status={status} />}
         </form>
