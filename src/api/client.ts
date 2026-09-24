@@ -33,13 +33,7 @@ export type ClientOptions = {
 };
 
 function envBase(): string | undefined {
-  try {
-    // Vite-style env when bundled; ignored under plain tsc/node.
-    const meta = import.meta as { env?: { VITE_PROTOTYPE_API_BASE?: string } };
-    return meta.env?.VITE_PROTOTYPE_API_BASE;
-  } catch {
-    return undefined;
-  }
+  return import.meta.env?.VITE_PROTOTYPE_API_BASE;
 }
 
 const DEFAULT_BASE = envBase() || "http://127.0.0.1:8787";
