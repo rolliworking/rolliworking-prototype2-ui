@@ -51,20 +51,20 @@ export const packages: Package[] = [
 
 export const outbox: OutboxEmail[] = [
   {
-    id: 'ob-01', to: 'richard.stavros@example.com', toName: 'Richard Stavros', relatedRef: 'SUB-26-0308 · EST-26-1051', status: 'pending',
-    subject: 'We’ve received your Tudor Pelagos — EST-26-1051',
-    body: 'Hello Richard,\n\nYour package arrived safely at RolliSuite today. We logged: watch head, bracelet, box.\n\nIt now moves to inspection, where we verify the watch against your estimate EST-26-1051 before any work begins. You’ll hear from us once inspection is complete.\n\nSub#: SUB-26-0308\n\n— The RolliSuite team',
+    id: 'ob-01', to: 'richard.stavros@example.com', toName: 'Richard Stavros', relatedRef: 'SUB-26-0308 · E01051', status: 'pending',
+    subject: 'We’ve received your Tudor Pelagos — E01051',
+    body: 'Hello Richard,\n\nYour package arrived safely at RolliSuite today. We logged: watch head, bracelet, box.\n\nIt now moves to inspection, where we verify the watch against your estimate E01051 before any work begins. You’ll hear from us once inspection is complete.\n\nSub#: SUB-26-0308\n\n— The RolliSuite team',
     createdAt: daysAgo(1, 17), createdBy: 'Vienna', station: 'Front Desk 1',
   },
   {
-    id: 'ob-02', to: 'j.okafor@example.com', toName: 'Jonathan Okafor', relatedRef: 'SUB-26-0309 · EST-26-1045', status: 'pending',
-    subject: 'We’ve received your Rolex Explorer — EST-26-1045',
-    body: 'Hello Jonathan,\n\nYour package arrived safely at RolliSuite today. We logged: watch head, papers.\n\nIt now moves to inspection, where we verify the watch against your estimate EST-26-1045 before any work begins.\n\nSub#: SUB-26-0309\n\n— The RolliSuite team',
+    id: 'ob-02', to: 'j.okafor@example.com', toName: 'Jonathan Okafor', relatedRef: 'SUB-26-0309 · E01045', status: 'pending',
+    subject: 'We’ve received your Rolex Explorer — E01045',
+    body: 'Hello Jonathan,\n\nYour package arrived safely at RolliSuite today. We logged: watch head, papers.\n\nIt now moves to inspection, where we verify the watch against your estimate E01045 before any work begins.\n\nSub#: SUB-26-0309\n\n— The RolliSuite team',
     createdAt: daysAgo(1, 17), createdBy: 'Vienna', station: 'Front Desk 1',
   },
 ];
 
 export const labels: LabelJob[] = [
-  { id: 'lb-01', type: 'pdf417_data', packageId: 'pk-09', estimateNumber: 'EST-26-1052', payload: 'EST-26-1052|SUB-26-0301|M79360N-0002|T6Q1W48V|B,P', lines: ['EST-26-1052', 'SUB-26-0301', 'Grace Nakamura', 'Workflow B · P'], createdAt: daysAgo(4, 10), createdBy: 'MH', station: 'Front Desk 1', printed: false },
-  { id: 'lb-02', type: 'ref_serial', packageId: 'pk-09', estimateNumber: 'EST-26-1052', payload: 'M79360N-0002 / T6Q1W48V', lines: ['Tudor Black Bay Chrono', 'Ref M79360N-0002', 'Serial T6Q1W48V'], createdAt: daysAgo(4, 10), createdBy: 'MH', station: 'Front Desk 1', printed: false },
+  { id: 'lb-01', type: 'pdf417_data', packageId: 'pk-09', estimateNumber: 'E01052', payload: 'E01052|SUB-26-0301|M79360N-0002|T6Q1W48V|B,P', lines: ['E01052', 'SUB-26-0301', 'Grace Nakamura', 'Workflow B · P'], createdAt: daysAgo(4, 10), createdBy: 'MH', station: 'Front Desk 1', printed: false },
+  { id: 'lb-02', type: 'ref_serial', packageId: 'pk-09', estimateNumber: 'E01052', payload: 'M79360N-0002 / T6Q1W48V', lines: ['Tudor Black Bay Chrono', 'Ref M79360N-0002', 'Serial T6Q1W48V'], createdAt: daysAgo(4, 10), createdBy: 'MH', station: 'Front Desk 1', printed: false },
 ];

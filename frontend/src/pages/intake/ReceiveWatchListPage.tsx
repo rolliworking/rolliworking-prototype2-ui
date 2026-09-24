@@ -30,7 +30,7 @@ export default function ReceiveWatchListPage() {
   return (
     <div data-testid="inspection-list-page" className="grid grid-cols-[380px_1fr] gap-4">
       <Card title="Scan estimate barcode" subtitle="Opens the Receive Watch screen pre-populated from upstream" testId="inspection-scan-card">
-        <ScanInput label="Estimate #" testId="inspection-scan-input" onScan={scan} error={error} placeholder="EST-26-1053 … then Enter" hint="Bins below: click a row is the same as scanning it" />
+        <ScanInput label="Estimate #" testId="inspection-scan-input" onScan={scan} error={error} placeholder="E01053 … then Enter" hint="Bins below: click a row is the same as scanning it" />
       </Card>
 
       <div className="space-y-4">
@@ -43,7 +43,7 @@ export default function ReceiveWatchListPage() {
                   <Td className="font-mono text-xs font-medium text-ink">{p.estimate?.number}</Td>
                   <Td className="font-mono text-xs text-ink-500">{p.subNumber}</Td>
                   <Td>{p.client ? fullName(p.client) : '—'}</Td>
-                  <Td>{p.estimate && <>{p.estimate.watch.brand} {p.estimate.watch.model} <span className="font-mono text-xs text-ink-400">{p.estimate.watch.reference}</span></>}</Td>
+                  <Td>{p.estimate?.watch && <>{p.estimate.watch.brand} {p.estimate.watch.model} <span className="font-mono text-xs text-ink-400">{p.estimate.watch.reference}</span></>}</Td>
                   <Td><span className="flex gap-1">{Array.from(new Set(p.estimate?.lines.map((l) => l.dept))).map((d) => <DeptBadge key={d} code={d} />)}</span></Td>
                   <Td className="capitalize text-ink-700">{p.bin}</Td>
                   <Td><span className="tabular">{p.workOrderAt && fmtDate(p.workOrderAt)}</span> <Stamp by={p.workOrderBy} station={p.arrivedStation} /></Td>

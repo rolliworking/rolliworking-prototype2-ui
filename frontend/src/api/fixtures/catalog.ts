@@ -1,0 +1,26 @@
+import type { CatalogService } from '../types';
+
+export const catalog: CatalogService[] = [
+  { id: 'svc-01', name: 'Complete service — cal. 3135', dept: 'W', rate: 1250, type: 'service' },
+  { id: 'svc-02', name: 'Complete service — cal. 3235', dept: 'W', rate: 1250, type: 'service' },
+  { id: 'svc-03', name: 'Complete service — cal. 3255', dept: 'W', rate: 1350, type: 'service' },
+  { id: 'svc-04', name: 'Complete service — cal. 4130 (chronograph)', dept: 'W', rate: 1850, type: 'service' },
+  { id: 'svc-05', name: 'Complete service — Tudor MT56xx', dept: 'W', rate: 950, type: 'service' },
+  { id: 'svc-06', name: 'Timing regulation only', dept: 'W', rate: 180, type: 'service' },
+  { id: 'svc-07', name: 'Pressure test 100m', dept: 'W', rate: 115, type: 'service' },
+  { id: 'svc-08', name: 'Pressure test 300m', dept: 'W', rate: 115, type: 'service' },
+  { id: 'svc-09', name: 'Gasket set & crown tube', dept: 'W', rate: 85, type: 'part' },
+  { id: 'svc-10', name: 'Sapphire crystal (OEM)', dept: 'W', rate: 360, type: 'part' },
+  { id: 'svc-11', name: 'Mainspring & barrel assembly', dept: 'W', rate: 415, type: 'part' },
+  { id: 'svc-12', name: 'Bracelet tighten & re-pin (Oyster)', dept: 'B', rate: 380, type: 'service' },
+  { id: 'svc-13', name: 'Bracelet stretch repair', dept: 'B', rate: 380, type: 'service' },
+  { id: 'svc-14', name: 'Clasp spring replacement', dept: 'B', rate: 140, type: 'part' },
+  { id: 'svc-15', name: 'Replace bracelet end-links', dept: 'B', rate: 420, type: 'part' },
+  { id: 'svc-16', name: 'Case & bracelet refinish — Oyster', dept: 'P', rate: 340, type: 'service' },
+  { id: 'svc-17', name: 'Case & bracelet refinish — Jubilee', dept: 'P', rate: 325, type: 'service' },
+  { id: 'svc-18', name: 'Clasp refinish', dept: 'P', rate: 100, type: 'service' },
+  { id: 'svc-19', name: 'Ultrasonic clean', dept: 'P', rate: 60, type: 'service' },
+  { id: 'svc-20', name: 'Platinum bezel refinish', dept: 'PM', rate: 650, type: 'service' },
+  { id: 'svc-21', name: 'Gold case re-plate', dept: 'PM', rate: 900, type: 'service' },
+  { id: 'svc-22', name: 'Insured return shipping', dept: 'W', rate: 35, type: 'shipping' },
+];

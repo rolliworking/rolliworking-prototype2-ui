@@ -34,8 +34,8 @@ export default function ReceiveWatchPage() {
   useEffect(() => {
     if (!ctx) return;
     setComponents(ctx.expectedComponents.filter((c) => ctx.pkg.contents.includes(c)));
-    setReference(ctx.estimate.watch.reference);
-    setSerial(ctx.estimate.watch.serial);
+    setReference(ctx.estimate.watch!.reference);
+    setSerial(ctx.estimate.watch!.serial);
     setWorkflow(ctx.suggestedWorkflow);
   }, [ctx]);
 
@@ -73,6 +73,7 @@ export default function ReceiveWatchPage() {
   }
 
   const { pkg, estimate } = ctx;
+  const expWatch = estimate.watch!;
 
   const commit = async () => {
     setBusy(true);
@@ -144,11 +145,11 @@ export default function ReceiveWatchPage() {
 
       <div className="grid grid-cols-[1fr_360px] gap-4">
         <div className="space-y-4">
-          <Card title="From the estimate" subtitle={`${fullName(estimate.client)} · ${estimate.watch.brand} ${estimate.watch.model} · verify each line is in scope`} testId="inspection-lines-card">
+          <Card title="From the estimate" subtitle={`${fullName(estimate.client)} · ${expWatch.brand} ${expWatch.model} · verify each line is in scope`} testId="inspection-lines-card">
             <LineChecklist lines={estimate.lines} verified={linesVerified} onToggle={(i) => setLinesVerified((v) => (v.includes(i) ? v.filter((x) => x !== i) : [...v, i]))} />
             <div className="mt-3 flex items-start gap-2 rounded-sm bg-canvas p-2.5 text-xs text-ink-700" data-testid="inspection-concerns">
               <MessageSquareQuote size={13} className="mt-0.5 shrink-0 text-ink-400" />
-              <span><span className="font-semibold text-ink-500">Client’s stated concerns:</span> {estimate.concerns}</span>
+              <span><span className="font-semibold text-ink-500">Client’s stated concerns:</span> {estimate.clientNotes}</span>
             </div>
           </Card>
 
@@ -168,7 +169,7 @@ export default function ReceiveWatchPage() {
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Reference</label>
                 <input data-testid="identity-reference" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 w-full rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" />
-                <p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{estimate.watch.reference}</span></p>
+                <p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.reference}</span></p>
               </div>
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Serial</label>
@@ -176,7 +177,7 @@ export default function ReceiveWatchPage() {
                   <input data-testid="identity-serial" value={serial} onChange={(e) => setSerial(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 flex-1 rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" />
                   <Button type="button" data-testid="identity-ns" onClick={() => setSerial('NS')} disabled={readOnly} title="Serial unreadable — placeholder">NS</Button>
                 </div>
-                <p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{estimate.watch.serial}</span>{serial === 'NS' && <span className="ml-1 text-amber-800">· NS placeholder — skips the same-watch check</span>}</p>
+                <p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.serial}</span>{serial === 'NS' && <span className="ml-1 text-amber-800">· NS placeholder — skips the same-watch check</span>}</p>
               </div>
             </div>
             {match && (

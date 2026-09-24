@@ -20,5 +20,6 @@ export const watches: Watch[] = [
   // Expected — estimate exists, watch not yet received through Intake
   { id: 'w-16', clientId: 'c-18', brand: 'Rolex', model: 'Lady-Datejust', reference: '279174', serial: 'N4K8P2W7', dial: 'Silver', bracelet: 'Jubilee', status: 'expected', receivedAt: daysAgo(0) },
   { id: 'w-17', clientId: 'c-16', brand: 'Tudor', model: 'Black Bay 41', reference: 'M79540-0001', serial: 'Q7M3R95T', dial: 'Black', bracelet: 'Steel', status: 'expected', receivedAt: daysAgo(0) },
+  { id: 'w-19', clientId: 'c-20', brand: 'Rolex', model: 'Datejust 36', reference: '126234', serial: 'F7C2N81K', dial: 'Mint green', bracelet: 'Jubilee', status: 'expected', receivedAt: daysAgo(0) },
   { id: 'w-18', clientId: 'c-19', brand: 'Rolex', model: 'Yacht-Master 40', reference: '126622', serial: 'S2H6V8D4', dial: 'Rhodium', bracelet: 'Oyster', status: 'expected', receivedAt: daysAgo(0) },
 ];

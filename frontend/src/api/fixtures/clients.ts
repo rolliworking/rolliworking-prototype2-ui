@@ -42,6 +42,7 @@ export const clients: Client[] = rows.map(([id, firstName, lastName, email, phon
   city,
   state,
   company,
+  street: `${120 + i * 37} ${['Park Ave', 'Madison Ave', 'Elm St', 'Harbor Rd', 'Lakeview Dr', 'Oak Ln', 'Ocean Blvd'][i % 7]}`,
   type: tradeIds.has(id) ? 'trade' : 'retail',
   since: daysAgo(120 + i * 37),
 }));

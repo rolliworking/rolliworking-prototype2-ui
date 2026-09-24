@@ -6,7 +6,9 @@ import { findNavItem } from '@/config/navigation';
 import AuditLogPage from '@/pages/AuditLogPage';
 import ClientDetailPage from '@/pages/ClientDetailPage';
 import Dashboard from '@/pages/Dashboard';
-import EstimatesPage from '@/pages/EstimatesPage';
+import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
+import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
+import EstimatesListPage from '@/pages/estimates/EstimatesListPage';
 import HitListPage from '@/pages/HitListPage';
 import ArrivalPage from '@/pages/intake/ArrivalPage';
 import LabelQueuePage from '@/pages/intake/LabelQueuePage';
@@ -61,7 +63,9 @@ export default function App() {
             <Route element={<TierGate />}>
               <Route index element={<Dashboard />} />
               <Route path="/hit-list" element={<HitListPage />} />
-              <Route path="/estimates" element={<EstimatesPage />} />
+              <Route path="/estimates" element={<EstimatesListPage />} />
+              <Route path="/estimates/new" element={<EstimateCreatePage />} />
+              <Route path="/estimates/:id" element={<EstimateDetailPage />} />
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/intake" element={<IntakeLayout />}>
                 <Route index element={<ArrivalPage />} />

@@ -31,7 +31,8 @@ export type AuditEventType =
   | 'station_registered'
   | 'station_renamed'
   | 'station_reset'
-  | 'intake';
+  | 'intake'
+  | 'estimate';
 
 export interface AuditEvent {
   id: string;
@@ -55,6 +56,7 @@ export interface Client {
   email: string;
   phone: string;
   company?: string;
+  street: string;
   city: string;
   state: string;
   type: ClientType;
@@ -86,29 +88,88 @@ export interface Watch {
 
 export type Department = 'watchmaking' | 'band' | 'polish';
 
-export type EstimateStatus = 'draft' | 'sent' | 'awaiting_approval' | 'approved' | 'declined' | 'expired';
-
 export type DeptCode = 'W' | 'B' | 'P' | 'PM';
 
+export type EstimateStatus = 'draft' | 'sent' | 'approved' | 'converted' | 'expired' | 'declined';
+export type LineType = 'service' | 'part' | 'shipping';
+
 export interface EstimateLine {
+  id: string;
   description: string;
   qty: number;
   unitPrice: number;
   dept: DeptCode;
+  taxable: boolean;
+  type: LineType;
+  catalogId?: string;
+  partNumber?: string;
+}
+
+export interface Address {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+}
+
+export interface EstimateRevision {
+  revision: number;
+  status: EstimateStatus;
+  lines: EstimateLine[];
+  subtotal: number;
+  shippingAmount: number;
+  total: number;
+  validUntil: string;
+  clientNotes: string;
+  messageNotes: string;
+  internalNotes: string;
+  savedAt: string;
+  savedBy: string;
 }
 
 export interface Estimate {
   id: string;
   number: string;
+  revision: number;
+  revisions: EstimateRevision[];
   clientId: string;
-  watchId: string;
+  watchId?: string;
   department: Department;
   status: EstimateStatus;
   lines: EstimateLine[];
+  subtotal: number;
+  shippingAmount: number;
+  taxAmount: number;
   total: number;
-  concerns: string;
+  validUntil: string;
+  clientNotes: string;
+  messageNotes: string;
+  internalNotes: string;
+  billingAddress: Address;
+  shippingAddress: Address;
+  shippingMirrorsBilling: boolean;
+  historical: boolean;
   createdAt: string;
+  createdBy: string;
+  updatedAt: string;
   sentAt?: string;
+  convertedAt?: string;
+  approvedAt?: string;
+  declinedAt?: string;
+  declineReason?: string;
+}
+
+export interface CatalogService {
+  id: string;
+  name: string;
+  dept: DeptCode;
+  rate: number;
+  type: LineType;
+}
+
+export interface QuoteContext {
+  clientEstimates: EstimateWithRefs[];
+  watchEstimates: EstimateWithRefs[];
 }
 
 export type JobStatus =
@@ -184,7 +245,7 @@ export interface DashboardStats {
   departments: DepartmentPnl[];
 }
 
-export type EstimateWithRefs = Estimate & { client: Client; watch: Watch };
+export type EstimateWithRefs = Estimate & { client: Client; watch: Watch | null };
 export type JobWithRefs = Job & { client: Client; watch: Watch };
 
 // ---- Intake -----------------------------------------------------------------

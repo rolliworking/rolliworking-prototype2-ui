@@ -92,7 +92,7 @@ export default function WorkOrderPage() {
             <div>
               <div className="font-mono text-xs font-semibold text-ink">{selected.subNumber}</div>
               <div className="text-[13px] text-ink">{selected.client ? fullName(selected.client) : 'Unknown client'} {selected.estimate && <span className="font-mono text-xs text-ink-500">· {selected.estimate.number}</span>}</div>
-              {selected.estimate && <div className="text-xs text-ink-500">{selected.estimate.watch.brand} {selected.estimate.watch.model}</div>}
+              {selected.estimate?.watch && <div className="text-xs text-ink-500">{selected.estimate.watch.brand} {selected.estimate.watch.model}</div>}
             </div>
             <label className="flex items-start gap-2 rounded-sm border border-line p-2.5 text-[13px] text-ink-700">
               <input type="checkbox" data-testid="wo-confirm" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 accent-ink" />

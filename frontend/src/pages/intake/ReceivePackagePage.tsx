@@ -83,7 +83,7 @@ export default function ReceivePackagePage() {
     `Sub#  ${pkg.subNumber}`,
     `Date  ${fmtDate(new Date().toISOString())}   Station ${station?.name ?? ''}`,
     `Client ${client ? fullName(client) : 'Unknown'}`,
-    estimate ? `Estimate ${estimate.number} · ${estimate.watch.brand} ${estimate.watch.model}` : 'Estimate —',
+    estimate ? `Estimate ${estimate.number}${estimate.watch ? ` · ${estimate.watch.brand} ${estimate.watch.model}` : ''}` : 'Estimate —',
     `Received ${contents.length ? contents.join(', ') : '—'}`,
     `Logged by ${user?.shortName}`,
   ];
@@ -116,7 +116,7 @@ export default function ReceivePackagePage() {
                   <div className="h-11 rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] leading-[44px]">{estimate?.number ?? '—'}</div>
                 </div>
               ) : (
-                <ScanInput label="Estimate #" testId="receive-estimate-input" onScan={scanEstimate} error={estError} placeholder="EST-26-1053 … then Enter" hint="Try EST-26-1055 (Kowalski) or 1051 · Enter to look up" />
+                <ScanInput label="Estimate #" testId="receive-estimate-input" onScan={scanEstimate} error={estError} placeholder="E01053 … then Enter" hint="Try E01055 (Kowalski) or 1051 · Enter to look up" />
               )}
             </div>
 
@@ -128,7 +128,7 @@ export default function ReceivePackagePage() {
                       {fullName(estimate.client)} <span className="ml-1 font-mono text-xs font-normal text-ink-500">{estimate.number}</span>
                     </div>
                     <div className="text-xs text-ink-500">
-                      {estimate.watch.brand} {estimate.watch.model} · <span className="font-mono">{estimate.watch.reference}</span> · {estimate.client.email}
+                      {estimate.watch ? `${estimate.watch.brand} ${estimate.watch.model} · ` : 'No watch on estimate · '}{estimate.watch && <span className="font-mono">{estimate.watch.reference}</span>} {estimate.client.email}
                     </div>
                   </div>
                   <StatusPill status={estimate.status} />

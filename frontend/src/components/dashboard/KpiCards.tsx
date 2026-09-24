@@ -15,7 +15,7 @@ export const KpiRow = ({ stats }: { stats: DashboardStats }) => {
   const kpis: Kpi[] = [
     { key: 'watches-in-house', label: 'Watches in house', value: stats.watchesInHouse, hint: 'received, not yet released' },
     { key: 'open-estimates', label: 'Open estimates', value: stats.openEstimates, hint: 'draft, sent or pending', to: '/estimates' },
-    { key: 'awaiting-approval', label: 'Awaiting approval', value: stats.awaitingApproval, hint: 'client response needed', to: '/estimates?status=awaiting_approval' },
+    { key: 'awaiting-approval', label: 'Awaiting approval', value: stats.awaitingApproval, hint: 'client response needed', to: '/estimates?status=sent' },
     { key: 'in-progress', label: 'In progress', value: stats.inProgress, hint: 'on the bench or in QC', to: '/jobs' },
     { key: 'awaiting-pickup', label: 'Awaiting pickup', value: stats.awaitingPickup, hint: 'ready for release', to: '/jobs?status=awaiting_pickup' },
     { key: 'revenue-mtd', label: 'Revenue this month', value: fmtMoney(stats.revenueThisMonth), hint: 'completed jobs, MTD' },

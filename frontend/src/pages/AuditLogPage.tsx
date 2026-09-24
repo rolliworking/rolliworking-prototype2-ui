@@ -18,9 +18,10 @@ const TYPE_TONE: Record<AuditEventType, string> = {
   station_renamed: 'bg-brand-50 text-brand',
   station_reset: 'bg-amber-50 text-amber-800',
   intake: 'bg-teal-50 text-teal-800',
+  estimate: 'bg-violet-50 text-violet-700',
 };
 
-type Filter = 'all' | 'sign_in' | 'station' | 'intake';
+type Filter = 'all' | 'sign_in' | 'station' | 'intake' | 'estimate';
 
 export default function AuditLogPage() {
   const { data } = useAsync(() => api.getAuditLog());
@@ -33,6 +34,7 @@ export default function AuditLogPage() {
         if (filter === 'sign_in') return e.type === 'sign_in' || e.type === 'sign_in_failed' || e.type === 'sign_out';
         if (filter === 'station') return e.type.startsWith('station_');
         if (filter === 'intake') return e.type === 'intake';
+        if (filter === 'estimate') return e.type === 'estimate';
         return true;
       }),
     [data, filter],
@@ -50,6 +52,7 @@ export default function AuditLogPage() {
         <FilterChip active={filter === 'sign_in'} onClick={() => setFilter('sign_in')} testId="audit-filter-sign-in">Sign-ins</FilterChip>
         <FilterChip active={filter === 'station'} onClick={() => setFilter('station')} testId="audit-filter-station">Station</FilterChip>
         <FilterChip active={filter === 'intake'} onClick={() => setFilter('intake')} testId="audit-filter-intake">Intake</FilterChip>
+        <FilterChip active={filter === 'estimate'} onClick={() => setFilter('estimate')} testId="audit-filter-estimate">Estimates</FilterChip>
       </div>
 
       <Card bodyClassName="p-0">

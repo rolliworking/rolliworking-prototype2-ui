@@ -9,7 +9,12 @@ import type {
   Client,
   DashboardStats,
   Department,
+  Address,
+  CatalogService,
   Estimate,
+  EstimateLine,
+  EstimateRevision,
+  EstimateStatus,
   EstimateWithRefs,
   HitListItem,
   InspectionContext,
@@ -22,6 +27,7 @@ import type {
   PackageSource,
   PackageStatus,
   PackageWithRefs,
+  QuoteContext,
   ReceiveWatchInput,
   Station,
   User,
@@ -64,7 +70,8 @@ const store = {
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
   watches: fx.watches.map((w) => ({ ...w })),
-  counters: { sub: 314, label: 3 },
+  estimates: fx.estimates.map((e) => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[] })),
+  counters: { sub: 314, label: 3, estimate: 1058 },
 };
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
@@ -73,10 +80,10 @@ const byId = <T extends { id: string }>(rows: T[], id: string): T => {
   return row;
 };
 
-const withRefs = <T extends { clientId: string; watchId: string }>(row: T) => ({
+const withRefs = <T extends { clientId: string; watchId?: string }>(row: T) => ({
   ...row,
   client: byId(fx.clients, row.clientId),
-  watch: byId(store.watches, row.watchId),
+  watch: row.watchId ? store.watches.find((w) => w.id === row.watchId) ?? null : null,
 });
 
 const isThisMonth = (iso?: string) => {
@@ -281,21 +288,28 @@ export async function getWatchesForClient(clientId: string): Promise<Watch[]> {
 // ---- Estimates --------------------------------------------------------------
 
 export async function getEstimates(): Promise<EstimateWithRefs[]> {
-  return resolve(fx.estimates.map(withRefs));
+  return resolve([...store.estimates].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(withRefs));
+}
+
+export async function getEstimate(id: string): Promise<EstimateWithRefs | null> {
+  const e = store.estimates.find((x) => x.id === id);
+  return resolve(e ? withRefs(e) : null);
 }
 
 export async function getEstimatesForClient(clientId: string): Promise<EstimateWithRefs[]> {
-  return resolve(fx.estimates.filter((e) => e.clientId === clientId).map(withRefs));
+  return resolve(store.estimates.filter((e) => e.clientId === clientId).map(withRefs));
 }
 
 // ---- Jobs -------------------------------------------------------------------
 
+const jobRefs = (j: Job): JobWithRefs => ({ ...j, client: byId(fx.clients, j.clientId), watch: byId(store.watches, j.watchId) });
+
 export async function getJobs(): Promise<JobWithRefs[]> {
-  return resolve(fx.jobs.map(withRefs));
+  return resolve(fx.jobs.map(jobRefs));
 }
 
 export async function getJobsForClient(clientId: string): Promise<JobWithRefs[]> {
-  return resolve(fx.jobs.filter((j) => j.clientId === clientId).map(withRefs));
+  return resolve(fx.jobs.filter((j) => j.clientId === clientId).map(jobRefs));
 }
 
 // ---- Daily hit list ---------------------------------------------------------
@@ -325,15 +339,15 @@ const DEPARTMENTS: { key: Department; name: string }[] = [
   { key: 'polish', name: 'Polish' },
 ];
 
-const OPEN_ESTIMATE: Estimate['status'][] = ['draft', 'sent', 'awaiting_approval'];
+const OPEN_ESTIMATE: Estimate['status'][] = ['draft', 'sent'];
 const ACTIVE_JOB: Job['status'][] = ['queued', 'in_progress', 'awaiting_parts', 'qc'];
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   const completedThisMonth = fx.jobs.filter((j) => isThisMonth(j.completedAt));
   return resolve({
     watchesInHouse: store.watches.filter((w) => w.status !== 'released' && w.status !== 'expected').length,
-    openEstimates: fx.estimates.filter((e) => OPEN_ESTIMATE.includes(e.status)).length,
-    awaitingApproval: fx.estimates.filter((e) => e.status === 'awaiting_approval').length,
+    openEstimates: store.estimates.filter((e) => OPEN_ESTIMATE.includes(e.status)).length,
+    awaitingApproval: store.estimates.filter((e) => e.status === 'sent').length,
     inProgress: fx.jobs.filter((j) => ACTIVE_JOB.includes(j.status)).length,
     awaitingPickup: fx.jobs.filter((j) => j.status === 'awaiting_pickup').length,
     revenueThisMonth: completedThisMonth.reduce((t, j) => t + j.total, 0),
@@ -360,7 +374,7 @@ const stamp = (detail: string, ref: string) => {
 };
 
 const pkgWithRefs = (p: Package): PackageWithRefs => {
-  const est = p.estimateId ? fx.estimates.find((e) => e.id === p.estimateId) : undefined;
+  const est = p.estimateId ? store.estimates.find((e) => e.id === p.estimateId) : undefined;
   return {
     ...p,
     client: p.clientId ? fx.clients.find((c) => c.id === p.clientId) ?? null : null,
@@ -430,9 +444,11 @@ export async function logArrival(input: ArrivalInput): Promise<PackageWithRefs> 
   return resolve(pkgWithRefs(pkg));
 }
 
+const estimateDigits = (s: string) => s.trim().toUpperCase().replace(/^EST-?/, '').replace(/^E/, '').replace(/^0+/, '');
+
 export async function lookupEstimate(numberOrId: string): Promise<EstimateWithRefs | null> {
-  const q = numberOrId.trim().toUpperCase();
-  const est = fx.estimates.find((e) => e.number.toUpperCase() === q || e.id === numberOrId || e.number.replace('EST-', '').toUpperCase() === q);
+  const q = estimateDigits(numberOrId);
+  const est = store.estimates.find((e) => e.id === numberOrId || (q && estimateDigits(e.number) === q));
   return resolve(est ? withRefs(est) : null);
 }
 
@@ -450,7 +466,7 @@ export async function receivePackage(id: string, input: ReceivePackageInput): Pr
   if (pkg.status !== 'arrived') throw new Error('Package is not awaiting processing');
   if (input.contents.length === 0) throw new Error('Describe what was received (pick at least one pill)');
   const a = actor();
-  const est = input.estimateId ? fx.estimates.find((e) => e.id === input.estimateId) : undefined;
+  const est = input.estimateId ? store.estimates.find((e) => e.id === input.estimateId) : undefined;
   pkg.trackingNumber = input.trackingNumber?.trim() || pkg.trackingNumber;
   pkg.estimateId = est?.id;
   pkg.clientId = est?.clientId ?? input.clientId ?? pkg.clientId;
@@ -514,7 +530,7 @@ const uniq = <T>(xs: T[]) => Array.from(new Set(xs));
 
 export async function getInspectionContext(packageId: string): Promise<InspectionContext> {
   const pkg = pkgWithRefs(getPkg(packageId));
-  if (!pkg.estimate) throw new Error('Package has no linked estimate — go back to Receive Package');
+  if (!pkg.estimate || !pkg.estimate.watch) throw new Error('Package has no linked estimate with a watch — go back to Receive Package');
   const depts = uniq(pkg.estimate.lines.map((l) => l.dept));
   const expectedComponents = uniq(depts.flatMap((d) => fx.DEPT_COMPONENTS[d]));
   return resolve({ pkg, estimate: pkg.estimate, expectedComponents, suggestedWorkflow: depts });
@@ -528,7 +544,7 @@ export async function findWatchBySerial(reference: string, serial: string): Prom
   if (!watch) return resolve(null);
   const jobs = fx.jobs.filter((j) => j.watchId === watch.id);
   const packages = store.packages.filter((p) => {
-    const est = p.estimateId ? fx.estimates.find((e) => e.id === p.estimateId) : undefined;
+    const est = p.estimateId ? store.estimates.find((e) => e.id === p.estimateId) : undefined;
     return est?.watchId === watch.id && (p.status === 'received' || p.status === 'discrepancy_hold');
   });
   // Only a watch with real history triggers the same-watch fork
@@ -553,10 +569,11 @@ export interface ReceiveWatchResult {
 export function computeDiscrepancies(ctx: InspectionContext, input: ReceiveWatchInput): string[] {
   const out: string[] = [];
   ctx.expectedComponents.filter((c) => !input.componentsReceived.includes(c)).forEach((c) => out.push(`Missing component: ${c}`));
-  const expectedSerial = ctx.estimate.watch.serial.toUpperCase();
+  const expWatch = ctx.estimate.watch!;
+  const expectedSerial = expWatch.serial.toUpperCase();
   const ser = input.serial.trim().toUpperCase();
   if (ser && ser !== 'NS' && ser !== expectedSerial) out.push(`Serial ${ser} differs from estimate (expected ${expectedSerial})`);
-  if (input.reference.trim().toUpperCase() !== ctx.estimate.watch.reference.toUpperCase()) out.push(`Reference ${input.reference.trim()} differs from estimate (expected ${ctx.estimate.watch.reference})`);
+  if (input.reference.trim().toUpperCase() !== expWatch.reference.toUpperCase()) out.push(`Reference ${input.reference.trim()} differs from estimate (expected ${expWatch.reference})`);
   if (input.extraWatch) out.push('Extra / unexpected watch in package');
   if (input.sameWatchDecision === 'conflict') out.push('Serial matches a different watch on file — flagged for review');
   return out;
@@ -596,7 +613,7 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
     const ser = input.serial.trim().toUpperCase();
     labels = [
       queueLabel({ type: 'pdf417_data', packageId: pkg.id, estimateNumber: est.number, payload: `${est.number}|${pkg.subNumber}|${ref}|${ser}|${input.workflow.join(',')}`, lines: [est.number, pkg.subNumber, `${est.client.firstName} ${est.client.lastName}`, `Workflow ${input.workflow.join(' · ')}`] }),
-      queueLabel({ type: 'ref_serial', packageId: pkg.id, estimateNumber: est.number, payload: `${ref} / ${ser}`, lines: [`${est.watch.brand} ${est.watch.model}`, `Ref ${ref}`, `Serial ${ser}`] }),
+      queueLabel({ type: 'ref_serial', packageId: pkg.id, estimateNumber: est.number, payload: `${ref} / ${ser}`, lines: [`${est.watch!.brand} ${est.watch!.model}`, `Ref ${ref}`, `Serial ${ser}`] }),
     ];
     stamp(`Watch received · ${ref} / ${ser} · workflow ${input.workflow.join('+')}${input.sameWatchDecision === 'returning' ? ' · same watch returning' : ''} · 2 labels queued`, pkg.subNumber);
   }
@@ -616,4 +633,254 @@ export async function setLabelPrinted(id: string, printed: boolean): Promise<Lab
   l.printed = printed;
   stamp(`${l.type === 'pdf417_data' ? 'PDF417 data label' : 'Ref/serial label'} ${printed ? 'printed (mock)' : 'marked unprinted'}`, l.estimateNumber);
   return resolve({ ...l });
+}
+
+// ---- Estimates (E3) ---------------------------------------------------------
+
+export { totalsFor as computeEstimateTotals } from './fixtures/estimates';
+
+const TAX_RATE_UNAPPLIED = 0.0825; // exists in legacy, never applied — kept for display only
+export const ESTIMATE_TAX_RATE_DISPLAY = TAX_RATE_UNAPPLIED;
+
+const estStamp = (e: Estimate, detail: string) => {
+  const a = actor();
+  appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${e.number} · ${detail}` });
+};
+
+const getEst = (id: string) => byId(store.estimates, id);
+const recalc = (e: Estimate) => {
+  Object.assign(e, fx.totalsFor(e.lines));
+  e.department = fx.primaryDepartment(e.lines);
+  e.updatedAt = new Date().toISOString();
+};
+const isEditable = (e: Estimate) => !e.historical && (e.status === 'draft' || e.status === 'sent');
+const nextEstimateNumber = () => `E${String(++store.counters.estimate).padStart(5, '0')}`;
+const newLineId = () => `ln-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+
+export async function getServiceCatalog(): Promise<CatalogService[]> {
+  return resolve(fx.catalog);
+}
+
+export async function searchEstimates(query: string, status?: EstimateStatus | 'all'): Promise<EstimateWithRefs[]> {
+  const q = query.trim().toLowerCase();
+  const digits = estimateDigits(query);
+  const rows = (await getEstimates()).filter((e) => {
+    if (status && status !== 'all' && e.status !== status) return false;
+    if (!q) return true;
+    const name = `${e.client.firstName} ${e.client.lastName}`.toLowerCase();
+    return (digits && estimateDigits(e.number).startsWith(digits)) || name.includes(q) || e.client.email.toLowerCase().includes(q);
+  });
+  return rows;
+}
+
+export async function getQuoteContext(clientId: string, watchId?: string, excludeId?: string): Promise<QuoteContext> {
+  const all = await getEstimates();
+  return {
+    clientEstimates: all.filter((e) => e.clientId === clientId && e.id !== excludeId),
+    watchEstimates: watchId ? all.filter((e) => e.watchId === watchId && e.id !== excludeId) : [],
+  };
+}
+
+export interface NewClientInput { firstName: string; lastName: string; email: string; phone: string }
+export interface NewWatchInput { brand: 'Rolex' | 'Tudor'; model: string; reference: string; serial: string; partNumber?: string }
+
+export async function createClient(input: NewClientInput): Promise<Client> {
+  if (!input.firstName.trim() || !input.lastName.trim()) throw new Error('Client first and last name are required');
+  const c: Client = { id: `c-${Date.now().toString(36)}`, firstName: input.firstName.trim(), lastName: input.lastName.trim(), email: input.email.trim(), phone: input.phone.trim(), street: '', city: '', state: '', type: 'retail', since: new Date().toISOString() };
+  fx.clients.push(c);
+  return resolve(c);
+}
+
+export async function createWatch(clientId: string, input: NewWatchInput): Promise<Watch> {
+  const w: Watch = { id: `w-${Date.now().toString(36)}`, clientId, brand: input.brand, model: input.model.trim() || 'Unknown model', reference: input.reference.trim().toUpperCase() || 'UNKNOWN', serial: input.serial.trim().toUpperCase() || 'NS', dial: '', bracelet: input.partNumber?.trim() ?? '', status: 'expected', receivedAt: new Date().toISOString() };
+  store.watches.push(w);
+  return resolve(w);
+}
+
+export interface EstimateInput {
+  clientId: string;
+  watchId?: string;
+  lines: EstimateLine[];
+  validUntil: string;
+  clientNotes: string;
+  messageNotes: string;
+  internalNotes: string;
+  billingAddress: Address;
+  shippingAddress: Address;
+  shippingMirrorsBilling: boolean;
+}
+
+const realLines = (lines: EstimateLine[]) => lines.filter((l) => l.description.trim() || l.unitPrice !== 0);
+
+export async function createEstimate(input: EstimateInput): Promise<EstimateWithRefs> {
+  if (!input.clientId) throw new Error('No customer — nothing saved');
+  const a = actor();
+  const lines = realLines(input.lines).map((l) => ({ ...l, id: l.id || newLineId() }));
+  const e: Estimate = {
+    id: `e-${Date.now().toString(36)}`,
+    number: nextEstimateNumber(),
+    revision: 1,
+    revisions: [],
+    clientId: input.clientId,
+    watchId: input.watchId,
+    department: 'watchmaking',
+    status: 'draft',
+    lines,
+    subtotal: 0, shippingAmount: 0, taxAmount: 0, total: 0,
+    validUntil: input.validUntil,
+    clientNotes: input.clientNotes,
+    messageNotes: input.messageNotes || 'Thank you for your business.',
+    internalNotes: input.internalNotes,
+    billingAddress: input.billingAddress,
+    shippingAddress: input.shippingMirrorsBilling ? input.billingAddress : input.shippingAddress,
+    shippingMirrorsBilling: input.shippingMirrorsBilling,
+    historical: false,
+    createdAt: new Date().toISOString(),
+    createdBy: a.by,
+    updatedAt: new Date().toISOString(),
+  };
+  recalc(e);
+  store.estimates.unshift(e);
+  estStamp(e, `Draft created · ${lines.length} line${lines.length === 1 ? '' : 's'} · ${e.total.toFixed(2)}`);
+  return resolve(withRefs(e));
+}
+
+export type EstimatePatch = Partial<Omit<EstimateInput, 'clientId'>>;
+
+const applyPatch = (e: Estimate, patch: EstimatePatch) => {
+  if (patch.lines) e.lines = realLines(patch.lines).map((l) => ({ ...l, id: l.id || newLineId() }));
+  if (patch.watchId !== undefined) e.watchId = patch.watchId || undefined;
+  if (patch.validUntil) e.validUntil = patch.validUntil;
+  if (patch.clientNotes !== undefined) e.clientNotes = patch.clientNotes;
+  if (patch.messageNotes !== undefined) e.messageNotes = patch.messageNotes;
+  if (patch.internalNotes !== undefined) e.internalNotes = patch.internalNotes;
+  if (patch.billingAddress) e.billingAddress = patch.billingAddress;
+  if (patch.shippingMirrorsBilling !== undefined) e.shippingMirrorsBilling = patch.shippingMirrorsBilling;
+  if (patch.shippingAddress) e.shippingAddress = patch.shippingAddress;
+  if (e.shippingMirrorsBilling) e.shippingAddress = e.billingAddress;
+  recalc(e);
+};
+
+// Draft: edit in place (autosaved by the UI)
+export async function updateEstimate(id: string, patch: EstimatePatch): Promise<EstimateWithRefs> {
+  const e = getEst(id);
+  if (e.historical) throw new Error('Historical estimate is read-only');
+  if (e.status !== 'draft') throw new Error('Only drafts edit in place — use Revise for a sent estimate');
+  applyPatch(e, patch);
+  return resolve(withRefs(e));
+}
+
+// Sent: snapshot the current version, then apply — prior versions are never overwritten
+export async function reviseEstimate(id: string, patch: EstimatePatch): Promise<EstimateWithRefs> {
+  const e = getEst(id);
+  if (!isEditable(e)) throw new Error('Only draft or sent estimates can be revised');
+  const a = actor();
+  e.revisions = [
+    { revision: e.revision, status: e.status, lines: e.lines.map((l) => ({ ...l })), subtotal: e.subtotal, shippingAmount: e.shippingAmount, total: e.total, validUntil: e.validUntil, clientNotes: e.clientNotes, messageNotes: e.messageNotes, internalNotes: e.internalNotes, savedAt: e.updatedAt, savedBy: a.by },
+    ...e.revisions,
+  ];
+  e.revision += 1;
+  applyPatch(e, patch);
+  estStamp(e, `Revision ${e.revision} saved (rev ${e.revision - 1} kept) · ${e.total.toFixed(2)}`);
+  return resolve(withRefs(e));
+}
+
+export async function duplicateEstimate(id: string): Promise<EstimateWithRefs> {
+  const src = getEst(id);
+  const a = actor();
+  const copy: Estimate = { ...src, id: `e-${Date.now().toString(36)}`, number: nextEstimateNumber(), revision: 1, revisions: [], status: 'draft', lines: src.lines.map((l) => ({ ...l, id: newLineId() })), historical: false, createdAt: new Date().toISOString(), createdBy: a.by, updatedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString(), sentAt: undefined, convertedAt: undefined, approvedAt: undefined, declinedAt: undefined, declineReason: undefined };
+  recalc(copy);
+  store.estimates.unshift(copy);
+  estStamp(copy, `Duplicated from ${src.number}`);
+  return resolve(withRefs(copy));
+}
+
+export async function deleteEstimate(id: string): Promise<void> {
+  const e = getEst(id);
+  if (e.status === 'converted') throw new Error('Converted estimates cannot be deleted');
+  if (store.packages.some((p) => p.estimateId === id)) throw new Error('An intake package is linked to this estimate');
+  store.estimates = store.estimates.filter((x) => x.id !== id);
+  estStamp(e, 'Deleted');
+  return resolve(undefined);
+}
+
+export async function markEstimateSent(id: string): Promise<EstimateWithRefs> {
+  const e = getEst(id);
+  if (e.status !== 'draft') throw new Error('Only a draft can be marked as sent');
+  e.status = 'sent'; // no sent-at: mark-as-sent means "went out some other way"
+  e.updatedAt = new Date().toISOString();
+  estStamp(e, 'Marked as sent (no email)');
+  return resolve(withRefs(e));
+}
+
+export async function sendEstimate(id: string): Promise<{ estimate: EstimateWithRefs; email: OutboxEmail }> {
+  const e = getEst(id);
+  if (e.status !== 'draft' && e.status !== 'sent') throw new Error('Only draft or sent estimates can be sent');
+  if (e.lines.length === 0) throw new Error('Add at least one line before sending');
+  const a = actor();
+  const c = byId(fx.clients, e.clientId);
+  const w = e.watchId ? store.watches.find((x) => x.id === e.watchId) : undefined;
+  const again = e.status === 'sent';
+  const email: OutboxEmail = {
+    id: `ob-${Date.now().toString(36)}`,
+    to: c.email, toName: `${c.firstName} ${c.lastName}`,
+    relatedRef: `${e.number} rev ${e.revision}`, status: 'pending',
+    subject: `${again ? 'Updated estimate' : 'Your estimate'} ${e.number}${w ? ` — ${w.brand} ${w.model}` : ''}`,
+    body: `Hello ${c.firstName},\n\n${again ? 'Here is the updated estimate' : 'Here is your estimate'} ${e.number} (revision ${e.revision})${w ? ` for your ${w.brand} ${w.model} ${w.reference}` : ''}.\n\n${e.lines.map((l) => `• ${l.description} × ${l.qty} — $${(l.qty * l.unitPrice).toFixed(2)}`).join('\n')}\n\nTotal: $${e.total.toFixed(2)}\nValid until ${new Date(e.validUntil).toLocaleDateString('en-US')}\n\n${e.messageNotes}\n\n— The RolliSuite team`,
+    createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
+  };
+  store.outbox.unshift(email);
+  e.status = 'sent';
+  e.sentAt = new Date().toISOString();
+  e.updatedAt = e.sentAt;
+  estStamp(e, `${again ? 'Sent again' : 'Sent'} · rev ${e.revision} · email queued to Outbox`);
+  return resolve({ estimate: withRefs(e), email });
+}
+
+export async function declineEstimate(id: string, reason: string): Promise<EstimateWithRefs> {
+  const e = getEst(id);
+  if (e.status !== 'sent') throw new Error('Only a sent estimate can be declined');
+  if (!reason.trim()) throw new Error('A decline reason is required');
+  e.status = 'declined';
+  e.declinedAt = new Date().toISOString();
+  e.declineReason = reason.trim();
+  e.updatedAt = e.declinedAt;
+  estStamp(e, `Declined · ${e.declineReason}`);
+  return resolve(withRefs(e));
+}
+
+// PROVISIONAL: staff records "client said yes". Not a legacy status transition — flagged in the UI.
+export async function approveEstimate(id: string): Promise<EstimateWithRefs> {
+  const e = getEst(id);
+  if (e.status !== 'sent') throw new Error('Only a sent estimate can be approved');
+  e.status = 'approved';
+  e.approvedAt = new Date().toISOString();
+  e.updatedAt = e.approvedAt;
+  estStamp(e, 'Approved by client (recorded by staff — provisional status)');
+  return resolve(withRefs(e));
+}
+
+export async function reopenEstimate(id: string): Promise<EstimateWithRefs> {
+  const e = getEst(id);
+  if (e.status !== 'declined' && e.status !== 'expired') throw new Error('Only declined or expired estimates can be reopened');
+  e.status = 'draft';
+  e.declineReason = undefined;
+  e.declinedAt = undefined;
+  e.updatedAt = new Date().toISOString();
+  estStamp(e, 'Reopened → draft');
+  return resolve(withRefs(e));
+}
+
+export async function convertEstimate(id: string, target: 'job' | 'sales_order' | 'intake'): Promise<never> {
+  const e = getEst(id);
+  estStamp(e, `Convert to ${target} requested — not wired in this session`);
+  throw new Error(`Convert to ${target.replace('_', ' ')} isn’t wired yet — target arrives in a later session`);
+}
+
+export interface ShippingCalcInput { units: number; hiAk: boolean; saturday: boolean }
+// Display-only legacy calculator (UNKNOWN whether it persists) — never written on save
+export function calcShipping(i: ShippingCalcInput) {
+  const overnight = i.units > 25;
+  const amount = 35 + (overnight ? 25 : 0) + i.units * 1.5 + (i.hiAk ? 30 : 0) + (i.saturday ? 20 : 0);
+  return { amount, overnight, insuredValue: i.units * 1000 };
 }
