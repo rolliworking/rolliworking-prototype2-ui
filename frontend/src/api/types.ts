@@ -32,7 +32,8 @@ export type AuditEventType =
   | 'station_renamed'
   | 'station_reset'
   | 'intake'
-  | 'estimate';
+  | 'estimate'
+  | 'job';
 
 export interface AuditEvent {
   id: string;
@@ -157,6 +158,7 @@ export interface Estimate {
   approvedAt?: string;
   declinedAt?: string;
   declineReason?: string;
+  jobId?: string;
 }
 
 export interface CatalogService {
@@ -172,28 +174,81 @@ export interface QuoteContext {
   watchEstimates: EstimateWithRefs[];
 }
 
-export type JobStatus =
-  | 'queued'
-  | 'in_progress'
-  | 'awaiting_parts'
-  | 'qc'
-  | 'complete'
-  | 'awaiting_pickup'
-  | 'shipped';
+// ---- Jobs (E4) — enums per PROMPT-PACK-jobs.md (DB enums win over app lists) ----
+
+export type JobStatus = 'intake' | 'in_review' | 'awaiting_customer_approval' | 'approved' | 'in_service' | 'testing' | 'ready_to_ship' | 'closed';
+export type JobSimpleStatus = 'estimate' | 'on_hand' | 'finished';
+export type JobPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type HoldType = 'parts' | 'outsource';
+
+export interface Stamp {
+  at: string;
+  by: string;
+  station: string;
+}
+
+export interface JobTransition extends Stamp {
+  id: string;
+  from: JobStatus | null;
+  to: JobStatus;
+  action: string;
+  reason?: string;
+  emailQueued?: boolean;
+}
+
+export interface JobHold {
+  id: string;
+  type: HoldType;
+  reason: string;
+  priorStatus: JobStatus;
+  placedAt: string;
+  placedBy: string;
+  station: string;
+  releasedAt?: string;
+  releasedBy?: string;
+  releaseNote?: string;
+}
+
+export interface JobNote extends Stamp {
+  id: string;
+  text: string;
+}
+
+export type JobPhoto = PackagePhoto & Stamp;
+
+export interface ShopTimeEntry extends Stamp {
+  id: string;
+  jobId: string;
+  minutes: number;
+  note: string;
+}
 
 export interface Job {
   id: string;
   number: string;
-  estimateId?: string;
   clientId: string;
   watchId: string;
+  estimateId?: string;
+  packageId?: string;
   department: Department;
+  workflow: DeptCode[];
   status: JobStatus;
-  technician: string;
-  startedAt: string;
-  dueAt: string;
-  completedAt?: string;
+  simpleStatus: JobSimpleStatus;
+  priority: JobPriority;
+  lines: EstimateLine[];
   total: number;
+  assignedTo?: string;
+  intakeDate?: string;
+  intakeNotes?: string;
+  conditionNotes?: string;
+  dueAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+  createdBy: string;
+  timeline: JobTransition[];
+  holds: JobHold[];
+  notes: JobNote[];
+  photos: JobPhoto[];
 }
 
 export type Priority = 'high' | 'normal' | 'low';
@@ -246,7 +301,7 @@ export interface DashboardStats {
 }
 
 export type EstimateWithRefs = Estimate & { client: Client; watch: Watch | null };
-export type JobWithRefs = Job & { client: Client; watch: Watch };
+export type JobWithRefs = Job & { client: Client; watch: Watch; estimate: Estimate | null; pkg: Package | null };
 
 // ---- Intake -----------------------------------------------------------------
 

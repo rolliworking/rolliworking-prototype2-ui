@@ -11,8 +11,16 @@ const TONE: Record<string, string> = {
   expired: 'bg-slate-100 text-slate-500',
   // jobs & watches
   intake: 'bg-slate-100 text-slate-700',
-  queued: 'bg-slate-100 text-slate-700',
+  in_review: 'bg-amber-50 text-amber-800',
+  awaiting_customer_approval: 'bg-orange-50 text-orange-800',
   in_service: 'bg-brand-50 text-brand',
+  testing: 'bg-violet-50 text-violet-700',
+  ready_to_ship: 'bg-teal-50 text-teal-800',
+  closed: 'bg-slate-100 text-slate-500',
+  on_hand: 'bg-moss-50 text-moss-700',
+  estimate: 'bg-slate-100 text-slate-600',
+  finished: 'bg-slate-100 text-slate-500',
+  queued: 'bg-slate-100 text-slate-700',
   in_progress: 'bg-brand-50 text-brand',
   awaiting_parts: 'bg-orange-50 text-orange-800',
   qc: 'bg-violet-50 text-violet-700',
@@ -31,6 +39,10 @@ const TONE: Record<string, string> = {
 
 const LABEL: Record<string, string> = {
   qc: 'QC',
+  testing: 'Testing / QC',
+  ready_to_ship: 'Ready to ship',
+  awaiting_customer_approval: 'Awaiting customer approval',
+  on_hand: 'On hand',
   arrived: 'Arrived — awaiting processing',
   processed: 'Processed — awaiting work order',
   awaiting_inspection: 'Awaiting inspection',

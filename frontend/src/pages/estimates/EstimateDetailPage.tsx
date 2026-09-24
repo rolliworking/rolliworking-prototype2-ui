@@ -1,4 +1,4 @@
-import { ArrowLeft, Briefcase, Check, Copy, Lock, Mail, PenLine, Printer, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowLeft, Briefcase, Check, Copy, Lock, Mail, PackageCheck, PenLine, Printer, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -117,10 +117,13 @@ export default function EstimateDetailPage() {
           {revising && <><Button variant="primary" data-testid="act-save-revision" onClick={saveRevision}><Check size={13} /> Save as rev {e.revision + 1}</Button><Button data-testid="act-cancel-revision" onClick={() => { setRevising(false); setForm(toForm(e)); }}>Cancel</Button></>}
           {(e.status === 'declined' || e.status === 'expired') && <Button variant="primary" data-testid="act-reopen" onClick={() => run(() => api.reopenEstimate(e.id), 'Reopened → draft')}><RotateCcw size={13} /> Reopen → draft</Button>}
           {e.status === 'approved' && <>
-            <span className="inline-flex items-center gap-1"><Button variant="primary" data-testid="act-create-job" onClick={() => run(() => api.convertEstimate(e.id, 'job'), '')}><Briefcase size={13} /> Create job</Button><Provisional note="Wire target arrives in a later session — stub" /></span>
-            <Button data-testid="act-convert-so" onClick={() => run(() => api.convertEstimate(e.id, 'sales_order'), '')}>Convert to SO</Button>
-            <Button data-testid="act-convert-intake" onClick={() => run(() => api.convertEstimate(e.id, 'intake'), '')}>Convert to intake</Button>
+            <Button variant="primary" data-testid="act-create-job" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'job'); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Create job failed'); } }}><Briefcase size={13} /> Create job</Button>
+            <span className="inline-flex items-center gap-1"><Button data-testid="act-convert-so" onClick={() => run(() => api.convertEstimate(e.id, 'sales_order'), '')}>Convert to SO</Button><Provisional note="Sales order target arrives in a later session — stub" /></span>
           </>}
+          {(e.status === 'sent' || e.status === 'approved' || (e.status === 'converted' && e.jobId)) && !e.historical && (
+            <Button data-testid="act-convert-intake" title="Pack: job goes on hand + intake date; estimate converted" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'intake'); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}><PackageCheck size={13} /> Convert to intake</Button>
+          )}
+          {e.status === 'converted' && e.jobId && <Link to={`/jobs/${e.jobId}`} data-testid="act-open-job" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:border-ink-300 hover:bg-canvas"><Briefcase size={13} /> Open job</Link>}
           <Button data-testid="act-print" onClick={() => setModal('print')}><Printer size={13} /> Print</Button>
           <Button data-testid="act-duplicate" onClick={async () => { const c = await api.duplicateEstimate(e.id); navigate(`/estimates/${c.id}`); }}><Copy size={13} /> Duplicate</Button>
           {e.status !== 'converted' && <Button data-testid="act-delete" onClick={() => { if (window.confirm(`Delete ${e.number}?`)) run(() => api.deleteEstimate(e.id), '').then(() => navigate('/estimates')); }}><Trash2 size={13} className="text-rose-700" /></Button>}

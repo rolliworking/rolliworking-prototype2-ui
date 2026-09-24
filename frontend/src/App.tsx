@@ -19,6 +19,9 @@ import ReceiveWatchListPage from '@/pages/intake/ReceiveWatchListPage';
 import ReceiveWatchPage from '@/pages/intake/ReceiveWatchPage';
 import WorkOrderPage from '@/pages/intake/WorkOrderPage';
 import JobsPage from '@/pages/JobsPage';
+import JobCreatePage from '@/pages/jobs/JobCreatePage';
+import JobDetailPage from '@/pages/jobs/JobDetailPage';
+import ShopTimePage from '@/pages/jobs/ShopTimePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
 import SignInPage from '@/pages/SignInPage';
@@ -67,6 +70,9 @@ export default function App() {
               <Route path="/estimates/new" element={<EstimateCreatePage />} />
               <Route path="/estimates/:id" element={<EstimateDetailPage />} />
               <Route path="/jobs" element={<JobsPage />} />
+              <Route path="/jobs/new" element={<JobCreatePage />} />
+              <Route path="/jobs/shop-time" element={<ShopTimePage />} />
+              <Route path="/jobs/:id" element={<JobDetailPage />} />
               <Route path="/intake" element={<IntakeLayout />}>
                 <Route index element={<ArrivalPage />} />
                 <Route path="receive" element={<ReceivePackageListPage />} />

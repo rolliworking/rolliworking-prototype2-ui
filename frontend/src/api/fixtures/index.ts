@@ -4,7 +4,7 @@ export { clients } from './clients';
 export { watches } from './watches';
 export { estimates, addressFor, totalsFor, primaryDepartment } from './estimates';
 export { catalog } from './catalog';
-export { jobs } from './jobs';
+export { jobs, shopTime, JOB_FLOW, DEPT_OF_CODE } from './jobs';
 export { hitList } from './hitList';
 export { activity } from './activity';
 export { packages, outbox, labels, CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './intake';

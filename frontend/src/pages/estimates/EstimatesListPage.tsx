@@ -1,4 +1,4 @@
-import { Copy, FilePlus2, MoreHorizontal, Printer, Trash2 } from 'lucide-react';
+import { Briefcase, Copy, FilePlus2, MoreHorizontal, PackageCheck, Printer, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -14,7 +14,8 @@ const STATUSES: (EstimateStatus | 'all')[] = ['all', 'draft', 'sent', 'approved'
 const LABEL: Record<string, string> = { all: 'All', draft: 'Draft', sent: 'Sent', approved: 'Approved', converted: 'Closed', expired: 'Expired', declined: 'Declined' };
 const PAGE = 50;
 
-const RowMenu = ({ e, onDuplicate, onDelete, onPrint }: { e: EstimateWithRefs; onDuplicate: () => void; onDelete: () => void; onPrint: () => void }) => {
+const RowMenu = ({ e, onDuplicate, onDelete, onPrint, onConvert }: { e: EstimateWithRefs; onDuplicate: () => void; onDelete: () => void; onPrint: () => void; onConvert: (target: 'job' | 'intake') => void }) => {
+  const canIntake = !e.historical && (e.status === 'sent' || e.status === 'approved' || (e.status === 'converted' && !!e.jobId));
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,6 +34,9 @@ const RowMenu = ({ e, onDuplicate, onDelete, onPrint }: { e: EstimateWithRefs; o
           <button type="button" data-testid={`est-duplicate-${e.id}`} onClick={() => { setOpen(false); onDuplicate(); }} className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-ink hover:bg-canvas"><Copy size={12} /> Duplicate</button>
           <button type="button" data-testid={`est-delete-${e.id}`} onClick={() => { setOpen(false); onDelete(); }} className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-rose-700 hover:bg-rose-50"><Trash2 size={12} /> Delete…</button>
           <div className="my-1 border-t border-line" />
+          {e.status === 'approved' && <button type="button" data-testid={`est-create-job-${e.id}`} onClick={() => { setOpen(false); onConvert('job'); }} className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-ink hover:bg-canvas"><Briefcase size={12} /> Create job</button>}
+          {canIntake && <button type="button" data-testid={`est-convert-intake-${e.id}`} onClick={() => { setOpen(false); onConvert('intake'); }} className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-ink hover:bg-canvas"><PackageCheck size={12} /> Convert to intake</button>}
+          {e.status === 'converted' && e.jobId && <Link to={`/jobs/${e.jobId}`} data-testid={`est-open-job-${e.id}`} className="flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-xs text-ink hover:bg-canvas"><Briefcase size={12} /> Open job</Link>}
           <div className="flex items-center justify-between px-2.5 py-1 text-[11px] text-ink-400">Convert to invoice <Provisional note="Empty stub in legacy — not wired" /></div>
         </div>
       )}
@@ -49,6 +53,9 @@ export default function EstimatesListPage() {
   const [page, setPage] = useState(0);
   const [printing, setPrinting] = useState<EstimateWithRefs | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const convert = async (e: EstimateWithRefs, target: 'job' | 'intake') => {
+    try { const j = await api.convertEstimate(e.id, target); navigate(`/jobs/${j.id}`); } catch (err) { setError(err instanceof Error ? err.message : 'Convert failed'); }
+  };
 
   const load = () => api.searchEstimates(q, status).then(setRows);
   useEffect(() => {
@@ -127,7 +134,7 @@ export default function EstimatesListPage() {
                 <Td className="text-ink-700">{e.watch ? <>{e.watch.brand} {e.watch.model} <span className="font-mono text-xs text-ink-400">{e.watch.reference}</span></> : <span className="text-ink-300">—</span>}</Td>
                 <Td className="tabular text-right font-medium">{fmtMoneyCents(e.total)}</Td>
                 <Td><EstimateStatusPill status={e.status} /></Td>
-                <Td><RowMenu e={e} onDuplicate={() => duplicate(e)} onDelete={() => del(e)} onPrint={() => setPrinting(e)} /></Td>
+                <Td><RowMenu e={e} onDuplicate={() => duplicate(e)} onDelete={() => del(e)} onPrint={() => setPrinting(e)} onConvert={(t) => convert(e, t)} /></Td>
               </tr>
             ))}
             {rows && visible.length === 0 && <EmptyRow colSpan={7} text="No estimates match." />}

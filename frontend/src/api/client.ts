@@ -8,6 +8,12 @@ import type {
   Carrier,
   Client,
   DashboardStats,
+  DeptCode,
+  HoldType,
+  JobHold,
+  JobPriority,
+  JobStatus,
+  ShopTimeEntry,
   Department,
   Address,
   CatalogService,
@@ -70,8 +76,10 @@ const store = {
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
   watches: fx.watches.map((w) => ({ ...w })),
-  estimates: fx.estimates.map((e) => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[] })),
-  counters: { sub: 314, label: 3, estimate: 1058 },
+  estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[], jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
+  jobs: fx.jobs.map((j) => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow] })),
+  shopTime: fx.shopTime.map((t) => ({ ...t })),
+  counters: { sub: 314, label: 3, estimate: 1058, job: 2028 },
 };
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
@@ -300,16 +308,27 @@ export async function getEstimatesForClient(clientId: string): Promise<EstimateW
   return resolve(store.estimates.filter((e) => e.clientId === clientId).map(withRefs));
 }
 
-// ---- Jobs -------------------------------------------------------------------
+// ---- Jobs (read) -------------------------------------------------------------
 
-const jobRefs = (j: Job): JobWithRefs => ({ ...j, client: byId(fx.clients, j.clientId), watch: byId(store.watches, j.watchId) });
+const jobRefs = (j: Job): JobWithRefs => ({
+  ...j,
+  client: byId(fx.clients, j.clientId),
+  watch: byId(store.watches, j.watchId),
+  estimate: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) ?? null : null,
+  pkg: j.packageId ? store.packages.find((p) => p.id === j.packageId) ?? null : store.packages.find((p) => p.estimateId && p.estimateId === j.estimateId) ?? null,
+});
 
 export async function getJobs(): Promise<JobWithRefs[]> {
-  return resolve(fx.jobs.map(jobRefs));
+  return resolve([...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(jobRefs));
+}
+
+export async function getJob(id: string): Promise<JobWithRefs | null> {
+  const j = store.jobs.find((x) => x.id === id);
+  return resolve(j ? jobRefs(j) : null);
 }
 
 export async function getJobsForClient(clientId: string): Promise<JobWithRefs[]> {
-  return resolve(fx.jobs.filter((j) => j.clientId === clientId).map(jobRefs));
+  return resolve(store.jobs.filter((j) => j.clientId === clientId).map(jobRefs));
 }
 
 // ---- Daily hit list ---------------------------------------------------------
@@ -340,21 +359,21 @@ const DEPARTMENTS: { key: Department; name: string }[] = [
 ];
 
 const OPEN_ESTIMATE: Estimate['status'][] = ['draft', 'sent'];
-const ACTIVE_JOB: Job['status'][] = ['queued', 'in_progress', 'awaiting_parts', 'qc'];
+const ACTIVE_JOB: Job['status'][] = ['approved', 'in_service', 'testing'];
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const completedThisMonth = fx.jobs.filter((j) => isThisMonth(j.completedAt));
+  const completedThisMonth = store.jobs.filter((j) => isThisMonth(j.finishedAt));
   return resolve({
     watchesInHouse: store.watches.filter((w) => w.status !== 'released' && w.status !== 'expected').length,
     openEstimates: store.estimates.filter((e) => OPEN_ESTIMATE.includes(e.status)).length,
     awaitingApproval: store.estimates.filter((e) => e.status === 'sent').length,
-    inProgress: fx.jobs.filter((j) => ACTIVE_JOB.includes(j.status)).length,
-    awaitingPickup: fx.jobs.filter((j) => j.status === 'awaiting_pickup').length,
+    inProgress: store.jobs.filter((j) => ACTIVE_JOB.includes(j.status)).length,
+    awaitingPickup: store.jobs.filter((j) => j.status === 'ready_to_ship').length,
     revenueThisMonth: completedThisMonth.reduce((t, j) => t + j.total, 0),
     departments: DEPARTMENTS.map((d) => ({
       ...d,
       mtdRevenue: completedThisMonth.filter((j) => j.department === d.key).reduce((t, j) => t + j.total, 0),
-      jobCount: fx.jobs.filter((j) => j.department === d.key).length,
+      jobCount: store.jobs.filter((j) => j.department === d.key && j.status !== 'closed').length,
     })),
   });
 }
@@ -542,7 +561,7 @@ export async function findWatchBySerial(reference: string, serial: string): Prom
   if (!ref || !ser || ser === 'NS') return resolve(null);
   const watch = store.watches.find((w) => w.reference.toUpperCase() === ref && w.serial.toUpperCase() === ser);
   if (!watch) return resolve(null);
-  const jobs = fx.jobs.filter((j) => j.watchId === watch.id);
+  const jobs = store.jobs.filter((j) => j.watchId === watch.id);
   const packages = store.packages.filter((p) => {
     const est = p.estimateId ? store.estimates.find((e) => e.id === p.estimateId) : undefined;
     return est?.watchId === watch.id && (p.status === 'received' || p.status === 'discrepancy_hold');
@@ -871,10 +890,12 @@ export async function reopenEstimate(id: string): Promise<EstimateWithRefs> {
   return resolve(withRefs(e));
 }
 
-export async function convertEstimate(id: string, target: 'job' | 'sales_order' | 'intake'): Promise<never> {
+export async function convertEstimate(id: string, target: 'job' | 'sales_order' | 'intake'): Promise<JobWithRefs> {
+  if (target === 'job') return createJobFromEstimate(id);
+  if (target === 'intake') return convertEstimateToIntake(id);
   const e = getEst(id);
-  estStamp(e, `Convert to ${target} requested — not wired in this session`);
-  throw new Error(`Convert to ${target.replace('_', ' ')} isn’t wired yet — target arrives in a later session`);
+  estStamp(e, 'Convert to sales order requested — not wired in this session');
+  throw new Error('Convert to sales order isn’t wired yet — target arrives in a later session');
 }
 
 export interface ShippingCalcInput { units: number; hiAk: boolean; saturday: boolean }
@@ -883,4 +904,336 @@ export function calcShipping(i: ShippingCalcInput) {
   const overnight = i.units > 25;
   const amount = 35 + (overnight ? 25 : 0) + i.units * 1.5 + (i.hiAk ? 30 : 0) + (i.saturday ? 20 : 0);
   return { amount, overnight, insuredValue: i.units * 1000 };
+}
+
+// ---- Jobs (E4) — state machine per PROMPT-PACK-jobs.md ------------------------
+
+export { JOB_FLOW, DEPT_OF_CODE } from './fixtures/jobs';
+
+export interface JobAction {
+  key: string;
+  label: string;
+  to: JobStatus;
+  needsReason?: boolean;
+  notifies?: boolean;
+  tone?: 'primary' | 'danger' | 'neutral';
+  provisional?: string;
+}
+
+// Only these buttons render — never a free status dropdown. Linear order is the pack's full status list;
+// notify points are UNKNOWN in the pack (flagged provisional in the UI).
+const JOB_ACTIONS: Record<JobStatus, JobAction[]> = {
+  intake: [{ key: 'start_review', label: 'Start review', to: 'in_review', tone: 'primary' }],
+  in_review: [
+    { key: 'request_approval', label: 'Send for customer approval', to: 'awaiting_customer_approval', tone: 'primary', notifies: true },
+    { key: 'approve_direct', label: 'Mark approved (estimate pre-approved)', to: 'approved', provisional: 'Skip to approved when the linked estimate was already approved — not in the pack' },
+  ],
+  awaiting_customer_approval: [
+    { key: 'approve', label: 'Customer approved', to: 'approved', tone: 'primary' },
+    { key: 'back_to_review', label: 'Back to review…', to: 'in_review', needsReason: true, tone: 'neutral' },
+  ],
+  approved: [{ key: 'start_service', label: 'Start service', to: 'in_service', tone: 'primary' }],
+  in_service: [{ key: 'to_testing', label: 'Send to testing / QC', to: 'testing', tone: 'primary' }],
+  testing: [
+    { key: 'qc_pass', label: 'QC pass → ready to ship', to: 'ready_to_ship', tone: 'primary', notifies: true },
+    { key: 'qc_fail', label: 'QC fail → back to service…', to: 'in_service', needsReason: true, notifies: true, tone: 'danger' },
+  ],
+  ready_to_ship: [{ key: 'close', label: 'Close job', to: 'closed', tone: 'primary' }],
+  closed: [],
+};
+
+export const activeHold = (j: Job): JobHold | undefined => j.holds.find((h) => !h.releasedAt);
+
+export function legalJobActions(j: Job): JobAction[] {
+  if (activeHold(j)) return [];
+  return JOB_ACTIONS[j.status];
+}
+
+const HOLDABLE: JobStatus[] = ['approved', 'in_service', 'testing'];
+export const canHold = (j: Job) => !activeHold(j) && j.simpleStatus === 'on_hand' && HOLDABLE.includes(j.status);
+
+const WATCH_STATUS_FOR: Partial<Record<JobStatus, Watch['status']>> = { in_service: 'in_service', testing: 'qc', ready_to_ship: 'awaiting_pickup', closed: 'released', awaiting_customer_approval: 'awaiting_approval' };
+
+const getJobRow = (id: string) => byId(store.jobs, id);
+const nextJobNumber = () => `E${String(++store.counters.job).padStart(5, '0')}`; // pack: `E` + digits from a next-job-id sequence
+const newId = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+
+const jobStamp = (j: Job, detail: string) => {
+  const a = actor();
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} · ${detail}` });
+};
+
+const queueJobEmail = (j: Job, subject: string, body: string) => {
+  const a = actor();
+  const c = byId(fx.clients, j.clientId);
+  const w = byId(store.watches, j.watchId);
+  const email: OutboxEmail = {
+    id: `ob-${Date.now().toString(36)}`,
+    to: c.email, toName: `${c.firstName} ${c.lastName}`,
+    relatedRef: j.number, status: 'pending',
+    subject: `${subject} — ${w.brand} ${w.model} (${j.number})`,
+    body: `Hello ${c.firstName},\n\n${body}\n\nJob: ${j.number} · ${w.brand} ${w.model} ${w.reference}\n\n— The RolliSuite team`,
+    createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
+  };
+  store.outbox.unshift(email);
+  return email;
+};
+
+const EMAIL_FOR: Record<string, (j: Job, reason?: string) => [string, string]> = {
+  request_approval: () => ['Your estimate is ready for approval', 'We have finished reviewing your watch and the estimate is ready for your approval. Please reply to this email or call the shop to confirm.'],
+  qc_pass: () => ['Your watch is ready', 'Your watch has passed final testing and quality control and is ready to ship or collect. We will be in touch to arrange delivery.'],
+  qc_fail: (_j, reason) => ['A short delay on your watch', `During final testing we found something we want to correct before it leaves the shop: ${reason}. It has gone back to the bench and we will update you when testing is complete.`],
+};
+
+const pushTransition = (j: Job, action: string, to: JobStatus, reason?: string, emailQueued?: boolean) => {
+  const a = actor();
+  j.timeline.push({ id: newId('jt'), from: j.status, to, action, reason, emailQueued, at: new Date().toISOString(), by: a.by, station: a.station });
+  j.status = to;
+  const ws = WATCH_STATUS_FOR[to];
+  const w = store.watches.find((x) => x.id === j.watchId);
+  if (ws && w) w.status = ws;
+  if (to === 'closed') { j.finishedAt = new Date().toISOString(); j.simpleStatus = 'finished'; }
+};
+
+export async function transitionJob(id: string, actionKey: string, reason?: string): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  if (activeHold(j)) throw new Error('Job is on hold — release the hold first');
+  const action = JOB_ACTIONS[j.status].find((x) => x.key === actionKey);
+  if (!action) throw new Error(`"${actionKey}" is not a legal action from ${j.status}`);
+  if (action.needsReason && !reason?.trim()) throw new Error('A reason is required for this step');
+  const mail = action.notifies ? EMAIL_FOR[action.key] : undefined;
+  let queued = false;
+  if (mail) { const [s, b] = mail(j, reason?.trim()); queueJobEmail(j, s, b); queued = true; }
+  pushTransition(j, action.key, action.to, reason?.trim(), queued);
+  jobStamp(j, `${action.label.replace('…', '')} · ${humanizeStatus(action.to)}${reason ? ` · ${reason.trim()}` : ''}${queued ? ' · client email queued' : ''}`);
+  return resolve(jobRefs(j));
+}
+
+const humanizeStatus = (s: string) => s.replace(/_/g, ' ');
+
+export async function assignJob(id: string, shortName: string | null): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  if (shortName && !fx.users.some((u) => u.shortName === shortName)) throw new Error('Pick someone from the staff list');
+  const prev = j.assignedTo;
+  j.assignedTo = shortName ?? undefined;
+  jobStamp(j, shortName ? `Assigned to ${shortName}${prev ? ` (was ${prev})` : ''}` : `Unassigned (was ${prev ?? 'nobody'})`);
+  return resolve(jobRefs(j));
+}
+
+export async function placeHold(id: string, type: HoldType, reason: string): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  if (!reason.trim()) throw new Error('A hold reason is required');
+  if (activeHold(j)) throw new Error('Job already has an active hold');
+  if (!canHold(j)) throw new Error('Holds apply to on-hand jobs that are approved, in service or in testing');
+  const a = actor();
+  j.holds.unshift({ id: newId('jh'), type, reason: reason.trim(), priorStatus: j.status, placedAt: new Date().toISOString(), placedBy: a.by, station: a.station });
+  const w = store.watches.find((x) => x.id === j.watchId);
+  if (w && type === 'parts') w.status = 'awaiting_parts';
+  jobStamp(j, `${type === 'parts' ? 'Parts' : 'Outsource'} hold placed · ${reason.trim()} · parked from ${humanizeStatus(j.status)}`);
+  return resolve(jobRefs(j));
+}
+
+export async function releaseHold(id: string, note?: string): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  const h = activeHold(j);
+  if (!h) throw new Error('No active hold on this job');
+  const a = actor();
+  h.releasedAt = new Date().toISOString();
+  h.releasedBy = a.by;
+  h.releaseNote = note?.trim() || undefined;
+  j.status = h.priorStatus;
+  const w = store.watches.find((x) => x.id === j.watchId);
+  const ws = WATCH_STATUS_FOR[j.status];
+  if (w && ws) w.status = ws;
+  jobStamp(j, `${h.type === 'parts' ? 'Parts' : 'Outsource'} hold released · back to ${humanizeStatus(h.priorStatus)}${h.releaseNote ? ` · ${h.releaseNote}` : ''}`);
+  return resolve(jobRefs(j));
+}
+
+export async function addJobNote(id: string, text: string): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  if (!text.trim()) throw new Error('Note is empty');
+  const a = actor();
+  j.notes.unshift({ id: newId('jn'), text: text.trim(), at: new Date().toISOString(), by: a.by, station: a.station });
+  jobStamp(j, `Note added · ${text.trim().slice(0, 60)}`);
+  return resolve(jobRefs(j));
+}
+
+export async function addJobPhotos(id: string, photos: PackagePhoto[]): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  const a = actor();
+  photos.forEach((p) => j.photos.unshift({ ...p, at: new Date().toISOString(), by: a.by, station: a.station }));
+  jobStamp(j, `${photos.length} photo${photos.length === 1 ? '' : 's'} attached`);
+  return resolve(jobRefs(j));
+}
+
+export interface JobFieldsPatch { priority?: JobPriority; dueAt?: string | null; conditionNotes?: string; intakeNotes?: string }
+
+export async function updateJobFields(id: string, patch: JobFieldsPatch): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  const changed: string[] = [];
+  if (patch.priority && patch.priority !== j.priority) { changed.push(`priority ${j.priority} → ${patch.priority}`); j.priority = patch.priority; }
+  if (patch.dueAt !== undefined) { j.dueAt = patch.dueAt || undefined; changed.push(patch.dueAt ? `due ${new Date(patch.dueAt).toLocaleDateString('en-US')}` : 'due date cleared'); }
+  if (patch.conditionNotes !== undefined) { j.conditionNotes = patch.conditionNotes; changed.push('condition notes'); }
+  if (patch.intakeNotes !== undefined) { j.intakeNotes = patch.intakeNotes; changed.push('intake notes'); }
+  if (changed.length) jobStamp(j, `Updated · ${changed.join(', ')}`);
+  return resolve(jobRefs(j));
+}
+
+export async function searchJobs(query: string): Promise<JobWithRefs[]> {
+  const q = query.trim().toLowerCase();
+  const digits = estimateDigits(query);
+  const all = await getJobs();
+  if (!q) return all;
+  return all.filter((j) => {
+    const name = `${j.client.firstName} ${j.client.lastName}`.toLowerCase();
+    return (digits && estimateDigits(j.number).startsWith(digits)) || name.includes(q) || j.watch.reference.toLowerCase().includes(q) || j.watch.serial.toLowerCase().includes(q) || j.watch.model.toLowerCase().includes(q) || (j.assignedTo?.toLowerCase().includes(q) ?? false);
+  });
+}
+
+export interface CreateJobInput {
+  clientId: string;
+  watchId: string;
+  estimateId?: string;
+  priority?: JobPriority;
+  dueAt?: string;
+  assignedTo?: string;
+  conditionNotes?: string;
+  intakeNotes?: string;
+  onHand: boolean;
+  workflow?: DeptCode[];
+  lines?: EstimateLine[];
+}
+
+const buildJob = (input: CreateJobInput): Job => {
+  if (!input.clientId) throw new Error('Customer is required');
+  if (!input.watchId) throw new Error('Watch is required on create');
+  const w = byId(store.watches, input.watchId);
+  if (w.clientId !== input.clientId) throw new Error('That watch belongs to a different customer');
+  const a = actor();
+  const now = new Date().toISOString();
+  const lines = (input.lines ?? []).map((l) => ({ ...l, id: newLineId() }));
+  const workflow = input.workflow?.length ? input.workflow : uniq(lines.map((l) => l.dept));
+  const j: Job = {
+    id: newId('j'),
+    number: nextJobNumber(),
+    clientId: input.clientId,
+    watchId: input.watchId,
+    estimateId: input.estimateId,
+    department: fx.DEPT_OF_CODE[workflow[0] ?? 'W'],
+    workflow: workflow.length ? workflow : ['W'],
+    status: 'intake',
+    simpleStatus: input.onHand ? 'on_hand' : 'estimate',
+    priority: input.priority ?? 'normal',
+    lines,
+    total: lines.reduce((t, l) => t + l.qty * l.unitPrice, 0),
+    assignedTo: input.assignedTo || undefined,
+    intakeDate: input.onHand ? now : undefined,
+    intakeNotes: input.intakeNotes?.trim() || undefined,
+    conditionNotes: input.conditionNotes?.trim() || undefined,
+    dueAt: input.dueAt || undefined,
+    createdAt: now,
+    createdBy: a.by,
+    timeline: [{ id: newId('jt'), from: null, to: 'intake', action: 'create', at: now, by: a.by, station: a.station }],
+    holds: [], notes: [], photos: [],
+  };
+  if (store.jobs.some((x) => x.number === j.number)) throw new Error(`Job ${j.number} already exists`); // existence check before create
+  store.jobs.unshift(j);
+  return j;
+};
+
+export async function createJob(input: CreateJobInput): Promise<JobWithRefs> {
+  const j = buildJob(input);
+  jobStamp(j, `Created · ${j.workflow.join('+')} · ${j.simpleStatus === 'on_hand' ? 'on hand' : 'watch not yet on hand'} · priority ${j.priority}`);
+  return resolve(jobRefs(j));
+}
+
+// Received package for an estimate = routing authority for workflow, and proof the watch is on hand
+const receivedPkgFor = (estimateId: string) => store.packages.find((p) => p.estimateId === estimateId && (p.status === 'received' || p.status === 'discrepancy_hold'));
+
+const jobFromEstimate = (e: Estimate, onHand: boolean): Job => {
+  if (!e.watchId) throw new Error('Estimate has no watch — add one before creating a job');
+  const pkg = receivedPkgFor(e.id);
+  const j = buildJob({ clientId: e.clientId, watchId: e.watchId, estimateId: e.id, onHand: onHand || !!pkg, lines: e.lines, workflow: pkg?.workflow, intakeNotes: pkg?.notes });
+  j.packageId = pkg?.id;
+  e.jobId = j.id;
+  return j;
+};
+
+const markConverted = (e: Estimate) => {
+  e.status = 'converted';
+  e.convertedAt = new Date().toISOString();
+  e.updatedAt = e.convertedAt;
+};
+
+// E3 "Create job": born from an approved estimate, carrying its lines and watch
+export async function createJobFromEstimate(estimateId: string): Promise<JobWithRefs> {
+  const e = getEst(estimateId);
+  if (e.jobId) throw new Error(`Estimate already has job ${byId(store.jobs, e.jobId).number}`);
+  if (e.status !== 'approved') throw new Error('Only an approved estimate can create a job');
+  const j = jobFromEstimate(e, false);
+  markConverted(e);
+  estStamp(e, `Converted → job ${j.number}`);
+  jobStamp(j, `Created from estimate ${e.number} · ${j.lines.length} line${j.lines.length === 1 ? '' : 's'} · ${j.workflow.join('+')}${j.packageId ? ' · on hand (received package)' : ''}`);
+  return resolve(jobRefs(j));
+}
+
+// Pack: if the estimate already has a job → that job goes on_hand + intake_date; else insert a job and link it
+export async function convertEstimateToIntake(estimateId: string): Promise<JobWithRefs> {
+  const e = getEst(estimateId);
+  if (!['sent', 'approved', 'converted'].includes(e.status)) throw new Error('Only a sent, approved or converted estimate can be converted to intake');
+  let j: Job;
+  if (e.jobId) {
+    j = byId(store.jobs, e.jobId);
+    if (j.simpleStatus === 'on_hand') throw new Error(`Job ${j.number} is already on hand`);
+    if (j.simpleStatus === 'finished') throw new Error(`Job ${j.number} is finished`);
+    j.simpleStatus = 'on_hand';
+    j.intakeDate = new Date().toISOString();
+    jobStamp(j, `Converted to intake · now on hand`);
+  } else {
+    j = jobFromEstimate(e, true);
+    jobStamp(j, `Created on hand via convert-to-intake from ${e.number}`);
+  }
+  if (e.status !== 'converted') markConverted(e);
+  estStamp(e, `Convert to intake → job ${j.number} on hand`);
+  return resolve(jobRefs(j));
+}
+
+// Pack: delete requires can-delete-jobs — mapped to manager tier in the prototype
+export async function deleteJob(id: string): Promise<void> {
+  const j = getJobRow(id);
+  const a = actor();
+  if (a.user?.accessTier !== 'manager') throw new Error('Deleting jobs needs the can-delete-jobs permission (manager)');
+  store.jobs = store.jobs.filter((x) => x.id !== id);
+  store.shopTime = store.shopTime.filter((t) => t.jobId !== id);
+  const e = j.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined;
+  if (e) e.jobId = undefined;
+  jobStamp(j, 'Deleted');
+  return resolve(undefined);
+}
+
+export async function invoiceJob(id: string): Promise<never> {
+  const j = getJobRow(id);
+  jobStamp(j, 'Create invoice requested — arrives in the invoicing session');
+  throw new Error('Invoicing arrives in the next session (E5) — stub');
+}
+
+// ---- Shop Time: time rows against on_hand jobs; never moves job status ----------
+
+export async function getShopTime(jobId?: string): Promise<ShopTimeEntry[]> {
+  return resolve(store.shopTime.filter((t) => !jobId || t.jobId === jobId).sort((a, b) => b.at.localeCompare(a.at)));
+}
+
+export async function getOnHandJobs(): Promise<JobWithRefs[]> {
+  return resolve(store.jobs.filter((j) => j.simpleStatus === 'on_hand').map(jobRefs));
+}
+
+export async function addShopTime(jobId: string, minutes: number, note: string): Promise<ShopTimeEntry> {
+  const j = getJobRow(jobId);
+  if (j.simpleStatus !== 'on_hand') throw new Error('Shop Time only accepts on-hand jobs');
+  if (!Number.isFinite(minutes) || minutes <= 0) throw new Error('Enter minutes worked (greater than 0)');
+  const a = actor();
+  const t: ShopTimeEntry = { id: newId('st'), jobId, minutes: Math.round(minutes), note: note.trim(), at: new Date().toISOString(), by: a.by, station: a.station };
+  store.shopTime.unshift(t);
+  jobStamp(j, `Shop time +${t.minutes} min${t.note ? ` · ${t.note}` : ''}`);
+  return resolve(t);
 }
