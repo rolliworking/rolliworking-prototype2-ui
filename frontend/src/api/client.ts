@@ -1783,7 +1783,7 @@ const BENCH_STATES: JobStatus[] = ['approved', 'in_service', 'testing'];
 // Pull-next: oldest approved, unassigned, on-hand job — but never one a supervisor already assigned to someone else
 export const pullNextCandidate = (me: string): Job | null =>
   store.jobs
-    .filter((j) => j.status === 'approved' && j.simpleStatus === 'on_hand' && !activeHold(j) && (j.assignees.length === 0 || j.assignees.includes(me)))
+    .filter((j) => j.status === 'approved' && j.simpleStatus === 'on_hand' && !activeHold(j) && j.assignees.length === 0 && me !== '')
     .sort((a, b) => ({ urgent: 0, high: 1, normal: 2, low: 3 }[a.priority] - { urgent: 0, high: 1, normal: 2, low: 3 }[b.priority]) || a.createdAt.localeCompare(b.createdAt))[0] ?? null;
 
 export async function getBenchView(userId?: string): Promise<BenchView> {
@@ -1792,14 +1792,16 @@ export async function getBenchView(userId?: string): Promise<BenchView> {
   const mine = store.jobs.filter((j) => j.assignees.includes(me.shortName) && j.status !== 'closed');
   const jobs = mine.filter((j) => !activeHold(j)).sort((a, b) => a.status.localeCompare(b.status) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9')).map((j) => { const n = nextActionLabel(j); return { ...jobRefs(j), nextAction: n.label, blocked: n.blocked }; });
   const holds = mine.filter((j) => activeHold(j)).map(jobRefs);
-  const pn = pullNextCandidate(me.shortName);
+  const benchRole = me.roles.includes('watchmaker') || me.roles.includes('inspector');
+  const pn = benchRole ? pullNextCandidate(me.shortName) : null;
   const partsRequests = store.partsRequests.filter((r) => r.requestedBy === me.shortName && r.status !== 'draft').map(prRefs);
-  return resolve({ jobs, holds, pullNext: pn && !pn.assignees.includes(me.shortName) ? jobRefs(pn) : null, partsRequests });
+  return resolve({ jobs, holds, pullNext: pn ? jobRefs(pn) : null, partsRequests });
 }
 
 // Pull-next = self-assign + start service, audit-stamped
 export async function pullNext(): Promise<JobWithRefs> {
   const a = actor();
+  if (!a.user || !(a.user.roles.includes('watchmaker') || a.user.roles.includes('inspector'))) throw new Error('Pull-next is for bench roles (watchmaker / inspector)');
   const j = pullNextCandidate(a.by);
   if (!j) throw new Error('Nothing to pull — no unassigned approved jobs on hand');
   if (!j.assignees.includes(a.by)) j.assignees.push(a.by);
