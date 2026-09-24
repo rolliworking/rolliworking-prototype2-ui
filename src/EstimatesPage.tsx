@@ -6,6 +6,7 @@ import {
   deleteEstimate,
   getEstimate,
   listEstimates,
+  replaceEstimateLines,
   searchCustomersForReceive,
   sendEstimateEmail,
   updateEstimate,
@@ -75,6 +76,11 @@ export function EstimatesPage() {
   const [lineDesc, setLineDesc] = useState("Service");
   const [linePrice, setLinePrice] = useState("250");
 
+  // revise lines on selected estimate
+  const [editLines, setEditLines] = useState<{ description: string; quantity: string; unit_price: string }[]>(
+    []
+  );
+
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -100,6 +106,7 @@ export function EstimatesPage() {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
+      setEditLines([]);
       return;
     }
     let cancelled = false;
@@ -108,7 +115,19 @@ export function EstimatesPage() {
       setNotice(null);
       try {
         const row = (await getEstimate(selectedId)) as Row;
-        if (!cancelled) setDetail(row);
+        if (!cancelled) {
+          setDetail(row);
+          const existing = ((row.lines as Row[] | undefined) || []).map((line) => ({
+            description: String(line.description || ""),
+            quantity: String(line.quantity ?? 1),
+            unit_price: String(line.unit_price ?? 0),
+          }));
+          setEditLines(
+            existing.length
+              ? existing
+              : [{ description: "", quantity: "1", unit_price: "0" }]
+          );
+        }
       } catch (e) {
         if (!cancelled) {
           setDetail(null);
@@ -278,6 +297,30 @@ export function EstimatesPage() {
       setNotice(`Converted to intake job ${String(job.id).slice(0, 8)}`);
       const row = (await getEstimate(selectedId)) as Row;
       setDetail(row);
+      await reload();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSaveLines() {
+    if (!selectedId) return;
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const lines = editLines
+        .filter((l) => l.description.trim())
+        .map((l) => ({
+          description: l.description.trim(),
+          quantity: Number(l.quantity) || 1,
+          unit_price: Number(l.unit_price) || 0,
+        }));
+      const row = (await replaceEstimateLines(selectedId, { lines })) as Row;
+      setDetail(row);
+      setNotice(`Lines saved · total ${money(row.total_amount ?? row.subtotal)}`);
       await reload();
     } catch (e) {
       setError(errMsg(e));
@@ -491,19 +534,80 @@ export function EstimatesPage() {
                   Convert → intake
                 </button>
               </div>
+              <h2 style={{ marginTop: "1rem" }}>Revise lines</h2>
+              {editLines.map((line, idx) => (
+                <div className="toolbar" key={idx}>
+                  <label>
+                    Description
+                    <input
+                      value={line.description}
+                      disabled={String(detail.status) === "converted"}
+                      onChange={(e) => {
+                        const next = [...editLines];
+                        next[idx] = { ...next[idx], description: e.target.value };
+                        setEditLines(next);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Qty
+                    <input
+                      value={line.quantity}
+                      disabled={String(detail.status) === "converted"}
+                      onChange={(e) => {
+                        const next = [...editLines];
+                        next[idx] = { ...next[idx], quantity: e.target.value };
+                        setEditLines(next);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Price
+                    <input
+                      value={line.unit_price}
+                      disabled={String(detail.status) === "converted"}
+                      onChange={(e) => {
+                        const next = [...editLines];
+                        next[idx] = { ...next[idx], unit_price: e.target.value };
+                        setEditLines(next);
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="linkish"
+                    disabled={busy || String(detail.status) === "converted"}
+                    onClick={() => setEditLines(editLines.filter((_, i) => i !== idx))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="actions">
+                <button
+                  type="button"
+                  disabled={busy || String(detail.status) === "converted"}
+                  onClick={() =>
+                    setEditLines([
+                      ...editLines,
+                      { description: "", quantity: "1", unit_price: "0" },
+                    ])
+                  }
+                >
+                  Add line
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || String(detail.status) === "converted"}
+                  onClick={() => void onSaveLines()}
+                >
+                  Save lines
+                </button>
+              </div>
               {lines.length === 0 ? (
-                <p className="empty">No lines</p>
+                <p className="empty">No saved lines yet</p>
               ) : (
-                <ul>
-                  {lines.map((line) => (
-                    <li key={String(line.id)}>
-                      <span>{String(line.description || "Line")}</span>
-                      <span>
-                        {Number(line.quantity) || 1} × {money(line.unit_price)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <p className="sub">Saved: {lines.length} line(s)</p>
               )}
             </>
           )}

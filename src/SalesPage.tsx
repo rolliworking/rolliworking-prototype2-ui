@@ -3,6 +3,7 @@ import {
   completePickup,
   confirmShipment,
   fulfillSalesOrder,
+  generatePickupCode,
   getSalesOrder,
   getSalesOrderInvoiceStatus,
   listSalesOrders,
@@ -54,6 +55,7 @@ export function SalesPage() {
   const [invoice, setInvoice] = useState<Row | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pickupCode, setPickupCode] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -195,6 +197,23 @@ export function SalesPage() {
           ?.tracking_number);
       setNotice(`Shipped with mock label${tracking ? ` · ${tracking}` : ""} — no carrier charge`);
       await refreshDetail(selectedId);
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onPickupCode() {
+    if (!selectedId) return;
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const res = (await generatePickupCode({ sales_order_id: selectedId })) as Row;
+      const code = String(res.code || "");
+      setPickupCode(code);
+      setNotice(`Pickup code ${code}${res.pickup_url_hint ? ` · ${String(res.pickup_url_hint)}` : ""}`);
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -372,7 +391,15 @@ export function SalesPage() {
                 <button type="button" disabled={busy} onClick={() => void onShipConfirm()}>
                   Ship (mock label)
                 </button>
+                <button type="button" disabled={busy} onClick={() => void onPickupCode()}>
+                  Generate pickup code
+                </button>
               </div>
+              {pickupCode ? (
+                <p className="banner" style={{ marginTop: "0.75rem" }}>
+                  Active code: <strong>{pickupCode}</strong>
+                </p>
+              ) : null}
               {lines.length === 0 ? (
                 <p className="empty">No lines</p>
               ) : (
