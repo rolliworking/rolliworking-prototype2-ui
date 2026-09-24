@@ -210,16 +210,21 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
 
       <div className="panels">
         <section className="panel">
-          <h2>Open sales orders</h2>
+          <h2>
+            Open sales orders{" "}
+            <button type="button" className="linkish" onClick={() => onGo("sales")}>
+              View all
+            </button>
+          </h2>
           {openSos.length === 0 ? (
             <p className="empty">No open sales orders</p>
           ) : (
             <ul>
               {openSos.map((row) => (
                 <li key={String(row.id)}>
-                  <span>
+                  <button type="button" className="linkish" onClick={() => onGo("sales")}>
                     {String(row.so_number || row.id)} · {String(row.customer_name || "—")}
-                  </span>
+                  </button>
                   <span>
                     {money(row.total_amount ?? row.total)} · {String(row.status)}
                   </span>
@@ -230,14 +235,21 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
         </section>
 
         <section className="panel">
-          <h2>Ready to ship</h2>
+          <h2>
+            Ready to ship{" "}
+            <button type="button" className="linkish" onClick={() => onGo("sales")}>
+              Ship station
+            </button>
+          </h2>
           {readyShip.length === 0 ? (
             <p className="empty">No orders ready to ship</p>
           ) : (
             <ul>
               {readyShip.map((row) => (
                 <li key={String(row.id)}>
-                  <span>{String(row.so_number || row.id)}</span>
+                  <button type="button" className="linkish" onClick={() => onGo("sales")}>
+                    {String(row.so_number || row.id)}
+                  </button>
                   <span>Ready · {String(row.status)}</span>
                 </li>
               ))}
@@ -246,17 +258,22 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
         </section>
 
         <section className="panel">
-          <h2>Recent estimates</h2>
+          <h2>
+            Recent estimates{" "}
+            <button type="button" className="linkish" onClick={() => onGo("estimates")}>
+              View all
+            </button>
+          </h2>
           {estimates.length === 0 ? (
             <p className="empty">No estimates</p>
           ) : (
             <ul>
               {estimates.map((row) => (
                 <li key={String(row.id)}>
-                  <span>
+                  <button type="button" className="linkish" onClick={() => onGo("estimates")}>
                     {String(row.estimate_number || row.id)} ·{" "}
                     {String((row.customer as { last_name?: string } | null)?.last_name || "")}
-                  </span>
+                  </button>
                   <span>{String(row.status)}</span>
                 </li>
               ))}
@@ -265,18 +282,23 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
         </section>
 
         <section className="panel">
-          <h2>Today's hit list</h2>
+          <h2>
+            Today's hit list{" "}
+            <button type="button" className="linkish" onClick={() => onGo("hit-list")}>
+              Open
+            </button>
+          </h2>
           {hitList.length === 0 ? (
             <p className="empty">No open hit-list items</p>
           ) : (
             <ul>
-                  {hitList.map((row) => (
+              {hitList.map((row) => (
                 <li key={String(row.id)}>
-                  <span>
+                  <button type="button" className="linkish" onClick={() => onGo("hit-list")}>
                     {String(row.estimate_number || "")}
                     {row.estimate_number ? " · " : ""}
                     {String(row.description || row.id)}
-                  </span>
+                  </button>
                   <span>{String(row.technician || "")}</span>
                 </li>
               ))}
