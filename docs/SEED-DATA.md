@@ -114,6 +114,15 @@ Bench (MM): j-01, j-03, j-16 + holds j-04, j-06; pull-next = j-10 (E02020, appro
 
 ## Activity (`activity.ts`) — 10 static dashboard rows (not derived).
 
+## Client 360 seed — Naomi Castellanos (c-10) (E7)
+| watch | ref / serial | status | history (newest first) |
+|---|---|---|---|
+| w-20 Rolex Datejust 31 | 278274 / 2R8M5K7Q | in_service | j-24 **E02007** in_service (MM, released parts hold, high) ← e-23 **E01040 rev 2** converted (rev 1 snapshot seeded) ← pk-11 **SUB-26-0291** FedEx `794644790132` received |
+| w-10 Rolex OP 41 | 124300 / D7W3F9K2 | released | e-13 E01053 approved (pk-06 SUB-26-0305 UPS `1Z999AA10123456701` awaiting inspection) · rq-02 closed · so-05 SO-26-0105 shipped/paid $425 · j-08 E02018 closed ← e-22 E01038 · e-10 E01050 declined · j-23 **E01412** closed (2023) ← e-20 **E00812** historical |
+| w-21 Tudor BB58 Navy | M79030B-0001 / W4T9L36N | released | rq-01 quoted → e-24 **E01057** draft · so-08 **SO-25-0042** picked up, paid $250 card + $260 cash (2024) · j-25 **E01788** closed ← e-21 **E00931** historical |
+Requests rq-01 (call, quoted), rq-02 (email, closed), rq-03 (web, new, no watch). Tasks t-11 (concierge role, open), t-12 (Vienna, open), t-13 (done). Emails ob-03..ob-08 to naomi.castellanos@example.com. Other requests: rq-04 (c-02), rq-05 (c-21).
+Search smoke identifiers: `Naomi`, `naomi.castellanos`, `555-0110`, `E01040`, `E02007`, `SUB-26-0291`, `794644790132`, `1Z999AA10123456701`, `278274`, `W4T9L36N`, `SO-25-0042`, `H7N2-55`, `RQ-26-0041`.
+
 ## Testing honesty notes
 - Numbers, names and dates are fabricated; no real customer data.
 - Because the store is in-memory, chain dependent UI steps in one page session; `page.goto` resets it.

@@ -621,3 +621,124 @@ export interface SupervisorBoard {
 
 export type FloorLane = 'intake' | 'review' | 'approval' | 'bench' | 'case_cleaning' | 'holds' | 'qc' | 'ready' | 'out';
 export interface FloorMap { lanes: { key: FloorLane; label: string; jobs: JobWithRefs[] }[] }
+
+// ---- E7 Client 360 ---------------------------------------------------------------
+
+export type RequestSource = 'call' | 'email' | 'web' | 'walk_in';
+export type RequestStatus = 'new' | 'quoted' | 'closed';
+
+export interface ServiceRequest {
+  id: string;
+  number: string;
+  clientId: string;
+  watchId?: string;
+  source: RequestSource;
+  status: RequestStatus;
+  summary: string;
+  estimateId?: string;
+  createdAt: string;
+  createdBy: string;
+  station: string;
+  closedAt?: string;
+  closedNote?: string;
+}
+
+export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request';
+
+export interface SearchHit {
+  kind: IdentifierKind;
+  id: string;
+  hitKey: string;
+  label: string;
+  detail: string;
+  matched: string;
+  clientId?: string;
+  clientName: string;
+  path: string;
+}
+
+export interface SearchGroup { kind: IdentifierKind; label: string; hits: SearchHit[] }
+export interface SearchResults { query: string; groups: SearchGroup[]; total: number }
+
+export type CustodyKind = 'package_arrived' | 'watch_received' | 'discrepancy' | 'hold_placed' | 'hold_released' | 'shipped' | 'picked_up';
+
+export interface CustodyEvent {
+  id: string;
+  kind: CustodyKind;
+  at: string;
+  by: string;
+  station: string;
+  detail: string;
+  watchId?: string;
+  jobId?: string;
+  packageId?: string;
+  salesOrderId?: string;
+  hitKey: string;
+  path: string;
+}
+
+export interface WatchHistoryRow {
+  kind: 'estimate' | 'job' | 'sales_order' | 'request';
+  id: string;
+  hitKey: string;
+  number: string;
+  status: string;
+  title: string;
+  amount?: number;
+  at: string;
+  path: string;
+}
+
+export interface WatchGroup {
+  watch: Watch;
+  history: WatchHistoryRow[];
+  lifetimeSpend: number;
+  lastServiceAt?: string;
+  activeJobId?: string;
+}
+
+export interface ClientNoteRow extends Stamp {
+  id: string;
+  source: 'job' | 'estimate';
+  ref: string;
+  text: string;
+  path: string;
+}
+
+export interface Client360Summary {
+  watchCount: number;
+  inHouse: number;
+  openBalance: number;
+  lifetimeSpend: number;
+  openEstimates: number;
+  activeJobs: number;
+  openRequests: number;
+  openTasks: number;
+  lastContactAt?: string;
+}
+
+export interface Client360 {
+  client: Client;
+  summary: Client360Summary;
+  watches: WatchGroup[];
+  requests: ServiceRequest[];
+  estimates: EstimateWithRefs[];
+  jobs: JobWithRefs[];
+  salesOrders: SalesOrderWithRefs[];
+  payments: (Payment & { salesOrderId: string; salesOrderNumber: string })[];
+  notes: ClientNoteRow[];
+  tasks: Task[];
+  custody: CustodyEvent[];
+  emails: OutboxEmail[];
+  packages: PackageWithRefs[];
+}
+
+export interface ClientDirectoryRow {
+  client: Client;
+  watchCount: number;
+  inHouse: number;
+  openEstimates: number;
+  activeJobs: number;
+  openBalance: number;
+  lastActivityAt?: string;
+}

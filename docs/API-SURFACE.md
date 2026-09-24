@@ -146,6 +146,14 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `getDashboardStats()` | `DashboardStats` | inProgress = approved+in_service+testing; awaitingPickup = ready_to_ship; revenue = closed this month |
 | `getRecentActivity(limit)` | `ActivityEvent[]` | static fixture |
 
+## Client 360 (E7)
+| function | returns | notes |
+|---|---|---|
+| `resolveIdentifier(q)` | `SearchResults {query, groups[], total}` | ANY identifier → grouped `SearchHit[]` (client · watch · estimate · job · sales_order · package · request), ≤6 per group; `hit.path` = `/clients/:id?hit=<hitKey>` or the record path when no client |
+| `getClient360(clientId)` | `Client360 \| null` | read model: summary, `watches: WatchGroup[]` (per-watch merged history newest first), requests, estimates (with `revisions[]`), jobs, salesOrders, payments (flattened), notes (job notes + estimate internal notes), tasks (client-linked or via jobs), custody (derived), emails (Outbox to client.email), packages |
+| `getClientDirectory()` | `ClientDirectoryRow[]` | `/clients` list: watch counts, open estimates, active jobs, balance, last activity |
+| `getRequests()` / `getRequestsForClient(clientId)` | `ServiceRequest[]` | read-only in E7 (no create/close yet) |
+
 ## Stubs / not wired (explicit)
 - `convertEstimate(id,'sales_order')` — throws (use `convertEstimateToSalesOrder`).
 - QBO push — state only (`qboStatus`, fake id). Payments — ledger only. Carrier — `shippingProvider` mock.

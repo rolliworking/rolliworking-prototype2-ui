@@ -118,5 +118,11 @@ Discrepancies (`computeDiscrepancies`): missing component, serial/ref mismatch, 
 ## 5b. Pinned hit-list item (manual layer, MH ruling)
 `active → dismissed` via `dismissPinned(id)` (dismissedAt/By kept). Created by `pinToHitList` from a job, a task row, or freeform (`#name`/`#role` prefix sets the assignee). Shown in the Pinned section of the assignee's (or role holders') `/today` above derived rows; pins never hide derived rows.
 
+## 5c. ServiceRequest (E7)
+`new → quoted (estimateId set) → closed (closedNote)`. Read-only in the prototype; seeded at every state. Shown on Client 360 (Requests card + per-watch history).
+
+## 5d. Custody (derived, E7)
+Not a machine — a projection: `package_arrived → watch_received | discrepancy → [hold_placed ⇄ hold_released]* → shipped | picked_up`, newest first, each row linking to its source record.
+
 ## 6. Auth / station
 Device: `unregistered → registered(stationId)` (`registerStation` manager+password; `resetDeviceRegistration` back). Session: `signInWithPassword` (photo) → `switchUserWithPin` (only if signed in today) → `signOut`.

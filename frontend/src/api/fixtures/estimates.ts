@@ -1,4 +1,4 @@
-import type { Address, Client, DeptCode, Estimate, EstimateLine, EstimateStatus, LineType } from '../types';
+import type { Address, Client, DeptCode, Estimate, EstimateLine, EstimateRevision, EstimateStatus, LineType } from '../types';
 import { clients } from './clients';
 import { daysAgo, daysFromNow } from './time';
 
@@ -31,6 +31,11 @@ export const totalsFor = (lines: EstimateLine[]) => {
   return { subtotal, shippingAmount, taxAmount: 0, total: subtotal };
 };
 
+// Prior-revision snapshot for seeds (revisions are never overwritten — E3 rule)
+const snapshot = (revision: number, lines: EstimateLine[], savedDaysAgo: number, clientNotes: string, internalNotes = ''): EstimateRevision => ({
+  revision, status: 'sent', lines, ...totalsFor(lines), validUntil: daysFromNow(30 - savedDaysAgo), clientNotes, messageNotes: 'Thank you for your business.', internalNotes, savedAt: daysAgo(savedDaysAgo, 11), savedBy: 'Walter',
+});
+
 interface Seed {
   id: string;
   number: string;
@@ -49,6 +54,8 @@ interface Seed {
   validUntil?: string;
   internalNotes?: string;
   revision?: number;
+  revisions?: EstimateRevision[];
+  createdBy?: string;
 }
 
 const build = (s: Seed): Estimate => {
@@ -59,7 +66,7 @@ const build = (s: Seed): Estimate => {
     id: s.id,
     number: s.number,
     revision: s.revision ?? 1,
-    revisions: [],
+    revisions: s.revisions ?? [],
     clientId: s.clientId,
     watchId: s.watchId,
     department: primaryDepartment(s.lines),
@@ -75,7 +82,7 @@ const build = (s: Seed): Estimate => {
     shippingMirrorsBilling: true,
     historical: s.historical ?? false,
     createdAt: daysAgo(s.createdDaysAgo),
-    createdBy: 'Walter',
+    createdBy: s.createdBy ?? 'Walter',
     updatedAt: daysAgo(s.sentDaysAgo ?? s.createdDaysAgo),
     sentAt: s.sentDaysAgo !== undefined ? daysAgo(s.sentDaysAgo) : undefined,
     convertedAt: s.convertedDaysAgo !== undefined ? daysAgo(s.convertedDaysAgo) : undefined,
@@ -149,4 +156,24 @@ export const estimates: Estimate[] = [
   build({ id: 'e-18', number: 'E01058', clientId: 'c-21', status: 'draft', createdDaysAgo: 0,
     clientNotes: 'Estate piece — no reference yet; client will bring it in next week.',
     lines: [line('Timing regulation only', 180, 'W', { catalogId: 'svc-06' })] }),
+  // ---- Client 360 seed: Naomi Castellanos (c-10) — three watches, estimates across 2023 → today ----
+  build({ id: 'e-20', number: 'E00812', clientId: 'c-10', watchId: 'w-10', status: 'converted', createdDaysAgo: 912, sentDaysAgo: 911, approvedDaysAgo: 908, convertedDaysAgo: 907, historical: true,
+    clientNotes: 'First service since purchase — stopped overnight twice.',
+    internalNotes: 'Historical — imported from the old system.',
+    lines: [line('Complete service — cal. 3230', 1150, 'W', { catalogId: 'svc-01' }), line('Gasket set & crown tube', 85, 'W', { type: 'part', catalogId: 'svc-09' })] }),
+  build({ id: 'e-21', number: 'E00931', clientId: 'c-10', watchId: 'w-21', status: 'converted', createdDaysAgo: 404, sentDaysAgo: 404, approvedDaysAgo: 402, convertedDaysAgo: 402, historical: true,
+    clientNotes: 'Bezel insert chipped at 10 o’clock; clasp no longer clicks.',
+    lines: [line('Replace bezel insert (blue)', 290, 'W', { type: 'part' }), line('Clasp spring & re-pin', 160, 'B', { catalogId: 'svc-12' }), line('Ultrasonic clean', 60, 'P', { catalogId: 'svc-19' })] }),
+  build({ id: 'e-22', number: 'E01038', clientId: 'c-10', watchId: 'w-10', status: 'converted', createdDaysAgo: 41, sentDaysAgo: 41, approvedDaysAgo: 39, convertedDaysAgo: 38,
+    clientNotes: 'Refinish only — bracelet and case sides scratched from a desk.',
+    lines: [line('Case & bracelet refinish — brushed/polished', 340, 'P', { catalogId: 'svc-16' })] }),
+  build({ id: 'e-23', number: 'E01040', clientId: 'c-10', watchId: 'w-20', status: 'converted', createdDaysAgo: 22, sentDaysAgo: 21, approvedDaysAgo: 19, convertedDaysAgo: 19, revision: 2,
+    clientNotes: 'Datejust 31 gaining 2 minutes a day; date jumps late. Aubergine dial — please protect during refinish.',
+    internalNotes: 'Rev 2: client asked to add the crystal after we found a hairline chip at inspection.',
+    revisions: [snapshot(1, [line('Complete service — cal. 2236', 1150, 'W'), line('Pressure test 100m', 115, 'W', { catalogId: 'svc-07' })], 21, 'Datejust 31 gaining 2 minutes a day; date jumps late.')],
+    lines: [line('Complete service — cal. 2236', 1150, 'W'), line('Pressure test 100m', 115, 'W', { catalogId: 'svc-07' }), line('Sapphire crystal (OEM)', 360, 'W', { type: 'part', catalogId: 'svc-10' })] }),
+  build({ id: 'e-24', number: 'E01057', clientId: 'c-10', watchId: 'w-21', status: 'draft', createdDaysAgo: 2, createdBy: 'Vienna',
+    clientNotes: 'Rivet bracelet stretched — quote new bracelet vs. re-pin.',
+    internalNotes: 'From call RQ-26-0041. Waiting on bracelet price from Tudor.',
+    lines: [line('Bracelet tighten & re-pin (Oyster)', 380, 'B', { catalogId: 'svc-12' })] }),
 ];

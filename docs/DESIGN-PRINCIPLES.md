@@ -21,6 +21,8 @@ These are decided. Extend them; do not re-litigate without a DECISIONS.md entry.
 
 | 15 | **Lenses, not modules** | Bench, Supervisor and Floor Map read the same job store through role-shaped views; they add no statuses. Learning loops (parts) write to lookup tables (`compatibleRefs`, `aliases`) and a visible knowledge log, never to hidden state. | `getBenchView`, `getSupervisorBoard`, `getShopFloorMap`, `approvePartsRequest` |
 
+16. **One box answers the phone.** Any identifier a caller can read out resolves through `resolveIdentifier` to the client's 360 page with the matched record flashed. New record types must register in the resolver (kind + hitKey) and carry `data-hit` on the 360 page. (E7)
+
 ## Anti-patterns (don't)
 - Free status `<select>`; editing `status` directly from a screen.
 - New storage paths, `fetch`, or component-local fixtures.

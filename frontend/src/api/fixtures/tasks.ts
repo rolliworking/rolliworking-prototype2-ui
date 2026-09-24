@@ -11,6 +11,9 @@ export const tasks: Task[] = [
   { id: 't-07', title: 'Send Priya Raghunathan the refinish before/after photos', assignedTo: { type: 'role', role: 'concierge' }, createdBy: 'Walter', jobId: 'j-03', clientId: 'c-04', dueAt: daysFromNow(2), status: 'open', createdAt: daysAgo(0, 9), station: 'Bench 2' },
   { id: 't-08', title: 'Restock bench 1 cleaning solution', assignedTo: { type: 'user', shortName: 'MM' }, createdBy: 'MM', dueAt: daysFromNow(3), status: 'open', createdAt: daysAgo(1, 8), station: 'Bench 1' },
   { id: 't-09', title: 'Approve overtime for Saturday QC run', assignedTo: { type: 'role', role: 'manager' }, createdBy: 'Vienna', dueAt: daysFromNow(0, 16), status: 'open', createdAt: daysAgo(0, 9), station: 'Front Desk 1' },
+  { id: 't-11', title: 'Call Naomi Castellanos — Datejust crystal fitted, confirm Friday pickup', assignedTo: { type: 'role', role: 'concierge' }, createdBy: 'MM', jobId: 'j-24', watchId: 'w-20', clientId: 'c-10', dueAt: daysFromNow(0, 16), status: 'open', createdAt: daysAgo(0, 9), station: 'Bench 1' },
+  { id: 't-12', title: 'Get Tudor rivet bracelet price for Naomi (E01057)', assignedTo: { type: 'user', shortName: 'Vienna' }, createdBy: 'Vienna', clientId: 'c-10', watchId: 'w-21', dueAt: daysFromNow(1, 12), status: 'open', createdAt: daysAgo(2, 11), station: 'Front Desk 1' },
+  { id: 't-13', title: 'Email Naomi the OP refinish before/after photos', assignedTo: { type: 'user', shortName: 'Vienna' }, createdBy: 'Walter', jobId: 'j-08', clientId: 'c-10', dueAt: daysAgo(9, 12), status: 'done', createdAt: daysAgo(10, 10), station: 'Bench 2', completedAt: daysAgo(9, 10), completedBy: 'Vienna' },
   { id: 't-10', title: 'File RSC warranty claim for Eleanor Vance Daytona', assignedTo: { type: 'user', shortName: 'Vienna' }, createdBy: 'MH', jobId: 'j-11', clientId: 'c-02', dueAt: daysAgo(2, 12), status: 'done', createdAt: daysAgo(4, 10), station: 'Front Desk 1', completedAt: daysAgo(2, 11), completedBy: 'Vienna' },
 ];
 

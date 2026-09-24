@@ -4,7 +4,8 @@ import AppShell from '@/components/layout/AppShell';
 import IntakeLayout from '@/components/intake/IntakeLayout';
 import { findNavItem } from '@/config/navigation';
 import AuditLogPage from '@/pages/AuditLogPage';
-import ClientDetailPage from '@/pages/ClientDetailPage';
+import ClientsPage from '@/pages/clients/ClientsPage';
+import Client360Page from '@/pages/clients/Client360Page';
 import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
@@ -92,7 +93,8 @@ export default function App() {
                 <Route path="outbox" element={<OutboxPage />} />
                 <Route path="labels" element={<LabelQueuePage />} />
               </Route>
-              <Route path="/clients/:id" element={<ClientDetailPage />} />
+              <Route path="/clients" element={<ClientsPage />} />
+              <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />

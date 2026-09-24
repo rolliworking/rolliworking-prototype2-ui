@@ -135,6 +135,21 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 - `BenchView`, `SupervisorBoard`, `FloorMap` (E6 lenses), `TailStage` per job (`tailStage`), `SO_BADGE`, `DashboardStats`, `QuoteContext`, `InspectionContext`, `WatchMatch`, `*WithRefs` joins.
 
 ## Relationships
+## ServiceRequest (E7)
+| field | type | notes |
+|---|---|---|
+| id, number | string | `RQ-26-nnnn` |
+| clientId, watchId? | ref | |
+| source | `call \| email \| web \| walk_in` | lookup, not enum in spirit |
+| status | `new \| quoted \| closed` | quoted = estimateId set |
+| summary | string | the ask, in the client's words |
+| estimateId? | ref | |
+| createdAt/By, station, closedAt?, closedNote? | Stamp-ish | |
+
+## Client 360 read models (E7, derived — never stored)
+`SearchHit {kind, id, hitKey, label, detail, matched, clientId?, clientName, path}` · `WatchGroup {watch, history: WatchHistoryRow[], lifetimeSpend, lastServiceAt?, activeJobId?}` · `CustodyEvent {kind, at, by, station, detail, watchId?, jobId?, packageId?, salesOrderId?, hitKey, path}` · `ClientNoteRow` (job note or estimate internal note) · `Client360 {client, summary, watches, requests, estimates, jobs, salesOrders, payments, notes, tasks, custody, emails, packages}` · `ClientDirectoryRow`.
+`hitKey` convention: `watch-<id>` · `est-<id>` · `job-<id>` · `so-<id>` · `pkg-<id>` · `req-<id>`; the 360 page marks rows with `data-hit` and flashes the first match.
+
 ```
 Client 1─* Watch 1─* Estimate ?─1 Job *─1 Watch
 Estimate 1─? Package (estimateId)   Package ?─1 Job (packageId, via received package)
@@ -142,6 +157,7 @@ Job 1─* JobTransition / JobHold / JobNote / JobPhoto / ShopTimeEntry / Task
 Job 1─? SalesOrder (jobId)   Estimate 1─? SalesOrder (estimateId)   SalesOrder 1─* Payment, 1─? Shipment, 1─? PickupSession
 User *─* Role (users.roles)   Job.owner → Role   Task.assignedTo → User | Role
 OutboxEmail.relatedRef → Estimate.number | Job.number | Package.subNumber (string ref only)
+Client 1─* ServiceRequest ?─1 Estimate   (E7)
 ```
 
 ## P-17 accommodation status

@@ -104,7 +104,7 @@ export const jobs: Job[] = [
   build({ id: 'j-06', number: 'E02016', estimateId: 'e-09', clientId: 'c-09', watchId: 'w-09', workflow: ['W', 'PM'], status: 'in_service', assignees: ['MM'], createdDaysAgo: 18, dueInDays: 6, hold: { type: 'outsource', reason: 'Bezel out to plating vendor (Goldsmith & Co.) — due back Thursday', daysAgo: 4 } }),
   // Walk-ins / no estimate link
   build({ id: 'j-07', number: 'E02017', clientId: 'c-12', watchId: 'w-12', workflow: ['B'], status: 'ready_to_ship', kind: 'small_job', assignees: ['MH'], createdDaysAgo: 16, dueInDays: -2 }),
-  build({ id: 'j-08', number: 'E02018', clientId: 'c-10', watchId: 'w-10', workflow: ['P'], status: 'closed', assignees: ['Walter'], createdDaysAgo: 38, lines: [line('Case & bracelet refinish — brushed/polished', 340, 'P')] }),
+  build({ id: 'j-08', number: 'E02018', estimateId: 'e-22', clientId: 'c-10', watchId: 'w-10', workflow: ['P'], status: 'closed', assignees: ['Walter'], createdDaysAgo: 38, lines: [line('Case & bracelet refinish — brushed/polished', 340, 'P')] }),
   build({ id: 'j-09', number: 'E02019', clientId: 'c-15', watchId: 'w-15', workflow: ['W', 'B', 'P'], status: 'closed', assignees: ['MM'], createdDaysAgo: 33, lines: [line('Complete movement service — cal. 3235', 1450, 'W'), line('Bracelet re-pin & tighten', 260, 'B'), line('Case & bracelet refinish', 540, 'P')] }),
   build({ id: 'j-10', number: 'E02020', clientId: 'c-11', watchId: 'w-11', workflow: ['B'], status: 'approved', kind: 'small_job', createdDaysAgo: 5, dueInDays: 4, lines: [line('Bracelet clasp replacement', 320, 'B'), line('Bracelet re-pin', 160, 'B')] }),
   build({ id: 'j-11', number: 'E02021', clientId: 'c-02', watchId: 'w-02', workflow: ['W'], status: 'awaiting_customer_approval', kind: 'warranty', assignees: ['Walter'], createdDaysAgo: 4, lines: [line('Chronograph service — cal. 4130', 1650, 'W')], notes: ['Estimate revised after review — pusher seals worn.'] }),
@@ -121,6 +121,10 @@ export const jobs: Job[] = [
   // History on returning watches
   build({ id: 'j-19', number: 'E01903', clientId: 'c-09', watchId: 'w-09', workflow: ['W'], status: 'closed', assignees: ['MM'], createdDaysAgo: 60, lines: [line('Movement service — cal. 3135', 1250, 'W')], hold: { type: 'parts', reason: 'Crown tube back-ordered', daysAgo: 45, released: true } }),
   build({ id: 'j-20', number: 'E01887', clientId: 'c-01', watchId: 'w-01', workflow: ['B', 'P'], status: 'closed', assignees: ['Walter'], createdDaysAgo: 75, lines: [line('Bracelet re-pin', 160, 'B'), line('Case & bracelet refinish', 540, 'P')] }),
+  // Client 360 seed — Naomi Castellanos: multi-year history across three watches
+  build({ id: 'j-23', number: 'E01412', estimateId: 'e-20', clientId: 'c-10', watchId: 'w-10', workflow: ['W'], status: 'closed', assignees: ['MM'], createdDaysAgo: 907, notes: ['Mainspring replaced under service. Amplitude 285° after 24h.'] }),
+  build({ id: 'j-25', number: 'E01788', estimateId: 'e-21', clientId: 'c-10', watchId: 'w-21', workflow: ['W', 'B', 'P'], status: 'closed', assignees: ['Walter', 'MM'], createdDaysAgo: 402, notes: ['Bezel insert swapped; clasp spring replaced.', 'Client picked up in person — very happy with the blue.'] }),
+  build({ id: 'j-24', number: 'E02007', estimateId: 'e-23', packageId: 'pk-11', clientId: 'c-10', watchId: 'w-20', workflow: ['W'], status: 'in_service', priority: 'high', owner: 'manager', assignees: ['MM'], createdDaysAgo: 19, dueInDays: 5, hold: { type: 'parts', reason: 'Sapphire crystal (OEM) on order from RSC', daysAgo: 12, released: true }, notes: ['Hairline chip found in crystal at inspection — client approved rev 2 adding the crystal.', 'Crystal arrived; fitted and pressure-tested 100m OK.'], conditionNotes: 'Aubergine dial pristine. Light desk wear on clasp.' }),
 ];
 
 export const shopTime: ShopTimeEntry[] = [

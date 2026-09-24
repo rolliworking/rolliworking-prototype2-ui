@@ -24,6 +24,7 @@ import {
   Map,
   ClipboardCheck,
   BookOpen,
+  Users,
 } from 'lucide-react';
 import type { AccessTier } from '@/api/client';
 
@@ -44,6 +45,7 @@ const MGR: AccessTier[] = ['manager'];
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, tiers: ALL, built: true, blurb: 'Shop overview and daily priorities.' },
   { key: 'today', label: 'Today', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your derived hit list — owner actions, bench work, holds, discrepancies, tasks.' },
+  { key: 'clients', label: 'Clients', path: '/clients', icon: Users, tiers: ALL, built: true, blurb: 'Client 360 — search any identifier, see their whole world.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, built: true, blurb: 'Quotes awaiting approval and approved work.' },
   { key: 'jobs', label: 'Jobs', path: '/jobs', icon: Wrench, tiers: MGR, built: true, blurb: 'Bench work in progress across departments.' },

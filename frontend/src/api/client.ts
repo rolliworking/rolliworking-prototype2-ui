@@ -62,6 +62,17 @@ import type {
   VerificationPhoto,
   Watch,
   WatchMatch,
+  ServiceRequest,
+  SearchHit,
+  SearchGroup,
+  SearchResults,
+  IdentifierKind,
+  CustodyEvent,
+  WatchHistoryRow,
+  WatchGroup,
+  ClientNoteRow,
+  Client360,
+  ClientDirectoryRow,
 } from './types';
 
 export * from './types';
@@ -103,9 +114,10 @@ const store = {
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
   watches: fx.watches.map((w) => ({ ...w })),
-  estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[], jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
+  estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: e.revisions.map((r): EstimateRevision => ({ ...r, lines: r.lines.map((l) => ({ ...l })) })), jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
   jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
+  requests: fx.requests.map((r): ServiceRequest => ({ ...r })),
   counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107, pr: 44 },
 };
 
@@ -1986,3 +1998,154 @@ export async function rejectPartsRequest(requestId: string, reason: string): Pro
 }
 
 export const partsById = (id: string): Part | undefined => store.parts.find((p) => p.id === id);
+
+// ---- E7 Client 360 — universal identifier search + one bundle per client -------------------
+
+const norm = (s: string) => s.toLowerCase().replace(/[\s-]/g, '');
+const clientName = (id: string) => fullNameOf(byId(fx.clients, id));
+const fullNameOf = (c: Client) => `${c.firstName} ${c.lastName}`;
+const clientPath = (clientId: string | undefined, hitKey: string, fallback: string) => (clientId ? `/clients/${clientId}?hit=${hitKey}` : fallback);
+
+const GROUP_LABEL: Record<IdentifierKind, string> = { client: 'Clients', estimate: 'Estimates', job: 'Jobs', package: 'Packages / SUB#', sales_order: 'Invoices (SO)', watch: 'Watches', request: 'Requests' };
+const GROUP_ORDER: IdentifierKind[] = ['client', 'watch', 'estimate', 'job', 'sales_order', 'package', 'request'];
+
+export async function getRequests(): Promise<ServiceRequest[]> { return resolve([...store.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
+export async function getRequestsForClient(clientId: string): Promise<ServiceRequest[]> { return resolve(store.requests.filter((r) => r.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
+
+// Accepts ANY identifier: name, email, phone, estimate #, job #, SUB#, tracking, watch ref / serial, SO #, pickup code, request #
+export async function resolveIdentifier(query: string): Promise<SearchResults> {
+  const raw = query.trim();
+  const q = raw.toLowerCase();
+  const nq = norm(raw);
+  const digits = raw.replace(/\D/g, '');
+  const estD = estimateDigits(raw);
+  const hits: SearchHit[] = [];
+  if (!q) return resolve({ query: raw, groups: [], total: 0 });
+
+  fx.clients.forEach((c) => {
+    const name = fullNameOf(c).toLowerCase();
+    const matched = name.includes(q) ? fullNameOf(c) : c.email.toLowerCase().includes(q) ? c.email : c.company?.toLowerCase().includes(q) ? c.company : digits.length >= 3 && c.phone.replace(/\D/g, '').includes(digits) ? c.phone : null;
+    if (matched) hits.push({ kind: 'client', id: c.id, hitKey: 'top', label: fullNameOf(c), detail: [c.company, c.email, c.phone].filter(Boolean).join(' · '), matched, clientId: c.id, clientName: fullNameOf(c), path: `/clients/${c.id}` });
+  });
+
+  if (q.length >= 3) {
+    store.watches.forEach((w) => {
+      const matched = norm(w.reference).includes(nq) ? w.reference : norm(w.serial).includes(nq) ? w.serial : `${w.brand} ${w.model}`.toLowerCase().includes(q) ? `${w.brand} ${w.model}` : null;
+      if (matched) hits.push({ kind: 'watch', id: w.id, hitKey: `watch-${w.id}`, label: `${w.brand} ${w.model}`, detail: `Ref ${w.reference} · S/N ${w.serial} · ${statusLabel(w.status)}`, matched, clientId: w.clientId, clientName: clientName(w.clientId), path: clientPath(w.clientId, `watch-${w.id}`, '/') });
+    });
+  }
+
+  if (estD.length >= 2 || q.length >= 2) {
+    store.estimates.forEach((e) => {
+      if ((estD && estimateDigits(e.number).startsWith(estD)) || e.number.toLowerCase() === q) hits.push({ kind: 'estimate', id: e.id, hitKey: `est-${e.id}`, label: `${e.number}${e.revision > 1 ? ` · rev ${e.revision}` : ''}`, detail: `${statusLabel(e.status)} · ${moneyLabel(e.total)}`, matched: e.number, clientId: e.clientId, clientName: clientName(e.clientId), path: clientPath(e.clientId, `est-${e.id}`, `/estimates/${e.id}`) });
+    });
+    store.jobs.forEach((j) => {
+      if ((estD && estimateDigits(j.number).startsWith(estD)) || j.number.toLowerCase() === q) {
+        const w = byId(store.watches, j.watchId);
+        hits.push({ kind: 'job', id: j.id, hitKey: `job-${j.id}`, label: `${j.number} · ${w.brand} ${w.model}`, detail: `${statusLabel(j.status)} · ${j.assignees.join(', ') || 'unassigned'}`, matched: j.number, clientId: j.clientId, clientName: clientName(j.clientId), path: clientPath(j.clientId, `job-${j.id}`, `/jobs/${j.id}`) });
+      }
+    });
+  }
+
+  if (q.length >= 3) {
+    store.salesOrders.forEach((o) => {
+      const matched = norm(o.number).includes(nq) || (digits.length >= 3 && o.number.replace(/\D/g, '').endsWith(digits)) ? o.number : o.tracking && norm(o.tracking).includes(nq) ? o.tracking : o.pickupCode && norm(o.pickupCode).startsWith(nq) ? `pickup code ${o.pickupCode}` : null;
+      if (matched) hits.push({ kind: 'sales_order', id: o.id, hitKey: `so-${o.id}`, label: o.number, detail: `${statusLabel(o.status)} · ${moneyLabel(o.total)} · ${o.isPaid ? 'paid' : `balance ${moneyLabel(o.balanceDue)}`}`, matched, clientId: o.clientId, clientName: clientName(o.clientId), path: clientPath(o.clientId, `so-${o.id}`, `/sales/${o.id}`) });
+    });
+    store.packages.forEach((p) => {
+      const matched = norm(p.subNumber).includes(nq) || (digits.length >= 3 && p.subNumber.replace(/\D/g, '').endsWith(digits)) ? p.subNumber : p.trackingNumber && norm(p.trackingNumber).includes(nq) ? p.trackingNumber : null;
+      if (matched) hits.push({ kind: 'package', id: p.id, hitKey: `pkg-${p.id}`, label: p.subNumber, detail: `${statusLabel(p.status)} · ${p.carrier}${p.trackingNumber ? ` ${p.trackingNumber}` : ''}`, matched, clientId: p.clientId, clientName: p.clientId ? clientName(p.clientId) : 'Unknown client', path: clientPath(p.clientId, `pkg-${p.id}`, `/intake/receive/${p.id}`) });
+    });
+    store.requests.forEach((r) => {
+      if (norm(r.number).includes(nq)) hits.push({ kind: 'request', id: r.id, hitKey: `req-${r.id}`, label: r.number, detail: `${statusLabel(r.status)} · ${r.source}`, matched: r.number, clientId: r.clientId, clientName: clientName(r.clientId), path: clientPath(r.clientId, `req-${r.id}`, '/') });
+    });
+  }
+
+  const groups: SearchGroup[] = GROUP_ORDER.map((kind) => ({ kind, label: GROUP_LABEL[kind], hits: hits.filter((h) => h.kind === kind).slice(0, 6) })).filter((g) => g.hits.length > 0);
+  return resolve({ query: raw, groups, total: groups.reduce((n, g) => n + g.hits.length, 0) });
+}
+
+const statusLabel = (s: string) => s.replace(/_/g, ' ');
+const moneyLabel = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+
+const custodyOf = (clientId: string): CustodyEvent[] => {
+  const out: CustodyEvent[] = [];
+  const watchLabel = (id?: string) => { const w = id ? store.watches.find((x) => x.id === id) : undefined; return w ? `${w.brand} ${w.model}` : 'watch'; };
+  store.packages.filter((p) => p.clientId === clientId).forEach((p) => {
+    out.push({ id: `cu-${p.id}-arr`, kind: 'package_arrived', at: p.arrivedAt, by: p.arrivedBy, station: p.arrivedStation, detail: `${p.subNumber} arrived · ${p.carrier}${p.trackingNumber ? ` ${p.trackingNumber}` : ''}${p.signatureNoted ? ' · signed' : ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/receive/${p.id}` });
+    const job = store.jobs.find((j) => j.packageId === p.id);
+    if (p.inspectedAt && p.status === 'received') out.push({ id: `cu-${p.id}-rcv`, kind: 'watch_received', at: p.inspectedAt, by: p.inspectedBy ?? 'Unknown', station: 'Front Desk 1', detail: `${watchLabel(job?.watchId)} received into custody from ${p.subNumber}`, packageId: p.id, jobId: job?.id, watchId: job?.watchId, hitKey: job ? `job-${job.id}` : `pkg-${p.id}`, path: job ? `/jobs/${job.id}` : `/intake/receive/${p.id}` });
+    if (p.status === 'discrepancy_hold' && p.inspectedAt) out.push({ id: `cu-${p.id}-dis`, kind: 'discrepancy', at: p.inspectedAt, by: p.inspectedBy ?? 'Unknown', station: 'Front Desk 1', detail: `Discrepancy hold on ${p.subNumber}: ${p.discrepancyReason ?? ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/inspection/${p.id}` });
+  });
+  store.jobs.filter((j) => j.clientId === clientId).forEach((j) => {
+    if (!j.packageId && j.intakeDate) out.push({ id: `cu-${j.id}-in`, kind: 'watch_received', at: j.intakeDate, by: j.timeline[0]?.by ?? j.createdBy, station: j.timeline[0]?.station ?? 'Front Desk 1', detail: `${watchLabel(j.watchId)} received on hand · ${j.number}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
+    j.holds.forEach((h) => {
+      out.push({ id: `cu-${h.id}-p`, kind: 'hold_placed', at: h.placedAt, by: h.placedBy, station: h.station, detail: `${h.type === 'outsource' ? 'Left the building — outsource' : 'Parts hold'} on ${j.number}: ${h.reason}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
+      if (h.releasedAt) out.push({ id: `cu-${h.id}-r`, kind: 'hold_released', at: h.releasedAt, by: h.releasedBy ?? 'Unknown', station: h.station, detail: `Hold released on ${j.number}${h.releaseNote ? ` · ${h.releaseNote}` : ''}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
+    });
+  });
+  store.salesOrders.filter((o) => o.clientId === clientId).forEach((o) => {
+    const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) : undefined;
+    if (o.shipment) out.push({ id: `cu-${o.id}-ship`, kind: 'shipped', at: o.shipment.at, by: o.shipment.by, station: o.shipment.station, detail: `${watchLabel(job?.watchId)} shipped · ${o.shipment.service} · ${o.shipment.tracking}`, salesOrderId: o.id, jobId: job?.id, watchId: job?.watchId, hitKey: `so-${o.id}`, path: `/sales/${o.id}` });
+    if (o.pickupSession) out.push({ id: `cu-${o.id}-pu`, kind: 'picked_up', at: o.pickupSession.at, by: o.pickupSession.by, station: o.pickupSession.station, detail: `${watchLabel(job?.watchId)} released at pickup${o.pickupSession.proxyName ? ` to ${o.pickupSession.proxyName}` : ''}${o.pickupSession.codeUsed ? ` · code ${o.pickupSession.codeUsed}` : ''}`, salesOrderId: o.id, jobId: job?.id, watchId: job?.watchId, hitKey: `so-${o.id}`, path: `/sales/${o.id}` });
+  });
+  return out.sort((a, b) => b.at.localeCompare(a.at));
+};
+
+const isActiveJob = (j: Job) => j.status !== 'closed' && j.simpleStatus !== 'estimate';
+
+export async function getClient360(clientId: string): Promise<Client360 | null> {
+  const client = fx.clients.find((c) => c.id === clientId);
+  if (!client) return resolve(null);
+  const newest = <T>(rows: T[], key: (r: T) => string) => [...rows].sort((a, b) => key(b).localeCompare(key(a)));
+  const estimates = newest(store.estimates.filter((e) => e.clientId === clientId).map(withRefs), (e) => e.createdAt);
+  const jobs = newest(store.jobs.filter((j) => j.clientId === clientId).map(jobRefs), (j) => j.createdAt);
+  const salesOrders = newest(store.salesOrders.filter((o) => o.clientId === clientId).map(soRefs), (o) => o.orderDate);
+  const requests = newest(store.requests.filter((r) => r.clientId === clientId), (r) => r.createdAt);
+  const tasks = newest(store.tasks.filter((t) => t.clientId === clientId || jobs.some((j) => j.id === t.jobId)), (t) => t.createdAt);
+  const packages = newest(store.packages.filter((p) => p.clientId === clientId).map(pkgWithRefs), (p) => p.arrivedAt);
+  const emails = newest(store.outbox.filter((e) => e.to.toLowerCase() === client.email.toLowerCase()), (e) => e.createdAt);
+  const payments = newest(salesOrders.flatMap((o) => o.payments.map((p) => ({ ...p, salesOrderId: o.id, salesOrderNumber: o.number }))), (p) => p.at);
+  const notes: ClientNoteRow[] = newest([
+    ...jobs.flatMap((j) => j.notes.map((n): ClientNoteRow => ({ ...n, source: 'job', ref: j.number, path: `/jobs/${j.id}` }))),
+    ...estimates.filter((e) => e.internalNotes.trim()).map((e): ClientNoteRow => ({ id: `en-${e.id}`, source: 'estimate', ref: e.number, text: e.internalNotes, at: e.updatedAt, by: e.createdBy, station: 'Front Desk 1', path: `/estimates/${e.id}` })),
+  ], (n) => n.at);
+
+  const watches: WatchGroup[] = newest(store.watches.filter((w) => w.clientId === clientId), (w) => w.receivedAt).map((watch) => {
+    const history: WatchHistoryRow[] = [
+      ...estimates.filter((e) => e.watchId === watch.id).map((e): WatchHistoryRow => ({ kind: 'estimate', id: e.id, hitKey: `est-${e.id}`, number: e.number + (e.revision > 1 ? ` r${e.revision}` : ''), status: e.status, title: e.lines[0]?.description ?? 'Estimate', amount: e.total, at: e.createdAt, path: `/estimates/${e.id}` })),
+      ...jobs.filter((j) => j.watchId === watch.id).map((j): WatchHistoryRow => ({ kind: 'job', id: j.id, hitKey: `job-${j.id}`, number: j.number, status: j.status, title: `${j.workflow.join('·')} · ${j.lines[0]?.description ?? 'Job'}`, amount: j.total, at: j.createdAt, path: `/jobs/${j.id}` })),
+      ...salesOrders.filter((o) => o.job?.watchId === watch.id).map((o): WatchHistoryRow => ({ kind: 'sales_order', id: o.id, hitKey: `so-${o.id}`, number: o.number, status: o.isPaid ? 'paid' : 'unpaid', title: `Invoice · ${o.status.replace(/_/g, ' ')}`, amount: o.total, at: o.orderDate, path: `/sales/${o.id}` })),
+      ...requests.filter((r) => r.watchId === watch.id).map((r): WatchHistoryRow => ({ kind: 'request', id: r.id, hitKey: `req-${r.id}`, number: r.number, status: r.status, title: r.summary, at: r.createdAt, path: `/clients/${clientId}?hit=req-${r.id}` })),
+    ].sort((a, b) => b.at.localeCompare(a.at));
+    const paidHere = salesOrders.filter((o) => o.job?.watchId === watch.id).reduce((t, o) => t + o.payments.reduce((a, p) => a + p.amount, 0), 0);
+    const closed = jobs.filter((j) => j.watchId === watch.id && j.finishedAt);
+    return { watch, history, lifetimeSpend: paidHere, lastServiceAt: closed[0]?.finishedAt, activeJobId: jobs.find((j) => j.watchId === watch.id && isActiveJob(j))?.id };
+  });
+
+  const lastContactAt = [emails[0]?.createdAt, requests[0]?.createdAt, notes[0]?.at].filter((x): x is string => !!x).sort().reverse()[0];
+  const summary = {
+    watchCount: watches.length,
+    inHouse: watches.filter((g) => g.watch.status !== 'released' && g.watch.status !== 'expected').length,
+    openBalance: salesOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'draft').reduce((t, o) => t + o.balanceDue, 0),
+    lifetimeSpend: payments.reduce((t, p) => t + p.amount, 0),
+    openEstimates: estimates.filter((e) => e.status === 'draft' || e.status === 'sent' || e.status === 'approved').length,
+    activeJobs: jobs.filter(isActiveJob).length,
+    openRequests: requests.filter((r) => r.status !== 'closed').length,
+    openTasks: tasks.filter((t) => t.status === 'open').length,
+    lastContactAt,
+  };
+  return resolve({ client, summary, watches, requests, estimates, jobs, salesOrders, payments, notes, tasks, custody: custodyOf(clientId), emails, packages });
+}
+
+export async function getClientDirectory(): Promise<ClientDirectoryRow[]> {
+  const rows = fx.clients.map((client): ClientDirectoryRow => {
+    const ws = store.watches.filter((w) => w.clientId === client.id);
+    const js = store.jobs.filter((j) => j.clientId === client.id);
+    const es = store.estimates.filter((e) => e.clientId === client.id);
+    const os = store.salesOrders.filter((o) => o.clientId === client.id && o.status !== 'cancelled' && o.status !== 'draft');
+    const last = [...js.map((j) => j.createdAt), ...es.map((e) => e.updatedAt), ...os.map((o) => o.orderDate)].sort().reverse()[0];
+    return { client, watchCount: ws.length, inHouse: ws.filter((w) => w.status !== 'released' && w.status !== 'expected').length, openEstimates: es.filter((e) => e.status === 'draft' || e.status === 'sent' || e.status === 'approved').length, activeJobs: js.filter(isActiveJob).length, openBalance: os.reduce((t, o) => t + o.balanceDue, 0), lastActivityAt: last };
+  });
+  return resolve(rows.sort((a, b) => (b.lastActivityAt ?? '').localeCompare(a.lastActivityAt ?? '')));
+}
