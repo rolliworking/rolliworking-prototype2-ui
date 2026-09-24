@@ -1,4 +1,4 @@
-import type { DeptCode, Department, EstimateLine, HoldType, Job, JobKind, JobPriority, JobStatus, JobTransition, Role, ShopTimeEntry } from '../types';
+import type { DeptCode, Department, Division, EstimateLine, HoldType, Job, JobKind, JobPriority, JobStatus, JobTransition, Role, ShopTimeEntry } from '../types';
 import { estimates } from './estimates';
 import { seedPhoto } from './intake';
 import { daysAgo, daysFromNow } from './time';
@@ -49,6 +49,7 @@ interface Seed {
   qcFail?: string;
   notes?: string[];
   conditionNotes?: string;
+  division?: Division;
 }
 
 const build = (s: Seed): Job => {
@@ -76,6 +77,7 @@ const build = (s: Seed): Job => {
     status: s.status,
     simpleStatus: simple,
     priority: s.priority ?? 'normal',
+    division: s.division ?? 'rolliworks',
     lines,
     total: lines.reduce((t, l) => t + l.qty * l.unitPrice, 0),
     owner: s.owner ?? (kind === 'service' ? undefined : 'concierge'),

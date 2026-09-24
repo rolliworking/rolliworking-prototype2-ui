@@ -9,6 +9,7 @@ import type {
   Client,
   DashboardStats,
   DeptCode,
+  Division,
   HoldType,
   JobHold,
   JobPriority,
@@ -166,7 +167,8 @@ const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toD
 
 const readStations = (): Station[] => {
   const saved = readJson<Station[] | null>(KEYS.stations, null);
-  if (saved) return saved;
+  // Backfill division for stations saved before the division feature was added
+  if (saved) return saved.map((s) => ({ ...s, division: s.division ?? 'rolliworks' }));
   writeJson(KEYS.stations, fx.stations);
   return fx.stations;
 };
@@ -186,6 +188,9 @@ const readStation = (): Station | null => {
 
 const stationNameOrUnknown = () => readStation()?.name ?? 'Unregistered device';
 
+// Sync helper — division of the current session (station-bound)
+export const getSessionDivision = (): Division => readStation()?.division ?? 'rolliworks';
+
 export async function getStation(): Promise<Station | null> {
   return resolve(readStation());
 }
@@ -194,13 +199,13 @@ export async function getStations(): Promise<Station[]> {
   return resolve(readStations());
 }
 
-export async function addStation(name: string): Promise<Station> {
+export async function addStation(name: string, division: Division = 'rolliworks'): Promise<Station> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Station name is required');
   const list = readStations();
   const existing = list.find((s) => s.name.toLowerCase() === trimmed.toLowerCase());
   if (existing) return resolve(existing);
-  const st: Station = { id: `st-${Date.now().toString(36)}`, name: trimmed };
+  const st: Station = { id: `st-${Date.now().toString(36)}`, name: trimmed, division };
   writeJson(KEYS.stations, [...list, st]);
   return resolve(st);
 }
@@ -234,6 +239,16 @@ export async function resetDeviceRegistration(): Promise<void> {
   localStorage.removeItem(KEYS.currentUser);
   return resolve(undefined);
 }
+
+// ---- Division helpers -------------------------------------------------------
+
+/** All users whose division includes `div` (own-division + 'both'). */
+export const getDivisionStaff = (div: Division): User[] =>
+  fx.users.filter((u) => u.division === div || u.division === 'both');
+
+/** Roles that have at least one holder in `div`. */
+export const getDivisionRoles = (div: Division): Role[] =>
+  ROLES.filter((r) => getDivisionStaff(div).some((u) => u.roles.includes(r)));
 
 // ---- Audit log --------------------------------------------------------------
 
@@ -1245,6 +1260,7 @@ const buildJob = (input: CreateJobInput): Job => {
     status: 'intake',
     simpleStatus: input.onHand ? 'on_hand' : 'estimate',
     priority: input.priority ?? 'normal',
+    division: getSessionDivision(),
     lines,
     total: lines.reduce((t, l) => t + l.qty * l.unitPrice, 0),
     owner: JOB_KIND_CONFIG[kind].defaultOwnerRole ?? undefined,
@@ -1397,7 +1413,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const a = actor();
   const job = input.jobId ? store.jobs.find((j) => j.id === input.jobId) : undefined;
   if (input.jobId && !job) throw new Error('Linked job not found');
-  const t: Task = { id: newId('t'), title: input.title.trim(), assignedTo: input.assignedTo, createdBy: a.by, jobId: job?.id, watchId: job?.watchId, clientId: job?.clientId, dueAt: input.dueAt || undefined, status: 'open', createdAt: new Date().toISOString(), station: a.station };
+  const division = getSessionDivision();
+  const t: Task = { id: newId('t'), title: input.title.trim(), assignedTo: input.assignedTo, createdBy: a.by, division, jobId: job?.id, watchId: job?.watchId, clientId: job?.clientId, dueAt: input.dueAt || undefined, status: 'open', createdAt: new Date().toISOString(), station: a.station };
   store.tasks.unshift(t);
   taskStamp(t, `created · assigned to ${assigneeLabel(t.assignedTo)}${job ? ` · linked ${job.number}` : ''}`);
   if (job) jobStamp(job, `Task added for ${assigneeLabel(t.assignedTo)} · ${t.title.slice(0, 50)}`);
@@ -1421,10 +1438,11 @@ const TECH_ACTION: Partial<Record<JobStatus, string>> = { approved: 'Start servi
 
 // ---- Pinned hit list (manual layer, MH ruling) — never hides derived rows -------
 
-const HASHTAG = /^#(\w+)\s+/;
-// "#vienna order paper" → assignee Vienna; "#manager sign off" → role manager
+// Accept both # and @ as mention prefixes (MH ruling 2026-09-24)
+const MENTION = /^[#@](\w+)\s+/;
+// "#vienna order paper" | "@vienna order paper" → assignee Vienna; "@manager sign off" → role manager
 export const parsePin = (raw: string, fallback: Assignee): { title: string; assignedTo: Assignee } => {
-  const m = raw.trim().match(HASHTAG);
+  const m = raw.trim().match(MENTION);
   if (!m) return { title: raw.trim(), assignedTo: fallback };
   const tag = m[1].toLowerCase();
   const user = fx.users.find((u) => u.shortName.toLowerCase() === tag || u.firstName.toLowerCase() === tag);
@@ -1433,7 +1451,7 @@ export const parsePin = (raw: string, fallback: Assignee): { title: string; assi
   return { title: raw.trim(), assignedTo: fallback };
 };
 
-export interface PinInput { title: string; assignedTo?: Assignee; jobId?: string; taskId?: string }
+export interface PinInput { title: string; assignedTo?: Assignee; jobId?: string; taskId?: string; clientId?: string; estimateId?: string }
 
 export async function pinToHitList(input: PinInput): Promise<PinnedItem> {
   const a = actor();
@@ -1441,7 +1459,8 @@ export async function pinToHitList(input: PinInput): Promise<PinnedItem> {
   const parsed = parsePin(input.title, input.assignedTo ?? fallback);
   if (!parsed.title) throw new Error('Say what to pin');
   const job = input.jobId ? store.jobs.find((j) => j.id === input.jobId) : undefined;
-  const p: PinnedItem = { id: newId('pin'), title: parsed.title, assignedTo: input.assignedTo && !HASHTAG.test(input.title) ? input.assignedTo : parsed.assignedTo, createdBy: a.by, jobId: job?.id, taskId: input.taskId, createdAt: new Date().toISOString(), station: a.station };
+  const division = getSessionDivision();
+  const p: PinnedItem = { id: newId('pin'), title: parsed.title, assignedTo: input.assignedTo && !MENTION.test(input.title) ? input.assignedTo : parsed.assignedTo, createdBy: a.by, division, jobId: job?.id, taskId: input.taskId, clientId: input.clientId, estimateId: input.estimateId, createdAt: new Date().toISOString(), station: a.station };
   store.pinned.unshift(p);
   appendAudit({ type: 'pin', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Pinned "${p.title.slice(0, 50)}" for ${assigneeLabel(p.assignedTo)}${job ? ` · ${job.number}` : ''}` });
   if (job) jobStamp(job, `Pinned to ${assigneeLabel(p.assignedTo).split(' →')[0]}'s hit list · ${p.title.slice(0, 50)}`);
@@ -1460,6 +1479,7 @@ export async function dismissPinned(id: string): Promise<PinnedItem> {
 export async function getToday(userId?: string): Promise<TodayView> {
   const me = userId ? byId(fx.users, userId) : currentUserSync();
   if (!me) return resolve({ pinned: [], rows: [], waitingOn: [] });
+  const sessionDiv = getSessionDivision();
   const roles = userRoles(me);
   const now = Date.now();
   const rows: TodayRow[] = [];
@@ -1468,6 +1488,8 @@ export async function getToday(userId?: string): Promise<TodayView> {
   const due = (iso?: string) => ({ dueAt: iso, overdue: !!iso && new Date(iso).getTime() < now });
 
   store.jobs.forEach((j) => {
+    // Division wall: only jobs belonging to this session's division
+    if ((j.division ?? 'rolliworks') !== sessionDiv) return;
     const held = activeHold(j);
     const iOwn = !!j.owner && roles.includes(j.owner);
     const iWork = j.assignees.includes(me.shortName);
@@ -1480,19 +1502,23 @@ export async function getToday(userId?: string): Promise<TodayView> {
   });
 
   // Discrepancy packages route to the concierge role and to the inspector who flagged them
-  store.packages.filter((p) => p.status === 'discrepancy_hold').forEach((p) => {
-    const mine = roles.includes('concierge') || p.inspectedBy === me.shortName;
-    if (mine) rows.push({ id: `disc-${p.id}`, source: 'discrepancy', title: `Resolve discrepancy · ${p.subNumber}`, detail: p.discrepancyReason ?? 'Discrepancy at Receive Watch', via: p.inspectedBy === me.shortName ? 'flagged by me' : 'owner · concierge', packageId: p.id, urgent: true, overdue: false });
-  });
+  // Only shown in the same division the package was processed in (all current packages are rolliworks)
+  if (sessionDiv === 'rolliworks') {
+    store.packages.filter((p) => p.status === 'discrepancy_hold').forEach((p) => {
+      const mine = roles.includes('concierge') || p.inspectedBy === me.shortName;
+      if (mine) rows.push({ id: `disc-${p.id}`, source: 'discrepancy', title: `Resolve discrepancy · ${p.subNumber}`, detail: p.discrepancyReason ?? 'Discrepancy at Receive Watch', via: p.inspectedBy === me.shortName ? 'flagged by me' : 'owner · concierge', packageId: p.id, urgent: true, overdue: false });
+    });
+  }
 
-  store.tasks.filter((t) => t.status === 'open' && assigneeMatches(t.assignedTo, me)).forEach((t) => {
+  // Task-derived rows — division-scoped
+  store.tasks.filter((t) => t.status === 'open' && t.division === sessionDiv && assigneeMatches(t.assignedTo, me)).forEach((t) => {
     const job = t.jobId ? store.jobs.find((j) => j.id === t.jobId) : undefined;
     rows.push({ id: `task-${t.id}`, source: 'task', title: t.title, detail: job ? `${job.number} · ${clientOf(job.clientId)}` : t.clientId ? clientOf(t.clientId) : 'Task', via: t.assignedTo.type === 'role' ? `role · ${t.assignedTo.role}` : 'assigned to me', taskId: t.id, jobId: job?.id, sentBy: t.createdBy !== me.shortName ? t.createdBy : undefined, urgent: false, ...due(t.dueAt) });
   });
 
   rows.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.urgent) - Number(a.urgent) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9'));
-  const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
-  const pinned = store.pinned.filter((p) => !p.dismissedAt && assigneeMatches(p.assignedTo, me));
+  const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.division === sessionDiv && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
+  const pinned = store.pinned.filter((p) => !p.dismissedAt && p.division === sessionDiv && assigneeMatches(p.assignedTo, me));
   return resolve({ pinned, rows, waitingOn });
 }
 
@@ -2489,7 +2515,7 @@ export async function portalConfirmPickupWindow(clientId: string, id: string, da
   const c = byId(fx.clients, clientId);
   const when = `${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${slot}`;
   await asClient(clientId, async () => { soStamp(o, `Pickup window confirmed by client · ${when}${note?.trim() ? ` · “${note.trim()}”` : ''}`); });
-  store.tasks.unshift({ id: `t-${Date.now().toString(36)}`, title: `${c.firstName} ${c.lastName} picking up ${o.number} — ${when}`, assignedTo: { type: 'role', role: 'concierge' }, createdBy: 'RolliConnect', jobId: o.jobId, clientId, dueAt: new Date(date + (slot === 'morning' ? 'T09:00:00' : 'T13:00:00')).toISOString(), status: 'open', createdAt: new Date().toISOString(), station: 'RolliConnect' });
+  store.tasks.unshift({ id: `t-${Date.now().toString(36)}`, title: `${c.firstName} ${c.lastName} picking up ${o.number} — ${when}`, assignedTo: { type: 'role', role: 'concierge' }, createdBy: 'RolliConnect', division: 'rolliworks', jobId: o.jobId, clientId, dueAt: new Date(date + (slot === 'morning' ? 'T09:00:00' : 'T13:00:00')).toISOString(), status: 'open', createdAt: new Date().toISOString(), station: 'RolliConnect' });
   portalStamp(clientId, `Confirmed pickup window for ${o.number} · ${when}`);
   return resolve(soRefs(o));
 }

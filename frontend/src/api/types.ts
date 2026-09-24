@@ -2,6 +2,8 @@ export type AccessTier = 'manager' | 'concierge';
 
 export type Role = 'concierge' | 'manager' | 'inspector' | 'watchmaker';
 
+export type Division = 'rolliworks' | 'rollishop';
+
 export interface User {
   id: string;
   roles: Role[];
@@ -10,6 +12,7 @@ export interface User {
   displayName: string;
   dutyLabel: string;
   accessTier: AccessTier;
+  division: Division | 'both';
   password: string;
   pin: string;
 }
@@ -17,6 +20,7 @@ export interface User {
 export interface Station {
   id: string;
   name: string;
+  division: Division;
 }
 
 export type CameraStatus = 'captured' | 'no_camera' | 'denied';
@@ -251,6 +255,7 @@ export interface Job {
   status: JobStatus;
   simpleStatus: JobSimpleStatus;
   priority: JobPriority;
+  division: Division;
   lines: EstimateLine[];
   total: number;
   owner?: Role;
@@ -278,6 +283,7 @@ export interface Task {
   title: string;
   assignedTo: Assignee;
   createdBy: string;
+  division: Division;
   jobId?: string;
   watchId?: string;
   clientId?: string;
@@ -295,8 +301,11 @@ export interface PinnedItem {
   title: string;
   assignedTo: Assignee;
   createdBy: string;
+  division: Division;
   jobId?: string;
   taskId?: string;
+  clientId?: string;
+  estimateId?: string;
   createdAt: string;
   station: string;
   dismissedAt?: string;

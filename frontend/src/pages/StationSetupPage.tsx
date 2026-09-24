@@ -2,9 +2,13 @@ import { MonitorSmartphone, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
+import type { Division } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { PrototypeBanner } from '@/components/layout/AppShell';
 import { useAsync } from '@/hooks/useAsync';
+
+const DIV_LABEL: Record<Division, string> = { rolliworks: 'Rolliworks', rollishop: 'RolliShop' };
+const DIV_CLS: Record<Division, string> = { rolliworks: 'bg-moss-50 text-moss-800 border-moss-200', rollishop: 'bg-amber-50 text-amber-800 border-amber-200' };
 
 export default function StationSetupPage() {
   const { station, loading, refreshStation } = useAuth();
@@ -15,6 +19,7 @@ export default function StationSetupPage() {
   const [password, setPassword] = useState('');
   const [stationId, setStationId] = useState('');
   const [newName, setNewName] = useState('');
+  const [newDiv, setNewDiv] = useState<Division>('rolliworks');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,7 +31,7 @@ export default function StationSetupPage() {
 
   const addNew = async () => {
     if (!newName.trim()) return;
-    const st = await api.addStation(newName);
+    const st = await api.addStation(newName, newDiv);
     setNewName('');
     setAdding(false);
     reload();
@@ -61,7 +66,7 @@ export default function StationSetupPage() {
           </div>
           <h1 className="text-lg font-semibold tracking-tight text-ink">Name this station</h1>
           <p className="mt-1 text-xs text-ink-500">
-            This device isn’t registered yet. A manager names it once; the station is then bound to this device and stamps every sign-in and audit event.
+            This device isn't registered yet. A manager names it once; the station is then bound to this device and stamps every sign-in and audit event.
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-4">
@@ -104,7 +109,8 @@ export default function StationSetupPage() {
                   }`}
                 >
                   <input type="radio" name="station" data-testid={`station-option-${s.id}`} checked={stationId === s.id} onChange={() => setStationId(s.id)} className="accent-ink" />
-                  {s.name}
+                  <span className="flex-1">{s.name}</span>
+                  <span className={`rounded-sm border px-1 py-0.5 text-[10px] font-semibold ${DIV_CLS[s.division ?? 'rolliworks']}`}>{DIV_LABEL[s.division ?? 'rolliworks']}</span>
                 </label>
               ))}
             </div>
@@ -119,6 +125,15 @@ export default function StationSetupPage() {
                   placeholder="e.g. Polishing Bench"
                   className="h-8 flex-1 rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:outline-none"
                 />
+                <select
+                  data-testid="station-new-div"
+                  value={newDiv}
+                  onChange={(e) => setNewDiv(e.target.value as Division)}
+                  className="h-8 rounded-sm border border-line bg-canvas px-2 text-[12px] focus:outline-none"
+                >
+                  <option value="rolliworks">Rolliworks</option>
+                  <option value="rollishop">RolliShop</option>
+                </select>
                 <button type="button" data-testid="station-new-save" onClick={addNew} className="h-8 rounded-sm bg-ink px-3 text-xs font-medium text-white">
                   Add
                 </button>
@@ -149,3 +164,4 @@ export default function StationSetupPage() {
     </div>
   );
 }
+

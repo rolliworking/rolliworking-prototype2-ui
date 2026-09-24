@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Users } from 'lucide-react';
 import * as api from '@/api/client';
 import type { TodayRow, TodaySource, TodayView } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { NewTaskForm } from '@/components/today/NewTaskForm';
 import { TodayRowItem, WaitingOnList } from '@/components/today/TodayBits';
 import { PinForm, PinModal, PinnedList } from '@/components/today/PinBits';
+import { StaffHitListModal } from '@/components/today/StaffHitListModal';
 import { Card } from '@/components/ui/Card';
 import { FilterChip, PageHeader } from '@/components/ui/Button';
 
@@ -12,11 +14,12 @@ const SOURCES: TodaySource[] = ['owner', 'assignee', 'hold', 'discrepancy', 'tas
 const LABEL: Record<TodaySource, string> = { owner: 'Owner actions', assignee: 'Bench', hold: 'Holds', discrepancy: 'Discrepancies', task: 'Tasks' };
 
 export default function TodayPage() {
-  const { user } = useAuth();
+  const { user, station } = useAuth();
   const [view, setView] = useState<TodayView | null>(null);
   const [source, setSource] = useState<TodaySource | 'all'>('all');
   const [flash, setFlash] = useState<string | null>(null);
   const [pinFrom, setPinFrom] = useState<TodayRow | null>(null);
+  const [showStaffHitList, setShowStaffHitList] = useState(false);
 
   const load = useCallback(() => api.getToday().then(setView), []);
   useEffect(() => { void load(); }, [load, user?.id]);
@@ -25,13 +28,34 @@ export default function TodayPage() {
   const counts = useMemo(() => Object.fromEntries(SOURCES.map((s) => [s, (view?.rows ?? []).filter((r) => r.source === s).length])), [view]);
   const overdue = (view?.rows ?? []).filter((r) => r.overdue).length;
 
+  // "Staff hit lists" is available to managers and concierge (admin-assistants) per ruling
+  const canViewStaffHitLists = !!user && (user.accessTier === 'manager' || user.roles.includes('concierge'));
+
+  const divLabel = station?.division === 'rollishop' ? 'RolliShop' : 'Rolliworks';
+
   const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3000); };
   const dismiss = async (id: string) => { await api.dismissPinned(id); say('Pinned item done'); await load(); };
   const done = async (taskId: string) => { await api.setTaskDone(taskId, true); setFlash('Task completed — the sender sees it in their waiting-on list'); window.setTimeout(() => setFlash(null), 3000); await load(); };
 
   return (
     <div data-testid="today-page" className="space-y-4">
-      <PageHeader title={`Today · ${user?.shortName ?? ''}`} subtitle={view ? `${view.rows.length} items derived for you${overdue ? ` · ${overdue} overdue` : ''} · roles: ${user?.roles.join(', ')} · no manual curation — rows come from jobs, holds, discrepancies and tasks` : 'Loading…'} testId="today-header" />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title={`Today · ${user?.shortName ?? ''}`}
+          subtitle={view ? `${view.rows.length} items derived for you${overdue ? ` · ${overdue} overdue` : ''} · roles: ${user?.roles.join(', ')} · division: ${divLabel} · rows from jobs, holds, discrepancies and tasks` : 'Loading…'}
+          testId="today-header"
+        />
+        {canViewStaffHitLists && (
+          <button
+            type="button"
+            data-testid="staff-hitlist-open"
+            onClick={() => setShowStaffHitList(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-sm border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 hover:border-ink-400 hover:bg-canvas"
+          >
+            <Users size={13} /> Staff hit lists
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-1.5" data-testid="today-filters">
         <FilterChip active={source === 'all'} onClick={() => setSource('all')} testId="today-filter-all">All</FilterChip>
@@ -58,6 +82,8 @@ export default function TodayPage() {
         <Card title="Send a task" subtitle="The explicit 20% — assign to a person or a role; linked tasks also show on the job's timeline" testId="today-new-task-card"><NewTaskForm onCreated={() => void load()} /></Card>
         <Card title="Waiting on" subtitle="Tasks you sent to others, still open" testId="today-waiting-card" bodyClassName="p-0"><WaitingOnList tasks={view?.waitingOn ?? []} /></Card>
       </div>
+
+      {showStaffHitList && <StaffHitListModal onClose={() => setShowStaffHitList(false)} />}
     </div>
   );
 }

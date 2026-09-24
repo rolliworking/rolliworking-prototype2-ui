@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { QuickAddProvider } from '@/components/today/QuickAddOverlay';
 
 export const PrototypeBanner = () => (
   <div
@@ -13,17 +14,19 @@ export const PrototypeBanner = () => (
 
 export default function AppShell() {
   return (
-    <div className="flex h-full flex-col">
-      <PrototypeBanner />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar />
-          <main data-testid="main-content" className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-            <Outlet />
-          </main>
+    <QuickAddProvider>
+      <div className="flex h-full flex-col">
+        <PrototypeBanner />
+        <div className="flex min-h-0 flex-1">
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TopBar />
+            <main data-testid="main-content" className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <Outlet />
+            </main>
+          </div>
         </div>
       </div>
-    </div>
+    </QuickAddProvider>
   );
 }
