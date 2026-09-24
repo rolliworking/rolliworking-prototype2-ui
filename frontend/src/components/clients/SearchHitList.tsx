@@ -34,6 +34,7 @@ export const SearchHitList = ({ results, active, onHover, onPick, dense }: Props
                   <button
                     type="button"
                     data-testid={`search-hit-${h.kind}-${h.id}`}
+                    data-active={i === active || undefined}
                     onMouseEnter={() => onHover(i)}
                     onClick={() => onPick(h)}
                     className={clsx('flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors', i === active ? 'bg-brand-50' : 'hover:bg-canvas')}

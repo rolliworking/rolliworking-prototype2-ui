@@ -37,10 +37,17 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
     ├── components/dashboard/  # KpiCards (KpiRow, DeptPnlStrip), HitListPanel, RecentActivity
     ├── components/hitlist/HitListRow.tsx
     ├── hooks/useAsync.ts, hooks/useHitList.ts
-    └── pages/ BadgeSignIn, Dashboard, HitListPage, EstimatesPage, JobsPage, ClientDetailPage, Placeholders
+    └── pages/ SignIn, Dashboard, TodayPage, estimates/, jobs/, sales/, workshop/, clients/{ClientsPage,Client360Page}, Placeholders
 ```
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
+
+## Implemented — Session E7 Client 360 (2026-06) — tested via testing agent, iteration_14.json, 100% pass
+- `resolveIdentifier(q)`: ANY identifier (name / email / phone / company / estimate # / job # / SUB# / tracking incl. shipments / watch ref or serial / SO # / pickup code / request #) → grouped `SearchHit[]`; each hit routes to `/clients/:id?hit=<key>` (record path when no client). Top-bar `GlobalSearch` now wraps `IdentifierSearch` (grouped dropdown, ↑/↓/Enter/Esc, clear); `/clients` page has the same box inline + directory (`getClientDirectory`, recent activity first).
+- `/clients/:id` = Client 360 (`getClient360`, read model, no writes): sticky identity header w/ stats (watches · in house, open estimates, active jobs, requests, tasks, balance due, lifetime paid, last contact), left column Watches (groups, per-watch merged history EST/JOB/INV/REQ newest first, open-job link), Estimates (rev badge + expandable prior revisions), Jobs, Invoices & payments; right column Requests, Notes & tasks, Custody (derived: arrived / received / discrepancy / hold placed-released / shipped / picked up), Emails (expandable body, Outbox link). `?hit=` scrolls to + flashes `data-hit` row (`useHitHighlight`, `.hit-flash`).
+- New entity `ServiceRequest` (fixtures/requests.ts, new → quoted → closed, source call/email/web/walk_in). Sidebar "Clients" for all tiers. Old ClientDetailPage removed.
+- Seed: Naomi Castellanos (c-10) — w-20 Datejust 31 (j-24 E02007 in_service, e-23 E01040 rev 2 w/ seeded rev 1, pk-11 SUB-26-0291 FedEx 794644790132), w-10 OP 41 (e-13/e-10/e-22/e-20, j-08/j-23, so-05), w-21 Tudor BB58 (e-21/e-24, j-25, so-08 SO-25-0042 two payments, picked up 2024); rq-01..03, t-11..13, ob-03..08. Store now preserves fixture `revisions`.
+- Docs updated: DECISIONS ×6 (E7), API-SURFACE, DATA-MODEL (ServiceRequest + read models + hitKey convention), STATE-MACHINES 5c/5d, SEED-DATA (Naomi table + search smoke identifiers), DESIGN-PRINCIPLES #16.
 
 ## Implemented — Session E6 Workshop lenses + parts chat (2026-06) — tested via testing agent, iteration_12 + 13, all pass
 - `/bench` (all tiers): my assigned jobs with next legal action + blocked reason, my holds, pull-next (oldest approved on-hand unassigned, priority first; bench roles only; supervisor-assigned jobs never pullable), my parts requests. `/supervisor` (manager): unassigned bench work + per-tech lists with assign toggles (`supervisorAssign`, audited), parts-approval queue, holds parked under supervisor with logged transitions, QC queue. `/floor` (all tiers): 9 lanes incl. Case cleaning (in-service P/PM-only — provisional), job chips.
@@ -116,6 +123,7 @@ Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Re
 
 ## Backlog
 - P0: Next module per E-session order (user to brief + prompt pack). Keep /app/docs/*.md updated after each module.
+- P1: Requests create/close actions (Quick action "Request" still a placeholder; ServiceRequest is read-only), client edit/create from Client 360
 - P1: Portal grants (P-17 ✗), split-custody warning (pack UNKNOWN, not built), customer/invoice mismatch confirm dialog, real inspection question set, confirm per-kind skipStages
 - P1: Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake/jobs store to localStorage, sales-order convert target
 - P1: Repoint `src/api/client.ts` at the real RolliSuite API (Fastify) when ready
