@@ -45,7 +45,7 @@ function money(n: unknown) {
   return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-function Dashboard() {
+function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openSos, setOpenSos] = useState<Row[]>([]);
@@ -177,14 +177,20 @@ function Dashboard() {
       </div>
 
       <div className="actions">
-        <button type="button" disabled title="Create SO via API / later Emergent screen">
+        <button type="button" onClick={() => onGo("sales")}>
           Create SO
         </button>
-        <button type="button" disabled title="Ship station later">
+        <button type="button" onClick={() => onGo("sales")}>
           Ship Station
         </button>
         <button type="button" disabled title="No inventory Contract ops yet">
           Add Part
+        </button>
+        <button type="button" onClick={() => onGo("estimates")}>
+          Estimates
+        </button>
+        <button type="button" onClick={() => onGo("intake")}>
+          Intake
         </button>
       </div>
 
@@ -389,7 +395,7 @@ export function App() {
           <>
             <h1>Home</h1>
             <p className="sub">E1 shell dashboard — live reads from Contract client where available.</p>
-            <Dashboard />
+            <Dashboard onGo={setNav} />
           </>
         ) : null}
         {nav === "estimates" ? <EstimatesPage /> : null}
