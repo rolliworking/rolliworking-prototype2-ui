@@ -277,6 +277,17 @@ export function createShipment(body: Json, opts?: ClientOptions) {
 
 // --- jobs / shop time ---
 
+export function listJobs(
+  query: { status?: string; q?: string; limit?: number } = {},
+  opts?: ClientOptions
+) {
+  return request<Json>("GET", "/jobs", { ...opts, query });
+}
+
+export function getJob(jobId: string, opts?: ClientOptions) {
+  return request<Json>("GET", `/jobs/${encodeURIComponent(jobId)}`, opts);
+}
+
 export function createJob(body: Json, opts?: ClientOptions) {
   return request<Json>("POST", "/jobs", { ...opts, body });
 }

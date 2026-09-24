@@ -10,6 +10,7 @@ import { AuthGate } from "./AuthGate";
 import { EstimatesPage } from "./EstimatesPage";
 import { HitListPage } from "./HitListPage";
 import { IntakePage } from "./IntakePage";
+import { JobsPage } from "./JobsPage";
 import { RolesPage } from "./RolesPage";
 import { SalesPage } from "./SalesPage";
 import { ShopTimePage } from "./ShopTimePage";
@@ -21,6 +22,7 @@ type NavId =
   | "hit-list"
   | "sales"
   | "intake"
+  | "jobs"
   | "shop-time"
   | "roles";
 
@@ -293,6 +295,7 @@ export function App() {
             ["hit-list", "Hit list"],
             ["sales", "Sales"],
             ["intake", "Intake"],
+            ["jobs", "Jobs"],
             ["shop-time", "Shop time"],
             ["roles", "Roles"],
           ] as const
@@ -335,6 +338,7 @@ export function App() {
         {nav === "hit-list" ? <HitListPage /> : null}
         {nav === "sales" ? <SalesPage /> : null}
         {nav === "intake" ? <IntakePage /> : null}
+        {nav === "jobs" ? <JobsPage /> : null}
         {nav === "shop-time" ? <ShopTimePage /> : null}
         {nav === "roles" ? <RolesPage /> : null}
       </main>
