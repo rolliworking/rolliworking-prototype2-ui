@@ -8,6 +8,7 @@ import {
 } from "./api/client";
 import { EstimatesPage } from "./EstimatesPage";
 import { HitListPage } from "./HitListPage";
+import { SalesPage } from "./SalesPage";
 
 type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake";
 
@@ -305,12 +306,7 @@ export function App() {
         ) : null}
         {nav === "estimates" ? <EstimatesPage /> : null}
         {nav === "hit-list" ? <HitListPage /> : null}
-        {nav === "sales" ? (
-          <Placeholder
-            title="Sales"
-            note="listSalesOrders / fulfill / pickup / ship helpers are on the typed client."
-          />
-        ) : null}
+        {nav === "sales" ? <SalesPage /> : null}
         {nav === "intake" ? (
           <Placeholder
             title="Intake"
