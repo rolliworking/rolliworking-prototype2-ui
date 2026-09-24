@@ -62,6 +62,16 @@ Outbox: ob-01, ob-02. Labels: lb-01 (pdf417), lb-02 (ref/serial), unprinted.
 | j-20 | E01887 | closed | service | B+P | — | Walter | old history for w-01 |
 Counters: next job E02029, next estimate E01059, next SUB-26-0315.
 
+Inspection seeds: every job at `awaiting_customer_approval` or later has 1 inspection photo; service-kind ones also have a saved `inspection` report. In-review jobs j-13 (small_job) and j-18 (service) have no photos → review gate blocks them until photos are attached (j-18 also needs the report).
+
+## Pinned (`tasks.ts`) — 4
+| id | for | by | link | state |
+|---|---|---|---|---|
+| pin-01 | Vienna | MH | — | active ("#vienna order paper…") |
+| pin-02 | MM | Walter | j-04 | active |
+| pin-03 | role manager (MH, Walter, MM) | Vienna | t-09 | active |
+| pin-04 | MM | MM | — | dismissed (history) |
+
 ## Shop time (`jobs.ts`) — 5 rows: j-01 ×2 (MM), j-03 (Walter), j-05 (MH), j-16 (MM).
 
 ## Tasks (`tasks.ts`) — 10

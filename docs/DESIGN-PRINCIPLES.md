@@ -16,11 +16,13 @@ These are decided. Extend them; do not re-litigate without a DECISIONS.md entry.
 | 10 | **Routing authority = Receive Watch** | The workflow set (W/B/P/PM) recorded at intake stage 4 governs the job; jobs inherit it from the received package before falling back to line depts. | `receiveWatch`, `jobFromEstimate` |
 | 11 | **Naming: "PM" = precious metals** | `PM` is a `DeptCode` only. Accountability is always `owner`; techs are `assignees`. Never "PM" for project manager in schema, UI, or docs. | `types.ts`, `OwnerBadge` |
 | 12 | **Dense, keyboard-first staff UI** | Tight spacing, mono for ids, Enter submits, ⌘/Ctrl+Enter confirms modals, rows focusable, auto-focus the scan/search field, `data-testid` on every interactive/critical element. | all pages |
-| 13 | **Derived views over manual lists** | If a list can be computed from state (hit list, lane counts, dashboard KPIs, waiting-on), compute it. Only the explicit 20% (tasks) is stored. | `getToday`, `getDashboardStats` |
+| 13 | **Derived first, pinned on top** | If a list can be computed from state (hit list rows, lane counts, KPIs, waiting-on), compute it. Explicit items are stored only as tasks and pinned hit-list items; pins sit in their own section above derived rows and can never hide them (MH ruling). | `getToday`, `pinToHitList`, `getDashboardStats` |
+| 14 | **Evidence before advance** | Leaving review requires inspection photos for every kind; the multiple-choice report only where the kind's config says so. Gates live in the client module (`reviewGaps`) and the UI just reflects them. | `JOB_KIND_CONFIG`, `reviewGaps`, `ReviewGate` |
 
 ## Anti-patterns (don't)
 - Free status `<select>`; editing `status` directly from a screen.
 - New storage paths, `fetch`, or component-local fixtures.
 - Adding a "PM" / project-manager field.
 - Subtasks, task kanban, comments, priority schemes on tasks (out of scope by decision).
+- Hiding or filtering out derived `/today` rows because something was pinned.
 - Silent dead buttons — a stub must throw a visible message and be audited.

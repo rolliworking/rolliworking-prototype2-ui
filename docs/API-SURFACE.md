@@ -76,7 +76,10 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `searchJobs(q)` | `JobWithRefs[]` | number, client, ref, serial, model, assignee, owner |
 | `legalJobActions(job)` | `JobAction[]` | sync; empty while held; applies per-kind skipStages |
 | `activeHold(job)` / `canHold(job)` | `JobHold \| undefined` / `boolean` | sync |
-| `JOB_KIND_CONFIG` | const | `{label, defaultOwnerRole, skipStages}` per kind |
+| `JOB_KIND_CONFIG` | const | `{label, defaultOwnerRole, skipStages, inspectionReport, inspectionPhotos}` per kind |
+| `INSPECTION_QUESTIONS` | const | multiple-choice form rows (key, label, options) |
+| `reviewGaps(job)` | `string[]` | sync; what blocks leaving in_review (photos every kind; report if kind requires) |
+| `saveInspectionReport(id, answers)` | `JobWithRefs` | service kind only; every question required |
 | `ROLES` / `roleHolders(role)` | `Role[]` / `User[]` | sync |
 | `transitionJob(id, actionKey, reason?)` | `JobWithRefs` | validates legality; queues email if action notifies |
 | `setJobOwner(id, role \| null)` | `JobWithRefs` | owner = role |
@@ -99,7 +102,10 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `createTask({title, assignedTo, jobId?, dueAt?})` | `Task` | links watch/client from job; stamps job audit |
 | `setTaskDone(id, done)` | `Task` | |
 | `assigneeLabel(Assignee)` | `string` | sync; role → holders |
-| `getToday(userId?)` | `TodayView {rows, waitingOn}` | derived, no manual curation (see STATE-MACHINES / DESIGN-PRINCIPLES) |
+| `getToday(userId?)` | `TodayView {pinned, rows, waitingOn}` | rows derived (no curation); pinned = manual layer for me / my roles |
+| `parsePin(raw, fallback)` | `{title, assignedTo}` | sync; `#vienna …` / `#manager …` prefix → assignee |
+| `pinToHitList({title, assignedTo?, jobId?, taskId?})` | `PinnedItem` | audit type `pin`; job-linked pins also stamp the job |
+| `dismissPinned(id)` | `PinnedItem` | done = dismissed, kept |
 
 ## Dashboard / activity
 | function | returns | notes |

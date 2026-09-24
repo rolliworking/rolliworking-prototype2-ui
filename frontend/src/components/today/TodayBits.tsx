@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlertTriangle, ArrowRight, Check, Clock, Inbox, PauseCircle, Send, UserCog, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Clock, Inbox, PauseCircle, Pin, Send, UserCog, Wrench } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Task, TodayRow, TodaySource } from '@/api/client';
@@ -20,7 +20,7 @@ export const SourcePill = ({ source }: { source: TodaySource }) => {
   return <span className={clsx('inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', s.tone)}><Icon size={9} /> {s.label}</span>;
 };
 
-export const TodayRowItem = ({ row: r, onDone, dense }: { row: TodayRow; onDone?: (taskId: string) => void; dense?: boolean }) => {
+export const TodayRowItem = ({ row: r, onDone, onPin, dense }: { row: TodayRow; onDone?: (taskId: string) => void; onPin?: (row: TodayRow) => void; dense?: boolean }) => {
   const href = r.jobId ? `/jobs/${r.jobId}` : r.packageId ? `/intake/inspection/${r.packageId}` : undefined;
   return (
     <li data-testid={`today-row-${r.id}`} className={clsx('group flex items-center gap-3 px-4 transition-colors hover:bg-canvas/70', dense ? 'py-1.5' : 'py-2.5')}>
@@ -42,6 +42,7 @@ export const TodayRowItem = ({ row: r, onDone, dense }: { row: TodayRow; onDone?
       </div>
       {r.sentBy && <span className="inline-flex items-center gap-1 text-[11px] text-ink-400" title={`Sent by ${r.sentBy}`}><Send size={10} /> from <OwnerChip owner={r.sentBy} /></span>}
       {r.dueAt && <span className={clsx('tabular shrink-0 inline-flex items-center gap-1 text-[11px]', r.overdue ? 'font-semibold text-rose-700' : 'text-ink-400')}><Clock size={10} /> {dueLabel(r.dueAt)}</span>}
+      {onPin && <button type="button" data-testid={`today-pin-${r.id}`} onClick={() => onPin(r)} title="Add to a hit list" className="rounded-sm p-1 text-ink-300 opacity-0 transition-opacity hover:bg-surface hover:text-amber-700 group-hover:opacity-100 focus:opacity-100"><Pin size={12} /></button>}
     </li>
   );
 };

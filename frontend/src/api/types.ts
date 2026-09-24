@@ -37,7 +37,8 @@ export type AuditEventType =
   | 'intake'
   | 'estimate'
   | 'job'
-  | 'task';
+  | 'task'
+  | 'pin';
 
 export interface AuditEvent {
   id: string;
@@ -221,6 +222,11 @@ export interface JobNote extends Stamp {
 
 export type JobPhoto = PackagePhoto & Stamp;
 
+// Multiple-choice inspection report (service kind only — MH ruling); photos are required for every kind
+export interface InspectionReport extends Stamp {
+  answers: Record<string, string>;
+}
+
 export interface ShopTimeEntry extends Stamp {
   id: string;
   jobId: string;
@@ -256,6 +262,7 @@ export interface Job {
   holds: JobHold[];
   notes: JobNote[];
   photos: JobPhoto[];
+  inspection?: InspectionReport;
 }
 
 // ---- Tasks (explicit 20%) + derived /today rows -----------------------------
@@ -278,6 +285,20 @@ export interface Task {
   completedBy?: string;
 }
 
+// Manual layer: pinned hit-list items (MH ruling) — sit above the derived rows, never hide them
+export interface PinnedItem {
+  id: string;
+  title: string;
+  assignedTo: Assignee;
+  createdBy: string;
+  jobId?: string;
+  taskId?: string;
+  createdAt: string;
+  station: string;
+  dismissedAt?: string;
+  dismissedBy?: string;
+}
+
 export type TodaySource = 'owner' | 'assignee' | 'hold' | 'discrepancy' | 'task';
 
 export interface TodayRow {
@@ -296,6 +317,7 @@ export interface TodayRow {
 }
 
 export interface TodayView {
+  pinned: PinnedItem[];
   rows: TodayRow[];
   waitingOn: Task[];
 }

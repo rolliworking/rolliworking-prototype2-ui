@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, Package, Receipt, Trash2, Watch as WatchIcon } from 'lucide-react';
+import { ArrowLeft, FileText, Package, Pin, Receipt, Trash2, Watch as WatchIcon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -7,12 +7,14 @@ import { useAuth } from '@/auth/AuthContext';
 import { HoldModal, KindPill, OwnerBadge, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
 import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, NotesPanel, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
+import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
+import { PinModal } from '@/components/today/PinBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fullName } from '@/lib/format';
 
-type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | null;
+type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | { kind: 'pin' } | null;
 
 export default function JobDetailPage() {
   const { id = '' } = useParams();
@@ -35,6 +37,7 @@ export default function JobDetailPage() {
   if (!job) return <div className="text-ink-500">Job not found. <Link to="/jobs" className="underline">Back to Jobs</Link></div>;
   const j = job;
   const actions = api.legalJobActions(j);
+  const gaps = api.reviewGaps(j);
 
   const act = (a: JobAction) => (a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client email queued' : ''}`));
 
@@ -61,18 +64,20 @@ export default function JobDetailPage() {
         <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="job-actions">
           {actions.map((a) => (
             <span key={a.key} className="inline-flex items-center gap-1">
-              <Button data-testid={`act-${a.key}`} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-200 !text-rose-700 hover:!bg-rose-50' : undefined} onClick={() => act(a)}>{a.label}</Button>
+              <Button data-testid={`act-${a.key}`} disabled={gaps.length > 0} title={gaps.join(' · ') || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-200 !text-rose-700 hover:!bg-rose-50' : undefined} onClick={() => act(a)}>{a.label}</Button>
               {a.provisional && <Provisional note={a.provisional} />}
               {a.notifies && <Provisional note="Pack is silent on which transitions notify the client — emailing here is provisional" />}
             </span>
           ))}
           {(j.status === 'ready_to_ship' || j.status === 'closed') && <span className="inline-flex items-center gap-1"><Button data-testid="act-invoice" onClick={() => run(() => api.invoiceJob(j.id), '')}><Receipt size={13} /> Create invoice</Button><Provisional note="Invoicing arrives next session — stub" /></span>}
+          <Button data-testid="act-pin" onClick={() => setModal({ kind: 'pin' })} title="Add to someone's hit list"><Pin size={13} /> Add to hit list</Button>
           {user?.accessTier === 'manager' && <Button data-testid="act-delete-job" title="Delete (can-delete-jobs)" onClick={() => { if (window.confirm(`Delete ${j.number}?`)) void run(() => api.deleteJob(j.id), '').then(() => navigate('/jobs')); }}><Trash2 size={13} className="text-rose-700" /></Button>}
         </div>
       </div>
 
       {flash && <div data-testid="job-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
       {error && <div data-testid="job-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
+      <ReviewGate job={j} />
       {api.activeHold(j) && <div data-testid="held-banner" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs text-rose-900">This job is parked on hold — status actions return when the hold is released.</div>}
       {actions.length === 0 && !api.activeHold(j) && j.status === 'closed' && <div data-testid="closed-banner" className="rounded-sm bg-slate-100 px-3 py-1.5 text-xs text-slate-600">Closed — end of the line. Invoice / pickup is the next session.</div>}
 
@@ -90,6 +95,7 @@ export default function JobDetailPage() {
             </div>
           </Card>
           <Card title="Line items" subtitle="Carried from the estimate · department tags route the shop floor" testId="job-lines-card" bodyClassName="p-0"><LinesTable job={j} /></Card>
+          <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
           <Card title="Notes" subtitle="Freeform, stamped who / when / station" testId="job-notes-card"><NotesPanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
           <Card title="Shop time" subtitle="Time rows never move job status" testId="job-shop-time-card"><ShopTimePanel job={j} /></Card>
@@ -104,6 +110,7 @@ export default function JobDetailPage() {
       </div>
 
       {modal?.kind === 'reason' && <ReasonModal testId={`reason-modal-${modal.action.key}`} title={modal.action.label.replace('…', '')} hint={modal.action.key === 'qc_fail' ? 'Fail moves the job back to service and queues a client email with this reason.' : 'A reason is required; it lands on the timeline.'} confirmLabel={modal.action.label.replace('…', '')} danger={modal.action.tone === 'danger'} onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, modal.action.key, r); setModal(null); await load(); say(`${modal.action.label.replace('…', '')}${modal.action.notifies ? ' · client email queued' : ''}`); }} />}
+      {modal?.kind === 'pin' && <PinModal defaultTitle={`${j.number} · ${fullName(j.client)} · ${j.watch.model}`} jobId={j.id} onClose={() => setModal(null)} onPinned={() => { setModal(null); say('Pinned to their hit list'); }} />}
       {modal?.kind === 'hold' && <HoldModal onClose={() => setModal(null)} onConfirm={async (t, r) => { await api.placeHold(j.id, t, r); setModal(null); await load(); say(`${t === 'parts' ? 'Parts' : 'Outsource'} hold placed`); }} />}
       {modal?.kind === 'release' && <ReasonModal testId="release-modal" title="Release hold" hint={`Returns the job to ${api.activeHold(j)?.priorStatus.replace(/_/g, ' ')}.`} confirmLabel="Release" optional onClose={() => setModal(null)} onConfirm={async (r) => { await api.releaseHold(j.id, r); setModal(null); await load(); say('Hold released'); }} />}
     </div>

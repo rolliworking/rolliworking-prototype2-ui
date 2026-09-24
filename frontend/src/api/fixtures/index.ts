@@ -5,6 +5,6 @@ export { watches } from './watches';
 export { estimates, addressFor, totalsFor, primaryDepartment } from './estimates';
 export { catalog } from './catalog';
 export { jobs, shopTime, JOB_FLOW, DEPT_OF_CODE } from './jobs';
-export { tasks } from './tasks';
+export { tasks, pinned } from './tasks';
 export { activity } from './activity';
-export { packages, outbox, labels, CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './intake';
+export { packages, outbox, labels, seedPhoto, CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './intake';

@@ -83,7 +83,8 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 | timeline[] | `JobTransition` | `{from,to,action,reason?,emailQueued?, at,by,station}` append-only **[P17:telemetry ✅]** |
 | holds[] | `JobHold` | `{type: parts\|outsource, reason, priorStatus, placedAt/By, station, releasedAt?/By?, releaseNote?}` |
 | notes[] | `JobNote` | `{text, at, by, station}` |
-| photos[] | `JobPhoto` | `PackagePhoto & Stamp` |
+| photos[] | `JobPhoto` | `PackagePhoto & Stamp` — inspection photos required for every kind before leaving in_review |
+| inspection? | `InspectionReport` | `{answers: Record<question,option>, at, by, station}` — service kind only (MH ruling) |
 
 ### ShopTimeEntry (`jobs.ts`) — `id, jobId→Job, minutes, note, at, by, station`. Never moves job status.
 
@@ -96,8 +97,17 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 | jobId?, watchId?, clientId? | linked tasks appear on the job timeline card |
 | dueAt?, status `open\|done`, createdAt, station, completedAt?, completedBy? | |
 
+### PinnedItem (`tasks.ts`, 4) — manual hit-list layer (MH ruling)
+| field | notes |
+|---|---|
+| id, title | title may start with `#name` / `#role` (parsed into assignedTo) |
+| assignedTo `Assignee` | person or role (resolved to holders) |
+| createdBy, createdAt, station | |
+| jobId?, taskId? | source of the pin |
+| dismissedAt?, dismissedBy? | dismissed = done; kept for history |
+
 ### Derived (not stored)
-- `TodayRow` — `/today` union: owner-action jobs + assignee bench jobs + holds I own/placed + discrepancy packages (concierge role / inspector who flagged) + open tasks to me/my roles. `TodayView = { rows, waitingOn: Task[] }`.
+- `TodayRow` — `/today` union: owner-action jobs + assignee bench jobs + holds I own/placed + discrepancy packages (concierge role / inspector who flagged) + open tasks to me/my roles. `TodayView = { pinned: PinnedItem[], rows, waitingOn: Task[] }` — pinned sits above rows; nothing derived is hidden by pins.
 - `DashboardStats`, `QuoteContext`, `InspectionContext`, `WatchMatch`, `*WithRefs` joins.
 
 ## Relationships
@@ -112,7 +122,7 @@ OutboxEmail.relatedRef → Estimate.number | Job.number | Package.subNumber (str
 ## P-17 accommodation status
 | item | status | where |
 |---|---|---|
-| job_kind | ✅ | `Job.kind`, `JOB_KIND_CONFIG` (label, default_owner_role, skipStages) |
+| job_kind | ✅ | `Job.kind`, `JOB_KIND_CONFIG` (label, default_owner_role, skipStages, inspectionReport, inspectionPhotos) |
 | party roles | ✅ | `User.roles`, `Job.owner: Role`, `Task.assignedTo` role variant, `roleHolders()` |
 | telemetry timestamps | ◐ | `Stamp {at,by,station}` on transitions/holds/notes/photos/shop time/tasks; package stage stamps; no device/geo telemetry |
 | portal grants | ✗ | no client portal identity or grant table yet (Wix/portal intake rule from pack is documented, not modelled) |

@@ -45,12 +45,14 @@ Every transition appends `JobTransition {from,to,action,reason?,emailQueued?,at,
 | createJob(onHand=true), createJobFromEstimate with received package, convertEstimateToIntake | on_hand (+ intakeDate) |
 | close | finished |
 
-### Per-kind config (`JOB_KIND_CONFIG`, lookup table — PROVISIONAL values)
-| kind | label | default_owner_role | skipStages |
-|---|---|---|---|
-| service | Service | — (manual owner) | [] |
-| small_job | Small job | concierge | [awaiting_customer_approval] |
-| warranty | Warranty | concierge | [] |
+### Per-kind config (`JOB_KIND_CONFIG`, lookup table)
+| kind | label | default_owner_role | skipStages | inspectionReport | inspectionPhotos |
+|---|---|---|---|---|---|
+| service | Service | — (manual owner) | [] | ✅ | required |
+| small_job | Small job | concierge | [awaiting_customer_approval] (provisional) | ✗ (MH ruling) | required |
+| warranty | Warranty | concierge | [] | ✗ (MH ruling) | required |
+
+**Review gate (`reviewGaps`)** — leaving `in_review` (request_approval / approve_direct) is blocked until: ≥1 inspection photo on the job (every kind) AND, for kinds with `inspectionReport`, a saved `InspectionReport` (`saveInspectionReport`, every `INSPECTION_QUESTIONS` row answered). UI disables the buttons and shows the gate strip; `transitionJob` enforces it too. Report form is a lookup table (`INSPECTION_QUESTIONS`: case, crystal, bracelet, movement, water) — placeholder set, provisional.
 
 Stage-skip mechanism: `legalJobActions` maps each action's target through `skipForward(kind, to)` (walks `JOB_FLOW` past skipped stages). Redirected actions are flagged provisional and dropped if a non-redirected action already reaches the same target (e.g. small_job in_review shows only "Mark approved"). Owner auto-set at creation from `default_owner_role`; service takes normal (manual) owner pick.
 
@@ -88,6 +90,9 @@ Discrepancies (`computeDiscrepancies`): missing component, serial/ref mismatch, 
 
 ## 5. Task
 `open ⇄ done` via `setTaskDone(id, bool)`; completion stamps completedAt/By; audit type `task`.
+
+## 5b. Pinned hit-list item (manual layer, MH ruling)
+`active → dismissed` via `dismissPinned(id)` (dismissedAt/By kept). Created by `pinToHitList` from a job, a task row, or freeform (`#name`/`#role` prefix sets the assignee). Shown in the Pinned section of the assignee's (or role holders') `/today` above derived rows; pins never hide derived rows.
 
 ## 6. Auth / station
 Device: `unregistered → registered(stationId)` (`registerStation` manager+password; `resetDeviceRegistration` back). Session: `signInWithPassword` (photo) → `switchUserWithPin` (only if signed in today) → `signOut`.

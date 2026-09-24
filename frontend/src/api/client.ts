@@ -23,6 +23,7 @@ import type {
   EstimateStatus,
   EstimateWithRefs,
   Assignee,
+  PinnedItem,
   JobKind,
   Role,
   Task,
@@ -77,12 +78,13 @@ const writeJson = (key: string, value: unknown) => localStorage.setItem(key, JSO
 // mutable in-memory copies so "writes" work within a session
 const store = {
   tasks: fx.tasks.map((t) => ({ ...t })),
+  pinned: fx.pinned.map((p) => ({ ...p })),
   packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
   watches: fx.watches.map((w) => ({ ...w })),
   estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[], jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
-  jobs: fx.jobs.map((j) => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees] })),
+  jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
   counters: { sub: 314, label: 3, estimate: 1058, job: 2028 },
 };
@@ -1010,6 +1012,8 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
   const action = legalJobActions(j).find((x) => x.key === actionKey);
   if (!action) throw new Error(`"${actionKey}" is not a legal action from ${j.status}`);
   if (action.needsReason && !reason?.trim()) throw new Error('A reason is required for this step');
+  const gaps = reviewGaps(j);
+  if (gaps.length) throw new Error(gaps.join(' · '));
   const mail = action.notifies ? EMAIL_FOR[action.key] : undefined;
   let queued = false;
   if (mail) { const [s, b] = mail(j, reason?.trim()); queueJobEmail(j, s, b); queued = true; }
@@ -1030,12 +1034,43 @@ export async function toggleAssignee(id: string, shortName: string): Promise<Job
   return resolve(jobRefs(j));
 }
 
-// Per-kind config (lookup table, not an enum switch): owner routing + stages the kind skips (PROVISIONAL set)
-export const JOB_KIND_CONFIG: Record<JobKind, { label: string; defaultOwnerRole: Role | null; skipStages: JobStatus[] }> = {
-  service: { label: 'Service', defaultOwnerRole: null, skipStages: [] },
-  small_job: { label: 'Small job', defaultOwnerRole: 'concierge', skipStages: ['awaiting_customer_approval'] },
-  warranty: { label: 'Warranty', defaultOwnerRole: 'concierge', skipStages: [] },
+// Per-kind config (lookup table, not an enum switch).
+// MH ruling 2026-06: inspectionReport (multiple-choice form) only for service; inspection PHOTOS are required for every kind.
+// skipStages for small_job stays PROVISIONAL (amber tag).
+export const JOB_KIND_CONFIG: Record<JobKind, { label: string; defaultOwnerRole: Role | null; skipStages: JobStatus[]; inspectionReport: boolean; inspectionPhotos: true }> = {
+  service: { label: 'Service', defaultOwnerRole: null, skipStages: [], inspectionReport: true, inspectionPhotos: true },
+  small_job: { label: 'Small job', defaultOwnerRole: 'concierge', skipStages: ['awaiting_customer_approval'], inspectionReport: false, inspectionPhotos: true },
+  warranty: { label: 'Warranty', defaultOwnerRole: 'concierge', skipStages: [], inspectionReport: false, inspectionPhotos: true },
 };
+
+// Multiple-choice inspection form (service kind). Lookup table — add a row to add a question.
+export const INSPECTION_QUESTIONS: { key: string; label: string; options: string[] }[] = [
+  { key: 'case', label: 'Case', options: ['clean', 'light scratches', 'deep scratches', 'dented'] },
+  { key: 'crystal', label: 'Crystal', options: ['clear', 'scratched', 'chipped', 'cracked'] },
+  { key: 'bracelet', label: 'Bracelet / strap', options: ['tight', 'stretched', 'damaged', 'missing'] },
+  { key: 'movement', label: 'Movement', options: ['running', 'intermittent', 'stopped'] },
+  { key: 'water', label: 'Water resistance', options: ['pass', 'fail', 'not tested'] },
+];
+
+// Gate on leaving in_review: photos for every kind, report only where the kind requires it
+export function reviewGaps(j: Job): string[] {
+  if (j.status !== 'in_review') return [];
+  const gaps: string[] = [];
+  if (j.photos.length === 0) gaps.push('Inspection photos required (every kind)');
+  if (JOB_KIND_CONFIG[j.kind].inspectionReport && !j.inspection) gaps.push('Inspection report not completed');
+  return gaps;
+}
+
+export async function saveInspectionReport(id: string, answers: Record<string, string>): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  if (!JOB_KIND_CONFIG[j.kind].inspectionReport) throw new Error(`${JOB_KIND_CONFIG[j.kind].label} jobs take no inspection report (MH ruling) — photos only`);
+  const missing = INSPECTION_QUESTIONS.filter((q) => !answers[q.key]);
+  if (missing.length) throw new Error(`Answer every question: ${missing.map((q) => q.label).join(', ')}`);
+  const a = actor();
+  j.inspection = { answers: { ...answers }, at: new Date().toISOString(), by: a.by, station: a.station };
+  jobStamp(j, `Inspection report saved · ${INSPECTION_QUESTIONS.map((q) => `${q.label} ${answers[q.key]}`).join(', ')}`);
+  return resolve(jobRefs(j));
+}
 export const ROLES: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker'];
 export const roleHolders = (role: Role): User[] => fx.users.filter((u) => u.roles.includes(role));
 
@@ -1322,9 +1357,47 @@ const OWNER_ACTION: Partial<Record<JobStatus, string>> = { intake: 'Start review
 // Assignees = working techs: these states are bench work
 const TECH_ACTION: Partial<Record<JobStatus, string>> = { approved: 'Start service', in_service: 'Bench work', testing: 'Run testing / QC' };
 
+// ---- Pinned hit list (manual layer, MH ruling) — never hides derived rows -------
+
+const HASHTAG = /^#(\w+)\s+/;
+// "#vienna order paper" → assignee Vienna; "#manager sign off" → role manager
+export const parsePin = (raw: string, fallback: Assignee): { title: string; assignedTo: Assignee } => {
+  const m = raw.trim().match(HASHTAG);
+  if (!m) return { title: raw.trim(), assignedTo: fallback };
+  const tag = m[1].toLowerCase();
+  const user = fx.users.find((u) => u.shortName.toLowerCase() === tag || u.firstName.toLowerCase() === tag);
+  if (user) return { title: raw.trim(), assignedTo: { type: 'user', shortName: user.shortName } };
+  if ((ROLES as string[]).includes(tag)) return { title: raw.trim(), assignedTo: { type: 'role', role: tag as Role } };
+  return { title: raw.trim(), assignedTo: fallback };
+};
+
+export interface PinInput { title: string; assignedTo?: Assignee; jobId?: string; taskId?: string }
+
+export async function pinToHitList(input: PinInput): Promise<PinnedItem> {
+  const a = actor();
+  const fallback: Assignee = { type: 'user', shortName: a.by };
+  const parsed = parsePin(input.title, input.assignedTo ?? fallback);
+  if (!parsed.title) throw new Error('Say what to pin');
+  const job = input.jobId ? store.jobs.find((j) => j.id === input.jobId) : undefined;
+  const p: PinnedItem = { id: newId('pin'), title: parsed.title, assignedTo: input.assignedTo && !HASHTAG.test(input.title) ? input.assignedTo : parsed.assignedTo, createdBy: a.by, jobId: job?.id, taskId: input.taskId, createdAt: new Date().toISOString(), station: a.station };
+  store.pinned.unshift(p);
+  appendAudit({ type: 'pin', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Pinned "${p.title.slice(0, 50)}" for ${assigneeLabel(p.assignedTo)}${job ? ` · ${job.number}` : ''}` });
+  if (job) jobStamp(job, `Pinned to ${assigneeLabel(p.assignedTo).split(' →')[0]}'s hit list · ${p.title.slice(0, 50)}`);
+  return resolve({ ...p });
+}
+
+export async function dismissPinned(id: string): Promise<PinnedItem> {
+  const p = byId(store.pinned, id);
+  const a = actor();
+  p.dismissedAt = new Date().toISOString();
+  p.dismissedBy = a.by;
+  appendAudit({ type: 'pin', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Dismissed pin "${p.title.slice(0, 50)}"` });
+  return resolve({ ...p });
+}
+
 export async function getToday(userId?: string): Promise<TodayView> {
   const me = userId ? byId(fx.users, userId) : currentUserSync();
-  if (!me) return resolve({ rows: [], waitingOn: [] });
+  if (!me) return resolve({ pinned: [], rows: [], waitingOn: [] });
   const roles = userRoles(me);
   const now = Date.now();
   const rows: TodayRow[] = [];
@@ -1357,5 +1430,6 @@ export async function getToday(userId?: string): Promise<TodayView> {
 
   rows.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.urgent) - Number(a.urgent) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9'));
   const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
-  return resolve({ rows, waitingOn });
+  const pinned = store.pinned.filter((p) => !p.dismissedAt && assigneeMatches(p.assignedTo, me));
+  return resolve({ pinned, rows, waitingOn });
 }

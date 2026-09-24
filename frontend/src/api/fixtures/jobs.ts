@@ -1,5 +1,6 @@
 import type { DeptCode, Department, EstimateLine, HoldType, Job, JobKind, JobPriority, JobStatus, JobTransition, Role, ShopTimeEntry } from '../types';
 import { estimates } from './estimates';
+import { seedPhoto } from './intake';
 import { daysAgo, daysFromNow } from './time';
 
 // Linear order of the pack's full status list — the shop-floor map reads left to right
@@ -88,7 +89,8 @@ const build = (s: Seed): Job => {
     timeline,
     holds: s.hold ? [{ id: `jh-${++seq}`, type: s.hold.type, reason: s.hold.reason, priorStatus: s.status, placedAt: daysAgo(s.hold.daysAgo, 14), placedBy: by, station: 'Bench 1', ...(s.hold.released ? { releasedAt: daysAgo(Math.max(0, s.hold.daysAgo - 3), 9), releasedBy: by, releaseNote: 'Parts arrived' } : {}) }] : [],
     notes: (s.notes ?? []).map((text, i) => ({ id: `jn-${++seq}`, text, at: daysAgo(Math.max(0, s.createdDaysAgo - i - 1), 16), by, station: 'Bench 1' })),
-    photos: [],
+    photos: JOB_FLOW.indexOf(s.status) >= 2 ? [{ ...seedPhoto(`Inspection ${s.number} front`), id: `jp-${++seq}`, at: daysAgo(Math.max(0, s.createdDaysAgo - 1), 11), by: 'Walter', station: 'Front Desk 1' }] : [],
+    inspection: kind === 'service' && JOB_FLOW.indexOf(s.status) >= 2 ? { answers: { case: 'light scratches', crystal: 'clear', bracelet: 'tight', movement: 'running', water: 'not tested' }, at: daysAgo(Math.max(0, s.createdDaysAgo - 1), 11), by: 'Walter', station: 'Front Desk 1' } : undefined,
   };
 };
 

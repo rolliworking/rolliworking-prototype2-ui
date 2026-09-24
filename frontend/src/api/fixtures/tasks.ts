@@ -1,4 +1,4 @@
-import type { Task } from '../types';
+import type { PinnedItem, Task } from '../types';
 import { daysAgo, daysFromNow } from './time';
 
 export const tasks: Task[] = [
@@ -12,4 +12,11 @@ export const tasks: Task[] = [
   { id: 't-08', title: 'Restock bench 1 cleaning solution', assignedTo: { type: 'user', shortName: 'MM' }, createdBy: 'MM', dueAt: daysFromNow(3), status: 'open', createdAt: daysAgo(1, 8), station: 'Bench 1' },
   { id: 't-09', title: 'Approve overtime for Saturday QC run', assignedTo: { type: 'role', role: 'manager' }, createdBy: 'Vienna', dueAt: daysFromNow(0, 16), status: 'open', createdAt: daysAgo(0, 9), station: 'Front Desk 1' },
   { id: 't-10', title: 'File RSC warranty claim for Eleanor Vance Daytona', assignedTo: { type: 'user', shortName: 'Vienna' }, createdBy: 'MH', jobId: 'j-11', clientId: 'c-02', dueAt: daysAgo(2, 12), status: 'done', createdAt: daysAgo(4, 10), station: 'Front Desk 1', completedAt: daysAgo(2, 11), completedBy: 'Vienna' },
+];
+
+export const pinned: PinnedItem[] = [
+  { id: 'pin-01', title: '#vienna order paper for the receipt printer', assignedTo: { type: 'user', shortName: 'Vienna' }, createdBy: 'MH', createdAt: daysAgo(0, 8), station: 'Front Desk 1' },
+  { id: 'pin-02', title: 'Walk the GMT parts hold with the client today', assignedTo: { type: 'user', shortName: 'MM' }, createdBy: 'Walter', jobId: 'j-04', createdAt: daysAgo(0, 9), station: 'Bench 2' },
+  { id: 'pin-03', title: 'Sign off Saturday overtime before noon', assignedTo: { type: 'role', role: 'manager' }, createdBy: 'Vienna', taskId: 't-09', createdAt: daysAgo(0, 9), station: 'Front Desk 1' },
+  { id: 'pin-04', title: 'Done yesterday — kept for history', assignedTo: { type: 'user', shortName: 'MM' }, createdBy: 'MM', createdAt: daysAgo(1, 9), station: 'Bench 1', dismissedAt: daysAgo(1, 17), dismissedBy: 'MM' },
 ];

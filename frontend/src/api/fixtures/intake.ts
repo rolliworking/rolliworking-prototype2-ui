@@ -20,7 +20,7 @@ export const DEPT_COMPONENTS: Record<DeptCode, string[]> = {
   PM: ['watch head'],
 };
 
-const seedPhoto = (label: string): PackagePhoto => ({
+export const seedPhoto = (label: string): PackagePhoto => ({
   id: `ph-${label.replace(/\W+/g, '-').toLowerCase()}`,
   source: 'upload',
   fileName: `${label.replace(/\W+/g, '_').toLowerCase()}.jpg`,
