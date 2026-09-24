@@ -38,7 +38,8 @@ export type AuditEventType =
   | 'estimate'
   | 'job'
   | 'task'
-  | 'pin';
+  | 'pin'
+  | 'sales';
 
 export interface AuditEvent {
   id: string;
@@ -458,3 +459,91 @@ export interface ReceiveWatchInput {
   sameWatchDecision: 'n/a' | 'returning' | 'conflict';
   notes?: string;
 }
+
+// ---- Sales orders / fulfil / pickup / ship (E5) — per PROMPT-PACK-invoicing-pickup-ship.md ----
+
+export type SOStatus = 'draft' | 'open' | 'partial_fulfilled' | 'fulfilled' | 'shipped' | 'picked_up' | 'cancelled';
+export type FulfillmentChannel = 'ship' | 'pickup';
+export type ShipCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other';
+export type PaymentMethod = 'card' | 'cash' | 'check' | 'wire' | 'other';
+
+export interface SOLine {
+  id: string;
+  description: string;
+  partNumber?: string;
+  qty: number;
+  rate: number;
+  dept?: DeptCode;
+  pickedUpQty: number;
+  shippedQty: number;
+}
+
+export interface Payment extends Stamp {
+  id: string;
+  method: PaymentMethod;
+  amount: number;
+  note?: string;
+}
+
+export interface Shipment extends Stamp {
+  id: string;
+  carrier: ShipCarrier;
+  service: string;
+  tracking: string;
+  labelId: string;
+  labelDataUrl: string;
+  declaredValue: number;
+  coverage: number;
+  photos: PackagePhoto[];
+  address: Address;
+  bypassReason?: string;
+}
+
+export interface PickupSession extends Stamp {
+  id: string;
+  codeUsed?: string;
+  proxyName?: string;
+  proxyIdPhoto?: PackagePhoto;
+  photos: PackagePhoto[];
+  lineQty: Record<string, number>;
+  bypassReason?: string;
+  adminOverride?: boolean;
+}
+
+export interface SalesOrder {
+  id: string;
+  number: string;
+  clientId: string;
+  jobId?: string;
+  estimateId?: string;
+  status: SOStatus;
+  channel?: FulfillmentChannel;
+  orderDate: string;
+  shipDate?: string;
+  lines: SOLine[];
+  shippingAmount: number;
+  total: number;
+  memo?: string;
+  qboInvoiceId?: string;
+  qboStatus: 'not_queued' | 'queued';
+  payments: Payment[];
+  balanceDue: number;
+  isPaid: boolean;
+  pickupCode?: string;
+  pickupCodeIssuedAt?: string;
+  shippingAddress?: Address;
+  shippingInfoRequestedAt?: string;
+  tracking?: string;
+  pickedUpAt?: string;
+  shipment?: Shipment;
+  pickupSession?: PickupSession;
+  fulfilledAt?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+}
+
+export type SalesOrderWithRefs = SalesOrder & { client: Client; job: Job | null; watch: Watch | null };
+
+export type TailStage = 'awaiting_invoice' | 'awaiting_payment' | 'ready_for_pickup' | 'ready_to_ship' | 'picked_up' | 'shipped';

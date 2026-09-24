@@ -60,7 +60,7 @@ Outbox: ob-01, ob-02. Labels: lb-01 (pdf417), lb-02 (ref/serial), unprinted.
 | j-18 | E02028 | in_review | service | W | — | MH | urgent |
 | j-19 | E01903 | closed | service | W | — | MM | released parts hold in history (w-09 returning) |
 | j-20 | E01887 | closed | service | B+P | — | Walter | old history for w-01 |
-Counters: next job E02029, next estimate E01059, next SUB-26-0315.
+Counters: next job E02031, next estimate E01059, next SUB-26-0315, next SO SO-26-0108.
 
 Inspection seeds: every job at `awaiting_customer_approval` or later has 1 inspection photo; service-kind ones also have a saved `inspection` report. In-review jobs j-13 (small_job) and j-18 (service) have no photos → review gate blocks them until photos are attached (j-18 also needs the report).
 
@@ -71,6 +71,18 @@ Inspection seeds: every job at `awaiting_customer_approval` or later has 1 inspe
 | pin-02 | MM | Walter | j-04 | active |
 | pin-03 | role manager (MH, Walter, MM) | Vienna | t-09 | active |
 | pin-04 | MM | MM | — | dismissed (history) |
+
+## Sales orders (`salesOrders.ts`) — 7, one per tail stage
+| id | number | client | job | status | channel | paid | notable |
+|---|---|---|---|---|---|---|---|
+| so-01 | SO-26-0101 | c-21 | — | draft | — | no | parts order, 2 lines |
+| so-02 | SO-26-0102 | c-12 | j-07 (ready_to_ship) | open | pickup | no ($480 due) | **awaiting payment** |
+| so-03 | SO-26-0103 | c-14 | j-21 (ready_to_ship) | fulfilled | pickup | yes | **ready for pickup**, code `4Q7M-82`, QBO queued |
+| so-04 | SO-26-0104 | c-15 | j-22 (ready_to_ship) | fulfilled | ship | yes (2 partial payments) | **ready to ship**, address set, info requested |
+| so-05 | SO-26-0105 | c-10 | j-08 (closed) | shipped | ship | yes | UPS tracking, shipment record + mock label |
+| so-06 | SO-26-0106 | c-15 | j-09 (closed) | picked_up | pickup | yes | pickup session, code consumed |
+| so-07 | SO-26-0107 | c-23 | — | cancelled | — | no | |
+j-02 (ready_to_ship, no SO) = **awaiting invoice**. Next SO number SO-26-0108. Jobs j-21 (E02029) and j-22 (E02030) added as tail-stage seeds; next job E02031.
 
 ## Shop time (`jobs.ts`) — 5 rows: j-01 ×2 (MM), j-03 (Walter), j-05 (MH), j-16 (MM).
 

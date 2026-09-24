@@ -22,9 +22,10 @@ const TYPE_TONE: Record<AuditEventType, string> = {
   job: 'bg-orange-50 text-orange-800',
   task: 'bg-moss-50 text-moss-700',
   pin: 'bg-moss-50 text-moss-700',
+  sales: 'bg-teal-50 text-teal-800',
 };
 
-type Filter = 'all' | 'sign_in' | 'station' | 'intake' | 'estimate' | 'job';
+type Filter = 'all' | 'sign_in' | 'station' | 'intake' | 'estimate' | 'job' | 'sales';
 
 export default function AuditLogPage() {
   const { data } = useAsync(() => api.getAuditLog());
@@ -39,6 +40,7 @@ export default function AuditLogPage() {
         if (filter === 'intake') return e.type === 'intake';
         if (filter === 'estimate') return e.type === 'estimate';
         if (filter === 'job') return e.type === 'job' || e.type === 'task' || e.type === 'pin';
+        if (filter === 'sales') return e.type === 'sales';
         return true;
       }),
     [data, filter],
@@ -58,6 +60,7 @@ export default function AuditLogPage() {
         <FilterChip active={filter === 'intake'} onClick={() => setFilter('intake')} testId="audit-filter-intake">Intake</FilterChip>
         <FilterChip active={filter === 'estimate'} onClick={() => setFilter('estimate')} testId="audit-filter-estimate">Estimates</FilterChip>
         <FilterChip active={filter === 'job'} onClick={() => setFilter('job')} testId="audit-filter-job">Jobs</FilterChip>
+        <FilterChip active={filter === 'sales'} onClick={() => setFilter('sales')} testId="audit-filter-sales">Sales</FilterChip>
       </div>
 
       <Card bodyClassName="p-0">

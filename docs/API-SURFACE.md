@@ -95,6 +95,25 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `getShopTime(jobId?)` / `getOnHandJobs()` | `ShopTimeEntry[]` / `JobWithRefs[]` | |
 | `addShopTime(jobId, minutes, note)` | `ShopTimeEntry` | on_hand only; never changes status |
 
+## Sales orders / fulfil / pickup / ship (E5)
+| function | returns | notes |
+|---|---|---|
+| `getSalesOrders()` / `getSalesOrder(id)` / `getSalesOrderForJob(jobId)` | `SalesOrderWithRefs` (client, job, watch) | |
+| `findSalesOrders(q)` | `SalesOrderWithRefs[]` | SO #, estimate #, job #, name, pickup code |
+| `SO_BADGE(order)` / `tailStage(job)` | `'picked_up'\|'shipped'\|'paid'\|'unpaid'` / `TailStage \| null` | sync read models |
+| `createSalesOrder(input)` / `updateSalesOrder(id, patch)` | `SalesOrderWithRefs` | customer required; edit draft/open only |
+| `convertEstimateToSalesOrder(estimateId)` | `SalesOrderWithRefs` | draft; shipping lines → shippingAmount |
+| `invoiceJob(jobId)` | `SalesOrderWithRefs` | **now real**: open SO from a ready_to_ship job's lines |
+| `openSalesOrder` / `cancelSalesOrder(id, reason)` / `fulfillSalesOrder(id)` | `SalesOrderWithRefs` | fulfil = QBO **STUB** (queued state only) |
+| `recordPayment(id, amount, method, note?)` | `SalesOrderWithRefs` | stub ledger, partial ok |
+| `setFulfillmentChannel(id, 'pickup'\|'ship')` / `regeneratePickupCode(id)` | `SalesOrderWithRefs` | |
+| `requestShippingInfo(id)` / `setShippingAddress(id, address)` | `SalesOrderWithRefs` | Outbox / address |
+| `shippingProvider.createShipment({carrier, declaredValue, address, reference})` | `MockShipment {labelId, tracking, service, coverage, labelDataUrl}` | **the seam** a real carrier replaces; `SHIP_CARRIERS`, `normalizeDeclaredValue` |
+| `confirmShipment(id, {carrier, declaredValue, photos, label, bypassReason?})` | `SalesOrderWithRefs` | shipped + custody closed |
+| `confirmPickup(id, {code?, proxyName?, proxyIdPhoto?, photos, lineQty?, bypassReason?})` | `SalesOrderWithRefs` | picked_up / partial + custody closed |
+| `adminMarkComplete(id, 'pickup'\|'ship', note)` | `SalesOrderWithRefs` | manager only, audited |
+| `getPickupQueue()` / `getShipQueue()` | `SalesOrderWithRefs[]` | station queues |
+
 ## Tasks + Today
 | function | returns | notes |
 |---|---|---|
@@ -114,8 +133,8 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `getRecentActivity(limit)` | `ActivityEvent[]` | static fixture |
 
 ## Stubs / not wired (explicit)
-- `convertEstimate(id,'sales_order')` — throws.
-- `invoiceJob(id)` — throws (E5).
+- `convertEstimate(id,'sales_order')` — throws (use `convertEstimateToSalesOrder`).
+- QBO push — state only (`qboStatus`, fake id). Payments — ledger only. Carrier — `shippingProvider` mock.
 - Estimates list "Convert to invoice" menu row — display-only.
 - Email sending, label printing, receipt printing — mocked flags / Outbox only.
 - No HTTP, no `fetch`; repoint this file to the real API when it exists.

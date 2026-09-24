@@ -9,6 +9,8 @@ import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, No
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { PinModal } from '@/components/today/PinBits';
+import { TailPill } from '@/components/sales/SalesBits';
+import type { SalesOrderWithRefs } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
@@ -24,8 +26,9 @@ export default function JobDetailPage() {
   const [modal, setModal] = useState<ModalState>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [so, setSo] = useState<SalesOrderWithRefs | null>(null);
 
-  const load = useCallback(async () => setJob(await api.getJob(id)), [id]);
+  const load = useCallback(async () => { setJob(await api.getJob(id)); setSo(await api.getSalesOrderForJob(id)); }, [id]);
   useEffect(() => { void load(); }, [load]);
 
   const say = (msg: string) => { setFlash(msg); setError(null); window.setTimeout(() => setFlash(null), 3000); };
@@ -58,6 +61,7 @@ export default function JobDetailPage() {
             <WorkflowBadges workflow={j.workflow} />
             <StatusPill status={j.simpleStatus} testId="job-simple-status" />
             <OwnerBadge owner={j.owner} testId="job-owner" />
+            <TailPill stage={api.tailStage(j)} testId="job-tail" />
           </div>
           <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> · {j.client.email} · {j.client.phone}</div>
         </div>
@@ -69,7 +73,8 @@ export default function JobDetailPage() {
               {a.notifies && <Provisional note="Pack is silent on which transitions notify the client — emailing here is provisional" />}
             </span>
           ))}
-          {(j.status === 'ready_to_ship' || j.status === 'closed') && <span className="inline-flex items-center gap-1"><Button data-testid="act-invoice" onClick={() => run(() => api.invoiceJob(j.id), '')}><Receipt size={13} /> Create invoice</Button><Provisional note="Invoicing arrives next session — stub" /></span>}
+          {(j.status === 'ready_to_ship' || j.status === 'closed') && !so && <Button variant="primary" data-testid="act-invoice" onClick={async () => { try { const o = await api.invoiceJob(j.id); navigate(`/sales/${o.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Invoice failed'); } }}><Receipt size={13} /> Create invoice (SO)</Button>}
+          {so && <Link to={`/sales/${so.id}`} data-testid="act-open-so" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:border-ink-300 hover:bg-canvas"><Receipt size={13} /> {so.number} · {so.status.replace(/_/g, ' ')}</Link>}
           <Button data-testid="act-pin" onClick={() => setModal({ kind: 'pin' })} title="Add to someone's hit list"><Pin size={13} /> Add to hit list</Button>
           {user?.accessTier === 'manager' && <Button data-testid="act-delete-job" title="Delete (can-delete-jobs)" onClick={() => { if (window.confirm(`Delete ${j.number}?`)) void run(() => api.deleteJob(j.id), '').then(() => navigate('/jobs')); }}><Trash2 size={13} className="text-rose-700" /></Button>}
         </div>

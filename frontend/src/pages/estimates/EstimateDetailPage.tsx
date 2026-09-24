@@ -118,7 +118,7 @@ export default function EstimateDetailPage() {
           {(e.status === 'declined' || e.status === 'expired') && <Button variant="primary" data-testid="act-reopen" onClick={() => run(() => api.reopenEstimate(e.id), 'Reopened → draft')}><RotateCcw size={13} /> Reopen → draft</Button>}
           {e.status === 'approved' && <>
             <Button variant="primary" data-testid="act-create-job" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'job'); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Create job failed'); } }}><Briefcase size={13} /> Create job</Button>
-            <span className="inline-flex items-center gap-1"><Button data-testid="act-convert-so" onClick={() => run(() => api.convertEstimate(e.id, 'sales_order'), '')}>Convert to SO</Button><Provisional note="Sales order target arrives in a later session — stub" /></span>
+            <Button data-testid="act-convert-so" onClick={async () => { try { const o = await api.convertEstimateToSalesOrder(e.id); navigate(`/sales/${o.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}>Convert to SO</Button>
           </>}
           {(e.status === 'sent' || e.status === 'approved' || (e.status === 'converted' && e.jobId)) && !e.historical && (
             <Button data-testid="act-convert-intake" title="Pack: job goes on hand + intake date; estimate converted" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'intake'); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}><PackageCheck size={13} /> Convert to intake</Button>

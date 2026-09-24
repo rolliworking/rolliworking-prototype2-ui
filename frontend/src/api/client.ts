@@ -23,7 +23,15 @@ import type {
   EstimateStatus,
   EstimateWithRefs,
   Assignee,
+  FulfillmentChannel,
+  Payment,
+  PaymentMethod,
   PinnedItem,
+  SalesOrder,
+  SalesOrderWithRefs,
+  ShipCarrier,
+  Shipment,
+  TailStage,
   JobKind,
   Role,
   Task,
@@ -79,6 +87,7 @@ const writeJson = (key: string, value: unknown) => localStorage.setItem(key, JSO
 const store = {
   tasks: fx.tasks.map((t) => ({ ...t })),
   pinned: fx.pinned.map((p) => ({ ...p })),
+  salesOrders: fx.salesOrders.map((o): SalesOrder => ({ ...o, lines: o.lines.map((l) => ({ ...l })), payments: [...o.payments] })),
   packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
@@ -86,7 +95,7 @@ const store = {
   estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[], jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
   jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
-  counters: { sub: 314, label: 3, estimate: 1058, job: 2028 },
+  counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107 },
 };
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
@@ -888,9 +897,7 @@ export async function reopenEstimate(id: string): Promise<EstimateWithRefs> {
 export async function convertEstimate(id: string, target: 'job' | 'sales_order' | 'intake'): Promise<JobWithRefs> {
   if (target === 'job') return createJobFromEstimate(id);
   if (target === 'intake') return convertEstimateToIntake(id);
-  const e = getEst(id);
-  estStamp(e, 'Convert to sales order requested — not wired in this session');
-  throw new Error('Convert to sales order isn’t wired yet — target arrives in a later session');
+  throw new Error('Use convertEstimateToSalesOrder for sales orders');
 }
 
 export interface ShippingCalcInput { units: number; hiAk: boolean; saturday: boolean }
@@ -1278,10 +1285,16 @@ export async function deleteJob(id: string): Promise<void> {
   return resolve(undefined);
 }
 
-export async function invoiceJob(id: string): Promise<never> {
+// E5: invoice = sales order born from a QC-passed job (pack: SO is the invoicing vehicle; QBO is a stub)
+export async function invoiceJob(id: string): Promise<SalesOrderWithRefs> {
   const j = getJobRow(id);
-  jobStamp(j, 'Create invoice requested — arrives in the invoicing session');
-  throw new Error('Invoicing arrives in the next session (E5) — stub');
+  if (j.status !== 'ready_to_ship' && j.status !== 'closed') throw new Error('Invoice only after QC pass (ready to ship)');
+  const existing = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled');
+  if (existing) throw new Error(`Job already has sales order ${existing.number}`);
+  const o = buildSO({ clientId: j.clientId, jobId: j.id, lines: j.lines.map((l) => ({ description: l.description, partNumber: l.partNumber, qty: l.qty, rate: l.unitPrice, dept: l.dept })), status: 'open' });
+  jobStamp(j, `Invoiced → ${o.number} · ${fmtMoney(o.total)}`);
+  soStamp(o, `Created from job ${j.number} · ${o.lines.length} lines · open`);
+  return resolve(soRefs(o));
 }
 
 // ---- Shop Time: time rows against on_hand jobs; never moves job status ----------
@@ -1432,4 +1445,313 @@ export async function getToday(userId?: string): Promise<TodayView> {
   const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
   const pinned = store.pinned.filter((p) => !p.dismissedAt && assigneeMatches(p.assignedTo, me));
   return resolve({ pinned, rows, waitingOn });
+}
+
+// ---- E5 Sales orders / fulfil / pickup / ship — PROMPT-PACK-invoicing-pickup-ship.md -----------
+// Hard stops: QBO stub only, email Outbox only, no real money, shipping via mock seam.
+
+const fmtMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+const soTotals = (o: SalesOrder) => {
+  o.total = o.lines.reduce((t, l) => t + l.qty * l.rate, 0) + o.shippingAmount; // pack: Σ(qty × rate) + shipping
+  const paid = o.payments.reduce((t, p) => t + p.amount, 0);
+  o.balanceDue = Math.max(0, o.total - paid);
+  o.isPaid = o.total > 0 && paid >= o.total;
+  o.updatedAt = new Date().toISOString();
+};
+const soRefs = (o: SalesOrder): SalesOrderWithRefs => {
+  const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) ?? null : null;
+  return { ...o, client: byId(fx.clients, o.clientId), job, watch: job ? byId(store.watches, job.watchId) : null };
+};
+const getSO = (id: string) => byId(store.salesOrders, id);
+const soStamp = (o: SalesOrder, detail: string) => {
+  const a = actor();
+  appendAudit({ type: 'sales', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${o.number} · ${detail}` });
+};
+const soEmail = (o: SalesOrder, subject: string, body: string) => {
+  const a = actor();
+  const c = byId(fx.clients, o.clientId);
+  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', subject: `${subject} — ${o.number}`, body: `Hello ${c.firstName},\n\n${body}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+};
+
+export const SO_BADGE = (o: SalesOrder): 'picked_up' | 'shipped' | 'paid' | 'unpaid' => (o.pickedUpAt ? 'picked_up' : o.tracking || o.shipDate ? 'shipped' : o.isPaid ? 'paid' : 'unpaid');
+
+// Where a QC-passed job sits in the money tail (brief's lane names, derived from the SO)
+export function tailStage(job: Job): TailStage | null {
+  if (job.status !== 'ready_to_ship' && job.status !== 'closed') return null;
+  const o = store.salesOrders.find((x) => x.jobId === job.id && x.status !== 'cancelled');
+  if (!o) return job.status === 'closed' ? null : 'awaiting_invoice';
+  if (o.status === 'picked_up') return 'picked_up';
+  if (o.status === 'shipped') return 'shipped';
+  if (!o.isPaid && o.status !== 'fulfilled') return 'awaiting_payment';
+  if (o.status === 'fulfilled' || o.status === 'partial_fulfilled') return o.channel === 'ship' ? 'ready_to_ship' : o.channel === 'pickup' ? 'ready_for_pickup' : 'awaiting_payment';
+  return 'awaiting_payment';
+}
+
+export async function getSalesOrders(): Promise<SalesOrderWithRefs[]> {
+  return resolve([...store.salesOrders].sort((a, b) => b.orderDate.localeCompare(a.orderDate)).map(soRefs));
+}
+export async function getSalesOrder(id: string): Promise<SalesOrderWithRefs | null> {
+  const o = store.salesOrders.find((x) => x.id === id);
+  return resolve(o ? soRefs(o) : null);
+}
+export async function getSalesOrderForJob(jobId: string): Promise<SalesOrderWithRefs | null> {
+  const o = store.salesOrders.find((x) => x.jobId === jobId && x.status !== 'cancelled');
+  return resolve(o ? soRefs(o) : null);
+}
+// Pack: lookup by SO #, estimate #, name; jobs by E-number too
+export async function findSalesOrders(query: string): Promise<SalesOrderWithRefs[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return getSalesOrders();
+  const digits = q.replace(/\D/g, '');
+  return resolve(store.salesOrders.filter((o) => {
+    const c = byId(fx.clients, o.clientId);
+    const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) : undefined;
+    const est = o.estimateId ? store.estimates.find((e) => e.id === o.estimateId) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
+    return o.number.toLowerCase().includes(q) || (digits && o.number.replace(/\D/g, '').endsWith(digits)) || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || (job?.number.toLowerCase().includes(q) ?? false) || (est?.number.toLowerCase().includes(q) ?? false) || (digits && estimateDigits(est?.number ?? '').endsWith(digits) && digits.length >= 3) || (o.pickupCode?.toLowerCase() === q);
+  }).map(soRefs));
+}
+
+export interface SOLineInput { description: string; partNumber?: string; qty: number; rate: number; dept?: DeptCode }
+export interface SalesOrderInput { clientId: string; jobId?: string; estimateId?: string; lines: SOLineInput[]; shippingAmount?: number; memo?: string; channel?: FulfillmentChannel; status?: 'draft' | 'open' }
+
+const nextSONumber = () => `SO-26-${String(++store.counters.so).padStart(4, '0')}`;
+const buildSO = (input: SalesOrderInput): SalesOrder => {
+  if (!input.clientId) throw new Error('Customer is required before save'); // pack rule
+  const a = actor();
+  const now = new Date().toISOString();
+  const o: SalesOrder = {
+    id: newId('so'), number: nextSONumber(), clientId: input.clientId, jobId: input.jobId, estimateId: input.estimateId,
+    status: input.status ?? 'draft', channel: input.channel, orderDate: now,
+    lines: input.lines.filter((l) => l.description.trim()).map((l) => ({ id: newId('sol'), description: l.description.trim(), partNumber: l.partNumber, qty: l.qty || 1, rate: l.rate || 0, dept: l.dept, pickedUpQty: 0, shippedQty: 0 })),
+    shippingAmount: input.shippingAmount ?? 0, total: 0, memo: input.memo?.trim() || undefined, qboStatus: 'not_queued', payments: [], balanceDue: 0, isPaid: false,
+    createdAt: now, createdBy: a.by, updatedAt: now,
+  };
+  soTotals(o);
+  store.salesOrders.unshift(o);
+  return o;
+};
+
+export async function createSalesOrder(input: SalesOrderInput): Promise<SalesOrderWithRefs> {
+  const o = buildSO(input);
+  soStamp(o, `Created · ${o.status} · ${o.lines.length} lines · ${fmtMoney(o.total)}`);
+  return resolve(soRefs(o));
+}
+
+export async function convertEstimateToSalesOrder(estimateId: string): Promise<SalesOrderWithRefs> {
+  const e = getEst(estimateId);
+  const existing = store.salesOrders.find((o) => o.estimateId === e.id && o.status !== 'cancelled');
+  if (existing) throw new Error(`Estimate already has ${existing.number}`);
+  const shipping = e.lines.filter((l) => l.type === 'shipping').reduce((t, l) => t + l.qty * l.unitPrice, 0);
+  const o = buildSO({ clientId: e.clientId, estimateId: e.id, lines: e.lines.filter((l) => l.type !== 'shipping').map((l) => ({ description: l.description, partNumber: l.partNumber, qty: l.qty, rate: l.unitPrice, dept: l.dept })), shippingAmount: shipping, memo: e.clientNotes });
+  estStamp(e, `Converted → sales order ${o.number} (draft)`);
+  soStamp(o, `Created from estimate ${e.number} · draft`);
+  return resolve(soRefs(o));
+}
+
+export interface SalesOrderPatch { lines?: SOLineInput[]; shippingAmount?: number; memo?: string; channel?: FulfillmentChannel }
+export async function updateSalesOrder(id: string, patch: SalesOrderPatch): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!['draft', 'open'].includes(o.status)) throw new Error('Only draft or open orders can be edited');
+  if (patch.lines) o.lines = patch.lines.filter((l) => l.description.trim()).map((l) => ({ id: newId('sol'), description: l.description.trim(), partNumber: l.partNumber, qty: l.qty || 1, rate: l.rate || 0, dept: l.dept, pickedUpQty: 0, shippedQty: 0 }));
+  if (patch.shippingAmount !== undefined) o.shippingAmount = patch.shippingAmount;
+  if (patch.memo !== undefined) o.memo = patch.memo.trim() || undefined;
+  if (patch.channel !== undefined) o.channel = patch.channel;
+  soTotals(o);
+  soStamp(o, `Edited · ${fmtMoney(o.total)}`);
+  return resolve(soRefs(o));
+}
+
+// SO machine: draft → open → partial_fulfilled → fulfilled → shipped | picked_up ; any → cancelled
+export async function openSalesOrder(id: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (o.status !== 'draft') throw new Error('Only a draft can be opened');
+  if (o.lines.length === 0) throw new Error('Add at least one line');
+  o.status = 'open'; soTotals(o);
+  soStamp(o, 'Opened');
+  soEmail(o, 'Your order is ready to pay', `Your order ${o.number} totals ${fmtMoney(o.total)}. Balance due ${fmtMoney(o.balanceDue)}. Reply or call the shop to arrange payment.`);
+  return resolve(soRefs(o));
+}
+
+export async function cancelSalesOrder(id: string, reason: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!reason.trim()) throw new Error('A reason is required to cancel');
+  if (o.status === 'shipped' || o.status === 'picked_up') throw new Error('Completed orders cannot be cancelled');
+  o.status = 'cancelled'; o.cancelledAt = new Date().toISOString(); soTotals(o);
+  soStamp(o, `Cancelled · ${reason.trim()}`);
+  return resolve(soRefs(o));
+}
+
+// Payment: stub ledger only, no processor. Partial payments allowed (pack exposes balance_due) — PROVISIONAL
+export async function recordPayment(id: string, amount: number, method: PaymentMethod, note?: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (o.status === 'draft' || o.status === 'cancelled') throw new Error('Open the order before taking payment');
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter an amount greater than 0');
+  if (amount > o.balanceDue + 0.005) throw new Error(`Amount exceeds balance due ${fmtMoney(o.balanceDue)}`);
+  const a = actor();
+  const p: Payment = { id: newId('pay'), amount: Math.round(amount * 100) / 100, method, note: note?.trim() || undefined, at: new Date().toISOString(), by: a.by, station: a.station };
+  o.payments.push(p); soTotals(o);
+  soStamp(o, `Payment ${fmtMoney(p.amount)} by ${method}${o.isPaid ? ' · PAID IN FULL' : ` · balance ${fmtMoney(o.balanceDue)}`}`);
+  soEmail(o, o.isPaid ? 'Payment received — thank you' : 'Partial payment received', `We received ${fmtMoney(p.amount)} by ${method}. ${o.isPaid ? 'Your order is paid in full.' : `Remaining balance: ${fmtMoney(o.balanceDue)}.`}`);
+  return resolve(soRefs(o));
+}
+
+// Fulfil = invoice handoff. Pack: status fulfilled → QBO stub (ensure customer → push items → push invoice) → optional job-finished notice
+export async function fulfillSalesOrder(id: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!['open', 'partial_fulfilled'].includes(o.status)) throw new Error('Only open orders can be fulfilled');
+  if (o.lines.length === 0) throw new Error('Nothing to fulfil');
+  o.status = 'fulfilled'; o.fulfilledAt = new Date().toISOString();
+  const c = byId(fx.clients, o.clientId);
+  o.qboInvoiceId = `QBO-STUB-${10000 + store.salesOrders.length * 7 + Math.floor(Math.random() * 90)}`; // HARD STOP: nothing leaves the app
+  o.qboStatus = 'queued';
+  soTotals(o);
+  soStamp(o, `Fulfilled · QBO stub: ensure customer ${c.lastName} → push ${o.lines.length} items → push invoice ${o.qboInvoiceId} (queued, no live call)`);
+  if (o.channel === 'pickup' && !o.pickupCode) issuePickupCode(o);
+  if (o.jobId) { const j = byId(store.jobs, o.jobId); jobStamp(j, `Invoice ${o.number} fulfilled · QBO queued`); }
+  soEmail(o, 'Your invoice', `Your invoice for ${o.number} is ready (${fmtMoney(o.total)}${o.isPaid ? ', paid in full' : `, balance due ${fmtMoney(o.balanceDue)}`}).${o.channel === 'pickup' && o.pickupCode ? ` Your pickup code is ${o.pickupCode} — bring it to the counter.` : ''}${o.channel === 'ship' ? ' We will ship as soon as your shipping details are confirmed.' : ''}`);
+  return resolve(soRefs(o));
+}
+
+const issuePickupCode = (o: SalesOrder) => {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const pick = (n: number) => Array.from({ length: n }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  o.pickupCode = `${pick(4)}-${pick(2)}`;
+  o.pickupCodeIssuedAt = new Date().toISOString();
+};
+
+// Push to Pickup / Ship Station. Pack: ship may clear prior tracking if reopening
+export async function setFulfillmentChannel(id: string, channel: FulfillmentChannel): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (o.status === 'cancelled' || o.status === 'shipped' || o.status === 'picked_up') throw new Error('Order is already complete');
+  o.channel = channel;
+  if (channel === 'pickup' && !o.pickupCode) issuePickupCode(o);
+  if (channel === 'ship') o.tracking = undefined;
+  soTotals(o);
+  soStamp(o, channel === 'pickup' ? `Pushed to Pickup Station · code ${o.pickupCode}` : 'Pushed to Ship Station');
+  if (channel === 'pickup') soEmail(o, 'Your watch is ready for pickup', `Your pickup verification code is ${o.pickupCode}. Bring it (or show this email) to the counter; a proxy will need your name and a government ID.`);
+  return resolve(soRefs(o));
+}
+
+export async function regeneratePickupCode(id: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  issuePickupCode(o); soTotals(o);
+  soStamp(o, `Pickup code re-issued · ${o.pickupCode}`);
+  soEmail(o, 'New pickup code', `Your new pickup verification code is ${o.pickupCode}.`);
+  return resolve(soRefs(o));
+}
+
+export async function requestShippingInfo(id: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  o.shippingInfoRequestedAt = new Date().toISOString(); soTotals(o);
+  soStamp(o, 'Shipping info requested · email queued');
+  soEmail(o, 'Where should we ship your watch?', 'Please reply with the delivery address and a phone number for the carrier. We ship fully insured and require a signature on delivery.');
+  return resolve(soRefs(o));
+}
+
+export async function setShippingAddress(id: string, address: Address): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!address.name.trim() || !address.street.trim() || !address.city.trim() || !address.state.trim()) throw new Error('Name, street, city and state are required');
+  o.shippingAddress = { ...address }; soTotals(o);
+  soStamp(o, `Ship-to set · ${address.name}, ${address.city} ${address.state}`);
+  return resolve(soRefs(o));
+}
+
+// ---- Shipping seam: the one module a real carrier provider replaces ------------------------------
+export const SHIP_CARRIERS: ShipCarrier[] = ['usps', 'ups', 'fedex', 'dhl', 'other'];
+// Pack: declared value 0 < n < 1000 is entered in thousands
+export const normalizeDeclaredValue = (n: number) => (n > 0 && n < 1000 ? n * 1000 : n);
+export interface CreateShipmentInput { carrier: ShipCarrier; declaredValue: number; address: Address; reference: string }
+export interface MockShipment { labelId: string; tracking: string; service: string; coverage: number; labelDataUrl: string }
+const TRACK: Record<ShipCarrier, () => string> = {
+  ups: () => `1Z 999 AA1 ${String(Math.floor(Math.random() * 90 + 10))} ${String(Math.floor(Math.random() * 9000 + 1000))} ${String(Math.floor(Math.random() * 9000 + 1000))}`,
+  fedex: () => String(Math.floor(Math.random() * 9e11 + 1e11)),
+  usps: () => `9400 1000 0000 ${String(Math.floor(Math.random() * 9000 + 1000))} ${String(Math.floor(Math.random() * 9000 + 1000))} 00`,
+  dhl: () => String(Math.floor(Math.random() * 9e9 + 1e9)),
+  other: () => `TRK-${Date.now().toString(36).toUpperCase()}`,
+};
+const SERVICE: Record<ShipCarrier, string> = { ups: 'UPS Next Day Air', fedex: 'FedEx Priority Overnight', usps: 'USPS Priority Mail Express', dhl: 'DHL Express Worldwide', other: 'Courier' };
+export const shippingProvider = {
+  name: 'MOCK carrier seam',
+  async createShipment(input: CreateShipmentInput): Promise<MockShipment> {
+    const value = normalizeDeclaredValue(input.declaredValue);
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='240'><rect width='100%' height='100%' fill='#fff' stroke='#111' stroke-width='4'/><text x='16' y='40' font-family='monospace' font-size='22' font-weight='bold'>${input.carrier.toUpperCase()} · ${SERVICE[input.carrier]}</text><text x='16' y='80' font-family='monospace' font-size='16'>TO: ${input.address.name}</text><text x='16' y='104' font-family='monospace' font-size='16'>${input.address.street}, ${input.address.city} ${input.address.state}</text><text x='16' y='150' font-family='monospace' font-size='14'>REF ${input.reference} · INSURED $${value.toLocaleString('en-US')}</text><rect x='16' y='170' width='368' height='50' fill='#111'/><text x='200' y='232' text-anchor='middle' font-family='monospace' font-size='12'>MOCK LABEL — no carrier contacted</text></svg>`;
+    return resolve({ labelId: `LBL-MOCK-${String(store.salesOrders.length + 100).padStart(4, '0')}`, tracking: TRACK[input.carrier](), service: SERVICE[input.carrier], coverage: value, labelDataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}` });
+  },
+};
+
+export interface ConfirmShipmentInput { carrier: ShipCarrier; declaredValue: number; photos: PackagePhoto[]; label: MockShipment; bypassReason?: string }
+// Ship Station confirm: shipment record, line shipped_qty, SO shipped + tracking + ship_date, Outbox notification, custody closes
+export async function confirmShipment(id: string, input: ConfirmShipmentInput): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not shippable in its current status');
+  if (!o.shippingAddress) throw new Error('Capture the ship-to address first');
+  if (input.photos.length === 0) throw new Error('Package photos are required before confirm');
+  if (!o.isPaid && !input.bypassReason?.trim()) throw new Error('Unpaid order — ship is blocked unless a payment bypass is logged');
+  const a = actor();
+  const shipment: Shipment = { id: newId('shp'), carrier: input.carrier, service: input.label.service, tracking: input.label.tracking, labelId: input.label.labelId, labelDataUrl: input.label.labelDataUrl, declaredValue: normalizeDeclaredValue(input.declaredValue), coverage: input.label.coverage, photos: input.photos, address: { ...o.shippingAddress }, bypassReason: input.bypassReason?.trim() || undefined, at: new Date().toISOString(), by: a.by, station: a.station };
+  o.shipment = shipment; o.tracking = shipment.tracking; o.shipDate = shipment.at; o.channel = 'ship';
+  o.lines.forEach((l) => { l.shippedQty = l.qty; });
+  if (o.status !== 'fulfilled') { o.fulfilledAt = o.fulfilledAt ?? shipment.at; }
+  o.status = 'shipped'; soTotals(o);
+  soStamp(o, `Shipped · ${input.carrier.toUpperCase()} ${shipment.tracking} · insured ${fmtMoney(shipment.coverage)}${shipment.bypassReason ? ` · PAYMENT BYPASS: ${shipment.bypassReason}` : ''}`);
+  closeCustody(o, `Shipped ${shipment.tracking}`);
+  soEmail(o, 'Your watch has shipped', `Your watch is on its way via ${shipment.service}. Tracking: ${shipment.tracking}. The shipment is insured for ${fmtMoney(shipment.coverage)} and requires a signature on delivery.`);
+  return resolve(soRefs(o));
+}
+
+export interface ConfirmPickupInput { code?: string; proxyName?: string; proxyIdPhoto?: PackagePhoto; photos: PackagePhoto[]; lineQty?: Record<string, number>; bypassReason?: string }
+// Pickup Station complete: verify code (or proxy name + ID photo), photos required, consume code, picked_up_qty, custody closes. Signature-free (locked decision).
+export async function confirmPickup(id: string, input: ConfirmPickupInput): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not in the pickup queue');
+  if (o.channel === 'ship' && o.shippingAddress) throw new Error('Order has outbound ship products — send staff to Ship Station');
+  const codeOk = !!o.pickupCode && input.code?.trim().toUpperCase().replace(/\s/g, '') === o.pickupCode.replace(/\s/g, '');
+  const proxyOk = !!input.proxyName?.trim() && !!input.proxyIdPhoto;
+  if (!codeOk && !proxyOk) throw new Error('Verify identity: pickup code, or proxy name + government ID photo');
+  if (input.photos.length === 0) throw new Error('Hand-back photos are required to complete');
+  if (!o.isPaid && !input.bypassReason?.trim()) throw new Error(`Balance due ${fmtMoney(o.balanceDue)} — take payment or log a bypass reason`);
+  const a = actor();
+  const lineQty = input.lineQty ?? {};
+  o.lines.forEach((l) => { l.pickedUpQty = Math.min(l.qty, l.pickedUpQty + (lineQty[l.id] ?? l.qty - l.pickedUpQty)); });
+  const fully = o.lines.every((l) => l.pickedUpQty >= l.qty);
+  o.pickupSession = { id: newId('pks'), codeUsed: codeOk ? o.pickupCode : undefined, proxyName: input.proxyName?.trim() || undefined, proxyIdPhoto: input.proxyIdPhoto, photos: input.photos, lineQty, bypassReason: input.bypassReason?.trim() || undefined, at: new Date().toISOString(), by: a.by, station: a.station };
+  o.channel = 'pickup';
+  if (codeOk) o.pickupCode = undefined; // consumed
+  if (fully) { o.status = 'picked_up'; o.pickedUpAt = o.pickupSession.at; if (!o.fulfilledAt) o.fulfilledAt = o.pickedUpAt; } else o.status = 'partial_fulfilled';
+  soTotals(o);
+  soStamp(o, `${fully ? 'Picked up' : 'Partial pickup'} · ${codeOk ? 'code verified' : `proxy ${input.proxyName} (ID photo)`}${o.pickupSession.bypassReason ? ` · PAYMENT BYPASS: ${o.pickupSession.bypassReason}` : ''}`);
+  if (fully) closeCustody(o, 'Picked up at counter');
+  soEmail(o, fully ? 'Thank you — your watch is home' : 'Partial pickup recorded', fully ? 'Your watch was handed back at the counter today. Thank you for trusting us with it.' : 'Part of your order was collected today; the remaining items will be ready shortly.');
+  return resolve(soRefs(o));
+}
+
+// Admin overrides (pack: allowed with an audit log; privileged roles) — manager tier
+export async function adminMarkComplete(id: string, mode: FulfillmentChannel, note: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  const a = actor();
+  if (a.user?.accessTier !== 'manager') throw new Error('Admin mark requires a manager');
+  if (!note.trim()) throw new Error('Log why the override is needed');
+  if (mode === 'pickup') { o.status = 'picked_up'; o.pickedUpAt = new Date().toISOString(); o.lines.forEach((l) => { l.pickedUpQty = l.qty; }); o.pickupSession = { id: newId('pks'), photos: [], lineQty: {}, adminOverride: true, at: o.pickedUpAt, by: a.by, station: a.station, bypassReason: note.trim() }; }
+  else { o.status = 'shipped'; o.shipDate = new Date().toISOString(); o.tracking = o.tracking ?? 'ADMIN-MARKED'; o.lines.forEach((l) => { l.shippedQty = l.qty; }); }
+  o.channel = mode; if (!o.fulfilledAt) o.fulfilledAt = new Date().toISOString(); soTotals(o);
+  soStamp(o, `ADMIN MARK ${mode === 'pickup' ? 'PICKED UP' : 'SHIPPED'} · ${note.trim()}`);
+  closeCustody(o, `Admin marked ${mode}`);
+  return resolve(soRefs(o));
+}
+
+// Custody closes at hand-back (pickup / ship): job → closed, watch → released
+const closeCustody = (o: SalesOrder, why: string) => {
+  if (!o.jobId) return;
+  const j = store.jobs.find((x) => x.id === o.jobId);
+  if (!j || j.status === 'closed') return;
+  if (j.status === 'ready_to_ship') pushTransition(j, 'close', 'closed');
+  jobStamp(j, `Custody closed · ${why} · ${o.number}`);
+};
+
+// Queues for the stations
+export async function getPickupQueue(): Promise<SalesOrderWithRefs[]> {
+  return resolve(store.salesOrders.filter((o) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.channel !== 'ship').map(soRefs));
+}
+export async function getShipQueue(): Promise<SalesOrderWithRefs[]> {
+  return resolve(store.salesOrders.filter((o) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.channel === 'ship').map(soRefs));
 }

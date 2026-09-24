@@ -106,15 +106,36 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 | jobId?, taskId? | source of the pin |
 | dismissedAt?, dismissedBy? | dismissed = done; kept for history |
 
+### SalesOrder (`salesOrders.ts`, 7) — the invoicing vehicle (E5)
+| field | notes |
+|---|---|
+| id, number | `SO-26-nnnn` from `counters.so` |
+| clientId→Client, jobId?→Job, estimateId?→Estimate | |
+| status | `draft \| open \| partial_fulfilled \| fulfilled \| shipped \| picked_up \| cancelled` |
+| channel? | `ship \| pickup` |
+| orderDate, shipDate?, fulfilledAt?, cancelledAt?, pickedUpAt? | |
+| lines[] `SOLine` | `{description, partNumber?, qty, rate, dept?, pickedUpQty, shippedQty}`; amount = qty × rate |
+| shippingAmount, total | total = Σ lines + shipping |
+| memo? | |
+| qboInvoiceId?, qboStatus `not_queued \| queued` | HARD-STOP stub |
+| payments[] `Payment` | `{method: card\|cash\|check\|wire\|other, amount, note?, at, by, station}` |
+| balanceDue, isPaid | derived on every write |
+| pickupCode?, pickupCodeIssuedAt? | issued on push-to-pickup / fulfil; consumed at pickup |
+| shippingAddress? `Address`, shippingInfoRequestedAt?, tracking? | |
+| shipment? `Shipment` | `{carrier, service, tracking, labelId, labelDataUrl, declaredValue, coverage, photos[], address, bypassReason?, at, by, station}` |
+| pickupSession? `PickupSession` | `{codeUsed?, proxyName?, proxyIdPhoto?, photos[], lineQty, bypassReason?, adminOverride?, at, by, station}` — signature-free |
+| createdAt/By, updatedAt | |
+
 ### Derived (not stored)
 - `TodayRow` — `/today` union: owner-action jobs + assignee bench jobs + holds I own/placed + discrepancy packages (concierge role / inspector who flagged) + open tasks to me/my roles. `TodayView = { pinned: PinnedItem[], rows, waitingOn: Task[] }` — pinned sits above rows; nothing derived is hidden by pins.
-- `DashboardStats`, `QuoteContext`, `InspectionContext`, `WatchMatch`, `*WithRefs` joins.
+- `TailStage` per job (`tailStage`), `SO_BADGE`, `DashboardStats`, `QuoteContext`, `InspectionContext`, `WatchMatch`, `*WithRefs` joins.
 
 ## Relationships
 ```
 Client 1─* Watch 1─* Estimate ?─1 Job *─1 Watch
 Estimate 1─? Package (estimateId)   Package ?─1 Job (packageId, via received package)
 Job 1─* JobTransition / JobHold / JobNote / JobPhoto / ShopTimeEntry / Task
+Job 1─? SalesOrder (jobId)   Estimate 1─? SalesOrder (estimateId)   SalesOrder 1─* Payment, 1─? Shipment, 1─? PickupSession
 User *─* Role (users.roles)   Job.owner → Role   Task.assignedTo → User | Role
 OutboxEmail.relatedRef → Estimate.number | Job.number | Package.subNumber (string ref only)
 ```

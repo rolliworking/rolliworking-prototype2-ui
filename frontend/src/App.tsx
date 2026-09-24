@@ -22,6 +22,10 @@ import JobsPage from '@/pages/JobsPage';
 import JobCreatePage from '@/pages/jobs/JobCreatePage';
 import JobDetailPage from '@/pages/jobs/JobDetailPage';
 import ShopTimePage from '@/pages/jobs/ShopTimePage';
+import SalesOrdersPage from '@/pages/sales/SalesOrdersPage';
+import SalesOrderDetailPage from '@/pages/sales/SalesOrderDetailPage';
+import PickupStationPage from '@/pages/sales/PickupStationPage';
+import ShipStationPage from '@/pages/sales/ShipStationPage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
 import SignInPage from '@/pages/SignInPage';
@@ -87,6 +91,13 @@ export default function App() {
               <Route path="/clients/:id" element={<ClientDetailPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
+              <Route path="/sales" element={<SalesOrdersPage />} />
+              <Route path="/sales/new" element={<SalesOrderDetailPage />} />
+              <Route path="/sales/pickup" element={<PickupStationPage />} />
+              <Route path="/sales/ship" element={<ShipStationPage />} />
+              <Route path="/sales/:id" element={<SalesOrderDetailPage />} />
+              <Route path="/actions/ship" element={<Navigate to="/sales/ship" replace />} />
+              <Route path="/actions/pickup" element={<Navigate to="/sales/pickup" replace />} />
               <Route path="/actions/:action" element={<ActionPlaceholder />} />
               {PLACEHOLDER_PATHS.map((p) => (
                 <Route key={p} path={p} element={<SectionPlaceholder />} />

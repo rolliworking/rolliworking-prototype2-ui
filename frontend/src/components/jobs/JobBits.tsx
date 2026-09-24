@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { DeptBadge, OwnerChip, StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fullName } from '@/lib/format';
+import { TailPill } from '@/components/sales/SalesBits';
 
 export { Provisional };
 
@@ -76,6 +77,7 @@ export const JobCard = ({ job: j }: { job: JobWithRefs }) => (
         <AssigneeChips assignees={j.assignees} />
         {j.owner && <OwnerBadge owner={j.owner} compact />}
         <HoldBadge job={j} compact />
+        <TailPill stage={api.tailStage(j)} />
       </div>
       {j.dueAt && <span className={clsx('inline-flex items-center gap-1 tabular text-[11px]', isOverdue(j) ? 'font-semibold text-rose-700' : 'text-ink-400')}><Clock size={10} /> {fmtDate(j.dueAt)}</span>}
     </div>

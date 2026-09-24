@@ -63,6 +63,20 @@ Stage-skip mechanism: `legalJobActions` maps each action's target through `skipF
 | `convertEstimateToIntake` (`convertEstimate(id,'intake')`) | status ∈ sent/approved/converted | existing job → on_hand + intakeDate; else new job on_hand; estimate → converted |
 | `convertEstimate(id,'sales_order')` | | throws (stub) |
 
+## 1b. Sales order (E5) — `draft → open → partial_fulfilled → fulfilled → shipped | picked_up`; `any (not complete) → cancelled`
+| action | from | to | guards / side effects | email |
+|---|---|---|---|---|
+| openSalesOrder | draft | open | ≥1 line | ✉ ready to pay |
+| recordPayment | open/partial/fulfilled | same | 0 < amount ≤ balance; partial ok | ✉ payment received / partial |
+| fulfillSalesOrder | open/partial | fulfilled | QBO stub id + `qboStatus: queued`; pickup code issued if channel pickup; job stamped | ✉ your invoice (+ code) |
+| setFulfillmentChannel | not complete | same | pickup → issue code; ship → clears prior tracking | ✉ code (pickup) |
+| requestShippingInfo / setShippingAddress | not complete | same | address required for ship | ✉ where to ship |
+| confirmShipment | open/partial/fulfilled | shipped | address + photos required; unpaid blocked unless bypass; shipment record; shippedQty; **custody closes** | ✉ shipped + tracking |
+| confirmPickup | open/partial/fulfilled | picked_up (or partial_fulfilled) | code OR proxy(name + ID photo); photos required; unpaid needs bypass; code consumed; pickedUpQty; **custody closes when fully picked**; blocked if channel ship + address | ✉ thank you / partial |
+| adminMarkComplete | not complete | shipped / picked_up | manager + reason; audited | — |
+| cancelSalesOrder | not shipped/picked_up | cancelled | reason | — |
+Tail read-model `tailStage(job)`: no SO → awaiting_invoice · SO unpaid → awaiting_payment · fulfilled+pickup → ready_for_pickup · fulfilled+ship → ready_to_ship · shipped / picked_up.
+
 ## 2. Estimates (E3)
 `draft → sent → approved(provisional) → converted` · `sent → declined → draft (reopen)` · `sent → expired → draft (reopen)`.
 | action | from | to | notes |
