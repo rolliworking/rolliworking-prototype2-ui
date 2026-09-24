@@ -226,10 +226,14 @@ function Dashboard() {
             <p className="empty">No open hit-list items</p>
           ) : (
             <ul>
-              {hitList.map((row) => (
+                  {hitList.map((row) => (
                 <li key={String(row.id)}>
-                  <span>{String(row.title || row.description || row.id)}</span>
-                  <span>{String(row.technician || row.owner || "")}</span>
+                  <span>
+                    {String(row.estimate_number || "")}
+                    {row.estimate_number ? " · " : ""}
+                    {String(row.description || row.id)}
+                  </span>
+                  <span>{String(row.technician || "")}</span>
                 </li>
               ))}
             </ul>
