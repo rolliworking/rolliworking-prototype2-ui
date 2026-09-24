@@ -42,6 +42,12 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
+## Implemented — MH rulings: inspection-by-kind + pinned hit list (2026-06) — tested via testing agent, iteration_10.json, all pass
+- `JOB_KIND_CONFIG.inspectionReport` (service only) + `inspectionPhotos: true` (all kinds). `reviewGaps()` gates leaving in_review (photos every kind; multiple-choice report `INSPECTION_QUESTIONS` for service via `saveInspectionReport`). UI: ReviewGate strip, disabled action buttons, Inspection card (form / summary / "skipped for kind"). small_job approval skip stays provisional (amber).
+- Pinned manual layer: `PinnedItem` fixtures, `pinToHitList` (from job `act-pin`, from derived task row hover pin, freeform with `#name`/`#role` prefix via `parsePin`), `dismissPinned`; `/today` shows Pinned card above Derived; dashboard panel shows pinned first; nothing derived hidden. Audit type `pin`.
+- Docs updated: DECISIONS (2 MH rulings dated/attributed), STATE-MACHINES (per-kind table + review gate + pinned lifecycle), DATA-MODEL, API-SURFACE, SEED-DATA, DESIGN-PRINCIPLES (#13 amended, #14 added).
+- iteration_9.json: "michael1123" password report = user typo; michael123 works.
+
 ## Implemented — E4+ Kind / Owner / Today / Tasks (2026-06) — tested via testing agent, iteration_8.json, all pass
 - `Job.kind` service | small_job | warranty (orthogonal to workflow/status). `JOB_KIND_CONFIG` lookup: label, defaultOwnerRole (small_job & warranty → concierge), skipStages (small_job skips awaiting_customer_approval — provisional). `legalJobActions` applies skips.
 - `Job.owner: Role` (accountable, role-based, resolved to holders via `roleHolders`) ≠ `Job.assignees: string[]` (working techs, toggle multi). "PM" reserved for precious-metals DeptCode. `User.roles[]` added (concierge/manager/inspector/watchmaker).
