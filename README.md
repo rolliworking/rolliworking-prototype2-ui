@@ -15,4 +15,4 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 — sign in first (D-181 password + optional webcam / 4-digit PIN switch; device id stored locally). Then Home, Estimates, Hit list, Sales, and Intake. Configure `PROTOTYPE_AUTH_PASSWORDS` / `PROTOTYPE_AUTH_PINS` on prototype-api. Inventory / PO / QBO live stay UNKNOWN or stub.
+Open http://127.0.0.1:5173 — sign in first (D-181 password + optional webcam / 4-digit PIN switch; device id stored locally). Then Home, Estimates, Hit list, Sales, Intake, and Roles. API client attaches stored session token + device id on each call. Configure `PROTOTYPE_AUTH_PASSWORDS` / `PROTOTYPE_AUTH_PINS` on prototype-api. Inventory / PO / QBO live stay UNKNOWN or stub.

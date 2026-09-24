@@ -42,11 +42,28 @@ function resolveBase(opts?: ClientOptions): string {
   return (opts?.baseUrl || DEFAULT_BASE).replace(/\/+$/, "");
 }
 
+function sessionDefaults(): { sessionToken?: string; deviceId?: string } {
+  try {
+    const token = localStorage.getItem("prototype.session_token") || undefined;
+    const deviceId = localStorage.getItem("prototype.device_id") || undefined;
+    return {
+      sessionToken: token && token !== "pin-switch" ? token : undefined,
+      deviceId,
+    };
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
   opts?: ClientOptions & { query?: Record<string, string | number | undefined | null>; body?: unknown }
 ): Promise<T> {
+  const defaults = sessionDefaults();
+  const sessionToken = opts?.sessionToken !== undefined ? opts.sessionToken : defaults.sessionToken;
+  const deviceId = opts?.deviceId !== undefined ? opts.deviceId : defaults.deviceId;
+
   const url = new URL(resolveBase(opts) + path);
   if (opts?.query) {
     for (const [k, v] of Object.entries(opts.query)) {
@@ -59,8 +76,8 @@ async function request<T>(
     accept: "application/json",
   };
   if (opts?.body !== undefined) headers["content-type"] = "application/json";
-  if (opts?.sessionToken) headers.authorization = `Bearer ${opts.sessionToken}`;
-  if (opts?.deviceId) headers["x-device-id"] = opts.deviceId;
+  if (sessionToken) headers.authorization = `Bearer ${sessionToken}`;
+  if (deviceId) headers["x-device-id"] = deviceId;
 
   const fetchImpl = opts?.fetchImpl || fetch;
   const res = await fetchImpl(url, {

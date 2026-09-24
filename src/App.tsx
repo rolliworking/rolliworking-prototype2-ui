@@ -10,10 +10,11 @@ import { AuthGate } from "./AuthGate";
 import { EstimatesPage } from "./EstimatesPage";
 import { HitListPage } from "./HitListPage";
 import { IntakePage } from "./IntakePage";
+import { RolesPage } from "./RolesPage";
 import { SalesPage } from "./SalesPage";
 import { clearSession, loadSession, SessionUser } from "./session";
 
-type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake";
+type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake" | "roles";
 
 type Row = Record<string, unknown>;
 
@@ -284,6 +285,7 @@ export function App() {
             ["hit-list", "Hit list"],
             ["sales", "Sales"],
             ["intake", "Intake"],
+            ["roles", "Roles"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -324,6 +326,7 @@ export function App() {
         {nav === "hit-list" ? <HitListPage /> : null}
         {nav === "sales" ? <SalesPage /> : null}
         {nav === "intake" ? <IntakePage /> : null}
+        {nav === "roles" ? <RolesPage /> : null}
       </main>
     </div>
   );
