@@ -65,7 +65,7 @@ export const JobsSubNav = () => {
   const cls = ({ isActive }: { isActive: boolean }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink');
   return (
     <div className="flex items-center gap-1" data-testid="jobs-subnav">
-      <NavLink to="/jobs" end data-testid="jobs-tab-board" className={cls}><Kanban size={13} /> Board</NavLink>
+      <NavLink to="/jobs" end data-testid="jobs-tab-board" className={cls}><Kanban size={13} /> All jobs</NavLink>
       <NavLink to="/jobs/shop-time" data-testid="jobs-tab-shop-time" className={cls}><Clock size={13} /> Shop Time</NavLink>
       <NavLink to="/jobs/new" data-testid="jobs-tab-new" className={cls}><Plus size={13} /> New job</NavLink>
     </div>

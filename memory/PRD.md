@@ -42,6 +42,18 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
+## Implemented — Session E4 Jobs (2026-06) — tested via testing agent, iteration_7.json, all pass
+Built to the user's PROMPT-PACK-jobs.md (pack wins over brief). Reconciliations & provisional (amber) items:
+- Status enum (DB): intake | in_review | awaiting_customer_approval | approved | in_service | testing | ready_to_ship | closed. Linear machine in `JOB_ACTIONS` (client.ts); only legal actions render as buttons (`legalJobActions`). Extra provisional action: in_review → approved "estimate pre-approved". Testing: qc_pass → ready_to_ship; qc_fail (reason required) → in_service.
+- Simple status estimate | on_hand | finished (Shop Time lists on_hand only). Priority low/normal/high/urgent. Job id `E` + 5 digits from own sequence (E02011…; provisional whether it shares the estimate sequence).
+- Client emails → Outbox on request_approval / qc_pass / qc_fail (pack silent → provisional). Watch status synced on transitions.
+- Holds: parts | outsource, reason required, allowed on on_hand jobs in approved/in_service/testing; status untouched while held (actions blocked), "On hold" board lane; release → prior status; history kept.
+- Assignment from staff list; stamped notes; photos (webcam/upload via PhotoCapture); priority/due/condition edits; audit type 'job' on everything (Jobs filter on audit log).
+- Estimate wiring: `convertEstimate(id,'job')` = createJobFromEstimate (approved only; lines+watch carried; workflow from received package else line depts; estimate → converted + jobId). `convertEstimate(id,'intake')` = convertEstimateToIntake (sent/approved/converted: existing job → on_hand + intakeDate, else insert on hand). Both reachable from estimate detail actions and list More menu; "Open job" link on converted estimates. Sales-order convert still stub. Invoice action on ready_to_ship/closed = stub (E5). Delete job = manager only.
+- Screens: /jobs (board lanes w/ counts + grouped collapsible list, toggle; search job#/client/ref/serial/tech; workflow W/B/P/PM + status chips; URL params), /jobs/:id (watch card w/ estimate + package links, lines w/ dept tags, notes, photos, shop time, timeline, assignment, holds, details), /jobs/new (customer → watch → fields, optional estimate link, on-hand checkbox), /jobs/shop-time (on-hand picker, minutes, note, entries).
+- Fixtures: 20 jobs across every status/workflow (2 active holds, 1 released, 1 QC-fail history), 5 shop-time rows. Dashboard KPIs: In progress = approved+in_service+testing; Awaiting pickup = ready_to_ship.
+- Files: api/fixtures/jobs.ts, components/jobs/{JobBits,JobBoard,JobTimeline,JobPanels}.tsx, components/ui/Modal.tsx, pages/JobsPage.tsx, pages/jobs/{JobDetailPage,JobCreatePage,ShopTimePage}.tsx. Pack saved at /app/PROMPT-PACK-jobs.md.
+
 ## Implemented — Session E3 Estimates (2026-06) — tested via testing agent, iteration_6.json, all pass
 Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Reconciliations:
 - Numbers now `E` + 5 digits (E01041…); search strips EST-/E/leading zeros. All fixtures swept (intake, labels, hit list, activity).
@@ -79,7 +91,8 @@ Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Re
 - Daily Hit List page (owner filters, show-completed), Estimates & Jobs tables with status filter chips (?status=), Client detail page
 
 ## Backlog
-- P1: Wire 'Create job' from approved estimate (E4 jobs), Job detail, Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake store to localStorage
+- P0: SESSION E5 Invoicing / Pickup — wire `invoiceJob` stub, pickup/ship flow from ready_to_ship, "Convert to invoice" estimate stub. Await user PROMPT-PACK-invoicing.md (pack wins).
+- P1: Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake/jobs store to localStorage, sales-order convert target
 - P1: Repoint `src/api/client.ts` at the real RolliSuite API (Fastify) when ready
 - P2: Inspection photos gallery mock, Reports charts, Sales/Purchasing/Inventory tables from fixtures
 - P2: Persist hit-list done state to localStorage; owner "assign to me" action
