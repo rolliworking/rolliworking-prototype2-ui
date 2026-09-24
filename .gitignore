@@ -99,3 +99,9 @@ android-sdk/
 /*.md
 !/README.md
 /.env.example
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
