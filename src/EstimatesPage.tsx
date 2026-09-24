@@ -282,7 +282,7 @@ export function EstimatesPage() {
             <>
               <p>
                 <strong>E{String(detail.estimate_number || "").replace(/^E/i, "")}</strong> ·{" "}
-                {statusLabel(detail.status)} · total {money(detail.total ?? detail.subtotal)}
+                {statusLabel(detail.status)} · total {money(detail.total_amount ?? detail.subtotal)}
               </p>
               <p className="sub" style={{ marginBottom: "0.75rem" }}>
                 {customerLabel(detail)}
