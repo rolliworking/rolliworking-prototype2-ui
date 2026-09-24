@@ -4,6 +4,7 @@ import {
   listEstimates,
   listSalesOrders,
   lookupShipQueue,
+  switchUserWithPin,
   PrototypeApiError,
 } from "./api/client";
 import { AuthGate } from "./AuthGate";
@@ -14,7 +15,13 @@ import { JobsPage } from "./JobsPage";
 import { RolesPage } from "./RolesPage";
 import { SalesPage } from "./SalesPage";
 import { ShopTimePage } from "./ShopTimePage";
-import { clearSession, loadSession, SessionUser } from "./session";
+import {
+  clearSession,
+  getOrCreateDeviceId,
+  loadSession,
+  saveSession,
+  SessionUser,
+} from "./session";
 
 type NavId =
   | "dashboard"
@@ -274,11 +281,47 @@ function Dashboard() {
 export function App() {
   const [nav, setNav] = useState<NavId>("dashboard");
   const [user, setUser] = useState<SessionUser | null>(() => loadSession().user);
+  const [pin, setPin] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinOk, setPinOk] = useState<string | null>(null);
 
   useEffect(() => {
     const { user: stored } = loadSession();
     if (stored) setUser(stored);
   }, []);
+
+  async function onPinSwitch() {
+    if (!/^\d{4}$/.test(pin)) {
+      setPinError("PIN must be 4 digits");
+      return;
+    }
+    setPinBusy(true);
+    setPinError(null);
+    setPinOk(null);
+    try {
+      const res = (await switchUserWithPin({
+        pin,
+        device_id: getOrCreateDeviceId(),
+      })) as { user?: SessionUser };
+      if (!res.user) throw new Error("PIN switch missing user");
+      const { token } = loadSession();
+      saveSession(token || "pin-switch", res.user);
+      setUser(res.user);
+      setPin("");
+      setPinOk(`Switched to ${res.user.display_name || res.user.username || "user"}`);
+    } catch (e) {
+      const msg =
+        e instanceof PrototypeApiError
+          ? `${e.message}${e.code ? ` (${e.code})` : ""}`
+          : e instanceof Error
+            ? e.message
+            : "PIN switch failed";
+      setPinError(msg);
+    } finally {
+      setPinBusy(false);
+    }
+  }
 
   if (!user) {
     return <AuthGate onSignedIn={setUser} />;
@@ -311,6 +354,21 @@ export function App() {
         ))}
         <div className="nav-user">
           <span>{String(user.display_name || user.username || "signed in")}</span>
+          <label className="pin-switch">
+            PIN switch
+            <input
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              inputMode="numeric"
+              placeholder="••••"
+              maxLength={4}
+            />
+          </label>
+          <button type="button" disabled={pinBusy || pin.length !== 4} onClick={() => void onPinSwitch()}>
+            Switch
+          </button>
+          {pinError ? <span className="pin-msg err">{pinError}</span> : null}
+          {pinOk ? <span className="pin-msg ok">{pinOk}</span> : null}
           <button
             type="button"
             onClick={() => {
