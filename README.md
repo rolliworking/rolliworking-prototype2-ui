@@ -15,4 +15,4 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 — Home, **Estimates**, **Hit list**, and **Sales** (list + fulfill / pickup / mock ship). Inventory / PO / QBO live stay UNKNOWN or stub.
+Open http://127.0.0.1:5173 — Home, **Estimates**, **Hit list**, **Sales**, and **Intake** (packages / receive watch / leads). Inventory / PO / QBO live stay UNKNOWN or stub.

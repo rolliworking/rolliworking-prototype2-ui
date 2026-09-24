@@ -8,6 +8,7 @@ import {
 } from "./api/client";
 import { EstimatesPage } from "./EstimatesPage";
 import { HitListPage } from "./HitListPage";
+import { IntakePage } from "./IntakePage";
 import { SalesPage } from "./SalesPage";
 
 type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake";
@@ -307,12 +308,7 @@ export function App() {
         {nav === "estimates" ? <EstimatesPage /> : null}
         {nav === "hit-list" ? <HitListPage /> : null}
         {nav === "sales" ? <SalesPage /> : null}
-        {nav === "intake" ? (
-          <Placeholder
-            title="Intake"
-            note="Package arrivals, receive watch, leads, and shipping-label lookup helpers are ready."
-          />
-        ) : null}
+        {nav === "intake" ? <IntakePage /> : null}
       </main>
     </div>
   );
