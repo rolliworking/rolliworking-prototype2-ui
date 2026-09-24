@@ -60,6 +60,8 @@ export function SalesPage() {
   const [pickupCode, setPickupCode] = useState<string | null>(null);
   const [signatureRef, setSignatureRef] = useState("");
   const [photoRefs, setPhotoRefs] = useState("");
+  const [shipPackagePhotos, setShipPackagePhotos] = useState("");
+  const [shipLabelPhoto, setShipLabelPhoto] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
   const [custQ, setCustQ] = useState("PRACTICE");
@@ -205,16 +207,29 @@ export function SalesPage() {
     setBusy(true);
     setNotice(null);
     try {
+      const packagePhotos = shipPackagePhotos
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const res = (await confirmShipment({
         sales_order_id: selectedId,
         create_mock_label: true,
         declared_value: 2500,
+        package_photo_refs: packagePhotos.length ? packagePhotos : undefined,
+        label_photo_ref: shipLabelPhoto.trim() || undefined,
       })) as Row;
       const tracking =
         (res.tracking_number as string) ||
-        ((res.mock_shipment as { tracking?: { tracking_number?: string } } | undefined)?.tracking
-          ?.tracking_number);
-      setNotice(`Shipped with mock label${tracking ? ` · ${tracking}` : ""} — no carrier charge`);
+        ((res.shipment as { tracking_number?: string; mock_label?: { tracking?: { tracking_number?: string } } } | undefined)
+          ?.tracking_number) ||
+        ((res.shipment as { mock_label?: { tracking?: { tracking_number?: string } } } | undefined)?.mock_label
+          ?.tracking?.tracking_number);
+      const shipId = (res.shipment as { record?: { id?: string } } | undefined)?.record?.id;
+      setNotice(
+        `Shipped with mock label${tracking ? ` · ${tracking}` : ""}${
+          shipId ? ` · shipment ${String(shipId).slice(0, 8)}` : ""
+        } — no carrier charge`
+      );
       await refreshDetail(selectedId);
     } catch (e) {
       setError(errMsg(e));
@@ -503,6 +518,22 @@ export function SalesPage() {
                     value={photoRefs}
                     onChange={(e) => setPhotoRefs(e.target.value)}
                     placeholder="photo://front, photo://back"
+                  />
+                </label>
+                <label>
+                  Ship package photos
+                  <input
+                    value={shipPackagePhotos}
+                    onChange={(e) => setShipPackagePhotos(e.target.value)}
+                    placeholder="photo://pkg-1"
+                  />
+                </label>
+                <label>
+                  Ship label photo
+                  <input
+                    value={shipLabelPhoto}
+                    onChange={(e) => setShipLabelPhoto(e.target.value)}
+                    placeholder="photo://label"
                   />
                 </label>
               </div>
