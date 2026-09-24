@@ -7,7 +7,7 @@ import { DeptBadge, StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fmtMoneyCents, fullName } from '@/lib/format';
 
 const Check_ = ({ checked, onChange, testId, children, tone = 'ink' }: { checked: boolean; onChange: () => void; testId: string; children: React.ReactNode; tone?: 'ink' | 'moss' }) => (
-  <label className={clsx('flex cursor-pointer items-center gap-2.5 rounded-sm border px-2.5 py-2 transition-colors', checked ? (tone === 'moss' ? 'border-moss/40 bg-moss-50/60' : 'border-ink/30 bg-canvas') : 'border-line hover:border-ink-300')}>
+  <label data-testid={`${testId}-row`} className={clsx('flex cursor-pointer items-center gap-2.5 rounded-sm border px-2.5 py-2 transition-colors', checked ? (tone === 'moss' ? 'border-moss/40 bg-moss-50/60' : 'border-ink/30 bg-canvas') : 'border-line hover:border-ink-300')}>
     <input type="checkbox" data-testid={testId} checked={checked} onChange={onChange} className="sr-only peer" />
     <span className={clsx('grid h-4 w-4 shrink-0 place-items-center rounded-[3px] border transition-colors', checked ? (tone === 'moss' ? 'border-moss bg-moss' : 'border-ink bg-ink') : 'border-ink-300 bg-surface')}>
       <Check size={11} strokeWidth={3} className={clsx('text-white', checked ? 'opacity-100' : 'opacity-0')} />

@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Mail } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { EstimateWithRefs, PackagePhoto } from '@/api/client';
@@ -18,7 +18,9 @@ export default function ReceivePackagePage() {
   const navigate = useNavigate();
   const { user, station } = useAuth();
   const { refreshCounts } = useIntakeCounts();
-  const { data: pkg, loading, reload } = useAsync(() => api.getPackage(id), [id]);
+  const { data: pkg, loading } = useAsync(() => api.getPackage(id), [id]);
+  const [receiptPrinted, setReceiptPrinted] = useState(false);
+  const seededFor = useRef<string | null>(null);
   const [tracking, setTracking] = useState('');
   const [estimate, setEstimate] = useState<EstimateWithRefs | null>(null);
   const [estError, setEstError] = useState<string | null>(null);
@@ -28,11 +30,14 @@ export default function ReceivePackagePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Seed local form state from the package exactly once per package
   useEffect(() => {
-    if (!pkg) return;
+    if (!pkg || seededFor.current === pkg.id) return;
+    seededFor.current = pkg.id;
     setTracking(pkg.trackingNumber ?? '');
     setContents(pkg.contents);
     setPhotos(pkg.photos);
+    setReceiptPrinted(pkg.receiptPrinted);
     if (pkg.estimate) setEstimate(pkg.estimate);
   }, [pkg]);
 
@@ -70,7 +75,7 @@ export default function ReceivePackagePage() {
 
   const printReceipt = async () => {
     await api.printDropOffReceipt(pkg.id);
-    reload();
+    setReceiptPrinted(true);
   };
 
   const client = estimate?.client ?? pkg.client;
@@ -167,8 +172,8 @@ export default function ReceivePackagePage() {
 
         <div className="space-y-4">
           <Card title="Drop-off receipt" subtitle="Optional · mock print" testId="receive-receipt-card">
-            <ReceiptPreview lines={receiptLines} onPrint={printReceipt} printed={pkg.receiptPrinted} />
-            {pkg.receiptPrinted && <p data-testid="receipt-printed-flag" className="mt-2 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> Receipt printed</p>}
+            <ReceiptPreview lines={receiptLines} onPrint={printReceipt} printed={receiptPrinted} />
+            {receiptPrinted && <p data-testid="receipt-printed-flag" className="mt-2 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> Receipt printed</p>}
           </Card>
 
           <Card title="Finish" testId="receive-finish-card">
