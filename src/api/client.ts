@@ -142,7 +142,7 @@ export function search(q: string, opts?: ClientOptions) {
 // --- estimates ---
 
 export function listEstimates(
-  query: { status?: string; q?: string; limit?: number } = {},
+  query: { status?: string; q?: string; customer_id?: string; limit?: number } = {},
   opts?: ClientOptions
 ) {
   return request<Json>("GET", "/estimates", { ...opts, query });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   createJob,
   getJob,
+  listEstimates,
   listJobs,
   search,
   searchCustomersForReceive,
@@ -48,6 +49,7 @@ export function JobsPage() {
   const [custQ, setCustQ] = useState("PRACTICE");
   const [custHits, setCustHits] = useState<Row[]>([]);
   const [createEstimateId, setCreateEstimateId] = useState("");
+  const [customerEstimates, setCustomerEstimates] = useState<Row[]>([]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -93,6 +95,30 @@ export function JobsPage() {
     };
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!createCustomerId) {
+      setCustomerEstimates([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listEstimates({ customer_id: createCustomerId, limit: 20 });
+        if (cancelled) return;
+        const items = ((res as { items?: Row[] }).items || []) as Row[];
+        setCustomerEstimates(items);
+        if (!createEstimateId && items[0]?.id) {
+          setCreateEstimateId(String(items[0].id));
+        }
+      } catch (e) {
+        if (!cancelled) setError(errMsg(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [createCustomerId]);
+
   async function onGlobalSearch() {
     if (globalQ.trim().length < 2) {
       setError("Search needs at least 2 characters");
@@ -123,18 +149,20 @@ export function JobsPage() {
   }
 
   async function onCreate() {
+    if (!createEstimateId.trim()) {
+      setError("Pick a customer estimate to link the job (rebuild jobs have no customer_id column)");
+      return;
+    }
     setBusy(true);
     setNotice(null);
     setError(null);
     try {
-      // Contract CreateJobRequest wants customer_id; prototype createJob uses estimate_id optionally
       const job = (await createJob({
         status: "intake",
         workflow_type_committed: "STANDARD",
-        estimate_id: createEstimateId.trim() || undefined,
-        // customer_id not on rebuild jobs table — link via estimate when provided
+        estimate_id: createEstimateId.trim(),
       })) as Row;
-      setNotice(`Created job ${String(job.id).slice(0, 8)}`);
+      setNotice(`Created job ${String(job.id).slice(0, 8)} linked to estimate`);
       setSelectedId(String(job.id));
       await reload();
     } catch (e) {
@@ -267,7 +295,13 @@ export function JobsPage() {
           </button>
           <label>
             Customer
-            <select value={createCustomerId} onChange={(e) => setCreateCustomerId(e.target.value)}>
+            <select
+              value={createCustomerId}
+              onChange={(e) => {
+                setCreateCustomerId(e.target.value);
+                setCreateEstimateId("");
+              }}
+            >
               <option value="">—</option>
               {custHits.map((c) => (
                 <option key={String(c.id)} value={String(c.id)}>
@@ -277,20 +311,26 @@ export function JobsPage() {
             </select>
           </label>
           <label>
-            Estimate id (optional)
-            <input
+            Estimate (required link)
+            <select
               value={createEstimateId}
               onChange={(e) => setCreateEstimateId(e.target.value)}
-              placeholder="uuid"
-            />
+            >
+              <option value="">—</option>
+              {customerEstimates.map((est) => (
+                <option key={String(est.id)} value={String(est.id)}>
+                  {String(est.estimate_number || est.id)} · {String(est.status || "")}
+                </option>
+              ))}
+            </select>
           </label>
-          <button type="button" disabled={busy} onClick={() => void onCreate()}>
+          <button type="button" disabled={busy || !createEstimateId} onClick={() => void onCreate()}>
             Create
           </button>
         </div>
         <p className="sub">
-          Rebuild jobs table has no customer_id column — pass estimate_id to link. Customer picker is
-          informational until schema gains the field (UNKNOWN flagged).
+          Rebuild jobs have no customer_id — pick a customer, then an estimate for that customer. The
+          job links via estimate_id.
         </p>
       </div>
 
