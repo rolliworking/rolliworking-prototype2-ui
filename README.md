@@ -15,4 +15,4 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 — Home dashboard, **Estimates** list/detail, and **Hit list** (date + technician, dismiss, side unpaid/packages/labels). Inventory / PO / QBO stay UNKNOWN or stub until Contract covers them.
+Open http://127.0.0.1:5173 — Home, **Estimates**, **Hit list**, and **Sales** (list + fulfill / pickup / mock ship). Inventory / PO / QBO live stay UNKNOWN or stub.
