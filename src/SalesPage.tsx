@@ -58,6 +58,8 @@ export function SalesPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pickupCode, setPickupCode] = useState<string | null>(null);
+  const [signatureRef, setSignatureRef] = useState("");
+  const [photoRefs, setPhotoRefs] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
   const [custQ, setCustQ] = useState("PRACTICE");
@@ -174,14 +176,21 @@ export function SalesPage() {
     setBusy(true);
     setNotice(null);
     try {
-      await completePickup({
+      const photos = photoRefs
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const res = (await completePickup({
         sales_order_id: selectedId,
         admin_force: adminForce,
-      });
+        signature_ref: signatureRef.trim() || undefined,
+        photo_refs: photos.length ? photos : undefined,
+      })) as Row;
+      const session = (res.pickup as { session?: { id?: string } } | undefined)?.session;
       setNotice(
-        adminForce
-          ? "Pickup complete (admin force) — photos/signature UNKNOWN omitted"
-          : "Pickup complete — photos/signature UNKNOWN omitted"
+        `Pickup complete${adminForce ? " (admin force)" : ""}${
+          session?.id ? ` · session ${String(session.id).slice(0, 8)}` : ""
+        } — refs are proxies, no blob upload`
       );
       await refreshDetail(selectedId);
     } catch (e) {
@@ -283,7 +292,7 @@ export function SalesPage() {
       <h1>Sales</h1>
       <p className="sub">
         Orders list + fulfill / pickup / ship against prototype-api. Live QBO, email, and carriers stay
-        off. Proxy photos / signature: UNKNOWN — simplest omit.
+        off. Pickup accepts optional signature_ref + photo_refs as string proxies (no blob store).
       </p>
 
       <div className="toolbar">
@@ -479,6 +488,24 @@ export function SalesPage() {
                   </>
                 ) : null}
               </p>
+              <div className="toolbar" style={{ marginBottom: "0.75rem" }}>
+                <label>
+                  Signature ref (proxy)
+                  <input
+                    value={signatureRef}
+                    onChange={(e) => setSignatureRef(e.target.value)}
+                    placeholder="sig://demo-pad-1"
+                  />
+                </label>
+                <label>
+                  Photo refs (comma / newline)
+                  <input
+                    value={photoRefs}
+                    onChange={(e) => setPhotoRefs(e.target.value)}
+                    placeholder="photo://front, photo://back"
+                  />
+                </label>
+              </div>
               <div className="actions">
                 <button
                   type="button"
