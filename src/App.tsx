@@ -7,6 +7,7 @@ import {
   PrototypeApiError,
 } from "./api/client";
 import { EstimatesPage } from "./EstimatesPage";
+import { HitListPage } from "./HitListPage";
 
 type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake";
 
@@ -303,12 +304,7 @@ export function App() {
           </>
         ) : null}
         {nav === "estimates" ? <EstimatesPage /> : null}
-        {nav === "hit-list" ? (
-          <Placeholder
-            title="Hit list"
-            note="Client helpers getHitList / setHitListItemDone are ready. Full page is a later Emergent pack."
-          />
-        ) : null}
+        {nav === "hit-list" ? <HitListPage /> : null}
         {nav === "sales" ? (
           <Placeholder
             title="Sales"

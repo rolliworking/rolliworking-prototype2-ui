@@ -15,4 +15,4 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 — Home loads open SOs, ship queue, estimates, and hit list. **Estimates** nav has list + detail (search, status filter, send outbox, decline/reopen, delete). Inventory / PO / QBO cards stay UNKNOWN or stub until Contract covers them.
+Open http://127.0.0.1:5173 — Home dashboard, **Estimates** list/detail, and **Hit list** (date + technician, dismiss, side unpaid/packages/labels). Inventory / PO / QBO stay UNKNOWN or stub until Contract covers them.
