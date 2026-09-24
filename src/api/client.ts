@@ -307,6 +307,17 @@ export function createShopTimeEntry(body: Json, opts?: ClientOptions) {
   return request<Json>("POST", "/shop-time", { ...opts, body });
 }
 
+export function completeShopTimeEntry(
+  entryId: string,
+  body: { ended_at?: string; notes?: string } = {},
+  opts?: ClientOptions
+) {
+  return request<Json>("POST", `/shop-time/${encodeURIComponent(entryId)}/complete`, {
+    ...opts,
+    body,
+  });
+}
+
 export function listOnHandJobsForShopTime(query: { limit?: number } = {}, opts?: ClientOptions) {
   return request<Json>("GET", "/jobs/shop-time/on-hand-jobs", { ...opts, query });
 }

@@ -48,6 +48,7 @@ export function IntakePage() {
   const [matchEstimate, setMatchEstimate] = useState("");
   const [dropEstimateId, setDropEstimateId] = useState("");
   const [dropNotes, setDropNotes] = useState("");
+  const [dropSignatureRef, setDropSignatureRef] = useState("");
 
   // watch
   const [prefillNumber, setPrefillNumber] = useState("");
@@ -177,10 +178,16 @@ export function IntakePage() {
       const res = (await recordPackageDropOff({
         estimate_id: estimateId,
         notes: dropNotes || undefined,
+        signature_ref: dropSignatureRef.trim() || undefined,
         received_by: "michael",
       })) as Row;
-      setNotice(`Drop-off recorded · ${String(res.tracking_number || res.id)}`);
+      setNotice(
+        `Drop-off recorded · ${String(res.tracking_number || res.id)}${
+          dropSignatureRef.trim() ? " · signature proxy stored" : ""
+        }`
+      );
       setDropNotes("");
+      setDropSignatureRef("");
       await reloadPackages();
     } catch (e) {
       setError(errMsg(e));
@@ -304,7 +311,7 @@ export function IntakePage() {
       <h1>Intake</h1>
       <p className="sub">
         Packages, receive watch, and leads against prototype-api. IFS label clicks stay dead. Photos /
-        signature: UNKNOWN — simplest omit.
+        signature_ref on drop-off is a string proxy (no pad capture / blob store).
       </p>
 
       <div className="actions">
@@ -374,6 +381,14 @@ export function IntakePage() {
               <label>
                 Notes
                 <input value={dropNotes} onChange={(e) => setDropNotes(e.target.value)} />
+              </label>
+              <label>
+                Signature ref (proxy)
+                <input
+                  value={dropSignatureRef}
+                  onChange={(e) => setDropSignatureRef(e.target.value)}
+                  placeholder="sig://dropoff-pad"
+                />
               </label>
               <button
                 type="button"

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  completeShopTimeEntry,
   createShopTimeEntry,
   listOnHandJobsForShopTime,
   listShopTimeEntries,
@@ -111,7 +112,24 @@ export function ShopTimePage() {
         started_at: new Date().toISOString(),
         notes: notes || "timer start",
       })) as Row;
-      setNotice(`Timer started · ${String(entry.id).slice(0, 8)} (stop = add ended entry manually)`);
+      setNotice(`Timer started · ${String(entry.id).slice(0, 8)}`);
+      await reload();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onStop(entryId: string) {
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const entry = (await completeShopTimeEntry(entryId, {
+        notes: notes.trim() || undefined,
+      })) as Row;
+      setNotice(`Timer stopped · ${entry.minutes ?? "?"} min`);
       await reload();
     } catch (e) {
       setError(errMsg(e));
@@ -125,7 +143,7 @@ export function ShopTimePage() {
       <h1>Shop time</h1>
       <p className="sub">
         Time entries against on-hand jobs. Writes shop_time rows only — does not change job status.
-        Timer stop as a paired update is UNKNOWN — simplest: open start + manual completed entry.
+        Open timers stop via completeShopTimeEntry (ended_at + minutes).
       </p>
 
       <div className="panel" style={{ marginBottom: "1rem" }}>
@@ -197,6 +215,7 @@ export function ShopTimePage() {
                 <th>Ended</th>
                 <th>Min</th>
                 <th>Notes</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -208,6 +227,18 @@ export function ShopTimePage() {
                   <td>{fmtWhen(row.ended_at)}</td>
                   <td>{row.minutes != null ? String(row.minutes) : "—"}</td>
                   <td>{String(row.notes || "")}</td>
+                  <td>
+                    {!row.ended_at ? (
+                      <button
+                        type="button"
+                        className="linkish"
+                        disabled={busy}
+                        onClick={() => void onStop(String(row.id))}
+                      >
+                        Stop
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
