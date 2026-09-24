@@ -28,7 +28,9 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
     ├── api/client.ts          # THE ONLY data-access module (async, 120ms simulated latency)
     ├── api/types.ts           # shared types
     ├── api/fixtures/          # users, clients(25), watches(15), estimates(12), jobs(10), hitList(10), activity(10), time helpers
-    ├── auth/AuthContext.tsx   # user session (localStorage key rollisuite.prototype.currentUserId)
+    ├── auth/AuthContext.tsx   # user + station session
+    ├── components/auth/       # StaffCard, SignInPanel, CameraPreview, PinInput
+    ├── hooks/useCamera.ts     # getUserMedia + canvas capture
     ├── config/navigation.ts   # NAV_ITEMS (tiers, pinned), QUICK_ACTIONS
     ├── components/layout/     # AppShell (+PrototypeBanner), Sidebar, TopBar, GlobalSearch
     ├── components/ui/         # Card, Table, Button/PageHeader/FilterChip, Pills (StatusPill, OwnerChip)
@@ -40,8 +42,16 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
-## Implemented (2026-06, session E1) — tested via testing agent, iteration_2.json, 13/13 pass
-- Badge sign-in (autofocus, Enter, error state, badge hint chips), Switch user in persistent header
+## Implemented — Round 2 (2026-06) — tested via testing agent, iteration_3.json, 10/10 pass
+- Badge sign-in REMOVED. New: staff cards → password → webcam captures one verification photo on submit (useCamera hook; graceful no_camera / denied fallback) → sign_in audit event with photo + station stamp. Failed attempts logged (sign_in_failed).
+- Fast switch: header "Switch user" lists users signed in today (derived from audit log) → 4-digit PIN only, no photo. Sign-in screen also offers PIN for in-today users. Mock creds shown on screen: password firstname123, PIN 1234.
+- Device-bound station: mocked pre-registered "Front Desk 1" (localStorage). New device → /station-setup (manager select + password + pick/add station). Setup page (manager only): rename station, "Reset registration" (simulate new device), credentials table, audit preview.
+- Audit log at /setup/audit-log: events (sign_in, sign_in_failed, sign_out, station_registered/renamed/reset) with photo thumbnails (zoom), station, method, camera status. Capped at 60 entries in localStorage.
+- Repo trim: .gitignore + git rm --cached for apps/, packages/, lovable-source/, rolliworking-source/, backend/, root docs/configs. Repo now ships only frontend/, README.md, memory/, .emergent/, .gitignore. Legacy stays in workspace as naming reference only.
+- localStorage keys: rollisuite.prototype.{currentUserId,deviceInitialized,stationId,stations,auditLog}
+
+## Implemented — Round 1 (2026-06, session E1) — tested via testing agent, iteration_2.json, 13/13 pass
+- (superseded) Badge sign-in, Switch user in persistent header
 - Amber "PROTOTYPE — fake data" banner on every screen
 - Sidebar (15 items, Hit List pinned/green), tier-filtered; placeholders for unbuilt sections; 404 page
 - Top bar: global client search (name/email/phone/company, keyboard nav, dropdown → /clients/:id) + 5 action buttons → /actions/:key placeholders
