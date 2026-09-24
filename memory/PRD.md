@@ -42,6 +42,16 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
+## Implemented — Session E3 Estimates (2026-06) — tested via testing agent, iteration_6.json, all pass
+Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Reconciliations:
+- Numbers now `E` + 5 digits (E01041…); search strips EST-/E/leading zeros. All fixtures swept (intake, labels, hit list, activity).
+- Status enum: draft | sent | approved (PROVISIONAL — staff-recorded, flagged) | converted (list shows "Closed") | expired | declined. `awaiting_approval` removed (dashboard "Awaiting approval" KPI = sent count).
+- Money: extended = qty×rate; subtotal = Σ; shipping = Σ shipping-type lines; tax = 0 (8.25% shown "not applied", provisional); total = subtotal. Amount edit back-calcs rate round((amount/qty)×100)/100.
+- Fields: single optional watch (existing or new brand/model/ref/serial/part#), valid until (today+30), client/message/internal notes, billing + shipping (mirror), historical read-only, sentAt/convertedAt/approvedAt/declinedAt/declineReason, revision + revisions[] snapshots.
+- Screens: /estimates list (search, status chips, page 50, row menu open/print/duplicate/delete, provisional date filter + batch/convert-to-invoice stubs), /estimates/new (client search or new client, watch picker, catalog picker with inherited dept W/B/P/PM, custom lines, drag/arrow reorder, shipping calculator display + add-as-line, quote-context strip), /estimates/:id (draft autosave 450ms; sent → Revise creates rev N+1 keeping prior; mark-as-sent no sent-at; Send/Send again modal w/ context strip → Outbox; Decline w/ required reason; Approve provisional → Create job / Convert stubs not wired; Reopen; print preview; duplicate; delete rules).
+- Service catalog fixture (22 items w/ dept + type). 19 seeded estimates across every status incl. one historical.
+- Audit type 'estimate' for every action; Estimates filter on audit log.
+
 ## Implemented — Session E2 Intake (2026-06) — tested via testing agent, iteration_5.json (all stages pass; receipt-print state bug found & fixed)
 - Intake sub-nav (/intake) with 4 stage tabs + live counts + hold count; Outbox (/intake/outbox) and Label Queue (/intake/labels).
 - Stage 1 Arrival: scan-first tracking input (Enter = scan, auto-focus, clears & refocuses), carrier auto-detect (1Z→UPS, 12/15 digits→FedEx, 94…→USPS, 10 digits→DHL), signature flag, duplicate-tracking guard, walk-in (client or unknown) → SUB# record. Shelf list with time/by/station.
@@ -69,7 +79,7 @@ monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend
 - Daily Hit List page (owner filters, show-completed), Estimates & Jobs tables with status filter chips (?status=), Client detail page
 
 ## Backlog
-- P1: Estimate detail/approval mock, Job detail, Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake store to localStorage
+- P1: Wire 'Create job' from approved estimate (E4 jobs), Job detail, Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake store to localStorage
 - P1: Repoint `src/api/client.ts` at the real RolliSuite API (Fastify) when ready
 - P2: Inspection photos gallery mock, Reports charts, Sales/Purchasing/Inventory tables from fixtures
 - P2: Persist hit-list done state to localStorage; owner "assign to me" action
