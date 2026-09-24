@@ -12,9 +12,17 @@ import { HitListPage } from "./HitListPage";
 import { IntakePage } from "./IntakePage";
 import { RolesPage } from "./RolesPage";
 import { SalesPage } from "./SalesPage";
+import { ShopTimePage } from "./ShopTimePage";
 import { clearSession, loadSession, SessionUser } from "./session";
 
-type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake" | "roles";
+type NavId =
+  | "dashboard"
+  | "estimates"
+  | "hit-list"
+  | "sales"
+  | "intake"
+  | "shop-time"
+  | "roles";
 
 type Row = Record<string, unknown>;
 
@@ -285,6 +293,7 @@ export function App() {
             ["hit-list", "Hit list"],
             ["sales", "Sales"],
             ["intake", "Intake"],
+            ["shop-time", "Shop time"],
             ["roles", "Roles"],
           ] as const
         ).map(([id, label]) => (
@@ -326,6 +335,7 @@ export function App() {
         {nav === "hit-list" ? <HitListPage /> : null}
         {nav === "sales" ? <SalesPage /> : null}
         {nav === "intake" ? <IntakePage /> : null}
+        {nav === "shop-time" ? <ShopTimePage /> : null}
         {nav === "roles" ? <RolesPage /> : null}
       </main>
     </div>
