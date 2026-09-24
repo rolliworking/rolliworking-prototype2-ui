@@ -1,0 +1,13 @@
+{
+  "name": "rolliworking-prototype2-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Prototype UI shell (D-183). Typed Contract v1 client against prototype-api.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
