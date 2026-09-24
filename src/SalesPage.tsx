@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  createSalesOrder,
   completePickup,
   confirmShipment,
   fulfillSalesOrder,
@@ -9,6 +10,7 @@ import {
   listSalesOrders,
   lookupPickupQueue,
   lookupShipQueue,
+  searchCustomersForReceive,
   updateSalesOrder,
   PrototypeApiError,
 } from "./api/client";
@@ -56,6 +58,14 @@ export function SalesPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pickupCode, setPickupCode] = useState<string | null>(null);
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [custQ, setCustQ] = useState("PRACTICE");
+  const [custHits, setCustHits] = useState<Row[]>([]);
+  const [customerId, setCustomerId] = useState("");
+  const [lineDesc, setLineDesc] = useState("Service");
+  const [linePrice, setLinePrice] = useState("100");
+  const [channel, setChannel] = useState<"pickup" | "ship">("pickup");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -221,6 +231,51 @@ export function SalesPage() {
     }
   }
 
+  async function onFindCustomers() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await searchCustomersForReceive({ q: custQ.trim(), limit: 10 });
+      setCustHits(((res as { items?: Row[] }).items || []) as Row[]);
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onCreateSo() {
+    if (!customerId) {
+      setError("Pick a customer before creating an order");
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const order = (await createSalesOrder({
+        customer_id: customerId,
+        status: "draft",
+        fulfillment_channel: channel,
+        lines: [
+          {
+            description: lineDesc.trim() || "Line",
+            quantity: 1,
+            unit_price: Number(linePrice) || 0,
+          },
+        ],
+      })) as Row;
+      setNotice(`Created ${String(order.so_number || order.id)}`);
+      setShowCreate(false);
+      setSelectedId(String(order.id));
+      await reload();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const lines = ((detail?.lines as Row[] | undefined) || []) as Row[];
 
   return (
@@ -254,7 +309,60 @@ export function SalesPage() {
         <button type="button" onClick={() => void reload()} disabled={loading}>
           Refresh
         </button>
+        <button type="button" onClick={() => setShowCreate((v) => !v)}>
+          {showCreate ? "Hide create" : "New sales order"}
+        </button>
       </div>
+
+      {showCreate ? (
+        <div className="panel" style={{ marginBottom: "1rem" }}>
+          <h2>Create sales order</h2>
+          <div className="toolbar">
+            <label>
+              Customer search
+              <input value={custQ} onChange={(e) => setCustQ(e.target.value)} />
+            </label>
+            <button type="button" disabled={busy} onClick={() => void onFindCustomers()}>
+              Find
+            </button>
+            <label>
+              Customer
+              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                <option value="">select…</option>
+                {custHits.map((c) => (
+                  <option key={String(c.id)} value={String(c.id)}>
+                    {[c.first_name, c.last_name].filter(Boolean).join(" ") ||
+                      String(c.email || c.id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Channel
+              <select
+                value={channel}
+                onChange={(e) => setChannel(e.target.value as "pickup" | "ship")}
+              >
+                <option value="pickup">pickup</option>
+                <option value="ship">ship</option>
+              </select>
+            </label>
+          </div>
+          <div className="toolbar">
+            <label>
+              Line
+              <input value={lineDesc} onChange={(e) => setLineDesc(e.target.value)} />
+            </label>
+            <label>
+              Price
+              <input value={linePrice} onChange={(e) => setLinePrice(e.target.value)} />
+            </label>
+            <button type="button" disabled={busy || !customerId} onClick={() => void onCreateSo()}>
+              Save draft
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div className="error">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
