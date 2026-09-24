@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Camera, CheckCircle2, ClipboardList, Circle } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import * as api from '@/api/client';
 import type { JobWithRefs } from '@/api/client';
 import { Provisional } from '@/components/jobs/JobBits';
@@ -36,7 +36,7 @@ export const InspectionPanel = ({ job: j, run }: { job: JobWithRefs; run: Refres
   if (!editable && j.inspection) {
     return (
       <dl data-testid="inspection-summary" className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-1 text-xs">
-        {api.INSPECTION_QUESTIONS.map((q) => <><dt key={`${q.key}-t`} className="text-ink-500">{q.label}</dt><dd key={`${q.key}-d`} className="text-ink">{j.inspection!.answers[q.key] ?? '—'}</dd></>)}
+        {api.INSPECTION_QUESTIONS.map((q) => <Fragment key={q.key}><dt className="text-ink-500">{q.label}</dt><dd className="text-ink">{j.inspection!.answers[q.key] ?? '—'}</dd></Fragment>)}
         <dt className="text-ink-500">Recorded</dt><dd className="text-ink-400">{fmtDate(j.inspection.at)} {fmtTime(j.inspection.at)} · {j.inspection.by} · {j.inspection.station}</dd>
       </dl>
     );

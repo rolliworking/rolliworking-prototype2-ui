@@ -42,6 +42,12 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
+## Implemented — Session E5 Money tail: Sales orders / fulfil / pickup / ship (2026-06) — tested via testing agent, iteration_11.json, 10/10 pass
+Built to `/app/PROMPT-PACK-invoicing-pickup-ship.md` (pack wins): SO is the invoicing vehicle.
+- `SalesOrder` (draft → open → partial_fulfilled → fulfilled → shipped | picked_up; any → cancelled), lines qty×rate + shipping, stub payment ledger (partial ok, balanceDue/isPaid derived), fulfil = QBO HARD-STOP stub (`qboStatus: queued`, fake id), channel pickup/ship, pickup code (issued on push/fulfil, consumed at pickup), ship-to address + request-info email, `shippingProvider` mock seam (label + tracking + coverage; declared 0<n<1000 ×1000), Shipment + PickupSession records. Custody closes at pickup/ship → job closed, watch released. Admin marks (manager, reason, audited). Unpaid: ship blocked without bypass; pickup allowed with logged bypass. Signature-free pickup (locked decision; pack's signature step dropped). Audit type `sales`.
+- Screens: `/sales` list (badges paid/unpaid/shipped/picked up, search incl. pickup code), `/sales/:id` & `/sales/new` (create/edit, actions, payments, hand-back panel), `/sales/pickup` Pickup Station (customer → invoice → verify → photos → complete), `/sales/ship` Ship Station (order → tracking → review → email). Quick actions Ship/Pickup route there. `invoiceJob` now real (job detail "Create invoice (SO)"), `convertEstimateToSalesOrder` wired, tail pill (`tailStage`) on job cards/header.
+- Seeds so-01..so-07 across every SO stage + jobs j-21/j-22 ready_to_ship. Docs updated (DECISIONS ×8, STATE-MACHINES 1b, API-SURFACE, DATA-MODEL, SEED-DATA).
+
 ## Implemented — MH rulings: inspection-by-kind + pinned hit list (2026-06) — tested via testing agent, iteration_10.json, all pass
 - `JOB_KIND_CONFIG.inspectionReport` (service only) + `inspectionPhotos: true` (all kinds). `reviewGaps()` gates leaving in_review (photos every kind; multiple-choice report `INSPECTION_QUESTIONS` for service via `saveInspectionReport`). UI: ReviewGate strip, disabled action buttons, Inspection card (form / summary / "skipped for kind"). small_job approval skip stays provisional (amber).
 - Pinned manual layer: `PinnedItem` fixtures, `pinToHitList` (from job `act-pin`, from derived task row hover pin, freeform with `#name`/`#role` prefix via `parsePin`), `dismissPinned`; `/today` shows Pinned card above Derived; dashboard panel shows pinned first; nothing derived hidden. Audit type `pin`.
@@ -104,8 +110,8 @@ Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Re
 - Daily Hit List page (owner filters, show-completed), Estimates & Jobs tables with status filter chips (?status=), Client detail page
 
 ## Backlog
-- P0: SESSION E5 Invoicing / Pickup — wire `invoiceJob` stub, pickup/ship flow from ready_to_ship, "Convert to invoice" estimate stub. Await user PROMPT-PACK-invoicing.md (pack wins). Keep /app/docs/*.md updated after each module.
-- P1: Portal grants (P-17 ✗), telemetry beyond who/when/station, tier-gated job actions, confirm per-kind skipStages with the user
+- P0: Next module per E-session order (user to brief + prompt pack). Keep /app/docs/*.md updated after each module.
+- P1: Portal grants (P-17 ✗), split-custody warning (pack UNKNOWN, not built), customer/invoice mismatch confirm dialog, real inspection question set, confirm per-kind skipStages
 - P1: Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake/jobs store to localStorage, sales-order convert target
 - P1: Repoint `src/api/client.ts` at the real RolliSuite API (Fastify) when ready
 - P2: Inspection photos gallery mock, Reports charts, Sales/Purchasing/Inventory tables from fixtures

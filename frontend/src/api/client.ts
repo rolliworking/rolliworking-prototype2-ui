@@ -1507,7 +1507,7 @@ export async function findSalesOrders(query: string): Promise<SalesOrderWithRefs
     const c = byId(fx.clients, o.clientId);
     const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) : undefined;
     const est = o.estimateId ? store.estimates.find((e) => e.id === o.estimateId) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
-    return o.number.toLowerCase().includes(q) || (digits && o.number.replace(/\D/g, '').endsWith(digits)) || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || (job?.number.toLowerCase().includes(q) ?? false) || (est?.number.toLowerCase().includes(q) ?? false) || (digits && estimateDigits(est?.number ?? '').endsWith(digits) && digits.length >= 3) || (o.pickupCode?.toLowerCase() === q);
+    return o.number.toLowerCase().includes(q) || (digits && o.number.replace(/\D/g, '').endsWith(digits)) || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || (job?.number.toLowerCase().includes(q) ?? false) || (est?.number.toLowerCase().includes(q) ?? false) || (digits && estimateDigits(est?.number ?? '').endsWith(digits) && digits.length >= 3) || (q.length >= 3 && (o.pickupCode?.toLowerCase().replace('-', '').startsWith(q.replace('-', '')) ?? false));
   }).map(soRefs));
 }
 
