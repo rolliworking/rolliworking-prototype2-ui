@@ -1,4 +1,4 @@
-import { ArrowLeft, Camera } from 'lucide-react';
+import { ArrowLeft, Camera, Eye, EyeOff } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
@@ -17,6 +17,7 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
   const { signInWithPassword, switchWithPin } = useAuth();
   const { videoRef, status, capture } = useCamera(!signedInToday);
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pwRef = useRef<HTMLInputElement>(null);
@@ -27,12 +28,13 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
 
   const submitPassword = async (e: FormEvent) => {
     e.preventDefault();
-    if (!password || busy) return;
+    const trimmed = password.trim();
+    if (!trimmed || busy) return;
     setBusy(true);
     setError(null);
     try {
       const photo = capture();
-      await signInWithPassword(user.id, password, photo);
+      await signInWithPassword(user.id, trimmed, photo);
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
@@ -73,17 +75,28 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
             <label htmlFor="pw" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500">
               Password
             </label>
-            <input
-              id="pw"
-              ref={pwRef}
-              data-testid="password-input"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={busy}
-              className="h-10 w-full rounded-sm border border-line bg-canvas px-3 text-[14px] text-ink focus:border-ink focus:bg-surface focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                id="pw"
+                ref={pwRef}
+                data-testid="password-input"
+                type={showPw ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+                className="h-10 w-full rounded-sm border border-line bg-canvas px-3 pr-9 text-[14px] text-ink focus:border-ink focus:bg-surface focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-400 hover:text-ink"
+                tabIndex={-1}
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+              >
+                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
             {error && (
               <p data-testid="password-error" className="mt-2 text-xs font-medium text-rose-700">
                 {error}
@@ -100,6 +113,15 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
             </button>
             <p className="mt-2 text-[11px] text-ink-400">
               Prototype password: <span className="font-mono">{user.firstName}123</span>
+              {' · '}
+              <button
+                type="button"
+                data-testid="fill-prototype-password"
+                onClick={() => { setPassword(`${user.firstName}123`); setError(null); pwRef.current?.focus(); }}
+                className="underline hover:text-ink"
+              >
+                fill in
+              </button>
             </p>
           </div>
           {!noCamera && <CameraPreview videoRef={videoRef} status={status} />}
