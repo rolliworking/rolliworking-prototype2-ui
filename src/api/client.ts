@@ -357,6 +357,17 @@ export function searchCustomersForReceive(query: { q: string; limit?: number }, 
   return request<Json>("GET", "/intake/packages/lookups/customers", { ...opts, query });
 }
 
+export function listClientWatches(
+  query: { is_in_inventory?: boolean | "all"; limit?: number } = {},
+  opts?: ClientOptions
+) {
+  const { is_in_inventory, limit } = query;
+  const q: Record<string, string | number | null | undefined> = { limit };
+  if (is_in_inventory === "all") q.is_in_inventory = "all";
+  else if (typeof is_in_inventory === "boolean") q.is_in_inventory = is_in_inventory ? "true" : "false";
+  return request<Json>("GET", "/intake/watches", { ...opts, query: q });
+}
+
 export function getReceiveWatchPrefill(
   query: { estimate_id?: string; estimate_number?: string },
   opts?: ClientOptions

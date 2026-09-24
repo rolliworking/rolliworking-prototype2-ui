@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getHitList,
+  listClientWatches,
   listEstimates,
   listSalesOrders,
   lookupShipQueue,
@@ -52,6 +53,7 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
   const [readyShip, setReadyShip] = useState<Row[]>([]);
   const [hitList, setHitList] = useState<Row[]>([]);
   const [estimates, setEstimates] = useState<Row[]>([]);
+  const [clientWatchCount, setClientWatchCount] = useState<number | null>(null);
   const [todayRevenue, setTodayRevenue] = useState(0);
   const [monthRevenue, setMonthRevenue] = useState(0);
 
@@ -61,11 +63,12 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
       setLoading(true);
       setError(null);
       try {
-        const [sos, ship, hits, est] = await Promise.all([
+        const [sos, ship, hits, est, watches] = await Promise.all([
           listSalesOrders({ limit: 50 }),
           lookupShipQueue({ limit: 10 }),
           getHitList({ date: todayIso() }),
           listEstimates({ limit: 8 }),
+          listClientWatches({ is_in_inventory: true, limit: 1 }),
         ]);
         if (cancelled) return;
 
@@ -94,6 +97,8 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
         setReadyShip(((ship as { items?: Row[] }).items || []).slice(0, 5) as Row[]);
         setHitList(((hits as { items?: Row[] }).items || []).slice(0, 5) as Row[]);
         setEstimates(((est as { items?: Row[] }).items || []).slice(0, 5) as Row[]);
+        const totalWatches = Number((watches as { total?: number }).total);
+        setClientWatchCount(Number.isFinite(totalWatches) ? totalWatches : null);
       } catch (e) {
         if (cancelled) return;
         const msg =
@@ -166,8 +171,8 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
         </div>
         <div className="card">
           <div className="label">Client watches</div>
-          <div className="value">—</div>
-          <div className="note">UNKNOWN — count API not exposed; custody seed exists</div>
+          <div className="value">{clientWatchCount == null ? "—" : clientWatchCount}</div>
+          <div className="note">In-inventory custody (seeded client_property)</div>
         </div>
         <div className="card">
           <div className="label">QBO token</div>
@@ -191,6 +196,15 @@ function Dashboard({ onGo }: { onGo: (id: NavId) => void }) {
         </button>
         <button type="button" onClick={() => onGo("intake")}>
           Intake
+        </button>
+        <button type="button" onClick={() => onGo("hit-list")}>
+          Hit list
+        </button>
+        <button type="button" onClick={() => onGo("jobs")}>
+          Jobs
+        </button>
+        <button type="button" disabled title="No purchasing Contract ops yet">
+          Create PO
         </button>
       </div>
 
