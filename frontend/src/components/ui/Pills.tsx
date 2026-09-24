@@ -1,0 +1,60 @@
+import clsx from 'clsx';
+import { humanize } from '@/lib/format';
+
+const TONE: Record<string, string> = {
+  // estimates
+  draft: 'bg-slate-100 text-slate-700',
+  sent: 'bg-brand-50 text-brand',
+  awaiting_approval: 'bg-amber-50 text-amber-800',
+  approved: 'bg-moss-50 text-moss-700',
+  declined: 'bg-rose-50 text-rose-700',
+  expired: 'bg-slate-100 text-slate-500',
+  // jobs & watches
+  intake: 'bg-slate-100 text-slate-700',
+  queued: 'bg-slate-100 text-slate-700',
+  in_service: 'bg-brand-50 text-brand',
+  in_progress: 'bg-brand-50 text-brand',
+  awaiting_parts: 'bg-orange-50 text-orange-800',
+  qc: 'bg-violet-50 text-violet-700',
+  complete: 'bg-moss-50 text-moss-700',
+  awaiting_pickup: 'bg-teal-50 text-teal-800',
+  shipped: 'bg-slate-100 text-slate-600',
+  released: 'bg-slate-100 text-slate-500',
+};
+
+export const StatusPill = ({ status, testId }: { status: string; testId?: string }) => (
+  <span
+    data-testid={testId}
+    className={clsx(
+      'inline-flex items-center whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[11px] font-medium leading-4',
+      TONE[status] ?? 'bg-slate-100 text-slate-700',
+    )}
+  >
+    {status === 'qc' ? 'QC' : humanize(status)}
+  </span>
+);
+
+const OWNER_TONE: Record<string, string> = {
+  MH: 'bg-brand-100 text-brand-600',
+  Walter: 'bg-violet-100 text-violet-800',
+  Vienna: 'bg-amber-100 text-amber-900',
+  MM: 'bg-moss-100 text-moss-700',
+};
+
+export const OwnerChip = ({ owner, className }: { owner: string; className?: string }) => (
+  <span
+    data-testid={`owner-chip-${owner.toLowerCase()}`}
+    className={clsx(
+      'inline-flex h-5 min-w-[28px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-none',
+      OWNER_TONE[owner] ?? 'bg-slate-100 text-slate-700',
+      className,
+    )}
+    title={owner}
+  >
+    {owner}
+  </span>
+);
+
+export const DeptTag = ({ dept }: { dept: string }) => (
+  <span className="text-xs text-ink-500">{humanize(dept)}</span>
+);
