@@ -47,6 +47,8 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
     onDone();
   };
 
+  const noCamera = status === 'unavailable' || status === 'denied';
+
   return (
     <div data-testid="sign-in-panel" className="animate-rise rounded-md border-l-[3px] border-ink bg-surface p-5 shadow-card">
       <button type="button" onClick={onBack} data-testid="sign-in-back" className="mb-3 inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink">
@@ -55,14 +57,18 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
       <div className="mb-4">
         <div className="text-[15px] font-semibold tracking-tight text-ink" data-testid="sign-in-panel-user">{user.displayName}</div>
         <div className="text-xs text-ink-400">
-          {signedInToday ? 'Already signed in today — fast switch with PIN, no photo.' : 'First sign-in today — password plus one verification photo.'}
+          {signedInToday
+            ? 'Already signed in today — fast switch with PIN.'
+            : noCamera
+              ? 'First sign-in today — enter your password. (No camera detected; photo step skipped.)'
+              : 'First sign-in today — password plus one verification photo.'}
         </div>
       </div>
 
       {signedInToday ? (
         <PinInput onSubmit={submitPin} testId="sign-in-pin" />
       ) : (
-        <form onSubmit={submitPassword} className="grid grid-cols-[1fr_200px] gap-4">
+        <form onSubmit={submitPassword} className={noCamera ? 'flex flex-col gap-3' : 'grid grid-cols-[1fr_200px] gap-4'}>
           <div>
             <label htmlFor="pw" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500">
               Password
@@ -89,13 +95,14 @@ export const SignInPanel = ({ user, signedInToday, onBack, onDone }: Props) => {
               disabled={busy || !password}
               className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-sm bg-ink text-[13px] font-semibold text-white transition-colors hover:bg-ink-700 disabled:opacity-40"
             >
-              <Camera size={14} /> {busy ? 'Verifying…' : 'Sign in & capture photo'}
+              {!noCamera && <Camera size={14} />}
+              {busy ? 'Verifying…' : noCamera ? 'Sign in' : 'Sign in & capture photo'}
             </button>
             <p className="mt-2 text-[11px] text-ink-400">
               Prototype password: <span className="font-mono">{user.firstName}123</span>
             </p>
           </div>
-          <CameraPreview videoRef={videoRef} status={status} />
+          {!noCamera && <CameraPreview videoRef={videoRef} status={status} />}
         </form>
       )}
     </div>

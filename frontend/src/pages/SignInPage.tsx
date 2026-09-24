@@ -49,7 +49,7 @@ export default function SignInPage() {
               </div>
               <p className="mt-3 text-[11px] leading-4 text-ink-400">
                 Prototype credentials — password <span className="font-mono">firstname123</span>, PIN <span className="font-mono">1234</span>. First sign-in of the day
-                needs password + photo; later switches need only the PIN.
+                needs password (photo captured if camera available); later switches need only the PIN.
               </p>
             </div>
 
