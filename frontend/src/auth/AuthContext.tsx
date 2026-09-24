@@ -1,29 +1,40 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import * as api from '@/api/client';
-import type { User } from '@/api/client';
+import type { Station, User, VerificationPhoto } from '@/api/client';
 
 interface AuthValue {
   user: User | null;
+  station: Station | null;
   loading: boolean;
-  signIn: (badgeCode: string) => Promise<User>;
+  signInWithPassword: (userId: string, password: string, photo: VerificationPhoto) => Promise<User>;
+  switchWithPin: (userId: string, pin: string) => Promise<User>;
   signOut: () => Promise<void>;
+  refreshStation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [station, setStation] = useState<Station | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getCurrentUser().then((u) => {
+    Promise.all([api.getStation(), api.getCurrentUser()]).then(([st, u]) => {
+      setStation(st);
       setUser(u);
       setLoading(false);
     });
   }, []);
 
-  const signIn = useCallback(async (code: string) => {
-    const u = await api.signInWithBadge(code);
+  const signInWithPassword = useCallback(async (userId: string, password: string, photo: VerificationPhoto) => {
+    const u = await api.signInWithPassword(userId, password, photo);
+    setUser(u);
+    return u;
+  }, []);
+
+  const switchWithPin = useCallback(async (userId: string, pin: string) => {
+    const u = await api.switchUserWithPin(userId, pin);
     setUser(u);
     return u;
   }, []);
@@ -33,7 +44,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading, signIn, signOut }}>{children}</AuthContext.Provider>;
+  const refreshStation = useCallback(async () => {
+    const [st, u] = await Promise.all([api.getStation(), api.getCurrentUser()]);
+    setStation(st);
+    setUser(u);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, station, loading, signInWithPassword, switchWithPin, signOut, refreshStation }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthValue {

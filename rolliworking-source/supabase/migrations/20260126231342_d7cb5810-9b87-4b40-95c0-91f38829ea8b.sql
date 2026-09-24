@@ -1,1 +1,0 @@
-ALTER TABLE public.jobs ADD COLUMN finished_date date;

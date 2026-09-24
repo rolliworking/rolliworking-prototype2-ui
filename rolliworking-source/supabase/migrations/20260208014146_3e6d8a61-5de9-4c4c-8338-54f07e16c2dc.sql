@@ -1,1 +1,0 @@
-ALTER TABLE public.watchmakers ADD COLUMN weekly_target integer NOT NULL DEFAULT 0;

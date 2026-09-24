@@ -1,1 +1,0 @@
-ALTER TABLE inspections ADD COLUMN department_tag text DEFAULT NULL;

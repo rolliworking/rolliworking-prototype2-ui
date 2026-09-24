@@ -1,1 +1,0 @@
-export { emailTemplatesRoutes } from './routes';

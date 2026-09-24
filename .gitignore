@@ -80,3 +80,22 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+# --- Repo scope: only the prototype UI (frontend/) ships to GitHub ---
+# Legacy monorepo + source dumps stay in the workspace as naming reference only.
+/apps/
+/packages/
+/lovable-source/
+/rolliworking-source/
+/backend/
+/tests/
+/test_reports/
+/test_result.md
+/docker-compose.yml
+/package.json
+/package-lock.json
+/yarn.lock
+/.yarnrc.yml
+/.ruff_cache/
+/*.md
+!/README.md
+/.env.example

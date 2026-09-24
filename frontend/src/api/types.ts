@@ -2,11 +2,47 @@ export type AccessTier = 'manager' | 'concierge';
 
 export interface User {
   id: string;
-  badgeCode: string;
+  firstName: string;
   shortName: string;
   displayName: string;
   dutyLabel: string;
   accessTier: AccessTier;
+  password: string;
+  pin: string;
+}
+
+export interface Station {
+  id: string;
+  name: string;
+}
+
+export type CameraStatus = 'captured' | 'no_camera' | 'denied';
+export type SignInMethod = 'password_photo' | 'pin_switch';
+
+export interface VerificationPhoto {
+  dataUrl: string | null;
+  cameraStatus: CameraStatus;
+}
+
+export type AuditEventType =
+  | 'sign_in'
+  | 'sign_in_failed'
+  | 'sign_out'
+  | 'station_registered'
+  | 'station_renamed'
+  | 'station_reset';
+
+export interface AuditEvent {
+  id: string;
+  type: AuditEventType;
+  timestamp: string;
+  stationName: string;
+  userShortName?: string;
+  userDisplayName?: string;
+  method?: SignInMethod;
+  cameraStatus?: CameraStatus;
+  photoDataUrl?: string;
+  detail: string;
 }
 
 export type ClientType = 'retail' | 'trade';

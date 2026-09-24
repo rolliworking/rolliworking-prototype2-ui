@@ -1,1 +1,0 @@
-ALTER TABLE public.inspection_questions ADD COLUMN render_as_scale boolean NOT NULL DEFAULT false;

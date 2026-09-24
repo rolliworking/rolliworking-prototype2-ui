@@ -1,2 +1,0 @@
-ALTER TABLE public.email_templates DROP CONSTRAINT IF EXISTS email_templates_type_check;
-ALTER TABLE public.email_templates ADD CONSTRAINT email_templates_type_check CHECK (type IN ('custom', 'waiting_approval', 'inspection_notes', 'parts_approval', 'inspection_approval', 'liability_waiver', 'movement_service_update'));

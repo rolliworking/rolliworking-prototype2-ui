@@ -1,17 +1,13 @@
-import { ArrowLeftRight, UserRound } from 'lucide-react';
+import { MonitorSmartphone, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { QUICK_ACTIONS } from '@/config/navigation';
 import { GlobalSearch } from './GlobalSearch';
+import { UserSwitcher } from './UserSwitcher';
 
 export const TopBar = () => {
-  const { user, signOut } = useAuth();
+  const { user, station } = useAuth();
   const navigate = useNavigate();
-
-  const switchUser = async () => {
-    await signOut();
-    navigate('/sign-in', { replace: true });
-  };
 
   return (
     <header data-testid="top-bar" className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-surface px-4">
@@ -36,6 +32,13 @@ export const TopBar = () => {
       </div>
 
       <div className="ml-auto flex items-center gap-2 pl-3">
+        <span
+          data-testid="header-station"
+          className="hidden items-center gap-1.5 rounded-sm border border-line bg-canvas px-2 py-1 text-[11px] font-medium text-ink-700 md:inline-flex"
+          title="Station (device-bound)"
+        >
+          <MonitorSmartphone size={12} className="text-ink-400" /> {station?.name}
+        </span>
         <div className="flex items-center gap-2 text-right">
           <div className="hidden leading-tight lg:block">
             <div data-testid="current-user-name" className="text-xs font-semibold text-ink">
@@ -49,16 +52,7 @@ export const TopBar = () => {
             <UserRound size={14} />
           </span>
         </div>
-        <button
-          type="button"
-          data-testid="switch-user-button"
-          onClick={switchUser}
-          className="inline-flex h-8 items-center gap-1.5 rounded-sm px-2 text-xs font-medium text-ink-500 transition-colors hover:bg-canvas hover:text-ink"
-          title="Switch user"
-        >
-          <ArrowLeftRight size={14} />
-          Switch user
-        </button>
+        <UserSwitcher />
       </div>
     </header>
   );

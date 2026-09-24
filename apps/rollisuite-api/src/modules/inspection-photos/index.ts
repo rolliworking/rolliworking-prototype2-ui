@@ -1,1 +1,0 @@
-export { inspectionPhotosRoutes } from './routes';

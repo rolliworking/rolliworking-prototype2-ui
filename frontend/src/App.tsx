@@ -2,17 +2,21 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'rea
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import AppShell from '@/components/layout/AppShell';
 import { findNavItem } from '@/config/navigation';
-import BadgeSignIn from '@/pages/BadgeSignIn';
+import AuditLogPage from '@/pages/AuditLogPage';
 import ClientDetailPage from '@/pages/ClientDetailPage';
 import Dashboard from '@/pages/Dashboard';
 import EstimatesPage from '@/pages/EstimatesPage';
 import HitListPage from '@/pages/HitListPage';
 import JobsPage from '@/pages/JobsPage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
+import SetupPage from '@/pages/SetupPage';
+import SignInPage from '@/pages/SignInPage';
+import StationSetupPage from '@/pages/StationSetupPage';
 
 function RequireAuth() {
-  const { user, loading } = useAuth();
+  const { user, station, loading } = useAuth();
   if (loading) return null;
+  if (!station) return <Navigate to="/station-setup" replace />;
   if (!user) return <Navigate to="/sign-in" replace />;
   return <AppShell />;
 }
@@ -34,7 +38,6 @@ const PLACEHOLDER_PATHS = [
   '/labels',
   '/reports',
   '/accounting',
-  '/setup',
   '/integrations',
   '/help',
 ];
@@ -44,7 +47,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/sign-in" element={<BadgeSignIn />} />
+          <Route path="/station-setup" element={<StationSetupPage />} />
+          <Route path="/sign-in" element={<SignInPage />} />
           <Route element={<RequireAuth />}>
             <Route element={<TierGate />}>
               <Route index element={<Dashboard />} />
@@ -52,6 +56,8 @@ export default function App() {
               <Route path="/estimates" element={<EstimatesPage />} />
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/clients/:id" element={<ClientDetailPage />} />
+              <Route path="/setup" element={<SetupPage />} />
+              <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/actions/:action" element={<ActionPlaceholder />} />
               {PLACEHOLDER_PATHS.map((p) => (
                 <Route key={p} path={p} element={<SectionPlaceholder />} />

@@ -50,7 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, blurb: 'Bag tags, shipping labels and QR codes.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, blurb: 'Revenue, throughput and turnaround reporting.' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
-  { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, blurb: 'Users, departments, templates and preferences.' },
+  { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },
   { key: 'integrations', label: 'Integrations', path: '/integrations', icon: Plug, tiers: MGR, blurb: 'QuickBooks, email, SMS and shipping carriers.' },
   { key: 'help', label: 'Help', path: '/help', icon: HelpCircle, tiers: ALL, blurb: 'Guides, keyboard shortcuts and support.' },
 ];
