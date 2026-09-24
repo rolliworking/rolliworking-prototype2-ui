@@ -119,7 +119,7 @@ export const estimates: Estimate[] = [
   build({ id: 'e-08', number: 'E01048', clientId: 'c-08', watchId: 'w-08', status: 'sent', createdDaysAgo: 3, sentDaysAgo: 2,
     clientNotes: 'Bezel insert cracked; runs fast.',
     lines: [line('Complete service — cal. 3135', 1150, 'W', { catalogId: 'svc-01' }), line('Bezel insert (OEM ceramic)', 200, 'W', { type: 'part' }), line('Bracelet re-pin', 180, 'B')] }),
-  build({ id: 'e-12', number: 'E01052', clientId: 'c-14', watchId: 'w-14', status: 'sent', createdDaysAgo: 5, sentDaysAgo: 5,
+  build({ id: 'e-12', number: 'E01052', clientId: 'c-14', watchId: 'w-14', status: 'draft', createdDaysAgo: 5, internalNotes: 'Add-on quote for after pickup — hold until the current job is collected (E8: kept draft so Grace’s portal state stays “ready for pickup”).',
     clientNotes: 'End-links rattle; clasp scratched.',
     lines: [line('Replace bracelet end-links', 420, 'B', { type: 'part', catalogId: 'svc-15' }), line('Clasp adjustment & refinish', 360, 'P')] }),
   build({ id: 'e-15', number: 'E01055', clientId: 'c-16', watchId: 'w-17', status: 'sent', createdDaysAgo: 4, sentDaysAgo: 4,

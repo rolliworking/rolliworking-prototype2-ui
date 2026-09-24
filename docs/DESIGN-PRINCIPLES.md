@@ -23,6 +23,8 @@ These are decided. Extend them; do not re-litigate without a DECISIONS.md entry.
 
 16. **One box answers the phone.** Any identifier a caller can read out resolves through `resolveIdentifier` to the client's 360 page with the matched record flashed. New record types must register in the resolver (kind + hitKey) and carry `data-hit` on the 360 page. (E7)
 
+17. **The portal is a different product on the same store.** `/rc` has its own shell, session, palette and vocabulary (status words, no percents, no ERP nouns); it never links to staff routes. Client writes go through the same functions staff use, stamped as the client (`asClient`), audited as `portal`. (E8)
+
 ## Anti-patterns (don't)
 - Free status `<select>`; editing `status` directly from a screen.
 - New storage paths, `fetch`, or component-local fixtures.
@@ -30,3 +32,4 @@ These are decided. Extend them; do not re-litigate without a DECISIONS.md entry.
 - Subtasks, task kanban, comments, priority schemes on tasks (out of scope by decision).
 - Hiding or filtering out derived `/today` rows because something was pinned.
 - Silent dead buttons — a stub must throw a visible message and be audited.
+- Percent/progress bars or internal status enums in RolliConnect; links from `/rc` into staff routes.

@@ -150,6 +150,18 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 `SearchHit {kind, id, hitKey, label, detail, matched, clientId?, clientName, path}` · `WatchGroup {watch, history: WatchHistoryRow[], lifetimeSpend, lastServiceAt?, activeJobId?}` · `CustodyEvent {kind, at, by, station, detail, watchId?, jobId?, packageId?, salesOrderId?, hitKey, path}` · `ClientNoteRow` (job note or estimate internal note) · `Client360 {client, summary, watches, requests, estimates, jobs, salesOrders, payments, notes, tasks, custody, emails, packages}` · `ClientDirectoryRow`.
 `hitKey` convention: `watch-<id>` · `est-<id>` · `job-<id>` · `so-<id>` · `pkg-<id>` · `req-<id>`; the 360 page marks rows with `data-hit` and flashes the first match.
 
+## RolliConnect (E8)
+| entity | fields | notes |
+|---|---|---|
+| `Message` | id, clientId, watchId?, from `client \| staff`, by, text, at, readByStaff, readByClient, emailId? | one thread per client |
+| `MagicLink` | token, clientId, email, createdAt, usedAt? | stub, persisted |
+| `PortalSession` | clientId, email, token, issuedAt | localStorage `rollisuite.rc.session` |
+| `PickupWindow` (on `SalesOrder.pickupWindow`) | date, slot `morning \| afternoon`, confirmedAt, note? | |
+| `Estimate.approvedVia` | `staff \| portal` | |
+| `AuditEventType` + `portal` | | |
+Read models (derived): `PortalStatus {key, label, blurb, active}`, `NeedsYouItem`, `PortalWatch`, `PortalHome`, `PortalDocument` (photos, estimate/invoice links, labels, hand-back photos), `PortalHistoryRow` (plain-language timeline), `StaffInboxThread`.
+Persistence: `rollisuite.rc.events` = append-only `RcEvent[]` (approve · decline · pay · pickup · ship · msg · reply) replayed on load.
+
 ```
 Client 1─* Watch 1─* Estimate ?─1 Job *─1 Watch
 Estimate 1─? Package (estimateId)   Package ?─1 Job (packageId, via received package)
@@ -158,6 +170,7 @@ Job 1─? SalesOrder (jobId)   Estimate 1─? SalesOrder (estimateId)   SalesOrd
 User *─* Role (users.roles)   Job.owner → Role   Task.assignedTo → User | Role
 OutboxEmail.relatedRef → Estimate.number | Job.number | Package.subNumber (string ref only)
 Client 1─* ServiceRequest ?─1 Estimate   (E7)
+Client 1─* Message   Client 1─* MagicLink   SalesOrder 1─? PickupWindow   (E8)
 ```
 
 ## P-17 accommodation status
@@ -166,7 +179,7 @@ Client 1─* ServiceRequest ?─1 Estimate   (E7)
 | job_kind | ✅ | `Job.kind`, `JOB_KIND_CONFIG` (label, default_owner_role, skipStages, inspectionReport, inspectionPhotos) |
 | party roles | ✅ | `User.roles`, `Job.owner: Role`, `Task.assignedTo` role variant, `roleHolders()` |
 | telemetry timestamps | ◐ | `Stamp {at,by,station}` on transitions/holds/notes/photos/shop time/tasks; package stage stamps; no device/geo telemetry |
-| portal grants | ✗ | no client portal identity or grant table yet (Wix/portal intake rule from pack is documented, not modelled) |
+| portal grants | ◐ | RolliConnect session = one client per magic link (`PortalSession`); no delegated/grant table yet (e.g. a proxy collecting) |
 
 ## Removed
 - `HitListItem` / `hitList.ts` (manual hit list) → replaced by derived `/today` + `Task`.

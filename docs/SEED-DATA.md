@@ -123,7 +123,15 @@ Bench (MM): j-01, j-03, j-16 + holds j-04, j-06; pull-next = j-10 (E02020, appro
 Requests rq-01 (call, quoted), rq-02 (email, closed), rq-03 (web, new, no watch). Tasks t-11 (concierge role, open), t-12 (Vienna, open), t-13 (done). Emails ob-03..ob-08 to naomi.castellanos@example.com. Other requests: rq-04 (c-02), rq-05 (c-21).
 Search smoke identifiers: `Naomi`, `naomi.castellanos`, `555-0110`, `E01040`, `E02007`, `SUB-26-0291`, `794644790132`, `1Z999AA10123456701`, `278274`, `W4T9L36N`, `SO-25-0042`, `H7N2-55`, `RQ-26-0041`.
 
+## RolliConnect canonical clients (E8)
+| client | email | state | what the portal shows |
+|---|---|---|---|
+| Eleanor Vance c-02 | eleanor.vance@example.com | **awaiting approval** | Needs you: approve/decline E01042 (rev 2, $2,850). Daytona = "Waiting for your approval". Approve → estimate approved + j-11 E02021 → approved → "Queued for the bench" |
+| Harrison Whitfield c-01 | harrison.whitfield@example.com | **on the bench** | Submariner = "On the bench" (j-01 in_service, ETA due), unread staff reply msg-02 in Needs you; 3 documents, 15 history rows |
+| Grace Nakamura c-14 | grace.nakamura@example.com | **ready for pickup** | Tudor Chrono = "Ready for pickup"; Needs you: pay $470 balance on SO-26-0103 (now $1,000 of $1,470 paid), choose pickup window; unread client message msg-03 in staff Inbox |
+Messages seeded: msg-01/02 (c-01), msg-03 (c-14, unread by staff). `e-12 E01052` is now a **draft** (was sent).
+
 ## Testing honesty notes
 - Numbers, names and dates are fabricated; no real customer data.
-- Because the store is in-memory, chain dependent UI steps in one page session; `page.goto` resets it.
+- Because the store is in-memory, chain dependent UI steps in one page session; `page.goto` resets it — EXCEPT RolliConnect writes, which replay from `rollisuite.rc.events` (clear it or use Setup → Reset RolliConnect data for a clean run).
 - Audit log persists across reloads (localStorage) and is capped at 60 — long test runs will evict early rows.

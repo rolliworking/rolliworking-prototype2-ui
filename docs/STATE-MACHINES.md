@@ -124,5 +124,11 @@ Discrepancies (`computeDiscrepancies`): missing component, serial/ref mismatch, 
 ## 5d. Custody (derived, E7)
 Not a machine — a projection: `package_arrived → watch_received | discrepancy → [hold_placed ⇄ hold_released]* → shipped | picked_up`, newest first, each row linking to its source record.
 
+## 5e. RolliConnect portal status (projection, E8)
+Not stored. `portalStatusFor(watch, job, openEstimate, so)`, job-first: shipped → *On its way*; picked_up → *Back with you*; no job → sent estimate ? *Waiting for your approval* : expected/approved ? *We’re expecting your watch* : *On file*; job intake/in_review → *Received — being inspected*; awaiting_customer_approval → *Waiting for your approval*; approved → *Queued for the bench* (hold: *Waiting on a part* / *With a specialist*); in_service → *On the bench* (hold variants); testing → *Final checks*; ready_to_ship → SO fulfilled ? (pickup: *Ready for pickup* / ship: *Being prepared to ship*) : *Finishing up*; closed → *Back with you*.
+
+## 5f. Message / magic link (E8)
+`Message`: written once; `readByStaff` flips when staff opens the thread, `readByClient` when the client opens Messages. `MagicLink`: created → (usedAt set on redeem); not single-use in the prototype.
+
 ## 6. Auth / station
 Device: `unregistered → registered(stationId)` (`registerStation` manager+password; `resetDeviceRegistration` back). Session: `signInWithPassword` (photo) → `switchUserWithPin` (only if signed in today) → `signOut`.

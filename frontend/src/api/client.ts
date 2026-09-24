@@ -73,6 +73,18 @@ import type {
   ClientNoteRow,
   Client360,
   ClientDirectoryRow,
+  MagicLink,
+  Message,
+  NeedsYouItem,
+  PickupWindow,
+  PortalDocument,
+  PortalHistoryRow,
+  PortalHome,
+  PortalSession,
+  PortalStatus,
+  PortalStatusKey,
+  PortalWatch,
+  StaffInboxThread,
 } from './types';
 
 export * from './types';
@@ -85,6 +97,9 @@ const KEYS = {
   stationId: 'rollisuite.prototype.stationId',
   stations: 'rollisuite.prototype.stations',
   audit: 'rollisuite.prototype.auditLog',
+  portalSession: 'rollisuite.rc.session',
+  rcEvents: 'rollisuite.rc.events',
+  rcLinks: 'rollisuite.rc.magicLinks',
 };
 const AUDIT_CAP = 60;
 
@@ -118,6 +133,8 @@ const store = {
   jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
   requests: fx.requests.map((r): ServiceRequest => ({ ...r })),
+  messages: fx.messages.map((m): Message => ({ ...m })),
+  magicLinks: readJson<MagicLink[]>('rollisuite.rc.magicLinks', []),
   counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107, pr: 44 },
 };
 
@@ -219,9 +236,11 @@ export async function resetDeviceRegistration(): Promise<void> {
 
 const readAudit = (): AuditEvent[] => readJson<AuditEvent[]>(KEYS.audit, []);
 
+// RolliConnect writes are replayed from localStorage on load (see replayRcEvents); the audit log is already persisted, so skip stamping during replay
+let replaying = false;
 function appendAudit(e: Omit<AuditEvent, 'id' | 'timestamp'>): AuditEvent {
   const event: AuditEvent = { ...e, id: `ev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, timestamp: new Date().toISOString() };
-  writeJson(KEYS.audit, [event, ...readAudit()].slice(0, AUDIT_CAP));
+  if (!replaying) writeJson(KEYS.audit, [event, ...readAudit()].slice(0, AUDIT_CAP));
   return event;
 }
 
@@ -409,7 +428,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
 export { CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './fixtures/intake';
 
+// While a RolliConnect action runs, stamps carry the client's name and station "RolliConnect" instead of a staff user
+let portalActor: { by: string; station: string } | null = null;
 const actor = () => {
+  if (portalActor) return { by: portalActor.by, station: portalActor.station, user: undefined };
   const u = currentUserSync();
   return { by: u?.shortName ?? 'Unknown', station: stationNameOrUnknown(), user: u };
 };
@@ -883,7 +905,7 @@ export async function sendEstimate(id: string): Promise<{ estimate: EstimateWith
   return resolve({ estimate: withRefs(e), email });
 }
 
-export async function declineEstimate(id: string, reason: string): Promise<EstimateWithRefs> {
+export async function declineEstimate(id: string, reason: string, via: 'staff' | 'portal' = 'staff'): Promise<EstimateWithRefs> {
   const e = getEst(id);
   if (e.status !== 'sent') throw new Error('Only a sent estimate can be declined');
   if (!reason.trim()) throw new Error('A decline reason is required');
@@ -891,18 +913,19 @@ export async function declineEstimate(id: string, reason: string): Promise<Estim
   e.declinedAt = new Date().toISOString();
   e.declineReason = reason.trim();
   e.updatedAt = e.declinedAt;
-  estStamp(e, `Declined · ${e.declineReason}`);
+  estStamp(e, via === 'portal' ? `Declined by client via RolliConnect · ${e.declineReason}` : `Declined · ${e.declineReason}`);
   return resolve(withRefs(e));
 }
 
 // PROVISIONAL: staff records "client said yes". Not a legacy status transition — flagged in the UI.
-export async function approveEstimate(id: string): Promise<EstimateWithRefs> {
+export async function approveEstimate(id: string, via: 'staff' | 'portal' = 'staff'): Promise<EstimateWithRefs> {
   const e = getEst(id);
   if (e.status !== 'sent') throw new Error('Only a sent estimate can be approved');
   e.status = 'approved';
   e.approvedAt = new Date().toISOString();
+  e.approvedVia = via;
   e.updatedAt = e.approvedAt;
-  estStamp(e, 'Approved by client (recorded by staff — provisional status)');
+  estStamp(e, via === 'portal' ? 'Approved by client via RolliConnect' : 'Approved by client (recorded by staff — provisional status)');
   return resolve(withRefs(e));
 }
 
@@ -2149,3 +2172,328 @@ export async function getClientDirectory(): Promise<ClientDirectoryRow[]> {
   });
   return resolve(rows.sort((a, b) => (b.lastActivityAt ?? '').localeCompare(a.lastActivityAt ?? '')));
 }
+
+// ---- E8 RolliConnect — client portal. Same store, client-scoped reads, a handful of client-initiated writes ----
+
+const portalStamp = (clientId: string, detail: string) => {
+  const c = byId(fx.clients, clientId);
+  appendAudit({ type: 'portal', stationName: 'RolliConnect', userShortName: `${c.firstName} ${c.lastName}`, userDisplayName: `${c.firstName} ${c.lastName} (client)`, detail });
+};
+
+// Runs a store mutation as the client: every stamp inside reads actor() = client / RolliConnect
+const asClient = <T>(clientId: string, fn: () => Promise<T>): Promise<T> => {
+  const c = byId(fx.clients, clientId);
+  portalActor = { by: `${c.firstName} ${c.lastName} (client)`, station: 'RolliConnect' };
+  try {
+    return fn();
+  } finally {
+    portalActor = null;
+  }
+};
+
+// Persisted log of client-initiated writes so a staff tab / reload sees portal actions (store itself is in-memory)
+type RcEvent =
+  | { t: 'approve'; clientId: string; id: string }
+  | { t: 'decline'; clientId: string; id: string; reason: string }
+  | { t: 'pay'; clientId: string; id: string }
+  | { t: 'pickup'; clientId: string; id: string; date: string; slot: PickupWindow['slot']; note?: string }
+  | { t: 'ship'; clientId: string; id: string; address: Address; phone: string }
+  | { t: 'msg'; clientId: string; text: string; watchId?: string }
+  | { t: 'reply'; clientId: string; text: string; watchId?: string; by: string };
+const recordRcEvent = (ev: RcEvent) => { if (!replaying) writeJson(KEYS.rcEvents, [...readJson<RcEvent[]>(KEYS.rcEvents, []), ev]); };
+export function replayRcEvents(): number {
+  const events = readJson<RcEvent[]>(KEYS.rcEvents, []);
+  replaying = true;
+  try {
+    events.forEach((ev) => {
+      try {
+        if (ev.t === 'approve') void portalApproveEstimate(ev.clientId, ev.id);
+        else if (ev.t === 'decline') void portalDeclineEstimate(ev.clientId, ev.id, ev.reason);
+        else if (ev.t === 'pay') void portalPayBalance(ev.clientId, ev.id);
+        else if (ev.t === 'pickup') void portalConfirmPickupWindow(ev.clientId, ev.id, ev.date, ev.slot, ev.note);
+        else if (ev.t === 'ship') void portalSubmitShippingInfo(ev.clientId, ev.id, ev.address, ev.phone);
+        else if (ev.t === 'msg') void portalSendMessage(ev.clientId, ev.text, ev.watchId);
+        else if (ev.t === 'reply') void replyToClient(ev.clientId, ev.text, ev.watchId, ev.by);
+      } catch { /* stale event against reset fixtures — ignore */ }
+    });
+  } finally {
+    replaying = false;
+  }
+  return events.length;
+}
+export async function resetRcEvents(): Promise<void> { localStorage.removeItem(KEYS.rcEvents); return resolve(undefined); }
+
+const portalSessionSync = (): PortalSession | null => readJson<PortalSession | null>(KEYS.portalSession, null);
+const requireOwner = <T extends { clientId: string }>(clientId: string, row: T | undefined, what: string): T => {
+  if (!row || row.clientId !== clientId) throw new Error(`That ${what} isn’t on your account`);
+  return row;
+};
+
+export async function portalRequestMagicLink(email: string): Promise<{ link: MagicLink; path: string }> {
+  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
+  if (!c) throw new Error('We couldn’t find an account for that email');
+  const link: MagicLink = { token: `${c.id}-${Math.random().toString(36).slice(2, 10)}`, clientId: c.id, email: c.email, createdAt: new Date().toISOString() };
+  store.magicLinks.unshift(link);
+  writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20));
+  const path = `/rc/auth/${link.token}`;
+  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: 'RolliConnect sign-in', status: 'pending', subject: 'Your RolliConnect sign-in link', body: `Hello ${c.firstName},\n\nTap the link below to open RolliConnect. It expires in 15 minutes.\n\n${path}\n\nIf you didn’t ask for this, you can ignore it.\n\n— RolliSuite`, createdAt: new Date().toISOString(), createdBy: 'RolliConnect', station: 'RolliConnect' });
+  portalStamp(c.id, 'Magic link requested · email queued to Outbox (stub)');
+  return resolve({ link, path });
+}
+
+export async function portalRedeemMagicLink(token: string): Promise<Client> {
+  const link = store.magicLinks.find((l) => l.token === token);
+  if (!link) throw new Error('This link is invalid or has expired');
+  link.usedAt = new Date().toISOString();
+  const session: PortalSession = { clientId: link.clientId, email: link.email, token, issuedAt: link.usedAt };
+  writeJson(KEYS.portalSession, session);
+  portalStamp(link.clientId, 'Signed in to RolliConnect via magic link');
+  return resolve(byId(fx.clients, link.clientId));
+}
+
+export async function portalGetSession(): Promise<{ session: PortalSession; client: Client } | null> {
+  const s = portalSessionSync();
+  const c = s ? fx.clients.find((x) => x.id === s.clientId) : undefined;
+  return resolve(s && c ? { session: s, client: c } : null);
+}
+
+export async function portalSignOut(): Promise<void> {
+  const s = portalSessionSync();
+  localStorage.removeItem(KEYS.portalSession);
+  if (s) portalStamp(s.clientId, 'Signed out of RolliConnect');
+  return resolve(undefined);
+}
+
+export const PORTAL_STATUS: Record<PortalStatusKey, { label: string; blurb: string; active: boolean }> = {
+  on_file: { label: 'On file', blurb: 'No work in progress on this watch.', active: false },
+  expecting: { label: 'We’re expecting your watch', blurb: 'Your estimate is approved — we’ll confirm the moment it arrives.', active: true },
+  awaiting_approval: { label: 'Waiting for your approval', blurb: 'Review the estimate and let us know how you’d like to proceed.', active: true },
+  inspecting: { label: 'Received — being inspected', blurb: 'Your watch is safely with us and going through inspection.', active: true },
+  queued: { label: 'Queued for the bench', blurb: 'Approved and waiting for a watchmaker to open the case.', active: true },
+  on_bench: { label: 'On the bench', blurb: 'A watchmaker is working on it now.', active: true },
+  awaiting_part: { label: 'Waiting on a part', blurb: 'A component is on order; the work resumes when it lands.', active: true },
+  with_specialist: { label: 'With a specialist', blurb: 'Part of the work is with a trusted outside specialist.', active: true },
+  final_checks: { label: 'Final checks', blurb: 'Timing and water resistance are being verified.', active: true },
+  finishing: { label: 'Finishing up', blurb: 'Work is complete — we’re preparing the paperwork.', active: true },
+  ready_pickup: { label: 'Ready for pickup', blurb: 'Your watch is ready at the counter.', active: true },
+  preparing_ship: { label: 'Being prepared to ship', blurb: 'We’re packing it insured and will send tracking.', active: true },
+  on_its_way: { label: 'On its way', blurb: 'Shipped — tracking is below.', active: true },
+  back_with_you: { label: 'Back with you', blurb: 'This service is complete.', active: false },
+};
+
+const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefined, so: SalesOrder | undefined): PortalStatus => {
+  const key = ((): PortalStatusKey => {
+    if (so?.status === 'shipped') return 'on_its_way';
+    if (so?.status === 'picked_up') return 'back_with_you';
+    if (!job) return est?.status === 'sent' ? 'awaiting_approval' : w.status === 'expected' || est?.status === 'approved' ? 'expecting' : 'on_file';
+    if (job.simpleStatus === 'estimate') return est?.status === 'approved' ? 'expecting' : 'awaiting_approval';
+    const hold = activeHold(job);
+    switch (job.status) {
+      case 'intake':
+      case 'in_review': return 'inspecting';
+      case 'awaiting_customer_approval': return 'awaiting_approval';
+      case 'approved': return hold ? (hold.type === 'parts' ? 'awaiting_part' : 'with_specialist') : 'queued';
+      case 'in_service': return hold ? (hold.type === 'parts' ? 'awaiting_part' : 'with_specialist') : 'on_bench';
+      case 'testing': return 'final_checks';
+      case 'ready_to_ship': return so?.status === 'fulfilled' || so?.status === 'partial_fulfilled' ? (so.channel === 'ship' ? 'preparing_ship' : 'ready_pickup') : 'finishing';
+      case 'closed': return 'back_with_you';
+    }
+  })();
+  return { key, ...PORTAL_STATUS[key] };
+};
+
+const portalDocs = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalDocument[] => {
+  const docs: PortalDocument[] = [];
+  jobs.forEach((j) => j.photos.forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
+  store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => p.photos.forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
+  ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
+  sos.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').forEach((o) => {
+    docs.push({ id: `doc-${o.id}`, kind: 'invoice', title: `Invoice ${o.number}`, at: o.orderDate, path: `/rc/invoices/${o.id}` });
+    if (o.shipment) docs.push({ id: `doc-${o.id}-lbl`, kind: 'label', title: `Shipping label · ${o.shipment.tracking}`, at: o.shipment.at, dataUrl: o.shipment.labelDataUrl });
+    o.pickupSession?.photos.forEach((ph, i) => docs.push({ id: `doc-${o.id}-pu${i}`, kind: 'receipt', title: `Hand-back photo · ${o.number}`, at: o.pickupSession!.at, dataUrl: ph.dataUrl }));
+  });
+  return docs.sort((a, b) => b.at.localeCompare(a.at));
+};
+
+const PLAIN_ACTION: Record<string, string> = { create: 'Service opened', start_review: 'Inspection started', request_approval: 'Estimate sent for your approval', approve: 'Approved — queued for the bench', start_service: 'Work started on the bench', to_testing: 'Moved to final checks', qc_pass: 'Passed final checks', qc_fail: 'Sent back to the bench for another look', close: 'Service complete' };
+
+const portalHistory = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalHistoryRow[] => {
+  const rows: PortalHistoryRow[] = [];
+  ests.forEach((e) => {
+    if (e.sentAt) rows.push({ id: `h-${e.id}-sent`, at: e.sentAt, title: `Estimate ${e.number} sent`, detail: `${e.lines.length} line${e.lines.length === 1 ? '' : 's'} · ${fmtMoney(e.total)}`, path: `/rc/estimates/${e.id}` });
+    if (e.approvedAt) rows.push({ id: `h-${e.id}-ok`, at: e.approvedAt, title: `You approved estimate ${e.number}`, detail: e.approvedVia === 'portal' ? 'via RolliConnect' : 'recorded by our team', path: `/rc/estimates/${e.id}` });
+    if (e.declinedAt) rows.push({ id: `h-${e.id}-no`, at: e.declinedAt, title: `Estimate ${e.number} declined`, detail: e.declineReason ?? '', path: `/rc/estimates/${e.id}` });
+  });
+  jobs.forEach((j) => {
+    j.timeline.forEach((t) => rows.push({ id: `h-${t.id}`, at: t.at, title: PLAIN_ACTION[t.action] ?? t.action.replace(/_/g, ' '), detail: t.action === 'qc_fail' && t.reason ? 'We weren’t satisfied yet — a little more time on the bench.' : '' }));
+    j.holds.forEach((h) => {
+      rows.push({ id: `h-${h.id}-p`, at: h.placedAt, title: h.type === 'parts' ? 'Waiting on a part' : 'With a specialist', detail: '' });
+      if (h.releasedAt) rows.push({ id: `h-${h.id}-r`, at: h.releasedAt, title: h.type === 'parts' ? 'Part arrived — work resumed' : 'Back from the specialist', detail: '' });
+    });
+  });
+  sos.forEach((o) => {
+    if (o.fulfilledAt) rows.push({ id: `h-${o.id}-inv`, at: o.fulfilledAt, title: `Invoice ${o.number} issued`, detail: fmtMoney(o.total), path: `/rc/invoices/${o.id}` });
+    o.payments.forEach((p) => rows.push({ id: `h-${p.id}`, at: p.at, title: `Payment received — ${fmtMoney(p.amount)}`, detail: p.note ?? p.method, path: `/rc/invoices/${o.id}` }));
+    if (o.shipment) rows.push({ id: `h-${o.id}-ship`, at: o.shipment.at, title: 'Shipped', detail: `${o.shipment.service} · ${o.shipment.tracking}` });
+    if (o.pickupSession) rows.push({ id: `h-${o.id}-pu`, at: o.pickupSession.at, title: 'Picked up', detail: o.pickupSession.proxyName ? `Collected by ${o.pickupSession.proxyName}` : 'Collected in person' });
+  });
+  return rows.sort((a, b) => b.at.localeCompare(a.at));
+};
+
+const portalWatchFor = (clientId: string, w: Watch): PortalWatch => {
+  const jobs = store.jobs.filter((j) => j.watchId === w.id && j.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const ests = store.estimates.filter((e) => e.watchId === w.id && e.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sos = store.salesOrders.filter((o) => o.clientId === clientId && (o.jobId ? jobs.some((j) => j.id === o.jobId) : false)).sort((a, b) => b.orderDate.localeCompare(a.orderDate));
+  const job = jobs.find((j) => j.status !== 'closed') ?? jobs[0];
+  const openEstimate = ests.find((e) => e.status === 'sent') ?? ests.find((e) => e.status === 'approved' && !e.jobId);
+  const invoice = sos.find((o) => o.status !== 'cancelled' && o.status !== 'draft' && (o.jobId === job?.id || !job));
+  const status = portalStatusFor(w, job && job.status !== 'closed' ? job : invoice && (invoice.status === 'shipped' || invoice.status === 'picked_up') ? job : undefined, openEstimate, invoice && (invoice.jobId === job?.id) ? invoice : undefined);
+  return { watch: w, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos) };
+};
+
+const needsYouFor = (clientId: string, watches: PortalWatch[]): NeedsYouItem[] => {
+  const items: NeedsYouItem[] = [];
+  store.estimates.filter((e) => e.clientId === clientId && e.status === 'sent').forEach((e) => {
+    const w = e.watchId ? store.watches.find((x) => x.id === e.watchId) : undefined;
+    items.push({ id: `ny-est-${e.id}`, kind: 'approve_estimate', title: `Approve or decline estimate ${e.number}`, detail: `${w ? `${w.brand} ${w.model} · ` : ''}${fmtMoney(e.total)} · valid until ${new Date(e.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, path: `/rc/estimates/${e.id}`, at: e.sentAt ?? e.updatedAt, watchId: e.watchId });
+  });
+  store.salesOrders.filter((o) => o.clientId === clientId && o.status !== 'draft' && o.status !== 'cancelled').forEach((o) => {
+    const pw = watches.find((x) => x.invoice?.id === o.id);
+    const label = pw ? `${pw.watch.brand} ${pw.watch.model}` : o.number;
+    if (o.balanceDue > 0 && o.status !== 'picked_up' && o.status !== 'shipped') items.push({ id: `ny-pay-${o.id}`, kind: 'pay_balance', title: `Pay the balance on invoice ${o.number}`, detail: `${label} · ${fmtMoney(o.balanceDue)} due`, path: `/rc/invoices/${o.id}`, at: o.fulfilledAt ?? o.orderDate, watchId: pw?.watch.id });
+    if ((o.status === 'fulfilled' || o.status === 'partial_fulfilled') && o.channel === 'pickup' && !o.pickupWindow) items.push({ id: `ny-pu-${o.id}`, kind: 'confirm_pickup', title: 'Choose a pickup window', detail: `${label} is ready at the counter`, path: `/rc/invoices/${o.id}#pickup`, at: o.fulfilledAt ?? o.orderDate, watchId: pw?.watch.id });
+    if (o.channel === 'ship' && !o.shippingAddress && (o.shippingInfoRequestedAt || o.status === 'fulfilled')) items.push({ id: `ny-ship-${o.id}`, kind: 'shipping_info', title: 'Tell us where to ship', detail: `${label} · insured, signature on delivery`, path: `/rc/invoices/${o.id}#shipping`, at: o.shippingInfoRequestedAt ?? o.orderDate, watchId: pw?.watch.id });
+  });
+  const unread = store.messages.filter((m) => m.clientId === clientId && m.from === 'staff' && !m.readByClient);
+  if (unread.length) items.push({ id: 'ny-msg', kind: 'staff_reply', title: unread.length === 1 ? 'A reply from our team' : `${unread.length} replies from our team`, detail: unread[0].text.slice(0, 90) + (unread[0].text.length > 90 ? '…' : ''), path: '/rc/messages', at: unread[0].at });
+  return items.sort((a, b) => b.at.localeCompare(a.at));
+};
+
+export async function portalGetHome(clientId: string): Promise<PortalHome> {
+  const client = byId(fx.clients, clientId);
+  const watches = store.watches.filter((w) => w.clientId === clientId).map((w) => portalWatchFor(clientId, w)).sort((a, b) => Number(b.status.active) - Number(a.status.active) || b.watch.receivedAt.localeCompare(a.watch.receivedAt));
+  return resolve({ client, needsYou: needsYouFor(clientId, watches), watches, unreadMessages: store.messages.filter((m) => m.clientId === clientId && m.from === 'staff' && !m.readByClient).length });
+}
+
+export async function portalGetWatch(clientId: string, watchId: string): Promise<PortalWatch> {
+  const w = requireOwner(clientId, store.watches.find((x) => x.id === watchId), 'watch');
+  return resolve(portalWatchFor(clientId, w));
+}
+
+export async function portalGetEstimate(clientId: string, id: string): Promise<EstimateWithRefs> {
+  const e = requireOwner(clientId, store.estimates.find((x) => x.id === id), 'estimate');
+  if (e.status === 'draft') throw new Error('That estimate isn’t ready yet');
+  return resolve(withRefs(e));
+}
+
+export async function portalApproveEstimate(clientId: string, id: string): Promise<EstimateWithRefs> {
+  requireOwner(clientId, store.estimates.find((e) => e.id === id), 'estimate');
+  recordRcEvent({ t: 'approve', clientId, id });
+  const r = await asClient(clientId, () => approveEstimate(id, 'portal'));
+  // The linked job (if it is waiting on the customer) moves forward too — staff see it in the Approved lane instantly
+  const job = store.jobs.find((j) => j.estimateId === id && j.status === 'awaiting_customer_approval');
+  if (job) await asClient(clientId, () => transitionJob(job.id, 'approve'));
+  portalStamp(clientId, `Approved estimate ${r.number} rev ${r.revision}${job ? ` · job ${job.number} → approved` : ''}`);
+  return r;
+}
+
+export async function portalDeclineEstimate(clientId: string, id: string, reason: string): Promise<EstimateWithRefs> {
+  requireOwner(clientId, store.estimates.find((e) => e.id === id), 'estimate');
+  if (!reason.trim()) throw new Error('Please tell us why');
+  recordRcEvent({ t: 'decline', clientId, id, reason });
+  const r = await asClient(clientId, () => declineEstimate(id, reason, 'portal'));
+  portalStamp(clientId, `Declined estimate ${r.number} · ${reason.trim()}`);
+  return r;
+}
+
+export async function portalGetInvoice(clientId: string, id: string): Promise<SalesOrderWithRefs> {
+  return resolve(soRefs(requireOwner(clientId, store.salesOrders.find((o) => o.id === id), 'invoice')));
+}
+
+// Payment stub: settles the full balance as a card payment — no processor, ledger only
+export async function portalPayBalance(clientId: string, id: string): Promise<SalesOrderWithRefs> {
+  const o = requireOwner(clientId, store.salesOrders.find((x) => x.id === id), 'invoice');
+  if (o.balanceDue <= 0) throw new Error('This invoice is already paid');
+  recordRcEvent({ t: 'pay', clientId, id });
+  const amount = o.balanceDue;
+  const r = await asClient(clientId, () => recordPayment(id, amount, 'card', 'Paid online via RolliConnect (stub)'));
+  portalStamp(clientId, `Paid ${fmtMoney(amount)} on ${o.number} (stub card payment)`);
+  return r;
+}
+
+export async function portalConfirmPickupWindow(clientId: string, id: string, date: string, slot: PickupWindow['slot'], note?: string): Promise<SalesOrderWithRefs> {
+  const o = requireOwner(clientId, store.salesOrders.find((x) => x.id === id), 'invoice');
+  if (o.channel !== 'pickup') throw new Error('This order isn’t set for pickup');
+  if (!date) throw new Error('Pick a day');
+  recordRcEvent({ t: 'pickup', clientId, id, date, slot, note });
+  o.pickupWindow = { date, slot, confirmedAt: new Date().toISOString(), note: note?.trim() || undefined };
+  o.updatedAt = o.pickupWindow.confirmedAt;
+  const c = byId(fx.clients, clientId);
+  const when = `${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${slot}`;
+  await asClient(clientId, async () => { soStamp(o, `Pickup window confirmed by client · ${when}${note?.trim() ? ` · “${note.trim()}”` : ''}`); });
+  store.tasks.unshift({ id: `t-${Date.now().toString(36)}`, title: `${c.firstName} ${c.lastName} picking up ${o.number} — ${when}`, assignedTo: { type: 'role', role: 'concierge' }, createdBy: 'RolliConnect', jobId: o.jobId, clientId, dueAt: new Date(date + (slot === 'morning' ? 'T09:00:00' : 'T13:00:00')).toISOString(), status: 'open', createdAt: new Date().toISOString(), station: 'RolliConnect' });
+  portalStamp(clientId, `Confirmed pickup window for ${o.number} · ${when}`);
+  return resolve(soRefs(o));
+}
+
+export async function portalSubmitShippingInfo(clientId: string, id: string, address: Address, phone: string): Promise<SalesOrderWithRefs> {
+  const o = requireOwner(clientId, store.salesOrders.find((x) => x.id === id), 'invoice');
+  if (!address.name.trim() || !address.street.trim() || !address.city.trim() || !address.state.trim()) throw new Error('Please complete the address');
+  if (!phone.trim()) throw new Error('The carrier needs a phone number');
+  recordRcEvent({ t: 'ship', clientId, id, address, phone });
+  const r = await asClient(clientId, () => setShippingAddress(id, { name: address.name.trim(), street: address.street.trim(), city: address.city.trim(), state: address.state.trim() }));
+  o.memo = `${o.memo ? `${o.memo}\n` : ''}Carrier phone (from RolliConnect): ${phone.trim()}`;
+  portalStamp(clientId, `Submitted shipping address for ${o.number}`);
+  return r;
+}
+
+export async function portalGetMessages(clientId: string): Promise<Message[]> {
+  store.messages.forEach((m) => { if (m.clientId === clientId && m.from === 'staff') m.readByClient = true; });
+  return resolve(store.messages.filter((m) => m.clientId === clientId).sort((a, b) => a.at.localeCompare(b.at)));
+}
+
+export async function portalSendMessage(clientId: string, text: string, watchId?: string): Promise<Message> {
+  if (!text.trim()) throw new Error('Write something first');
+  recordRcEvent({ t: 'msg', clientId, text, watchId });
+  const c = byId(fx.clients, clientId);
+  const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, from: 'client', by: `${c.firstName} ${c.lastName}`, text: text.trim(), at: new Date().toISOString(), readByStaff: false, readByClient: true };
+  store.messages.push(m);
+  portalStamp(clientId, `Message sent to the team${watchId ? ` about ${store.watches.find((w) => w.id === watchId)?.model ?? 'a watch'}` : ''}`);
+  return resolve(m);
+}
+
+// Staff side: inbox of client threads; replies queue an Outbox email (nothing sends)
+export async function getStaffInbox(): Promise<StaffInboxThread[]> {
+  const byClient = new Map<string, Message[]>();
+  store.messages.forEach((m) => byClient.set(m.clientId, [...(byClient.get(m.clientId) ?? []), m]));
+  const threads = [...byClient.entries()].map(([clientId, msgs]): StaffInboxThread => {
+    const sorted = msgs.sort((a, b) => a.at.localeCompare(b.at));
+    const last = sorted[sorted.length - 1];
+    return { client: byId(fx.clients, clientId), messages: sorted, unread: sorted.filter((m) => m.from === 'client' && !m.readByStaff).length, lastAt: last.at, watch: last.watchId ? store.watches.find((w) => w.id === last.watchId) : undefined };
+  });
+  return resolve(threads.sort((a, b) => b.unread - a.unread || b.lastAt.localeCompare(a.lastAt)));
+}
+
+export async function getStaffInboxUnread(): Promise<number> { return resolve(store.messages.filter((m) => m.from === 'client' && !m.readByStaff).length); }
+
+export async function markThreadRead(clientId: string): Promise<void> {
+  store.messages.forEach((m) => { if (m.clientId === clientId && m.from === 'client') m.readByStaff = true; });
+  return resolve(undefined);
+}
+
+export async function replyToClient(clientId: string, text: string, watchId?: string, replayBy?: string): Promise<Message> {
+  if (!text.trim()) throw new Error('Write a reply first');
+  const a = replayBy ? { by: replayBy, station: 'Front Desk 1', user: undefined } : actor();
+  recordRcEvent({ t: 'reply', clientId, text, watchId, by: a.by });
+  const c = byId(fx.clients, clientId);
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: 'RolliConnect message', status: 'pending', subject: 'A reply from the RolliSuite team', body: `Hello ${c.firstName},\n\n${text.trim()}\n\nReply any time in RolliConnect.\n\n— ${a.by}, RolliSuite`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  store.outbox.unshift(email);
+  const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, from: 'staff', by: a.by, text: text.trim(), at: email.createdAt, readByStaff: true, readByClient: false, emailId: email.id };
+  store.messages.push(m);
+  await markThreadRead(clientId);
+  appendAudit({ type: 'portal', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Replied to ${c.firstName} ${c.lastName} in RolliConnect · email queued to Outbox` });
+  return resolve(m);
+}
+
+// Restore client-initiated writes on load (fixtures are in-memory; the portal log is not)
+replayRcEvents();

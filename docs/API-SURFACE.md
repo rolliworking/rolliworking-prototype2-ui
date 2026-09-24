@@ -154,9 +154,26 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `getClientDirectory()` | `ClientDirectoryRow[]` | `/clients` list: watch counts, open estimates, active jobs, balance, last activity |
 | `getRequests()` / `getRequestsForClient(clientId)` | `ServiceRequest[]` | read-only in E7 (no create/close yet) |
 
+## RolliConnect — client portal (E8)
+| function | returns | notes |
+|---|---|---|
+| `portalRequestMagicLink(email)` | `{link, path}` | stub: Outbox email + on-screen link `/rc/auth/:token`; links persisted (`rollisuite.rc.magicLinks`) |
+| `portalRedeemMagicLink(token)` / `portalGetSession()` / `portalSignOut()` | `Client` / `{session, client} \| null` / void | session key `rollisuite.rc.session` |
+| `portalGetHome(clientId)` | `PortalHome {client, needsYou[], watches: PortalWatch[], unreadMessages}` | needs-you kinds: approve_estimate · pay_balance · confirm_pickup · shipping_info · staff_reply |
+| `portalGetWatch(clientId, watchId)` | `PortalWatch {status, job?, openEstimate?, invoice?, eta?, history[], documents[]}` | owner-checked; drafts hidden |
+| `portalGetEstimate` / `portalApproveEstimate` / `portalDeclineEstimate(.., reason)` | `EstimateWithRefs` | via `approveEstimate(id,'portal')`; approve also `transitionJob(job,'approve')` when the linked job waits on the customer |
+| `portalGetInvoice` / `portalPayBalance` | `SalesOrderWithRefs` | pay = full balance, card, stub note |
+| `portalConfirmPickupWindow(clientId, soId, date, slot, note?)` | `SalesOrderWithRefs` | sets `pickupWindow`, creates concierge task |
+| `portalSubmitShippingInfo(clientId, soId, address, phone)` | `SalesOrderWithRefs` | via `setShippingAddress`; phone appended to memo |
+| `portalGetMessages(clientId)` / `portalSendMessage(clientId, text, watchId?)` | `Message[]` / `Message` | reading marks staff replies read |
+| `getStaffInbox()` / `getStaffInboxUnread()` / `markThreadRead(clientId)` / `replyToClient(clientId, text, watchId?)` | threads / number / void / `Message` | staff side; reply queues Outbox email |
+| `PORTAL_STATUS` | lookup | 14 plain-language statuses (label, blurb, active) |
+| `replayRcEvents()` / `resetRcEvents()` | number / void | portal write log persisted in `rollisuite.rc.events`, replayed at module load |
+
 ## Stubs / not wired (explicit)
 - `convertEstimate(id,'sales_order')` — throws (use `convertEstimateToSalesOrder`).
 - QBO push — state only (`qboStatus`, fake id). Payments — ledger only. Carrier — `shippingProvider` mock.
 - Estimates list "Convert to invoice" menu row — display-only.
 - Email sending, label printing, receipt printing — mocked flags / Outbox only.
+- RolliConnect: magic link (no email, no expiry), payment (ledger only), messages (no push). Nothing external.
 - No HTTP, no `fetch`; repoint this file to the real API when it exists.

@@ -40,7 +40,8 @@ export type AuditEventType =
   | 'task'
   | 'pin'
   | 'sales'
-  | 'parts';
+  | 'parts'
+  | 'portal';
 
 export interface AuditEvent {
   id: string;
@@ -165,6 +166,7 @@ export interface Estimate {
   approvedAt?: string;
   declinedAt?: string;
   declineReason?: string;
+  approvedVia?: 'staff' | 'portal';
   jobId?: string;
 }
 
@@ -536,6 +538,7 @@ export interface SalesOrder {
   shippingInfoRequestedAt?: string;
   tracking?: string;
   pickedUpAt?: string;
+  pickupWindow?: PickupWindow;
   shipment?: Shipment;
   pickupSession?: PickupSession;
   fulfilledAt?: string;
@@ -742,3 +745,48 @@ export interface ClientDirectoryRow {
   openBalance: number;
   lastActivityAt?: string;
 }
+
+// ---- E8 RolliConnect (client portal) ----------------------------------------------
+
+export interface PickupWindow { date: string; slot: 'morning' | 'afternoon'; confirmedAt: string; note?: string }
+
+export interface MagicLink { token: string; clientId: string; email: string; createdAt: string; usedAt?: string }
+export interface PortalSession { clientId: string; email: string; token: string; issuedAt: string }
+
+export interface Message {
+  id: string;
+  clientId: string;
+  watchId?: string;
+  from: 'client' | 'staff';
+  by: string;
+  text: string;
+  at: string;
+  readByStaff: boolean;
+  readByClient: boolean;
+  emailId?: string;
+}
+
+export type PortalStatusKey = 'on_file' | 'expecting' | 'awaiting_approval' | 'inspecting' | 'queued' | 'on_bench' | 'awaiting_part' | 'with_specialist' | 'final_checks' | 'finishing' | 'ready_pickup' | 'preparing_ship' | 'on_its_way' | 'back_with_you';
+export interface PortalStatus { key: PortalStatusKey; label: string; blurb: string; active: boolean }
+
+export type NeedsYouKind = 'approve_estimate' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply';
+export interface NeedsYouItem { id: string; kind: NeedsYouKind; title: string; detail: string; path: string; at: string; watchId?: string }
+
+export interface PortalDocument { id: string; kind: 'photo' | 'estimate' | 'invoice' | 'receipt' | 'label'; title: string; at: string; dataUrl?: string; path?: string }
+
+export interface PortalHistoryRow { id: string; at: string; title: string; detail: string; path?: string }
+
+export interface PortalWatch {
+  watch: Watch;
+  status: PortalStatus;
+  job?: Job;
+  openEstimate?: Estimate;
+  invoice?: SalesOrder;
+  eta?: string;
+  history: PortalHistoryRow[];
+  documents: PortalDocument[];
+}
+
+export interface PortalHome { client: Client; needsYou: NeedsYouItem[]; watches: PortalWatch[]; unreadMessages: number }
+
+export interface StaffInboxThread { client: Client; messages: Message[]; unread: number; lastAt: string; watch?: Watch }

@@ -109,7 +109,7 @@ export default function PickupStationPage() {
               </Card>
             )}
           </div>
-          <Card title="Order" testId="pickup-side"><dl className="grid grid-cols-[90px_1fr] gap-x-3 gap-y-1 text-xs"><dt className="text-ink-500">Status</dt><dd><StatusPill status={order.status} /></dd><dt className="text-ink-500">Channel</dt><dd className="capitalize">{order.channel ?? '—'}</dd><dt className="text-ink-500">Code issued</dt><dd className="font-mono">{order.pickupCode ? '••••-••' : '—'}</dd><dt className="text-ink-500">Detail</dt><dd><Link to={`/sales/${order.id}`} className="text-brand hover:underline">Open sales order</Link></dd></dl></Card>
+          <Card title="Order" testId="pickup-side"><dl className="grid grid-cols-[90px_1fr] gap-x-3 gap-y-1 text-xs"><dt className="text-ink-500">Status</dt><dd><StatusPill status={order.status} /></dd><dt className="text-ink-500">Channel</dt><dd className="capitalize">{order.channel ?? '—'}</dd><dt className="text-ink-500">Code issued</dt><dd className="font-mono">{order.pickupCode ? '••••-••' : '—'}</dd>{order.pickupWindow && <><dt className="text-ink-500">Window</dt><dd data-testid="pickup-window">{new Date(order.pickupWindow.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {order.pickupWindow.slot}{order.pickupWindow.note && <span className="block text-ink-500">“{order.pickupWindow.note}”</span>}</dd></>}<dt className="text-ink-500">Detail</dt><dd><Link to={`/sales/${order.id}`} className="text-brand hover:underline">Open sales order</Link></dd></dl></Card>
         </div>
       )}
 

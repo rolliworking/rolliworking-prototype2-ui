@@ -11,3 +11,4 @@ export { parts, partsRequests, partsKnowledge } from './parts';
 export { activity } from './activity';
 export { packages, outbox, labels, seedPhoto, CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './intake';
 export { requests } from './requests';
+export { messages } from './portal';

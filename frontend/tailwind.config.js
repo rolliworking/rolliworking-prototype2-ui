@@ -20,6 +20,15 @@ export default {
           100: '#d8e5f2',
           50: '#eaf1f8',
         },
+        rc: {
+          cream: '#f6f1e8',
+          paper: '#fffdf9',
+          ink: '#2b2621',
+          muted: '#7a6f63',
+          line: '#e6ddd0',
+          accent: '#8a6d3b',
+          accentSoft: '#f1e8d8',
+        },
         moss: {
           DEFAULT: '#1f7a4d',
           700: '#176240',
@@ -30,6 +39,7 @@ export default {
       fontFamily: {
         sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        serif: ['Fraunces', 'Georgia', 'serif'],
       },
       boxShadow: {
         card: '0 1px 2px rgba(28, 36, 48, 0.06), 0 0 0 1px rgba(28, 36, 48, 0.04)',

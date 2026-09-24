@@ -76,6 +76,12 @@ export default function SetupPage() {
                   Reset registration
                 </button>
               </div>
+              <div className="mt-2 flex items-center justify-between rounded-sm bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                <span>RolliConnect preview: forget client-side actions (approvals, payments, messages) replayed on load.</span>
+                <button type="button" data-testid="rc-events-reset-button" onClick={() => api.resetRcEvents().then(() => window.location.reload())} className="font-semibold underline-offset-2 hover:underline">
+                  Reset RolliConnect data
+                </button>
+              </div>
             </form>
           ) : (
             <p className="mt-4 text-xs text-ink-400">Only managers can rename this station.</p>
