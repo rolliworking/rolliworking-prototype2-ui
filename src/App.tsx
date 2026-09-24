@@ -6,6 +6,7 @@ import {
   lookupShipQueue,
   PrototypeApiError,
 } from "./api/client";
+import { EstimatesPage } from "./EstimatesPage";
 
 type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake";
 
@@ -301,12 +302,7 @@ export function App() {
             <Dashboard />
           </>
         ) : null}
-        {nav === "estimates" ? (
-          <Placeholder
-            title="Estimates"
-            note="Use Emergent E3 with PROMPT-PACK-estimates.md. Client helpers: listEstimates, createEstimate, …"
-          />
-        ) : null}
+        {nav === "estimates" ? <EstimatesPage /> : null}
         {nav === "hit-list" ? (
           <Placeholder
             title="Hit list"
