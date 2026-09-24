@@ -19,6 +19,8 @@ These are decided. Extend them; do not re-litigate without a DECISIONS.md entry.
 | 13 | **Derived first, pinned on top** | If a list can be computed from state (hit list rows, lane counts, KPIs, waiting-on), compute it. Explicit items are stored only as tasks and pinned hit-list items; pins sit in their own section above derived rows and can never hide them (MH ruling). | `getToday`, `pinToHitList`, `getDashboardStats` |
 | 14 | **Evidence before advance** | Leaving review requires inspection photos for every kind; the multiple-choice report only where the kind's config says so. Gates live in the client module (`reviewGaps`) and the UI just reflects them. | `JOB_KIND_CONFIG`, `reviewGaps`, `ReviewGate` |
 
+| 15 | **Lenses, not modules** | Bench, Supervisor and Floor Map read the same job store through role-shaped views; they add no statuses. Learning loops (parts) write to lookup tables (`compatibleRefs`, `aliases`) and a visible knowledge log, never to hidden state. | `getBenchView`, `getSupervisorBoard`, `getShopFloorMap`, `approvePartsRequest` |
+
 ## Anti-patterns (don't)
 - Free status `<select>`; editing `status` directly from a screen.
 - New storage paths, `fetch`, or component-local fixtures.

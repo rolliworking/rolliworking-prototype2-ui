@@ -39,7 +39,8 @@ export type AuditEventType =
   | 'job'
   | 'task'
   | 'pin'
-  | 'sales';
+  | 'sales'
+  | 'parts';
 
 export interface AuditEvent {
   id: string;
@@ -547,3 +548,76 @@ export interface SalesOrder {
 export type SalesOrderWithRefs = SalesOrder & { client: Client; job: Job | null; watch: Watch | null };
 
 export type TailStage = 'awaiting_invoice' | 'awaiting_payment' | 'ready_for_pickup' | 'ready_to_ship' | 'picked_up' | 'shipped';
+
+// ---- E6 Workshop lenses + parts chat -------------------------------------------
+
+export interface Part {
+  id: string;
+  partNumber: string;
+  name: string;
+  category: string;
+  compatibleRefs: string[];
+  calibers: string[];
+  aliases: string[];
+  price: number;
+  stock: number;
+}
+
+export type PartsRequestStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  suggestions?: { partId: string; reason: string }[];
+  at: string;
+}
+
+export interface PartsRequest {
+  id: string;
+  number: string;
+  jobId: string;
+  status: PartsRequestStatus;
+  partId?: string;
+  qty: number;
+  note?: string;
+  searchTerms: string[];
+  chat: ChatMessage[];
+  requestedBy: string;
+  requestedAt: string;
+  station: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNote?: string;
+}
+
+export interface PartsKnowledgeEntry extends Stamp {
+  id: string;
+  kind: 'association_confirmed' | 'alias_added' | 'rejected';
+  partId: string;
+  partNumber: string;
+  reference?: string;
+  alias?: string;
+  requestId: string;
+  detail: string;
+}
+
+export type PartsRequestWithRefs = PartsRequest & { job: Job; part: Part | null; client: Client; watch: Watch };
+
+export interface BenchView {
+  jobs: (JobWithRefs & { nextAction: string | null; blocked: string | null })[];
+  holds: JobWithRefs[];
+  pullNext: JobWithRefs | null;
+  partsRequests: PartsRequestWithRefs[];
+}
+
+export interface SupervisorBoard {
+  unassigned: JobWithRefs[];
+  byTech: { user: User; jobs: JobWithRefs[] }[];
+  partsQueue: PartsRequestWithRefs[];
+  holds: JobWithRefs[];
+  qcQueue: JobWithRefs[];
+}
+
+export type FloorLane = 'intake' | 'review' | 'approval' | 'bench' | 'case_cleaning' | 'holds' | 'qc' | 'ready' | 'out';
+export interface FloorMap { lanes: { key: FloorLane; label: string; jobs: JobWithRefs[] }[] }

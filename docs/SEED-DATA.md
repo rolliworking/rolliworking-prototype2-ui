@@ -84,6 +84,10 @@ Inspection seeds: every job at `awaiting_customer_approval` or later has 1 inspe
 | so-07 | SO-26-0107 | c-23 | — | cancelled | — | no | |
 j-02 (ready_to_ship, no SO) = **awaiting invoice**. Next SO number SO-26-0108. Jobs j-21 (E02029) and j-22 (E02030) added as tail-stage seeds; next job E02031.
 
+## Parts (`parts.ts`)
+Catalog: 25 parts (crystal, crown, movement, gasket, bracelet, bezel, dial, PM). Requests: pr-01 approved (j-04, 3285 barrel, aliases learned), pr-02 pending (j-01 mainspring 3135), pr-03 pending (j-16 Syloxi hairspring), pr-04 rejected (j-03 wrong insert colour). Knowledge log: 3 entries. Next PR-0045. Try in chat: "crystal ring for a 16613" → 29-5220-0 top hit; "gasket 126610" → 29-210-64.
+Bench (MM): j-01, j-03, j-16 + holds j-04, j-06; pull-next = j-10 (E02020, approved, unassigned) then j-15. Supervisor unassigned: j-10, j-15. QC queue: j-05, j-16. Floor case-cleaning lane: j-17 (PM only).
+
 ## Shop time (`jobs.ts`) — 5 rows: j-01 ×2 (MM), j-03 (Walter), j-05 (MH), j-16 (MM).
 
 ## Tasks (`tasks.ts`) — 10

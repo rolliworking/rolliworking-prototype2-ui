@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import type { ReactNode } from 'react';
 
 interface CardProps {
-  title?: string;
+  title?: ReactNode;
   subtitle?: string;
   action?: ReactNode;
   accent?: 'none' | 'moss';

@@ -77,6 +77,16 @@ Stage-skip mechanism: `legalJobActions` maps each action's target through `skipF
 | cancelSalesOrder | not shipped/picked_up | cancelled | reason | — |
 Tail read-model `tailStage(job)`: no SO → awaiting_invoice · SO unpaid → awaiting_payment · fulfilled+pickup → ready_for_pickup · fulfilled+ship → ready_to_ship · shipped / picked_up.
 
+## 1c. Parts request (E6) — `draft → pending → approved | rejected`
+| action | who | effect |
+|---|---|---|
+| openPartsRequest(jobId) | any | draft + assistant greeting |
+| partsChat(text) | requester | user msg + scripted reply with suggestions; text saved to searchTerms |
+| attachPart(partId) | requester | partId set |
+| submitPartsRequest | requester | pending; job stamped |
+| approvePartsRequest(note?) | manager | approved; part.compatibleRefs += job ref; aliases += searchTerms (≥4 chars); knowledge log `association_confirmed` + `alias_added`; parts hold placed if `canHold(job)` |
+| rejectPartsRequest(reason*) | manager | rejected; knowledge log `rejected` |
+
 ## 2. Estimates (E3)
 `draft → sent → approved(provisional) → converted` · `sent → declined → draft (reopen)` · `sent → expired → draft (reopen)`.
 | action | from | to | notes |

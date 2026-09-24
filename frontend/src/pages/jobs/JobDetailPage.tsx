@@ -10,7 +10,9 @@ import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { PinModal } from '@/components/today/PinBits';
 import { TailPill } from '@/components/sales/SalesBits';
-import type { SalesOrderWithRefs } from '@/api/client';
+import type { PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
+import { PartsRequestModal, PartsRequestPill } from '@/components/parts/PartsChat';
+import { Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
@@ -27,8 +29,10 @@ export default function JobDetailPage() {
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [so, setSo] = useState<SalesOrderWithRefs | null>(null);
+  const [prs, setPrs] = useState<PartsRequestWithRefs[]>([]);
+  const [openPr, setOpenPr] = useState<PartsRequestWithRefs | null>(null);
 
-  const load = useCallback(async () => { setJob(await api.getJob(id)); setSo(await api.getSalesOrderForJob(id)); }, [id]);
+  const load = useCallback(async () => { setJob(await api.getJob(id)); setSo(await api.getSalesOrderForJob(id)); setPrs(await api.getPartsRequestsForJob(id)); }, [id]);
   useEffect(() => { void load(); }, [load]);
 
   const say = (msg: string) => { setFlash(msg); setError(null); window.setTimeout(() => setFlash(null), 3000); };
@@ -75,6 +79,7 @@ export default function JobDetailPage() {
           ))}
           {(j.status === 'ready_to_ship' || j.status === 'closed') && !so && <Button variant="primary" data-testid="act-invoice" onClick={async () => { try { const o = await api.invoiceJob(j.id); navigate(`/sales/${o.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Invoice failed'); } }}><Receipt size={13} /> Create invoice (SO)</Button>}
           {so && <Link to={`/sales/${so.id}`} data-testid="act-open-so" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:border-ink-300 hover:bg-canvas"><Receipt size={13} /> {so.number} · {so.status.replace(/_/g, ' ')}</Link>}
+          {j.status !== 'closed' && <Button data-testid="act-parts-request" onClick={async () => { try { setOpenPr(await api.openPartsRequest(j.id)); } catch (er) { setError(er instanceof Error ? er.message : 'Failed'); } }}><Wrench size={13} /> Parts request</Button>}
           <Button data-testid="act-pin" onClick={() => setModal({ kind: 'pin' })} title="Add to someone's hit list"><Pin size={13} /> Add to hit list</Button>
           {user?.accessTier === 'manager' && <Button data-testid="act-delete-job" title="Delete (can-delete-jobs)" onClick={() => { if (window.confirm(`Delete ${j.number}?`)) void run(() => api.deleteJob(j.id), '').then(() => navigate('/jobs')); }}><Trash2 size={13} className="text-rose-700" /></Button>}
         </div>
@@ -103,6 +108,9 @@ export default function JobDetailPage() {
           <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
           <Card title="Notes" subtitle="Freeform, stamped who / when / station" testId="job-notes-card"><NotesPanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
+          <Card title="Parts requests" subtitle="Chat-style lookup → attach → supervisor approval" testId="job-parts-card" bodyClassName="p-0">
+            <ul className="divide-y divide-line/70">{prs.map((r) => <li key={r.id}><button type="button" data-testid={`job-pr-${r.id}`} onClick={() => setOpenPr(r)} className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-canvas"><span className="font-mono font-medium">{r.number}</span><span className="font-mono text-ink">{r.part?.partNumber ?? '—'}</span><span className="truncate text-ink-700">{r.part?.name ?? 'no part attached'}</span><span className="ml-auto text-ink-400">{r.requestedBy}</span><PartsRequestPill status={r.status} /></button></li>)}{prs.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">No parts requests — open one from the actions bar.</li>}</ul>
+          </Card>
           <Card title="Shop time" subtitle="Time rows never move job status" testId="job-shop-time-card"><ShopTimePanel job={j} /></Card>
         </div>
         <div className="space-y-4">
@@ -115,6 +123,7 @@ export default function JobDetailPage() {
       </div>
 
       {modal?.kind === 'reason' && <ReasonModal testId={`reason-modal-${modal.action.key}`} title={modal.action.label.replace('…', '')} hint={modal.action.key === 'qc_fail' ? 'Fail moves the job back to service and queues a client email with this reason.' : 'A reason is required; it lands on the timeline.'} confirmLabel={modal.action.label.replace('…', '')} danger={modal.action.tone === 'danger'} onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, modal.action.key, r); setModal(null); await load(); say(`${modal.action.label.replace('…', '')}${modal.action.notifies ? ' · client email queued' : ''}`); }} />}
+      {openPr && <PartsRequestModal request={openPr} onClose={() => { setOpenPr(null); void load(); }} onChange={setOpenPr} />}
       {modal?.kind === 'pin' && <PinModal defaultTitle={`${j.number} · ${fullName(j.client)} · ${j.watch.model}`} jobId={j.id} onClose={() => setModal(null)} onPinned={() => { setModal(null); say('Pinned to their hit list'); }} />}
       {modal?.kind === 'hold' && <HoldModal onClose={() => setModal(null)} onConfirm={async (t, r) => { await api.placeHold(j.id, t, r); setModal(null); await load(); say(`${t === 'parts' ? 'Parts' : 'Outsource'} hold placed`); }} />}
       {modal?.kind === 'release' && <ReasonModal testId="release-modal" title="Release hold" hint={`Returns the job to ${api.activeHold(j)?.priorStatus.replace(/_/g, ' ')}.`} confirmLabel="Release" optional onClose={() => setModal(null)} onConfirm={async (r) => { await api.releaseHold(j.id, r); setModal(null); await load(); say('Hold released'); }} />}

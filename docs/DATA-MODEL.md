@@ -126,9 +126,13 @@ Legend — **P-17 accommodation set**: `[P17:job_kind]` `[P17:party_roles]` `[P1
 | pickupSession? `PickupSession` | `{codeUsed?, proxyName?, proxyIdPhoto?, photos[], lineQty, bypassReason?, adminOverride?, at, by, station}` — signature-free |
 | createdAt/By, updatedAt | |
 
+### Part (`parts.ts`, 25) — `id, partNumber, name, category, compatibleRefs[], calibers[], aliases[], price, stock`. `compatibleRefs`/`aliases` grow on approval.
+### PartsRequest (`parts.ts`, 4) — `id, number PR-nnnn, jobId, status draft|pending|approved|rejected, partId?, qty, note?, searchTerms[], chat[] ChatMessage{role, text, suggestions?}, requestedBy/At, station, decidedBy?/At?, decisionNote?`.
+### PartsKnowledgeEntry (`parts.ts`, 3) — `kind association_confirmed|alias_added|rejected, partId, partNumber, reference?, alias?, requestId, detail, at, by, station`.
+
 ### Derived (not stored)
 - `TodayRow` — `/today` union: owner-action jobs + assignee bench jobs + holds I own/placed + discrepancy packages (concierge role / inspector who flagged) + open tasks to me/my roles. `TodayView = { pinned: PinnedItem[], rows, waitingOn: Task[] }` — pinned sits above rows; nothing derived is hidden by pins.
-- `TailStage` per job (`tailStage`), `SO_BADGE`, `DashboardStats`, `QuoteContext`, `InspectionContext`, `WatchMatch`, `*WithRefs` joins.
+- `BenchView`, `SupervisorBoard`, `FloorMap` (E6 lenses), `TailStage` per job (`tailStage`), `SO_BADGE`, `DashboardStats`, `QuoteContext`, `InspectionContext`, `WatchMatch`, `*WithRefs` joins.
 
 ## Relationships
 ```

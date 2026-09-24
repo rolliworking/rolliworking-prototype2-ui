@@ -23,7 +23,15 @@ import type {
   EstimateStatus,
   EstimateWithRefs,
   Assignee,
+  BenchView,
+  FloorLane,
+  FloorMap,
   FulfillmentChannel,
+  Part,
+  PartsKnowledgeEntry,
+  PartsRequest,
+  PartsRequestWithRefs,
+  SupervisorBoard,
   Payment,
   PaymentMethod,
   PinnedItem,
@@ -87,6 +95,9 @@ const writeJson = (key: string, value: unknown) => localStorage.setItem(key, JSO
 const store = {
   tasks: fx.tasks.map((t) => ({ ...t })),
   pinned: fx.pinned.map((p) => ({ ...p })),
+  parts: fx.parts.map((p): Part => ({ ...p, compatibleRefs: [...p.compatibleRefs], aliases: [...p.aliases] })),
+  partsRequests: fx.partsRequests.map((r): PartsRequest => ({ ...r, chat: [...r.chat], searchTerms: [...r.searchTerms] })),
+  partsKnowledge: fx.partsKnowledge.map((k): PartsKnowledgeEntry => ({ ...k })),
   salesOrders: fx.salesOrders.map((o): SalesOrder => ({ ...o, lines: o.lines.map((l) => ({ ...l })), payments: [...o.payments] })),
   packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
   outbox: fx.outbox.map((e) => ({ ...e })),
@@ -95,7 +106,7 @@ const store = {
   estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[], jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
   jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
-  counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107 },
+  counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107, pr: 44 },
 };
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
@@ -1755,3 +1766,221 @@ export async function getPickupQueue(): Promise<SalesOrderWithRefs[]> {
 export async function getShipQueue(): Promise<SalesOrderWithRefs[]> {
   return resolve(store.salesOrders.filter((o) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.channel === 'ship').map(soRefs));
 }
+
+// ---- E6 Workshop lenses: bench, supervisor, floor map ----------------------------------------
+
+const nextActionLabel = (j: Job): { label: string | null; blocked: string | null } => {
+  const hold = activeHold(j);
+  if (hold) return { label: null, blocked: `${hold.type} hold — ${hold.reason}` };
+  const gaps = reviewGaps(j);
+  const acts = legalJobActions(j);
+  if (!acts.length) return { label: null, blocked: j.status === 'closed' ? 'closed' : null };
+  return { label: acts[0].label.replace('…', ''), blocked: gaps.length ? gaps.join(' · ') : null };
+};
+
+const BENCH_STATES: JobStatus[] = ['approved', 'in_service', 'testing'];
+
+// Pull-next: oldest approved, unassigned, on-hand job — but never one a supervisor already assigned to someone else
+export const pullNextCandidate = (me: string): Job | null =>
+  store.jobs
+    .filter((j) => j.status === 'approved' && j.simpleStatus === 'on_hand' && !activeHold(j) && (j.assignees.length === 0 || j.assignees.includes(me)))
+    .sort((a, b) => ({ urgent: 0, high: 1, normal: 2, low: 3 }[a.priority] - { urgent: 0, high: 1, normal: 2, low: 3 }[b.priority]) || a.createdAt.localeCompare(b.createdAt))[0] ?? null;
+
+export async function getBenchView(userId?: string): Promise<BenchView> {
+  const me = userId ? byId(fx.users, userId) : currentUserSync();
+  if (!me) return resolve({ jobs: [], holds: [], pullNext: null, partsRequests: [] });
+  const mine = store.jobs.filter((j) => j.assignees.includes(me.shortName) && j.status !== 'closed');
+  const jobs = mine.filter((j) => !activeHold(j)).sort((a, b) => a.status.localeCompare(b.status) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9')).map((j) => { const n = nextActionLabel(j); return { ...jobRefs(j), nextAction: n.label, blocked: n.blocked }; });
+  const holds = mine.filter((j) => activeHold(j)).map(jobRefs);
+  const pn = pullNextCandidate(me.shortName);
+  const partsRequests = store.partsRequests.filter((r) => r.requestedBy === me.shortName && r.status !== 'draft').map(prRefs);
+  return resolve({ jobs, holds, pullNext: pn && !pn.assignees.includes(me.shortName) ? jobRefs(pn) : null, partsRequests });
+}
+
+// Pull-next = self-assign + start service, audit-stamped
+export async function pullNext(): Promise<JobWithRefs> {
+  const a = actor();
+  const j = pullNextCandidate(a.by);
+  if (!j) throw new Error('Nothing to pull — no unassigned approved jobs on hand');
+  if (!j.assignees.includes(a.by)) j.assignees.push(a.by);
+  jobStamp(j, `Pulled next by ${a.by} · self-assigned`);
+  return resolve(jobRefs(j));
+}
+
+export async function getSupervisorBoard(): Promise<SupervisorBoard> {
+  const open = store.jobs.filter((j) => j.status !== 'closed');
+  const techs = fx.users.filter((u) => u.roles.includes('watchmaker') || u.roles.includes('inspector'));
+  return resolve({
+    unassigned: open.filter((j) => j.assignees.length === 0 && BENCH_STATES.includes(j.status)).map(jobRefs),
+    byTech: techs.map((user) => ({ user, jobs: open.filter((j) => j.assignees.includes(user.shortName) && BENCH_STATES.includes(j.status)).map(jobRefs) })),
+    partsQueue: store.partsRequests.filter((r) => r.status === 'pending').map(prRefs),
+    holds: open.filter((j) => activeHold(j)).map(jobRefs),
+    qcQueue: open.filter((j) => j.status === 'testing' && !activeHold(j)).map(jobRefs),
+  });
+}
+
+// Supervisor assignment: overwrites the bench (audit says who)
+export async function supervisorAssign(jobId: string, shortNames: string[]): Promise<JobWithRefs> {
+  const j = getJobRow(jobId);
+  const a = actor();
+  if (a.user?.accessTier !== 'manager') throw new Error('Assignment is a supervisor action (manager tier)');
+  const prev = j.assignees.join(', ') || 'nobody';
+  j.assignees = shortNames.filter((s) => fx.users.some((u) => u.shortName === s));
+  jobStamp(j, `Supervisor ${a.by} assigned → ${j.assignees.join(', ') || 'nobody'} (was ${prev})`);
+  return resolve(jobRefs(j));
+}
+
+const FLOOR_LANES: { key: FloorLane; label: string }[] = [
+  { key: 'intake', label: 'Intake' }, { key: 'review', label: 'Review' }, { key: 'approval', label: 'Awaiting approval' }, { key: 'bench', label: 'Bench' },
+  { key: 'case_cleaning', label: 'Case cleaning' }, { key: 'holds', label: 'Holds (parked)' }, { key: 'qc', label: 'Testing / QC' }, { key: 'ready', label: 'Ready' }, { key: 'out', label: 'Out the door' },
+];
+// Case-cleaning lane = in-service jobs whose remaining work is polish-only (P / PM) — PROVISIONAL derivation
+const floorLane = (j: Job): FloorLane => {
+  if (activeHold(j)) return 'holds';
+  switch (j.status) {
+    case 'intake': return 'intake';
+    case 'in_review': return 'review';
+    case 'awaiting_customer_approval': return 'approval';
+    case 'approved': return 'bench';
+    case 'in_service': return j.workflow.every((d) => d === 'P' || d === 'PM') ? 'case_cleaning' : 'bench';
+    case 'testing': return 'qc';
+    case 'ready_to_ship': return 'ready';
+    default: return 'out';
+  }
+};
+export async function getShopFloorMap(): Promise<FloorMap> {
+  const recent = store.jobs.filter((j) => j.status !== 'closed' || (j.finishedAt && Date.now() - new Date(j.finishedAt).getTime() < 14 * 86_400_000));
+  return resolve({ lanes: FLOOR_LANES.map((l) => ({ ...l, jobs: recent.filter((j) => floorLane(j) === l.key).map(jobRefs) })) });
+}
+
+// ---- E6 Parts request → scripted assistant → approval loop -------------------------------------
+
+const prRefs = (r: PartsRequest): PartsRequestWithRefs => {
+  const job = byId(store.jobs, r.jobId);
+  return { ...r, job, part: r.partId ? store.parts.find((p) => p.id === r.partId) ?? null : null, client: byId(fx.clients, job.clientId), watch: byId(store.watches, job.watchId) };
+};
+const partsStamp = (r: PartsRequest, detail: string) => {
+  const a = actor();
+  appendAudit({ type: 'parts', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${r.number} · ${detail}` });
+};
+
+export async function getParts(): Promise<Part[]> { return resolve(store.parts.map((p) => ({ ...p }))); }
+export async function getPartsRequests(): Promise<PartsRequestWithRefs[]> { return resolve([...store.partsRequests].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)).map(prRefs)); }
+export async function getPartsRequest(id: string): Promise<PartsRequestWithRefs | null> { const r = store.partsRequests.find((x) => x.id === id); return resolve(r ? prRefs(r) : null); }
+export async function getPartsRequestsForJob(jobId: string): Promise<PartsRequestWithRefs[]> { return resolve(store.partsRequests.filter((r) => r.jobId === jobId).map(prRefs)); }
+export async function getPartsKnowledge(): Promise<PartsKnowledgeEntry[]> { return resolve([...store.partsKnowledge].sort((a, b) => b.at.localeCompare(a.at))); }
+
+export async function openPartsRequest(jobId: string): Promise<PartsRequestWithRefs> {
+  const j = getJobRow(jobId);
+  const a = actor();
+  const w = byId(store.watches, j.watchId);
+  const r: PartsRequest = { id: newId('pr'), number: `PR-${String(++store.counters.pr).padStart(4, '0')}`, jobId, status: 'draft', qty: 1, searchTerms: [], requestedBy: a.by, requestedAt: new Date().toISOString(), station: a.station,
+    chat: [{ id: newId('cm'), role: 'assistant', text: `Parts lookup for ${j.number} · ${w.brand} ${w.model} ref ${w.reference}. Tell me what you need in your own words — e.g. “crystal ring for a ${w.reference}”.`, at: new Date().toISOString() }] };
+  store.partsRequests.unshift(r);
+  partsStamp(r, `Opened on ${j.number} by ${a.by}`);
+  return resolve(prRefs(r));
+}
+
+// SCRIPTED assistant — canned matcher over the seeded catalog. No AI: tokens → refs / calibers / aliases / names.
+const REF_RE = /\b(m?\d{5,6}[a-z]{0,2})\b/gi;
+const CAL_RE = /\b(mt\s?\d{4}|\d{4})\b/gi;
+const STOP = new Set(['for', 'a', 'an', 'the', 'my', 'need', 'i', 'on', 'of', 'to', 'please', 'and', 'with', 'this', 'that', 'ref', 'cal', 'caliber']);
+export function partsAssistantReply(query: string, job: Job): { text: string; suggestions: { partId: string; reason: string }[] } {
+  const q = query.toLowerCase();
+  const refs = Array.from(q.matchAll(REF_RE)).map((m) => m[1].toUpperCase());
+  const cals = Array.from(q.matchAll(CAL_RE)).map((m) => m[1].replace(/\s/g, '').toUpperCase()).filter((c) => !refs.includes(c));
+  const words = q.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w && !STOP.has(w) && !/^\d+$/.test(w));
+  const watch = byId(store.watches, job.watchId);
+  const scored = store.parts.map((p) => {
+    let score = 0; const why: string[] = [];
+    const refHit = refs.find((r) => p.compatibleRefs.some((cr) => cr.toUpperCase() === r));
+    if (refHit) { score += 5; why.push(`ref ${refHit}`); }
+    const calHit = cals.find((c) => p.calibers.some((pc) => pc.toUpperCase() === c));
+    if (calHit) { score += 5; why.push(`caliber ${calHit}`); }
+    const aliasHit = p.aliases.find((al) => q.includes(al));
+    if (aliasHit) { score += 4; why.push(`“${aliasHit}”`); }
+    const wordHits = words.filter((w) => p.name.toLowerCase().includes(w) || p.category === w || p.aliases.some((al) => al.split(' ').includes(w)));
+    if (wordHits.length && !aliasHit) { score += 2 * wordHits.length; why.push(wordHits.join(' ')); }
+    if (!refs.length && !cals.length && p.compatibleRefs.includes(watch.reference)) { score += 1; why.push(`fits job ref ${watch.reference}`); }
+    return { p, score, why };
+  }).filter((x) => x.score >= 4).sort((a, b) => b.score - a.score).slice(0, 4);
+  if (!scored.length) {
+    const hint = refs.length || cals.length ? 'Nothing in the catalog matches that reference or caliber.' : `I need a reference or caliber to be sure — the job watch is ref ${watch.reference}.`;
+    return { text: `${hint} Try a part word plus a reference, e.g. “gasket ${watch.reference}”.`, suggestions: [] };
+  }
+  const head = refs.length ? `Found ${scored.length} match${scored.length === 1 ? '' : 'es'} for ref ${refs[0]}.` : cals.length ? `Found ${scored.length} match${scored.length === 1 ? '' : 'es'} for cal. ${cals[0]}.` : `Best guesses for “${query.trim()}” (no reference given — ranked against the job watch ${watch.reference}).`;
+  return { text: `${head} Attach one to the request.`, suggestions: scored.map((x) => ({ partId: x.p.id, reason: x.why.join(' · ') })) };
+}
+
+export async function partsChat(requestId: string, text: string): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId);
+  if (!text.trim()) throw new Error('Type what you need');
+  if (r.status !== 'draft' && r.status !== 'pending') throw new Error('Request is decided — open a new one');
+  const now = new Date().toISOString();
+  const job = byId(store.jobs, r.jobId);
+  r.chat.push({ id: newId('cm'), role: 'user', text: text.trim(), at: now });
+  r.searchTerms.push(text.trim().toLowerCase());
+  const reply = partsAssistantReply(text, job);
+  r.chat.push({ id: newId('cm'), role: 'assistant', text: reply.text, suggestions: reply.suggestions, at: now });
+  return resolve(prRefs(r));
+}
+
+export async function attachPart(requestId: string, partId: string, qty = 1, note?: string): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId);
+  const p = byId(store.parts, partId);
+  r.partId = p.id; r.qty = Math.max(1, qty); r.note = note?.trim() || r.note;
+  partsStamp(r, `Attached ${p.partNumber} ×${r.qty}`);
+  return resolve(prRefs(r));
+}
+
+export async function submitPartsRequest(requestId: string, note?: string): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId);
+  if (!r.partId) throw new Error('Attach a part first');
+  r.status = 'pending'; r.note = note?.trim() || r.note; r.requestedAt = new Date().toISOString();
+  const j = byId(store.jobs, r.jobId);
+  partsStamp(r, `Submitted for approval · ${byId(store.parts, r.partId).partNumber}`);
+  jobStamp(j, `Parts request ${r.number} submitted · ${byId(store.parts, r.partId).partNumber}`);
+  return resolve(prRefs(r));
+}
+
+const learn = (r: PartsRequest, kind: PartsKnowledgeEntry['kind'], extra: Partial<PartsKnowledgeEntry>, detail: string) => {
+  const a = actor();
+  const p = byId(store.parts, r.partId!);
+  store.partsKnowledge.unshift({ id: newId('pk'), kind, partId: p.id, partNumber: p.partNumber, requestId: r.id, detail, at: new Date().toISOString(), by: a.by, station: a.station, ...extra });
+};
+
+// Approval = the labeling loop: confirm part↔reference, record the user's own words as aliases
+export async function approvePartsRequest(requestId: string, note?: string, placeHoldToo = true): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId);
+  const a = actor();
+  if (a.user?.accessTier !== 'manager') throw new Error('Parts approval is a supervisor action');
+  if (r.status !== 'pending' || !r.partId) throw new Error('Only a pending request with a part can be approved');
+  const p = byId(store.parts, r.partId);
+  const j = byId(store.jobs, r.jobId);
+  const w = byId(store.watches, j.watchId);
+  r.status = 'approved'; r.decidedBy = a.by; r.decidedAt = new Date().toISOString(); r.decisionNote = note?.trim() || undefined;
+  if (!p.compatibleRefs.includes(w.reference)) p.compatibleRefs.push(w.reference);
+  learn(r, 'association_confirmed', { reference: w.reference }, `Approved on ${r.number} — ${p.partNumber} confirmed for ref ${w.reference}`);
+  r.searchTerms.map((t) => t.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()).filter((t) => t.length >= 4 && !p.aliases.includes(t)).forEach((t) => { p.aliases.push(t); learn(r, 'alias_added', { alias: t }, `Search term "${t}" now maps to ${p.partNumber}`); });
+  partsStamp(r, `Approved by ${a.by} · ${p.partNumber} ×${r.qty}${r.decisionNote ? ` · ${r.decisionNote}` : ''}`);
+  jobStamp(j, `Parts request ${r.number} approved · ${p.partNumber}`);
+  if (placeHoldToo && canHold(j)) { const held = await placeHold(j.id, 'parts', `${p.partNumber} ${p.name} ×${r.qty} — ${r.number} approved by ${a.by}`); void held; }
+  return resolve(prRefs(r));
+}
+
+export async function rejectPartsRequest(requestId: string, reason: string): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId);
+  const a = actor();
+  if (a.user?.accessTier !== 'manager') throw new Error('Parts approval is a supervisor action');
+  if (r.status !== 'pending') throw new Error('Only a pending request can be rejected');
+  if (!reason.trim()) throw new Error('A reason is required');
+  r.status = 'rejected'; r.decidedBy = a.by; r.decidedAt = new Date().toISOString(); r.decisionNote = reason.trim();
+  const j = byId(store.jobs, r.jobId);
+  const w = byId(store.watches, j.watchId);
+  if (r.partId) learn(r, 'rejected', { reference: w.reference }, `Rejected on ${r.number} — ${byId(store.parts, r.partId).partNumber} for ref ${w.reference}: ${reason.trim()}`);
+  partsStamp(r, `Rejected by ${a.by} · ${reason.trim()}`);
+  jobStamp(j, `Parts request ${r.number} rejected · ${reason.trim()}`);
+  return resolve(prRefs(r));
+}
+
+export const partsById = (id: string): Part | undefined => store.parts.find((p) => p.id === id);

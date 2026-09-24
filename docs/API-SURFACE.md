@@ -114,6 +114,20 @@ Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS,
 | `adminMarkComplete(id, 'pickup'\|'ship', note)` | `SalesOrderWithRefs` | manager only, audited |
 | `getPickupQueue()` / `getShipQueue()` | `SalesOrderWithRefs[]` | station queues |
 
+## Workshop lenses + parts (E6)
+| function | returns | notes |
+|---|---|---|
+| `getBenchView(userId?)` | `BenchView {jobs(+nextAction, blocked), holds, pullNext, partsRequests}` | derived for the signed-in user |
+| `pullNextCandidate(me)` / `pullNext()` | `Job \| null` / `JobWithRefs` | self-assign, audited |
+| `getSupervisorBoard()` | `SupervisorBoard {unassigned, byTech, partsQueue, holds, qcQueue}` | |
+| `supervisorAssign(jobId, shortNames[])` | `JobWithRefs` | manager; overwrites assignees, audited |
+| `getShopFloorMap()` | `FloorMap {lanes[]}` | 9 lanes incl. case_cleaning |
+| `getParts()` / `partsById(id)` / `getPartsKnowledge()` | | catalog + knowledge log |
+| `getPartsRequests()` / `getPartsRequest(id)` / `getPartsRequestsForJob(jobId)` | `PartsRequestWithRefs` | |
+| `openPartsRequest(jobId)` / `partsChat(id, text)` / `attachPart(id, partId, qty?)` / `submitPartsRequest(id, note?)` | `PartsRequestWithRefs` | |
+| `partsAssistantReply(query, job)` | `{text, suggestions}` | sync, **scripted** — no AI |
+| `approvePartsRequest(id, note?)` / `rejectPartsRequest(id, reason)` | `PartsRequestWithRefs` | manager; labeling loop |
+
 ## Tasks + Today
 | function | returns | notes |
 |---|---|---|

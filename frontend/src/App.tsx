@@ -26,6 +26,10 @@ import SalesOrdersPage from '@/pages/sales/SalesOrdersPage';
 import SalesOrderDetailPage from '@/pages/sales/SalesOrderDetailPage';
 import PickupStationPage from '@/pages/sales/PickupStationPage';
 import ShipStationPage from '@/pages/sales/ShipStationPage';
+import BenchPage from '@/pages/workshop/BenchPage';
+import SupervisorPage from '@/pages/workshop/SupervisorPage';
+import FloorMapPage from '@/pages/workshop/FloorMapPage';
+import PartsKnowledgePage from '@/pages/workshop/PartsKnowledgePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
 import SignInPage from '@/pages/SignInPage';
@@ -91,6 +95,10 @@ export default function App() {
               <Route path="/clients/:id" element={<ClientDetailPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
+              <Route path="/bench" element={<BenchPage />} />
+              <Route path="/supervisor" element={<SupervisorPage />} />
+              <Route path="/floor" element={<FloorMapPage />} />
+              <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/sales" element={<SalesOrdersPage />} />
               <Route path="/sales/new" element={<SalesOrderDetailPage />} />
               <Route path="/sales/pickup" element={<PickupStationPage />} />
