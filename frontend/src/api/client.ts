@@ -2199,7 +2199,8 @@ type RcEvent =
   | { t: 'pickup'; clientId: string; id: string; date: string; slot: PickupWindow['slot']; note?: string }
   | { t: 'ship'; clientId: string; id: string; address: Address; phone: string }
   | { t: 'msg'; clientId: string; text: string; watchId?: string }
-  | { t: 'reply'; clientId: string; text: string; watchId?: string; by: string };
+  | { t: 'reply'; clientId: string; text: string; watchId?: string; by: string }
+  | { t: 'read'; clientId: string; side: 'client' | 'staff' };
 const recordRcEvent = (ev: RcEvent) => { if (!replaying) writeJson(KEYS.rcEvents, [...readJson<RcEvent[]>(KEYS.rcEvents, []), ev]); };
 export function replayRcEvents(): number {
   const events = readJson<RcEvent[]>(KEYS.rcEvents, []);
@@ -2214,6 +2215,7 @@ export function replayRcEvents(): number {
         else if (ev.t === 'ship') void portalSubmitShippingInfo(ev.clientId, ev.id, ev.address, ev.phone);
         else if (ev.t === 'msg') void portalSendMessage(ev.clientId, ev.text, ev.watchId);
         else if (ev.t === 'reply') void replyToClient(ev.clientId, ev.text, ev.watchId, ev.by);
+        else if (ev.t === 'read') void (ev.side === 'client' ? portalGetMessages(ev.clientId) : markThreadRead(ev.clientId));
       } catch { /* stale event against reset fixtures — ignore */ }
     });
   } finally {
@@ -2448,6 +2450,7 @@ export async function portalSubmitShippingInfo(clientId: string, id: string, add
 }
 
 export async function portalGetMessages(clientId: string): Promise<Message[]> {
+  if (store.messages.some((m) => m.clientId === clientId && m.from === 'staff' && !m.readByClient)) recordRcEvent({ t: 'read', clientId, side: 'client' });
   store.messages.forEach((m) => { if (m.clientId === clientId && m.from === 'staff') m.readByClient = true; });
   return resolve(store.messages.filter((m) => m.clientId === clientId).sort((a, b) => a.at.localeCompare(b.at)));
 }
@@ -2477,6 +2480,7 @@ export async function getStaffInbox(): Promise<StaffInboxThread[]> {
 export async function getStaffInboxUnread(): Promise<number> { return resolve(store.messages.filter((m) => m.from === 'client' && !m.readByStaff).length); }
 
 export async function markThreadRead(clientId: string): Promise<void> {
+  if (store.messages.some((m) => m.clientId === clientId && m.from === 'client' && !m.readByStaff)) recordRcEvent({ t: 'read', clientId, side: 'staff' });
   store.messages.forEach((m) => { if (m.clientId === clientId && m.from === 'client') m.readByStaff = true; });
   return resolve(undefined);
 }

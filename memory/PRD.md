@@ -37,10 +37,17 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
     ├── components/dashboard/  # KpiCards (KpiRow, DeptPnlStrip), HitListPanel, RecentActivity
     ├── components/hitlist/HitListRow.tsx
     ├── hooks/useAsync.ts, hooks/useHitList.ts
-    └── pages/ SignIn, Dashboard, TodayPage, estimates/, jobs/, sales/, workshop/, clients/{ClientsPage,Client360Page}, Placeholders
+    ├── rc/ RcShell, RcSession, RcBits      # RolliConnect portal shell (E8)
+    └── pages/ SignIn, Dashboard, TodayPage, InboxPage, estimates/, jobs/, sales/, workshop/, clients/, rc/ (portal pages), Placeholders
 ```
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
+
+## Implemented — Session E8 RolliConnect client portal (2026-06) — tested via testing agent, iteration_15.json (~98% → read-state fix applied + self-verified)
+- `/rc` route-space with own shell (`src/rc/RcShell.tsx`: cream/serif/brass look, DRAFT banner, own session `rollisuite.rc.session`, guard → `/rc`, portal 404, zero staff links). Pages `src/pages/rc/`: login (email → magic-link stub shown on screen, Outbox email queued; 3 preview accounts), auth/:token, home (Needs-you inbox + watches with status words from `PORTAL_STATUS`, never a percent), estimates/:id (Approve / Decline w/ required reason), invoices/:id (Pay-now full-balance stub, pickup window date+slot+note, shipping-info form), watches/:id (documents & photos, plain-language history), messages (thread; client → staff Inbox).
+- client.ts E8 section: `portal*` functions call the same store functions staff use via `asClient()` (actor = client / station RolliConnect), audit type `portal`; approving also moves a linked `awaiting_customer_approval` job to approved. **Portal event replay**: writes (+ staff replies + read-state) appended to `rollisuite.rc.events`, replayed on load; Setup → "Reset RolliConnect data".
+- Staff: `/inbox` (all tiers) threads + reply (→ Message + Outbox email); SO detail & Pickup Station show `pickupWindow`; concierge task created on window confirm; audit log "RolliConnect" filter.
+- Seeds: Eleanor Vance (E01042 sent; j-11 now linked to e-02), Harrison Whitfield (E02011 on bench; msg-01/02), Grace Nakamura (SO-26-0103 now $1,000/$1,470 paid; msg-03 unread). `e-12 E01052` sent → draft. Fixture `portal.ts`. Docs updated (DECISIONS ×10, API-SURFACE, DATA-MODEL, STATE-MACHINES 5e/5f, SEED-DATA, DESIGN-PRINCIPLES #17).
 
 ## Implemented — Session E7 Client 360 (2026-06) — tested via testing agent, iteration_14.json, 100% pass
 - `resolveIdentifier(q)`: ANY identifier (name / email / phone / company / estimate # / job # / SUB# / tracking incl. shipments / watch ref or serial / SO # / pickup code / request #) → grouped `SearchHit[]`; each hit routes to `/clients/:id?hit=<key>` (record path when no client). Top-bar `GlobalSearch` now wraps `IdentifierSearch` (grouped dropdown, ↑/↓/Enter/Esc, clear); `/clients` page has the same box inline + directory (`getClientDirectory`, recent activity first).
@@ -124,6 +131,7 @@ Built to the user's PROMPT-PACK-estimates.md (pack wins over brief on rules). Re
 ## Backlog
 - P0: Next module per E-session order (user to brief + prompt pack). Keep /app/docs/*.md updated after each module.
 - P1: Requests create/close actions (Quick action "Request" still a placeholder; ServiceRequest is read-only), client edit/create from Client 360
+- P1: RolliConnect: proxy/delegate grants (P-17 ◐), magic-link expiry/single-use, ship-channel seed for the shipping form, client-side request creation
 - P1: Portal grants (P-17 ✗), split-custody warning (pack UNKNOWN, not built), customer/invoice mismatch confirm dialog, real inspection question set, confirm per-kind skipStages
 - P1: Labels section (reuse Label Queue), tier restrictions per intake stage, persist intake/jobs store to localStorage, sales-order convert target
 - P1: Repoint `src/api/client.ts` at the real RolliSuite API (Fastify) when ready
