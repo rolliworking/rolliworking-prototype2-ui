@@ -14,6 +14,7 @@ import {
   sendLeadFollowup,
   updateIntakeLead,
   updatePackageArrivalOutcome,
+  voidReceivedWatch,
   PrototypeApiError,
 } from "./api/client";
 
@@ -255,6 +256,23 @@ export function IntakePage() {
     }
   }
 
+  async function onVoidWatch() {
+    if (!lastPropertyId) return;
+    if (!window.confirm("Void this just-received custody row?")) return;
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      await voidReceivedWatch(lastPropertyId);
+      setNotice(`Voided custody ${lastPropertyId.slice(0, 8)}`);
+      setLastPropertyId(null);
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onLeadDone(id: string) {
     setBusy(true);
     try {
@@ -481,6 +499,9 @@ export function IntakePage() {
             </button>
             <button type="button" disabled={busy || !lastPropertyId} onClick={() => void onLabelPrinted()}>
               Mark label printed
+            </button>
+            <button type="button" disabled={busy || !lastPropertyId} onClick={() => void onVoidWatch()}>
+              Void receive
             </button>
           </div>
         </div>
