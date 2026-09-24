@@ -39,7 +39,7 @@ const MGR: AccessTier[] = ['manager'];
 
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, tiers: ALL, built: true, blurb: 'Shop overview and daily priorities.' },
-  { key: 'hit-list', label: 'Daily Hit List', path: '/hit-list', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Today’s to-dos by owner.' },
+  { key: 'today', label: 'Today', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your derived hit list — owner actions, bench work, holds, discrepancies, tasks.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, built: true, blurb: 'Quotes awaiting approval and approved work.' },
   { key: 'jobs', label: 'Jobs', path: '/jobs', icon: Wrench, tiers: MGR, built: true, blurb: 'Bench work in progress across departments.' },

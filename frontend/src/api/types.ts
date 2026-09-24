@@ -1,7 +1,10 @@
 export type AccessTier = 'manager' | 'concierge';
 
+export type Role = 'concierge' | 'manager' | 'inspector' | 'watchmaker';
+
 export interface User {
   id: string;
+  roles: Role[];
   firstName: string;
   shortName: string;
   displayName: string;
@@ -33,7 +36,8 @@ export type AuditEventType =
   | 'station_reset'
   | 'intake'
   | 'estimate'
-  | 'job';
+  | 'job'
+  | 'task';
 
 export interface AuditEvent {
   id: string;
@@ -180,6 +184,7 @@ export type JobStatus = 'intake' | 'in_review' | 'awaiting_customer_approval' | 
 export type JobSimpleStatus = 'estimate' | 'on_hand' | 'finished';
 export type JobPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type HoldType = 'parts' | 'outsource';
+export type JobKind = 'service' | 'small_job' | 'warranty';
 
 export interface Stamp {
   at: string;
@@ -232,12 +237,14 @@ export interface Job {
   packageId?: string;
   department: Department;
   workflow: DeptCode[];
+  kind: JobKind;
   status: JobStatus;
   simpleStatus: JobSimpleStatus;
   priority: JobPriority;
   lines: EstimateLine[];
   total: number;
-  assignedTo?: string;
+  owner?: Role;
+  assignees: string[];
   intakeDate?: string;
   intakeNotes?: string;
   conditionNotes?: string;
@@ -251,16 +258,46 @@ export interface Job {
   photos: JobPhoto[];
 }
 
-export type Priority = 'high' | 'normal' | 'low';
+// ---- Tasks (explicit 20%) + derived /today rows -----------------------------
 
-export interface HitListItem {
+export type Assignee = { type: 'user'; shortName: string } | { type: 'role'; role: Role };
+
+export interface Task {
   id: string;
   title: string;
-  ownerShortName: string;
-  priority: Priority;
-  done: boolean;
-  dueAt: string;
-  relatedRef?: string;
+  assignedTo: Assignee;
+  createdBy: string;
+  jobId?: string;
+  watchId?: string;
+  clientId?: string;
+  dueAt?: string;
+  status: 'open' | 'done';
+  createdAt: string;
+  station: string;
+  completedAt?: string;
+  completedBy?: string;
+}
+
+export type TodaySource = 'owner' | 'assignee' | 'hold' | 'discrepancy' | 'task';
+
+export interface TodayRow {
+  id: string;
+  source: TodaySource;
+  title: string;
+  detail: string;
+  via: string;
+  jobId?: string;
+  taskId?: string;
+  packageId?: string;
+  dueAt?: string;
+  overdue: boolean;
+  urgent: boolean;
+  sentBy?: string;
+}
+
+export interface TodayView {
+  rows: TodayRow[];
+  waitingOn: Task[];
 }
 
 export type ActivityType =

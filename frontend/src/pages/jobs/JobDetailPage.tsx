@@ -4,8 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { HoldModal, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
-import { AssignmentPanel, DetailsPanel, HoldPanel, LinesTable, NotesPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
+import { HoldModal, KindPill, OwnerBadge, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
+import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, NotesPanel, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -50,9 +50,11 @@ export default function JobDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="job-number">{j.number}</h1>
             <StatusWithHold job={j} />
+            <KindPill kind={j.kind} testId="job-kind-pill" />
             <PriorityPill priority={j.priority} testId="job-priority" />
             <WorkflowBadges workflow={j.workflow} />
             <StatusPill status={j.simpleStatus} testId="job-simple-status" />
+            <OwnerBadge owner={j.owner} testId="job-owner" />
           </div>
           <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> · {j.client.email} · {j.client.phone}</div>
         </div>
@@ -93,8 +95,9 @@ export default function JobDetailPage() {
           <Card title="Shop time" subtitle="Time rows never move job status" testId="job-shop-time-card"><ShopTimePanel job={j} /></Card>
         </div>
         <div className="space-y-4">
-          <Card title="Status timeline" subtitle="Every transition — who, when, station" testId="job-timeline-card"><JobTimeline job={j} /></Card>
-          <Card title="Assignment" testId="job-assignment-card"><AssignmentPanel job={j} run={run} /></Card>
+          <Card title="Status timeline" subtitle="Every transition — who, when, station · linked tasks below" testId="job-timeline-card"><JobTimeline job={j} /><div className="mt-3"><JobTasksPanel job={j} tick={j.timeline.length + j.notes.length} /></div></Card>
+          <Card title="Owner" subtitle="Accountable shepherd — role-based" testId="job-owner-card"><OwnerPanel job={j} run={run} /></Card>
+          <Card title="Assignees" subtitle="Working techs" testId="job-assignment-card"><AssignmentPanel job={j} run={run} /></Card>
           <Card title="Holds" testId="job-holds-card"><HoldPanel job={j} onPlace={() => setModal({ kind: 'hold' })} onRelease={() => setModal({ kind: 'release' })} /></Card>
           <Card title="Details" testId="job-details-card"><DetailsPanel job={j} run={run} /></Card>
         </div>

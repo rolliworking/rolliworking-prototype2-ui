@@ -1,9 +1,9 @@
 import clsx from 'clsx';
-import { AlertTriangle, Clock, Kanban, PauseCircle, Plus } from 'lucide-react';
+import { AlertTriangle, Clock, Kanban, PauseCircle, Plus, UserCog } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { HoldType, JobPriority, JobWithRefs } from '@/api/client';
+import type { HoldType, JobKind, JobPriority, JobWithRefs, Role } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -23,6 +23,26 @@ export const PriorityPill = ({ priority, testId }: { priority: JobPriority; test
   <span data-testid={testId} className={clsx('inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', PRIORITY_TONE[priority])}>
     {priority === 'urgent' && <AlertTriangle size={9} />}{priority}
   </span>
+);
+
+const KIND_TONE: Record<JobKind, string> = { service: 'bg-canvas text-ink-500', small_job: 'bg-teal-50 text-teal-800', warranty: 'bg-violet-50 text-violet-700' };
+export const KindPill = ({ kind, testId }: { kind: JobKind; testId?: string }) => (
+  <span data-testid={testId} className={clsx('inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', KIND_TONE[kind])}>{api.JOB_KIND_CONFIG[kind].label}</span>
+);
+
+// Owner = accountable ROLE (never "PM" — that code is precious metals); shows current holders
+export const OwnerBadge = ({ owner, testId, compact }: { owner?: Role; testId?: string; compact?: boolean }) => {
+  if (!owner) return <span data-testid={testId} className="text-[11px] text-ink-400">no owner</span>;
+  const holders = api.roleHolders(owner).map((u) => u.shortName).join(', ');
+  return (
+    <span data-testid={testId} title={`Owner role: ${owner} · holders: ${holders || 'none'}`} className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 ring-1 ring-inset ring-amber-100">
+      <UserCog size={10} /> {compact ? owner : `Owner · ${owner}`}{!compact && holders && <span className="font-normal text-amber-800/70">({holders})</span>}
+    </span>
+  );
+};
+
+export const AssigneeChips = ({ assignees }: { assignees: string[] }) => (
+  assignees.length ? <span className="inline-flex items-center gap-0.5">{assignees.map((a) => <OwnerChip key={a} owner={a} />)}</span> : <span className="text-[11px] text-ink-400">unassigned</span>
 );
 
 export const WorkflowBadges = ({ workflow, className }: { workflow: string[]; className?: string }) => (
@@ -47,13 +67,14 @@ export const JobCard = ({ job: j }: { job: JobWithRefs }) => (
   <Link to={`/jobs/${j.id}`} data-testid={`job-card-${j.id}`} className="block rounded-md border border-line bg-surface p-2.5 shadow-card transition-[transform,border-color] duration-150 hover:-translate-y-px hover:border-ink-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
     <div className="flex items-center justify-between gap-2">
       <span className="font-mono text-xs font-semibold text-ink">{j.number}</span>
-      <div className="flex items-center gap-1">{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} /></div>
+      <div className="flex items-center gap-1">{j.kind !== 'service' && <KindPill kind={j.kind} />}{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} /></div>
     </div>
     <div className="mt-1 truncate text-[13px] font-medium text-ink">{fullName(j.client)}</div>
     <div className="truncate text-xs text-ink-500">{j.watch.brand} {j.watch.model} <span className="font-mono text-ink-400">{j.watch.reference}</span></div>
     <div className="mt-1.5 flex items-center justify-between gap-2">
       <div className="flex items-center gap-1.5">
-        {j.assignedTo ? <OwnerChip owner={j.assignedTo} /> : <span className="text-[11px] text-ink-400">unassigned</span>}
+        <AssigneeChips assignees={j.assignees} />
+        {j.owner && <OwnerBadge owner={j.owner} compact />}
         <HoldBadge job={j} compact />
       </div>
       {j.dueAt && <span className={clsx('inline-flex items-center gap-1 tabular text-[11px]', isOverdue(j) ? 'font-semibold text-rose-700' : 'text-ink-400')}><Clock size={10} /> {fmtDate(j.dueAt)}</span>}

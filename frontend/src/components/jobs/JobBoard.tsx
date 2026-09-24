@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobStatus, JobWithRefs } from '@/api/client';
-import { HoldBadge, JobCard, PriorityPill, WorkflowBadges, isOverdue } from '@/components/jobs/JobBits';
-import { OwnerChip, StatusPill } from '@/components/ui/Pills';
+import { AssigneeChips, HoldBadge, JobCard, KindPill, OwnerBadge, PriorityPill, WorkflowBadges, isOverdue } from '@/components/jobs/JobBits';
+import { StatusPill } from '@/components/ui/Pills';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents, fullName, humanize } from '@/lib/format';
 
@@ -49,7 +49,7 @@ export const JobGroupedList = ({ jobs }: { jobs: JobWithRefs[] }) => {
   return (
     <Table testId="jobs-table">
       <thead>
-        <tr><Th>Job</Th><Th>Client</Th><Th>Watch</Th><Th>Workflow</Th><Th>Status</Th><Th>Priority</Th><Th>Assigned</Th><Th className="text-right">Due</Th><Th className="text-right">Total</Th></tr>
+        <tr><Th>Job</Th><Th>Kind</Th><Th>Client</Th><Th>Watch</Th><Th>Workflow</Th><Th>Status</Th><Th>Priority</Th><Th>Owner</Th><Th>Assignees</Th><Th className="text-right">Due</Th><Th className="text-right">Total</Th></tr>
       </thead>
       <tbody>
         {LANES.map((lane) => {
@@ -57,7 +57,7 @@ export const JobGroupedList = ({ jobs }: { jobs: JobWithRefs[] }) => {
           if (rows.length === 0) return null;
           return [
             <tr key={`${lane}-h`} className="bg-canvas/70">
-              <td colSpan={9} className="px-3 py-1">
+              <td colSpan={11} className="px-3 py-1">
                 <button type="button" data-testid={`group-toggle-${lane}`} onClick={() => toggle(lane)} className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink">
                   {collapsed[lane] ? <ChevronRight size={12} /> : <ChevronDown size={12} />}{LANE_LABEL[lane]} <span data-testid={`group-count-${lane}`} className="font-mono font-normal text-ink-400">{rows.length}</span>
                 </button>
@@ -66,19 +66,21 @@ export const JobGroupedList = ({ jobs }: { jobs: JobWithRefs[] }) => {
             ...(collapsed[lane] ? [] : rows.map((j) => (
               <tr key={j.id} data-testid={`job-row-${j.id}`} tabIndex={0} onClick={() => navigate(`/jobs/${j.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/jobs/${j.id}`)} className="cursor-pointer transition-colors hover:bg-canvas/70 focus:bg-canvas focus:outline-none">
                 <Td className="font-mono text-xs font-medium text-ink">{j.number}</Td>
+                <Td><KindPill kind={j.kind} /></Td>
                 <Td className="font-medium text-ink">{fullName(j.client)}</Td>
                 <Td><span className="text-ink">{j.watch.brand} {j.watch.model}</span> <span className="ml-1 font-mono text-xs text-ink-400">{j.watch.reference}</span></Td>
                 <Td><WorkflowBadges workflow={j.workflow} /></Td>
                 <Td><span className="inline-flex items-center gap-1.5"><StatusPill status={j.status} /><HoldBadge job={j} compact /></span></Td>
                 <Td><PriorityPill priority={j.priority} /></Td>
-                <Td>{j.assignedTo ? <OwnerChip owner={j.assignedTo} /> : <span className="text-xs text-ink-400">—</span>}</Td>
+                <Td><OwnerBadge owner={j.owner} compact /></Td>
+                <Td><AssigneeChips assignees={j.assignees} /></Td>
                 <Td className={clsx('tabular text-right', isOverdue(j) ? 'font-medium text-rose-700' : 'text-ink-500')}>{j.dueAt ? fmtDate(j.dueAt) : '—'}</Td>
                 <Td className="tabular text-right font-medium">{fmtMoneyCents(j.total)}</Td>
               </tr>
             ))),
           ];
         })}
-        {jobs.length === 0 && <EmptyRow colSpan={9} text="No jobs match." />}
+        {jobs.length === 0 && <EmptyRow colSpan={11} text="No jobs match." />}
       </tbody>
     </Table>
   );

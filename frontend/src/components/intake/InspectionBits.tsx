@@ -93,7 +93,7 @@ export const SameWatchFork = ({ match, expectedClientId, decision, onDecide }: F
             <ul className="space-y-0.5">
               {match.jobs.map((j) => (
                 <li key={j.id} className="flex items-center gap-2 text-ink-700">
-                  <span className="font-mono">{j.number}</span> {j.workflow.map((d) => DEPT_LABEL[d]).join(' · ')} · {j.assignedTo ?? 'unassigned'} · <StatusPill status={j.status} /> <span className="tabular text-ink-400">{fmtDate(j.createdAt)}</span>
+                  <span className="font-mono">{j.number}</span> {j.workflow.map((d) => DEPT_LABEL[d]).join(' · ')} · {j.assignees.join(', ') || 'unassigned'} · <StatusPill status={j.status} /> <span className="tabular text-ink-400">{fmtDate(j.createdAt)}</span>
                 </li>
               ))}
               {match.packages.map((p) => (

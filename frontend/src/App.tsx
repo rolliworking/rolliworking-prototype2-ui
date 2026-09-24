@@ -9,7 +9,7 @@ import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
 import EstimatesListPage from '@/pages/estimates/EstimatesListPage';
-import HitListPage from '@/pages/HitListPage';
+import TodayPage from '@/pages/TodayPage';
 import ArrivalPage from '@/pages/intake/ArrivalPage';
 import LabelQueuePage from '@/pages/intake/LabelQueuePage';
 import OutboxPage from '@/pages/intake/OutboxPage';
@@ -65,7 +65,8 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<TierGate />}>
               <Route index element={<Dashboard />} />
-              <Route path="/hit-list" element={<HitListPage />} />
+              <Route path="/today" element={<TodayPage />} />
+              <Route path="/hit-list" element={<Navigate to="/today" replace />} />
               <Route path="/estimates" element={<EstimatesListPage />} />
               <Route path="/estimates/new" element={<EstimateCreatePage />} />
               <Route path="/estimates/:id" element={<EstimateDetailPage />} />

@@ -1,12 +1,12 @@
-import { Camera, Clock, PauseCircle, PlayCircle, Send, UserRound } from 'lucide-react';
+import { Camera, Clock, ListChecks, PauseCircle, PlayCircle, Send, UserCog, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { JobPriority, JobWithRefs, ShopTimeEntry, User } from '@/api/client';
+import type { JobPriority, JobWithRefs, Role, ShopTimeEntry, Task, User } from '@/api/client';
 import { PhotoCapture } from '@/components/intake/ReceiveBits';
-import { Provisional } from '@/components/jobs/JobBits';
+import { AssigneeChips, KindPill, OwnerBadge, Provisional } from '@/components/jobs/JobBits';
 import { Button } from '@/components/ui/Button';
-import { DeptBadge, OwnerChip } from '@/components/ui/Pills';
+import { DeptBadge } from '@/components/ui/Pills';
 import { Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents, fmtTime } from '@/lib/format';
 
@@ -30,16 +30,47 @@ export const AssignmentPanel = ({ job: j, run }: { job: JobWithRefs; run: Refres
   useEffect(() => { api.getUsers().then(setUsers); }, []);
   return (
     <div data-testid="assignment-panel">
-      <div className="mb-2 flex items-center gap-2 text-xs text-ink-500"><UserRound size={12} /> Holds it now: {j.assignedTo ? <OwnerChip owner={j.assignedTo} /> : <span data-testid="assignee-none" className="text-ink-400">nobody</span>}</div>
+      <div className="mb-2 flex items-center gap-2 text-xs text-ink-500"><UserRound size={12} /> Working techs: <span data-testid="assignee-list"><AssigneeChips assignees={j.assignees} /></span></div>
       <div className="flex flex-wrap gap-1.5">
-        {users.map((u) => (
-          <button key={u.id} type="button" data-testid={`assign-${u.shortName.toLowerCase()}`} onClick={() => run(() => api.assignJob(j.id, u.shortName), `Assigned to ${u.shortName}`)} disabled={j.assignedTo === u.shortName} className={`h-7 rounded-sm border px-2 text-xs transition-colors ${j.assignedTo === u.shortName ? 'border-ink bg-ink text-white' : 'border-line text-ink-700 hover:border-ink-300'}`} title={u.displayName}>{u.shortName}</button>
-        ))}
-        {j.assignedTo && <button type="button" data-testid="assign-none" onClick={() => run(() => api.assignJob(j.id, null), 'Unassigned')} className="h-7 rounded-sm border border-dashed border-line px-2 text-xs text-ink-500 hover:border-ink-300">Unassign</button>}
+        {users.map((u) => {
+          const on = j.assignees.includes(u.shortName);
+          return <button key={u.id} type="button" data-testid={`assign-${u.shortName.toLowerCase()}`} aria-pressed={on} onClick={() => run(() => api.toggleAssignee(j.id, u.shortName), on ? `Removed ${u.shortName}` : `Added ${u.shortName}`)} className={`h-7 rounded-sm border px-2 text-xs transition-colors ${on ? 'border-ink bg-ink text-white' : 'border-line text-ink-700 hover:border-ink-300'}`} title={u.displayName}>{u.shortName}</button>;
+        })}
       </div>
+      <p className="mt-1.5 text-[10px] text-ink-400">Toggle to add or remove — several techs can hold a job (W + P).</p>
     </div>
   );
 };
+
+export const OwnerPanel = ({ job: j, run }: { job: JobWithRefs; run: Refresh }) => (
+  <div data-testid="owner-panel">
+    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink-500"><UserCog size={12} /> Accountable owner (role): <OwnerBadge owner={j.owner} testId="owner-badge" /> <KindPill kind={j.kind} testId="job-kind" /></div>
+    <div className="flex flex-wrap gap-1.5">
+      {api.ROLES.map((r) => (
+        <button key={r} type="button" data-testid={`owner-${r}`} onClick={() => run(() => api.setJobOwner(j.id, r), `Owner → ${r}`)} disabled={j.owner === r} className={`h-7 rounded-sm border px-2 text-xs capitalize transition-colors ${j.owner === r ? 'border-amber-700 bg-amber-700 text-white' : 'border-line text-ink-700 hover:border-ink-300'}`} title={`${r}: ${api.roleHolders(r).map((u) => u.shortName).join(', ') || 'no holder'}`}>{r} <span className="opacity-60">{api.roleHolders(r).length}</span></button>
+      ))}
+      {j.owner && <button type="button" data-testid="owner-none" onClick={() => run(() => api.setJobOwner(j.id, null), 'Owner cleared')} className="h-7 rounded-sm border border-dashed border-line px-2 text-xs text-ink-500 hover:border-ink-300">Clear</button>}
+    </div>
+    <p className="mt-1.5 text-[10px] text-ink-400">{api.JOB_KIND_CONFIG[j.kind].defaultOwnerRole ? `${api.JOB_KIND_CONFIG[j.kind].label} jobs auto-route to the ${api.JOB_KIND_CONFIG[j.kind].defaultOwnerRole} role at creation.` : 'Service jobs take a manually picked owner.'} Owner ≠ assignees; "PM" stays the precious-metals code.</p>
+  </div>
+);
+
+export const JobTasksPanel = ({ job: j, tick }: { job: JobWithRefs; tick: number }) => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  useEffect(() => { api.getTasksForJob(j.id).then(setTasks); }, [j.id, tick]);
+  if (tasks.length === 0) return null;
+  return (
+    <div data-testid="job-tasks-panel" className="rounded-sm border border-line bg-canvas/50 p-2.5">
+      <div className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500"><ListChecks size={11} /> Linked tasks</div>
+      <ul className="divide-y divide-line/70 text-xs">
+        {tasks.map((t) => <li key={t.id} data-testid={`job-task-${t.id}`} className={`flex items-center gap-2 py-1 ${t.status === 'done' ? 'text-ink-400 line-through' : 'text-ink'}`}><span className="flex-1 truncate">{t.title}</span><span className="whitespace-nowrap text-ink-400 no-underline">{api.assigneeLabel(t.assignedTo).split(' →')[0]} · from {t.createdBy}{t.dueAt && ` · due ${fmtDate(t.dueAt)}`}</span></li>)}
+      </ul>
+    </div>
+  );
+};
+
+const noopRole: Role | null = null;
+void noopRole;
 
 export const HoldPanel = ({ job: j, onPlace, onRelease }: { job: JobWithRefs; onPlace: () => void; onRelease: () => void }) => {
   const active = api.activeHold(j);

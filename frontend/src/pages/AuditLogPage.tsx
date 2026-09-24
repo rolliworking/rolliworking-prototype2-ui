@@ -20,6 +20,7 @@ const TYPE_TONE: Record<AuditEventType, string> = {
   intake: 'bg-teal-50 text-teal-800',
   estimate: 'bg-violet-50 text-violet-700',
   job: 'bg-orange-50 text-orange-800',
+  task: 'bg-moss-50 text-moss-700',
 };
 
 type Filter = 'all' | 'sign_in' | 'station' | 'intake' | 'estimate' | 'job';
@@ -36,7 +37,7 @@ export default function AuditLogPage() {
         if (filter === 'station') return e.type.startsWith('station_');
         if (filter === 'intake') return e.type === 'intake';
         if (filter === 'estimate') return e.type === 'estimate';
-        if (filter === 'job') return e.type === 'job';
+        if (filter === 'job') return e.type === 'job' || e.type === 'task';
         return true;
       }),
     [data, filter],

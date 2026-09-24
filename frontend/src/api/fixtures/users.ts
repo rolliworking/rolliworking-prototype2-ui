@@ -4,6 +4,7 @@ import type { User } from '../types';
 export const users: User[] = [
   {
     id: 'u-michael',
+    roles: ['manager', 'inspector'],
     firstName: 'michael',
     shortName: 'MH',
     displayName: 'MH — Inspector · Manager',
@@ -14,6 +15,7 @@ export const users: User[] = [
   },
   {
     id: 'u-walter',
+    roles: ['manager', 'inspector'],
     firstName: 'walter',
     shortName: 'Walter',
     displayName: 'Walter — Inspector · Manager',
@@ -24,6 +26,7 @@ export const users: User[] = [
   },
   {
     id: 'u-vienna',
+    roles: ['concierge'],
     firstName: 'vienna',
     shortName: 'Vienna',
     displayName: 'Vienna — Concierge · Admin assistant',
@@ -34,6 +37,7 @@ export const users: User[] = [
   },
   {
     id: 'u-mm',
+    roles: ['manager', 'watchmaker'],
     firstName: 'mm',
     shortName: 'MM',
     displayName: 'MM — Watchmaker Room Supervisor · Manager',

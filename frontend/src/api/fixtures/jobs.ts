@@ -1,4 +1,4 @@
-import type { DeptCode, Department, EstimateLine, HoldType, Job, JobPriority, JobStatus, JobTransition, ShopTimeEntry } from '../types';
+import type { DeptCode, Department, EstimateLine, HoldType, Job, JobKind, JobPriority, JobStatus, JobTransition, Role, ShopTimeEntry } from '../types';
 import { estimates } from './estimates';
 import { daysAgo, daysFromNow } from './time';
 
@@ -38,7 +38,9 @@ interface Seed {
   status: JobStatus;
   priority?: JobPriority;
   simple?: Job['simpleStatus'];
-  assignedTo?: string;
+  kind?: JobKind;
+  owner?: Role;
+  assignees?: string[];
   createdDaysAgo: number;
   dueInDays?: number;
   lines?: EstimateLine[];
@@ -51,7 +53,9 @@ interface Seed {
 const build = (s: Seed): Job => {
   const est = s.estimateId ? estimates.find((e) => e.id === s.estimateId) : undefined;
   const lines = s.lines ?? est?.lines.map((l) => ({ ...l })) ?? [];
-  const by = s.assignedTo ?? 'Walter';
+  const assignees = s.assignees ?? [];
+  const by = assignees[0] ?? 'Walter';
+  const kind = s.kind ?? 'service';
   const timeline = flow(s.status, s.createdDaysAgo, by);
   if (s.qcFail) {
     const i = timeline.findIndex((t) => t.to === 'testing');
@@ -67,12 +71,14 @@ const build = (s: Seed): Job => {
     packageId: s.packageId,
     department: DEPT_OF_CODE[s.workflow[0]],
     workflow: s.workflow,
+    kind,
     status: s.status,
     simpleStatus: simple,
     priority: s.priority ?? 'normal',
     lines,
     total: lines.reduce((t, l) => t + l.qty * l.unitPrice, 0),
-    assignedTo: s.assignedTo,
+    owner: s.owner ?? (kind === 'service' ? undefined : 'concierge'),
+    assignees,
     intakeDate: simple === 'estimate' ? undefined : daysAgo(s.createdDaysAgo, 9),
     conditionNotes: s.conditionNotes,
     dueAt: s.dueInDays !== undefined ? daysFromNow(s.dueInDays) : undefined,
@@ -88,28 +94,28 @@ const build = (s: Seed): Job => {
 
 export const jobs: Job[] = [
   // Born from converted estimates — on the bench
-  build({ id: 'j-01', number: 'E02011', estimateId: 'e-01', clientId: 'c-01', watchId: 'w-01', workflow: ['W'], status: 'in_service', priority: 'high', assignedTo: 'MM', createdDaysAgo: 9, dueInDays: 12, notes: ['Movement uncased. Mainspring shows fatigue — replacing under service.'] }),
-  build({ id: 'j-02', number: 'E02012', estimateId: 'e-03', clientId: 'c-03', watchId: 'w-03', workflow: ['P'], status: 'ready_to_ship', assignedTo: 'Walter', createdDaysAgo: 17, dueInDays: -3, notes: ['Ready for pickup — client texted, coming Saturday.'] }),
-  build({ id: 'j-03', number: 'E02013', estimateId: 'e-04', clientId: 'c-04', watchId: 'w-04', workflow: ['W', 'P'], status: 'in_service', assignedTo: 'Walter', createdDaysAgo: 6, dueInDays: 18 }),
-  build({ id: 'j-04', number: 'E02014', estimateId: 'e-06', clientId: 'c-06', watchId: 'w-06', workflow: ['W'], status: 'in_service', priority: 'high', assignedTo: 'MM', createdDaysAgo: 28, dueInDays: 9, hold: { type: 'parts', reason: 'Waiting on cal. 3285 mainspring barrel from RSC — ETA 10 days', daysAgo: 6 } }),
-  build({ id: 'j-05', number: 'E02015', estimateId: 'e-07', clientId: 'c-07', watchId: 'w-07', workflow: ['B', 'P'], status: 'testing', assignedTo: 'MH', createdDaysAgo: 13, dueInDays: 1 }),
-  build({ id: 'j-06', number: 'E02016', estimateId: 'e-09', clientId: 'c-09', watchId: 'w-09', workflow: ['W', 'PM'], status: 'in_service', assignedTo: 'MM', createdDaysAgo: 18, dueInDays: 6, hold: { type: 'outsource', reason: 'Bezel out to plating vendor (Goldsmith & Co.) — due back Thursday', daysAgo: 4 } }),
+  build({ id: 'j-01', number: 'E02011', estimateId: 'e-01', clientId: 'c-01', watchId: 'w-01', workflow: ['W'], status: 'in_service', priority: 'high', owner: 'manager', assignees: ['MM'], createdDaysAgo: 9, dueInDays: 12, notes: ['Movement uncased. Mainspring shows fatigue — replacing under service.'] }),
+  build({ id: 'j-02', number: 'E02012', estimateId: 'e-03', clientId: 'c-03', watchId: 'w-03', workflow: ['P'], status: 'ready_to_ship', owner: 'concierge', assignees: ['Walter'], createdDaysAgo: 17, dueInDays: -3, notes: ['Ready for pickup — client texted, coming Saturday.'] }),
+  build({ id: 'j-03', number: 'E02013', estimateId: 'e-04', clientId: 'c-04', watchId: 'w-04', workflow: ['W', 'P'], status: 'in_service', owner: 'manager', assignees: ['Walter', 'MM'], createdDaysAgo: 6, dueInDays: 18 }),
+  build({ id: 'j-04', number: 'E02014', estimateId: 'e-06', clientId: 'c-06', watchId: 'w-06', workflow: ['W'], status: 'in_service', priority: 'high', assignees: ['MM'], createdDaysAgo: 28, dueInDays: 9, hold: { type: 'parts', reason: 'Waiting on cal. 3285 mainspring barrel from RSC — ETA 10 days', daysAgo: 6 } }),
+  build({ id: 'j-05', number: 'E02015', estimateId: 'e-07', clientId: 'c-07', watchId: 'w-07', workflow: ['B', 'P'], status: 'testing', owner: 'inspector', assignees: ['MH'], createdDaysAgo: 13, dueInDays: 1 }),
+  build({ id: 'j-06', number: 'E02016', estimateId: 'e-09', clientId: 'c-09', watchId: 'w-09', workflow: ['W', 'PM'], status: 'in_service', assignees: ['MM'], createdDaysAgo: 18, dueInDays: 6, hold: { type: 'outsource', reason: 'Bezel out to plating vendor (Goldsmith & Co.) — due back Thursday', daysAgo: 4 } }),
   // Walk-ins / no estimate link
-  build({ id: 'j-07', number: 'E02017', clientId: 'c-12', watchId: 'w-12', workflow: ['B'], status: 'ready_to_ship', assignedTo: 'MH', createdDaysAgo: 16, dueInDays: -2 }),
-  build({ id: 'j-08', number: 'E02018', clientId: 'c-10', watchId: 'w-10', workflow: ['P'], status: 'closed', assignedTo: 'Walter', createdDaysAgo: 38, lines: [line('Case & bracelet refinish — brushed/polished', 340, 'P')] }),
-  build({ id: 'j-09', number: 'E02019', clientId: 'c-15', watchId: 'w-15', workflow: ['W', 'B', 'P'], status: 'closed', assignedTo: 'MM', createdDaysAgo: 33, lines: [line('Complete movement service — cal. 3235', 1450, 'W'), line('Bracelet re-pin & tighten', 260, 'B'), line('Case & bracelet refinish', 540, 'P')] }),
-  build({ id: 'j-10', number: 'E02020', clientId: 'c-11', watchId: 'w-11', workflow: ['B'], status: 'approved', createdDaysAgo: 5, dueInDays: 4, lines: [line('Bracelet clasp replacement', 320, 'B'), line('Bracelet re-pin', 160, 'B')] }),
-  build({ id: 'j-11', number: 'E02021', clientId: 'c-02', watchId: 'w-02', workflow: ['W'], status: 'awaiting_customer_approval', assignedTo: 'Walter', createdDaysAgo: 4, lines: [line('Chronograph service — cal. 4130', 1650, 'W')], notes: ['Estimate revised after review — pusher seals worn.'] }),
-  build({ id: 'j-12', number: 'E02022', clientId: 'c-05', watchId: 'w-05', workflow: ['W', 'B'], status: 'intake', priority: 'urgent', createdDaysAgo: 1, dueInDays: 10, lines: [line('Movement service — cal. 3230', 1250, 'W'), line('Bracelet screw replacement', 90, 'B')], conditionNotes: 'Crystal scratch at 4 o\u2019clock, bracelet stretch noted at intake.' }),
-  build({ id: 'j-13', number: 'E02023', clientId: 'c-13', watchId: 'w-13', workflow: ['B', 'P'], status: 'in_review', assignedTo: 'Walter', createdDaysAgo: 2, dueInDays: 14, lines: [line('Titanium bracelet refinish', 420, 'P'), line('Clasp spring replacement', 110, 'B')] }),
+  build({ id: 'j-07', number: 'E02017', clientId: 'c-12', watchId: 'w-12', workflow: ['B'], status: 'ready_to_ship', kind: 'small_job', assignees: ['MH'], createdDaysAgo: 16, dueInDays: -2 }),
+  build({ id: 'j-08', number: 'E02018', clientId: 'c-10', watchId: 'w-10', workflow: ['P'], status: 'closed', assignees: ['Walter'], createdDaysAgo: 38, lines: [line('Case & bracelet refinish — brushed/polished', 340, 'P')] }),
+  build({ id: 'j-09', number: 'E02019', clientId: 'c-15', watchId: 'w-15', workflow: ['W', 'B', 'P'], status: 'closed', assignees: ['MM'], createdDaysAgo: 33, lines: [line('Complete movement service — cal. 3235', 1450, 'W'), line('Bracelet re-pin & tighten', 260, 'B'), line('Case & bracelet refinish', 540, 'P')] }),
+  build({ id: 'j-10', number: 'E02020', clientId: 'c-11', watchId: 'w-11', workflow: ['B'], status: 'approved', kind: 'small_job', createdDaysAgo: 5, dueInDays: 4, lines: [line('Bracelet clasp replacement', 320, 'B'), line('Bracelet re-pin', 160, 'B')] }),
+  build({ id: 'j-11', number: 'E02021', clientId: 'c-02', watchId: 'w-02', workflow: ['W'], status: 'awaiting_customer_approval', kind: 'warranty', assignees: ['Walter'], createdDaysAgo: 4, lines: [line('Chronograph service — cal. 4130', 1650, 'W')], notes: ['Estimate revised after review — pusher seals worn.'] }),
+  build({ id: 'j-12', number: 'E02022', clientId: 'c-05', watchId: 'w-05', workflow: ['W', 'B'], status: 'intake', priority: 'urgent', owner: 'inspector', createdDaysAgo: 1, dueInDays: 10, lines: [line('Movement service — cal. 3230', 1250, 'W'), line('Bracelet screw replacement', 90, 'B')], conditionNotes: 'Crystal scratch at 4 o\u2019clock, bracelet stretch noted at intake.' }),
+  build({ id: 'j-13', number: 'E02023', clientId: 'c-13', watchId: 'w-13', workflow: ['B', 'P'], status: 'in_review', kind: 'small_job', assignees: ['Walter'], createdDaysAgo: 2, dueInDays: 14, lines: [line('Titanium bracelet refinish', 420, 'P'), line('Clasp spring replacement', 110, 'B')] }),
   build({ id: 'j-14', number: 'E02024', clientId: 'c-08', watchId: 'w-08', workflow: ['P'], status: 'intake', priority: 'low', simple: 'estimate', createdDaysAgo: 3, lines: [line('Case refinish — polished bevels', 385, 'P')], conditionNotes: 'Package on discrepancy hold — bracelet missing.' }),
   build({ id: 'j-15', number: 'E02025', clientId: 'c-16', watchId: 'w-17', workflow: ['W'], status: 'approved', priority: 'low', createdDaysAgo: 3, dueInDays: 21, lines: [line('Movement service — MT5602', 950, 'W')] }),
-  build({ id: 'j-16', number: 'E02026', clientId: 'c-18', watchId: 'w-16', workflow: ['W', 'P'], status: 'testing', priority: 'high', assignedTo: 'MM', createdDaysAgo: 12, dueInDays: 2, lines: [line('Movement service — cal. 2236', 1150, 'W'), line('Case refinish', 320, 'P')], qcFail: 'Amplitude low in dial-down position (198°) — re-check hairspring', notes: ['Second timing run in progress.'] }),
-  build({ id: 'j-17', number: 'E02027', clientId: 'c-19', watchId: 'w-18', workflow: ['PM'], status: 'in_service', assignedTo: 'Walter', createdDaysAgo: 7, dueInDays: 8, lines: [line('Platinum bezel refinish — precious metals', 780, 'PM')] }),
-  build({ id: 'j-18', number: 'E02028', clientId: 'c-20', watchId: 'w-19', workflow: ['W'], status: 'in_review', priority: 'urgent', assignedTo: 'MH', createdDaysAgo: 1, dueInDays: 6, lines: [line('Movement service — cal. 3235', 1450, 'W')], notes: ['Client travelling on the 28th — needs it back before.'] }),
+  build({ id: 'j-16', number: 'E02026', clientId: 'c-18', watchId: 'w-16', workflow: ['W', 'P'], status: 'testing', priority: 'high', kind: 'warranty', assignees: ['MM'], createdDaysAgo: 12, dueInDays: 2, lines: [line('Movement service — cal. 2236', 1150, 'W'), line('Case refinish', 320, 'P')], qcFail: 'Amplitude low in dial-down position (198°) — re-check hairspring', notes: ['Second timing run in progress.'] }),
+  build({ id: 'j-17', number: 'E02027', clientId: 'c-19', watchId: 'w-18', workflow: ['PM'], status: 'in_service', assignees: ['Walter'], createdDaysAgo: 7, dueInDays: 8, lines: [line('Platinum bezel refinish — precious metals', 780, 'PM')] }),
+  build({ id: 'j-18', number: 'E02028', clientId: 'c-20', watchId: 'w-19', workflow: ['W'], status: 'in_review', priority: 'urgent', assignees: ['MH'], createdDaysAgo: 1, dueInDays: 6, lines: [line('Movement service — cal. 3235', 1450, 'W')], notes: ['Client travelling on the 28th — needs it back before.'] }),
   // History on returning watches
-  build({ id: 'j-19', number: 'E01903', clientId: 'c-09', watchId: 'w-09', workflow: ['W'], status: 'closed', assignedTo: 'MM', createdDaysAgo: 60, lines: [line('Movement service — cal. 3135', 1250, 'W')], hold: { type: 'parts', reason: 'Crown tube back-ordered', daysAgo: 45, released: true } }),
-  build({ id: 'j-20', number: 'E01887', clientId: 'c-01', watchId: 'w-01', workflow: ['B', 'P'], status: 'closed', assignedTo: 'Walter', createdDaysAgo: 75, lines: [line('Bracelet re-pin', 160, 'B'), line('Case & bracelet refinish', 540, 'P')] }),
+  build({ id: 'j-19', number: 'E01903', clientId: 'c-09', watchId: 'w-09', workflow: ['W'], status: 'closed', assignees: ['MM'], createdDaysAgo: 60, lines: [line('Movement service — cal. 3135', 1250, 'W')], hold: { type: 'parts', reason: 'Crown tube back-ordered', daysAgo: 45, released: true } }),
+  build({ id: 'j-20', number: 'E01887', clientId: 'c-01', watchId: 'w-01', workflow: ['B', 'P'], status: 'closed', assignees: ['Walter'], createdDaysAgo: 75, lines: [line('Bracelet re-pin', 160, 'B'), line('Case & bracelet refinish', 540, 'P')] }),
 ];
 
 export const shopTime: ShopTimeEntry[] = [

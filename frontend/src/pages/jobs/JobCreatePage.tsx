@@ -2,15 +2,16 @@ import { ArrowLeft, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { Client, DeptCode, EstimateWithRefs, JobPriority, User, Watch } from '@/api/client';
+import type { Client, DeptCode, EstimateWithRefs, JobKind, JobPriority, User, Watch } from '@/api/client';
 import { ClientPicker, WatchPicker } from '@/components/estimates/EstimateForm';
-import { JobsSubNav, Provisional } from '@/components/jobs/JobBits';
+import { JobsSubNav, OwnerBadge, Provisional } from '@/components/jobs/JobBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DeptBadge } from '@/components/ui/Pills';
 import { fmtMoneyCents } from '@/lib/format';
 
 const PRIORITIES: JobPriority[] = ['low', 'normal', 'high', 'urgent'];
+const KINDS: JobKind[] = ['service', 'small_job', 'warranty'];
 const DEPTS: DeptCode[] = ['W', 'B', 'P', 'PM'];
 const field = 'h-8 rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:outline-none';
 
@@ -21,7 +22,7 @@ export default function JobCreatePage() {
   const [estimates, setEstimates] = useState<EstimateWithRefs[]>([]);
   const [estimateId, setEstimateId] = useState('');
   const [users, setUsers] = useState<User[]>([]);
-  const [f, setF] = useState({ priority: 'normal' as JobPriority, dueAt: '', assignedTo: '', conditionNotes: '', intakeNotes: '', onHand: true, workflow: [] as DeptCode[] });
+  const [f, setF] = useState({ kind: 'service' as JobKind, priority: 'normal' as JobPriority, dueAt: '', assignees: [] as string[], conditionNotes: '', intakeNotes: '', onHand: true, workflow: [] as DeptCode[] });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { api.getUsers().then(setUsers); }, []);
@@ -40,7 +41,7 @@ export default function JobCreatePage() {
     if (!client) return setError('Pick a customer first');
     if (!watch) return setError('Watch is required on create');
     try {
-      const j = await api.createJob({ clientId: client.id, watchId: watch.id, estimateId: est?.id, priority: f.priority, dueAt: f.dueAt ? new Date(`${f.dueAt}T17:00:00`).toISOString() : undefined, assignedTo: f.assignedTo || undefined, conditionNotes: f.conditionNotes, intakeNotes: f.intakeNotes, onHand: f.onHand, workflow: f.workflow, lines: est?.lines });
+      const j = await api.createJob({ clientId: client.id, watchId: watch.id, estimateId: est?.id, kind: f.kind, priority: f.priority, dueAt: f.dueAt ? new Date(`${f.dueAt}T17:00:00`).toISOString() : undefined, assignees: f.assignees, conditionNotes: f.conditionNotes, intakeNotes: f.intakeNotes, onHand: f.onHand, workflow: f.workflow, lines: est?.lines });
       navigate(`/jobs/${j.id}`);
     } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
   };
@@ -76,9 +77,11 @@ export default function JobCreatePage() {
       {client && watch && (
         <Card title="3 · Job fields" testId="create-fields-card">
           <div className="grid grid-cols-4 gap-3">
+            <label className="text-xs text-ink-500">Kind<select data-testid="create-kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as JobKind })} className={`${field} mt-1 block w-full`}>{KINDS.map((k) => <option key={k} value={k}>{api.JOB_KIND_CONFIG[k].label}</option>)}</select></label>
+            <div className="text-xs text-ink-500">Owner (role)<div className="mt-1 flex h-8 items-center" data-testid="create-owner-preview">{api.JOB_KIND_CONFIG[f.kind].defaultOwnerRole ? <OwnerBadge owner={api.JOB_KIND_CONFIG[f.kind].defaultOwnerRole!} /> : <span className="text-ink-400">picked on the job after creation</span>}</div></div>
             <label className="text-xs text-ink-500">Priority<select data-testid="create-priority" value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value as JobPriority })} className={`${field} mt-1 block w-full`}>{PRIORITIES.map((p) => <option key={p}>{p}</option>)}</select></label>
             <label className="text-xs text-ink-500">Due date<input type="date" data-testid="create-due" value={f.dueAt} onChange={(e) => setF({ ...f, dueAt: e.target.value })} className={`${field} mt-1 block w-full`} /></label>
-            <label className="text-xs text-ink-500">Assigned to<select data-testid="create-assignee" value={f.assignedTo} onChange={(e) => setF({ ...f, assignedTo: e.target.value })} className={`${field} mt-1 block w-full`}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.shortName}>{u.shortName} — {u.dutyLabel}</option>)}</select></label>
+            <div className="text-xs text-ink-500">Assignees (techs)<div className="mt-1 flex h-8 items-center gap-1">{users.map((u) => { const on = f.assignees.includes(u.shortName); return <button key={u.id} type="button" data-testid={`create-assignee-${u.shortName.toLowerCase()}`} aria-pressed={on} onClick={() => setF({ ...f, assignees: on ? f.assignees.filter((a) => a !== u.shortName) : [...f.assignees, u.shortName] })} className={`h-7 rounded-sm border px-2 text-xs ${on ? 'border-ink bg-ink text-white' : 'border-line text-ink-700 hover:border-ink-300'}`}>{u.shortName}</button>; })}</div></div>
             <div className="text-xs text-ink-500">Workflow <span className="text-ink-400">(defaults from lines)</span><div className="mt-1 flex h-8 items-center gap-1">{DEPTS.map((d) => <button key={d} type="button" data-testid={`create-wf-${d}`} onClick={() => toggleDept(d)} className={`rounded-sm ring-2 ring-offset-1 ${f.workflow.includes(d) ? 'ring-ink' : 'ring-transparent opacity-60 hover:opacity-100'}`}><DeptBadge code={d} /></button>)}</div></div>
             <label className="col-span-2 text-xs text-ink-500">Condition notes<textarea data-testid="create-condition" rows={2} value={f.conditionNotes} onChange={(e) => setF({ ...f, conditionNotes: e.target.value })} className="mt-1 block w-full rounded-sm border border-line bg-canvas px-2 py-1 text-[13px] focus:border-ink focus:outline-none" /></label>
             <label className="col-span-2 text-xs text-ink-500">Intake notes<textarea data-testid="create-intake-notes" rows={2} value={f.intakeNotes} onChange={(e) => setF({ ...f, intakeNotes: e.target.value })} className="mt-1 block w-full rounded-sm border border-line bg-canvas px-2 py-1 text-[13px] focus:border-ink focus:outline-none" /></label>

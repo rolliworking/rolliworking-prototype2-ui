@@ -91,7 +91,7 @@ export default function ClientDetailPage() {
               {jobs.map((j) => (
                 <tr key={j.id}>
                   <Td className="font-mono text-xs font-medium text-ink"><Link to={`/jobs/${j.id}`} className="hover:underline" data-testid={`client-job-link-${j.id}`}>{j.number}</Link></Td>
-                  <Td className="text-ink-700">{j.assignedTo ?? <span className="text-ink-400">—</span>}</Td>
+                  <Td className="text-ink-700">{j.assignees.length ? j.assignees.join(', ') : <span className="text-ink-400">—</span>}</Td>
                   <Td><StatusPill status={j.status} /></Td>
                   <Td className="tabular text-right text-ink-500">{j.dueAt ? fmtDate(j.dueAt) : '—'}</Td>
                 </tr>

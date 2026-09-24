@@ -22,7 +22,12 @@ import type {
   EstimateRevision,
   EstimateStatus,
   EstimateWithRefs,
-  HitListItem,
+  Assignee,
+  JobKind,
+  Role,
+  Task,
+  TodayRow,
+  TodayView,
   InspectionContext,
   Job,
   JobWithRefs,
@@ -71,13 +76,13 @@ const writeJson = (key: string, value: unknown) => localStorage.setItem(key, JSO
 
 // mutable in-memory copies so "writes" work within a session
 const store = {
-  hitList: fx.hitList.map((i) => ({ ...i })),
+  tasks: fx.tasks.map((t) => ({ ...t })),
   packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
   watches: fx.watches.map((w) => ({ ...w })),
   estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: [] as EstimateRevision[], jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
-  jobs: fx.jobs.map((j) => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow] })),
+  jobs: fx.jobs.map((j) => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees] })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
   counters: { sub: 314, label: 3, estimate: 1058, job: 2028 },
 };
@@ -329,18 +334,6 @@ export async function getJob(id: string): Promise<JobWithRefs | null> {
 
 export async function getJobsForClient(clientId: string): Promise<JobWithRefs[]> {
   return resolve(store.jobs.filter((j) => j.clientId === clientId).map(jobRefs));
-}
-
-// ---- Daily hit list ---------------------------------------------------------
-
-export async function getHitList(): Promise<HitListItem[]> {
-  return resolve(store.hitList.map((i) => ({ ...i })));
-}
-
-export async function setHitListItemDone(id: string, done: boolean): Promise<HitListItem> {
-  const item = byId(store.hitList, id);
-  item.done = done;
-  return resolve({ ...item });
 }
 
 // ---- Activity ---------------------------------------------------------------
@@ -944,9 +937,25 @@ const JOB_ACTIONS: Record<JobStatus, JobAction[]> = {
 
 export const activeHold = (j: Job): JobHold | undefined => j.holds.find((h) => !h.releasedAt);
 
+// Skipped stages collapse: the action's target walks forward to the next stage the kind keeps
+const skipForward = (kind: JobKind, to: JobStatus): JobStatus => {
+  const skip = JOB_KIND_CONFIG[kind].skipStages;
+  let i = fx.JOB_FLOW.indexOf(to);
+  while (skip.includes(fx.JOB_FLOW[i]) && i < fx.JOB_FLOW.length - 1) i += 1;
+  return fx.JOB_FLOW[i];
+};
+
 export function legalJobActions(j: Job): JobAction[] {
   if (activeHold(j)) return [];
-  return JOB_ACTIONS[j.status];
+  const redirected = JOB_ACTIONS[j.status].map((a) => {
+    const to = skipForward(j.kind, a.to);
+    return to === a.to ? a : { ...a, to, provisional: `${JOB_KIND_CONFIG[j.kind].label} skips ${a.to.replace(/_/g, ' ')} — per-kind stage-skip config (provisional)` };
+  });
+  const isSkip = (a: JobAction) => a.provisional?.startsWith(JOB_KIND_CONFIG[j.kind].label) ?? false;
+  const out: JobAction[] = [];
+  [...redirected.filter((a) => !isSkip(a)), ...redirected.filter(isSkip)]
+    .forEach((a) => { if (a.to !== j.status && !(isSkip(a) && out.some((o) => o.to === a.to))) out.push(a); });
+  return out;
 }
 
 const HOLDABLE: JobStatus[] = ['approved', 'in_service', 'testing'];
@@ -998,7 +1007,7 @@ const pushTransition = (j: Job, action: string, to: JobStatus, reason?: string, 
 export async function transitionJob(id: string, actionKey: string, reason?: string): Promise<JobWithRefs> {
   const j = getJobRow(id);
   if (activeHold(j)) throw new Error('Job is on hold — release the hold first');
-  const action = JOB_ACTIONS[j.status].find((x) => x.key === actionKey);
+  const action = legalJobActions(j).find((x) => x.key === actionKey);
   if (!action) throw new Error(`"${actionKey}" is not a legal action from ${j.status}`);
   if (action.needsReason && !reason?.trim()) throw new Error('A reason is required for this step');
   const mail = action.notifies ? EMAIL_FOR[action.key] : undefined;
@@ -1011,12 +1020,30 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
 
 const humanizeStatus = (s: string) => s.replace(/_/g, ' ');
 
-export async function assignJob(id: string, shortName: string | null): Promise<JobWithRefs> {
+// Assignees = working techs (many). Owner = accountable role (one) — never called "PM" (that code is precious metals).
+export async function toggleAssignee(id: string, shortName: string): Promise<JobWithRefs> {
   const j = getJobRow(id);
-  if (shortName && !fx.users.some((u) => u.shortName === shortName)) throw new Error('Pick someone from the staff list');
-  const prev = j.assignedTo;
-  j.assignedTo = shortName ?? undefined;
-  jobStamp(j, shortName ? `Assigned to ${shortName}${prev ? ` (was ${prev})` : ''}` : `Unassigned (was ${prev ?? 'nobody'})`);
+  if (!fx.users.some((u) => u.shortName === shortName)) throw new Error('Pick someone from the staff list');
+  const has = j.assignees.includes(shortName);
+  j.assignees = has ? j.assignees.filter((a) => a !== shortName) : [...j.assignees, shortName];
+  jobStamp(j, `${has ? 'Removed assignee' : 'Added assignee'} ${shortName} · now ${j.assignees.join(', ') || 'nobody'}`);
+  return resolve(jobRefs(j));
+}
+
+// Per-kind config (lookup table, not an enum switch): owner routing + stages the kind skips (PROVISIONAL set)
+export const JOB_KIND_CONFIG: Record<JobKind, { label: string; defaultOwnerRole: Role | null; skipStages: JobStatus[] }> = {
+  service: { label: 'Service', defaultOwnerRole: null, skipStages: [] },
+  small_job: { label: 'Small job', defaultOwnerRole: 'concierge', skipStages: ['awaiting_customer_approval'] },
+  warranty: { label: 'Warranty', defaultOwnerRole: 'concierge', skipStages: [] },
+};
+export const ROLES: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker'];
+export const roleHolders = (role: Role): User[] => fx.users.filter((u) => u.roles.includes(role));
+
+export async function setJobOwner(id: string, role: Role | null): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  const prev = j.owner;
+  j.owner = role ?? undefined;
+  jobStamp(j, role ? `Owner → ${role} (${roleHolders(role).map((u) => u.shortName).join(', ') || 'no holder'})${prev ? ` · was ${prev}` : ''}` : `Owner cleared (was ${prev ?? 'none'})`);
   return resolve(jobRefs(j));
 }
 
@@ -1086,7 +1113,7 @@ export async function searchJobs(query: string): Promise<JobWithRefs[]> {
   if (!q) return all;
   return all.filter((j) => {
     const name = `${j.client.firstName} ${j.client.lastName}`.toLowerCase();
-    return (digits && estimateDigits(j.number).startsWith(digits)) || name.includes(q) || j.watch.reference.toLowerCase().includes(q) || j.watch.serial.toLowerCase().includes(q) || j.watch.model.toLowerCase().includes(q) || (j.assignedTo?.toLowerCase().includes(q) ?? false);
+    return (digits && estimateDigits(j.number).startsWith(digits)) || name.includes(q) || j.watch.reference.toLowerCase().includes(q) || j.watch.serial.toLowerCase().includes(q) || j.watch.model.toLowerCase().includes(q) || j.assignees.some((a) => a.toLowerCase().includes(q)) || (j.owner?.includes(q) ?? false);
   });
 }
 
@@ -1094,9 +1121,10 @@ export interface CreateJobInput {
   clientId: string;
   watchId: string;
   estimateId?: string;
+  kind?: JobKind;
   priority?: JobPriority;
   dueAt?: string;
-  assignedTo?: string;
+  assignees?: string[];
   conditionNotes?: string;
   intakeNotes?: string;
   onHand: boolean;
@@ -1113,6 +1141,7 @@ const buildJob = (input: CreateJobInput): Job => {
   const now = new Date().toISOString();
   const lines = (input.lines ?? []).map((l) => ({ ...l, id: newLineId() }));
   const workflow = input.workflow?.length ? input.workflow : uniq(lines.map((l) => l.dept));
+  const kind = input.kind ?? 'service';
   const j: Job = {
     id: newId('j'),
     number: nextJobNumber(),
@@ -1121,12 +1150,14 @@ const buildJob = (input: CreateJobInput): Job => {
     estimateId: input.estimateId,
     department: fx.DEPT_OF_CODE[workflow[0] ?? 'W'],
     workflow: workflow.length ? workflow : ['W'],
+    kind,
     status: 'intake',
     simpleStatus: input.onHand ? 'on_hand' : 'estimate',
     priority: input.priority ?? 'normal',
     lines,
     total: lines.reduce((t, l) => t + l.qty * l.unitPrice, 0),
-    assignedTo: input.assignedTo || undefined,
+    owner: JOB_KIND_CONFIG[kind].defaultOwnerRole ?? undefined,
+    assignees: input.assignees ?? [],
     intakeDate: input.onHand ? now : undefined,
     intakeNotes: input.intakeNotes?.trim() || undefined,
     conditionNotes: input.conditionNotes?.trim() || undefined,
@@ -1143,7 +1174,7 @@ const buildJob = (input: CreateJobInput): Job => {
 
 export async function createJob(input: CreateJobInput): Promise<JobWithRefs> {
   const j = buildJob(input);
-  jobStamp(j, `Created · ${j.workflow.join('+')} · ${j.simpleStatus === 'on_hand' ? 'on hand' : 'watch not yet on hand'} · priority ${j.priority}`);
+  jobStamp(j, `Created · ${JOB_KIND_CONFIG[j.kind].label} · ${j.workflow.join('+')} · ${j.simpleStatus === 'on_hand' ? 'on hand' : 'watch not yet on hand'} · priority ${j.priority}${j.owner ? ` · owner auto-set ${j.owner}` : ''}`);
   return resolve(jobRefs(j));
 }
 
@@ -1205,6 +1236,7 @@ export async function deleteJob(id: string): Promise<void> {
   if (a.user?.accessTier !== 'manager') throw new Error('Deleting jobs needs the can-delete-jobs permission (manager)');
   store.jobs = store.jobs.filter((x) => x.id !== id);
   store.shopTime = store.shopTime.filter((t) => t.jobId !== id);
+  store.tasks = store.tasks.filter((t) => t.jobId !== id);
   const e = j.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined;
   if (e) e.jobId = undefined;
   jobStamp(j, 'Deleted');
@@ -1236,4 +1268,94 @@ export async function addShopTime(jobId: string, minutes: number, note: string):
   store.shopTime.unshift(t);
   jobStamp(j, `Shop time +${t.minutes} min${t.note ? ` · ${t.note}` : ''}`);
   return resolve(t);
+}
+
+// ---- Tasks (explicit) + /today (derived, no manual curation) ------------------
+
+const userRoles = (u: User | null): Role[] => u?.roles ?? [];
+const assigneeMatches = (a: Assignee, u: User) => (a.type === 'user' ? a.shortName === u.shortName : u.roles.includes(a.role));
+export const assigneeLabel = (a: Assignee) => (a.type === 'user' ? a.shortName : `${a.role} role → ${roleHolders(a.role).map((u) => u.shortName).join(', ') || 'no holder'}`);
+
+const taskStamp = (t: Task, detail: string) => {
+  const a = actor();
+  appendAudit({ type: 'task', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Task "${t.title.slice(0, 50)}" · ${detail}` });
+};
+
+export async function getTasks(): Promise<Task[]> {
+  return resolve([...store.tasks].sort((a, b) => (a.status === b.status ? (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9') : a.status === 'open' ? -1 : 1)));
+}
+
+export async function getTasksForJob(jobId: string): Promise<Task[]> {
+  return resolve(store.tasks.filter((t) => t.jobId === jobId));
+}
+
+export async function getTasksForClient(clientId: string): Promise<Task[]> {
+  return resolve(store.tasks.filter((t) => t.clientId === clientId));
+}
+
+export interface TaskInput { title: string; assignedTo: Assignee; jobId?: string; dueAt?: string }
+
+export async function createTask(input: TaskInput): Promise<Task> {
+  if (!input.title.trim()) throw new Error('Task title is required');
+  const a = actor();
+  const job = input.jobId ? store.jobs.find((j) => j.id === input.jobId) : undefined;
+  if (input.jobId && !job) throw new Error('Linked job not found');
+  const t: Task = { id: newId('t'), title: input.title.trim(), assignedTo: input.assignedTo, createdBy: a.by, jobId: job?.id, watchId: job?.watchId, clientId: job?.clientId, dueAt: input.dueAt || undefined, status: 'open', createdAt: new Date().toISOString(), station: a.station };
+  store.tasks.unshift(t);
+  taskStamp(t, `created · assigned to ${assigneeLabel(t.assignedTo)}${job ? ` · linked ${job.number}` : ''}`);
+  if (job) jobStamp(job, `Task added for ${assigneeLabel(t.assignedTo)} · ${t.title.slice(0, 50)}`);
+  return resolve(t);
+}
+
+export async function setTaskDone(id: string, done: boolean): Promise<Task> {
+  const t = byId(store.tasks, id);
+  const a = actor();
+  t.status = done ? 'done' : 'open';
+  t.completedAt = done ? new Date().toISOString() : undefined;
+  t.completedBy = done ? a.by : undefined;
+  taskStamp(t, done ? `completed (sent by ${t.createdBy})` : 'reopened');
+  return resolve({ ...t });
+}
+
+// Owner = accountable role: these states need the owner to move things along
+const OWNER_ACTION: Partial<Record<JobStatus, string>> = { intake: 'Start review', awaiting_customer_approval: 'Chase customer approval', ready_to_ship: 'Arrange pickup / shipping' };
+// Assignees = working techs: these states are bench work
+const TECH_ACTION: Partial<Record<JobStatus, string>> = { approved: 'Start service', in_service: 'Bench work', testing: 'Run testing / QC' };
+
+export async function getToday(userId?: string): Promise<TodayView> {
+  const me = userId ? byId(fx.users, userId) : currentUserSync();
+  if (!me) return resolve({ rows: [], waitingOn: [] });
+  const roles = userRoles(me);
+  const now = Date.now();
+  const rows: TodayRow[] = [];
+  const watchOf = (j: Job) => { const w = byId(store.watches, j.watchId); return `${w.brand} ${w.model}`; };
+  const clientOf = (id: string) => { const c = byId(fx.clients, id); return `${c.firstName} ${c.lastName}`; };
+  const due = (iso?: string) => ({ dueAt: iso, overdue: !!iso && new Date(iso).getTime() < now });
+
+  store.jobs.forEach((j) => {
+    const held = activeHold(j);
+    const iOwn = !!j.owner && roles.includes(j.owner);
+    const iWork = j.assignees.includes(me.shortName);
+    if (held) {
+      if (iOwn || held.placedBy === me.shortName) rows.push({ id: `hold-${j.id}`, source: 'hold', title: `Follow up ${held.type} hold · ${j.number}`, detail: `${held.reason} — ${clientOf(j.clientId)} · ${watchOf(j)}`, via: iOwn ? `owner · ${j.owner}` : 'placed by me', jobId: j.id, urgent: j.priority === 'urgent' || j.priority === 'high', ...due(j.dueAt) });
+      return;
+    }
+    if (iOwn && OWNER_ACTION[j.status]) rows.push({ id: `owner-${j.id}`, source: 'owner', title: `${OWNER_ACTION[j.status]} · ${j.number}`, detail: `${clientOf(j.clientId)} · ${watchOf(j)} · ${JOB_KIND_CONFIG[j.kind].label}`, via: `owner · ${j.owner}`, jobId: j.id, urgent: j.priority === 'urgent' || j.priority === 'high', ...due(j.dueAt) });
+    if (iWork && TECH_ACTION[j.status]) rows.push({ id: `tech-${j.id}`, source: 'assignee', title: `${TECH_ACTION[j.status]} · ${j.number}`, detail: `${clientOf(j.clientId)} · ${watchOf(j)} · ${j.workflow.join('+')}`, via: 'assigned to me', jobId: j.id, urgent: j.priority === 'urgent' || j.priority === 'high', ...due(j.dueAt) });
+  });
+
+  // Discrepancy packages route to the concierge role and to the inspector who flagged them
+  store.packages.filter((p) => p.status === 'discrepancy_hold').forEach((p) => {
+    const mine = roles.includes('concierge') || p.inspectedBy === me.shortName;
+    if (mine) rows.push({ id: `disc-${p.id}`, source: 'discrepancy', title: `Resolve discrepancy · ${p.subNumber}`, detail: p.discrepancyReason ?? 'Discrepancy at Receive Watch', via: p.inspectedBy === me.shortName ? 'flagged by me' : 'owner · concierge', packageId: p.id, urgent: true, overdue: false });
+  });
+
+  store.tasks.filter((t) => t.status === 'open' && assigneeMatches(t.assignedTo, me)).forEach((t) => {
+    const job = t.jobId ? store.jobs.find((j) => j.id === t.jobId) : undefined;
+    rows.push({ id: `task-${t.id}`, source: 'task', title: t.title, detail: job ? `${job.number} · ${clientOf(job.clientId)}` : t.clientId ? clientOf(t.clientId) : 'Task', via: t.assignedTo.type === 'role' ? `role · ${t.assignedTo.role}` : 'assigned to me', taskId: t.id, jobId: job?.id, sentBy: t.createdBy !== me.shortName ? t.createdBy : undefined, urgent: false, ...due(t.dueAt) });
+  });
+
+  rows.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.urgent) - Number(a.urgent) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9'));
+  const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
+  return resolve({ rows, waitingOn });
 }
