@@ -43,6 +43,9 @@ Intake, Estimates, Labels, Help. Direct URL to manager-only route → Restricted
 Package manager: yarn 1.22 (frontend/package.json sets `packageManager: yarn@1.22.22` to bypass the root
 monorepo's yarn@4 corepack check). Supervisor runs `yarn start` in /app/frontend.
 
+## Closing regression (2026-06) — iteration_16.json + iteration_17.json: E5 · E6 · E7 · E8 + both follow-ups, all roles — 100% pass, nothing broken
+- Only note: Pickup Station advances client-side on any non-empty code; the mismatch is enforced in `confirmPickup` (throws) — not a bug, but a UX polish candidate (validate code before the photo step).
+
 ## Implemented — Session E8 RolliConnect client portal (2026-06) — tested via testing agent, iteration_15.json (~98% → read-state fix applied + self-verified)
 - `/rc` route-space with own shell (`src/rc/RcShell.tsx`: cream/serif/brass look, DRAFT banner, own session `rollisuite.rc.session`, guard → `/rc`, portal 404, zero staff links). Pages `src/pages/rc/`: login (email → magic-link stub shown on screen, Outbox email queued; 3 preview accounts), auth/:token, home (Needs-you inbox + watches with status words from `PORTAL_STATUS`, never a percent), estimates/:id (Approve / Decline w/ required reason), invoices/:id (Pay-now full-balance stub, pickup window date+slot+note, shipping-info form), watches/:id (documents & photos, plain-language history), messages (thread; client → staff Inbox).
 - client.ts E8 section: `portal*` functions call the same store functions staff use via `asClient()` (actor = client / station RolliConnect), audit type `portal`; approving also moves a linked `awaiting_customer_approval` job to approved. **Portal event replay**: writes (+ staff replies + read-state) appended to `rollisuite.rc.events`, replayed on load; Setup → "Reset RolliConnect data".
