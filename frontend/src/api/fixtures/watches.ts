@@ -17,4 +17,8 @@ export const watches: Watch[] = [
   { id: 'w-13', clientId: 'c-13', brand: 'Tudor', model: 'Pelagos', reference: 'M25600TN-0001', serial: 'L3N9P62X', dial: 'Black', bracelet: 'Titanium', status: 'intake', receivedAt: daysAgo(2) },
   { id: 'w-14', clientId: 'c-14', brand: 'Tudor', model: 'Black Bay Chrono', reference: 'M79360N-0002', serial: 'T6Q1W48V', dial: 'Black', bracelet: 'Steel', status: 'awaiting_approval', receivedAt: daysAgo(6) },
   { id: 'w-15', clientId: 'c-15', brand: 'Rolex', model: 'Sea-Dweller', reference: '126600', serial: 'R9B4S7E2', dial: 'Black', bracelet: 'Oyster', status: 'released', receivedAt: daysAgo(35) },
+  // Expected — estimate exists, watch not yet received through Intake
+  { id: 'w-16', clientId: 'c-18', brand: 'Rolex', model: 'Lady-Datejust', reference: '279174', serial: 'N4K8P2W7', dial: 'Silver', bracelet: 'Jubilee', status: 'expected', receivedAt: daysAgo(0) },
+  { id: 'w-17', clientId: 'c-16', brand: 'Tudor', model: 'Black Bay 41', reference: 'M79540-0001', serial: 'Q7M3R95T', dial: 'Black', bracelet: 'Steel', status: 'expected', receivedAt: daysAgo(0) },
+  { id: 'w-18', clientId: 'c-19', brand: 'Rolex', model: 'Yacht-Master 40', reference: '126622', serial: 'S2H6V8D4', dial: 'Rhodium', bracelet: 'Oyster', status: 'expected', receivedAt: daysAgo(0) },
 ];

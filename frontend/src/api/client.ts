@@ -4,18 +4,30 @@ import * as fx from './fixtures';
 import type {
   ActivityEvent,
   AuditEvent,
+  Bin,
+  Carrier,
   Client,
   DashboardStats,
   Department,
   Estimate,
   EstimateWithRefs,
   HitListItem,
+  InspectionContext,
   Job,
   JobWithRefs,
+  LabelJob,
+  OutboxEmail,
+  Package,
+  PackagePhoto,
+  PackageSource,
+  PackageStatus,
+  PackageWithRefs,
+  ReceiveWatchInput,
   Station,
   User,
   VerificationPhoto,
   Watch,
+  WatchMatch,
 } from './types';
 
 export * from './types';
@@ -48,6 +60,11 @@ const writeJson = (key: string, value: unknown) => localStorage.setItem(key, JSO
 // mutable in-memory copies so "writes" work within a session
 const store = {
   hitList: fx.hitList.map((i) => ({ ...i })),
+  packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
+  outbox: fx.outbox.map((e) => ({ ...e })),
+  labels: fx.labels.map((l) => ({ ...l })),
+  watches: fx.watches.map((w) => ({ ...w })),
+  counters: { sub: 314, label: 3 },
 };
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
@@ -59,7 +76,7 @@ const byId = <T extends { id: string }>(rows: T[], id: string): T => {
 const withRefs = <T extends { clientId: string; watchId: string }>(row: T) => ({
   ...row,
   client: byId(fx.clients, row.clientId),
-  watch: byId(fx.watches, row.watchId),
+  watch: byId(store.watches, row.watchId),
 });
 
 const isThisMonth = (iso?: string) => {
@@ -254,11 +271,11 @@ export async function searchClients(query: string): Promise<Client[]> {
 // ---- Watches ----------------------------------------------------------------
 
 export async function getWatches(): Promise<Watch[]> {
-  return resolve(fx.watches);
+  return resolve(store.watches);
 }
 
 export async function getWatchesForClient(clientId: string): Promise<Watch[]> {
-  return resolve(fx.watches.filter((w) => w.clientId === clientId));
+  return resolve(store.watches.filter((w) => w.clientId === clientId));
 }
 
 // ---- Estimates --------------------------------------------------------------
@@ -314,7 +331,7 @@ const ACTIVE_JOB: Job['status'][] = ['queued', 'in_progress', 'awaiting_parts', 
 export async function getDashboardStats(): Promise<DashboardStats> {
   const completedThisMonth = fx.jobs.filter((j) => isThisMonth(j.completedAt));
   return resolve({
-    watchesInHouse: fx.watches.filter((w) => w.status !== 'released').length,
+    watchesInHouse: store.watches.filter((w) => w.status !== 'released' && w.status !== 'expected').length,
     openEstimates: fx.estimates.filter((e) => OPEN_ESTIMATE.includes(e.status)).length,
     awaitingApproval: fx.estimates.filter((e) => e.status === 'awaiting_approval').length,
     inProgress: fx.jobs.filter((j) => ACTIVE_JOB.includes(j.status)).length,
@@ -326,4 +343,277 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       jobCount: fx.jobs.filter((j) => j.department === d.key).length,
     })),
   });
+}
+
+// ---- Intake -----------------------------------------------------------------
+
+export { CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './fixtures/intake';
+
+const actor = () => {
+  const u = currentUserSync();
+  return { by: u?.shortName ?? 'Unknown', station: stationNameOrUnknown(), user: u };
+};
+
+const stamp = (detail: string, ref: string) => {
+  const a = actor();
+  appendAudit({ type: 'intake', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${ref} · ${detail}` });
+};
+
+const pkgWithRefs = (p: Package): PackageWithRefs => {
+  const est = p.estimateId ? fx.estimates.find((e) => e.id === p.estimateId) : undefined;
+  return {
+    ...p,
+    client: p.clientId ? fx.clients.find((c) => c.id === p.clientId) ?? null : null,
+    estimate: est ? withRefs(est) : null,
+  };
+};
+
+const getPkg = (id: string) => byId(store.packages, id);
+
+export const detectCarrier = (tracking: string): Carrier => {
+  const t = tracking.replace(/\s+/g, '').toUpperCase();
+  if (/^1Z/.test(t)) return 'UPS';
+  if (/^(94|92|93|95)\d{18,20}$/.test(t)) return 'USPS';
+  if (/^\d{12}$|^\d{15}$/.test(t)) return 'FedEx';
+  if (/^\d{10}$/.test(t)) return 'DHL';
+  return 'FedEx';
+};
+
+export async function getPackages(status?: PackageStatus): Promise<PackageWithRefs[]> {
+  const rows = store.packages.filter((p) => !status || p.status === status);
+  return resolve(rows.map(pkgWithRefs).sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt)));
+}
+
+export async function getPackage(id: string): Promise<PackageWithRefs | null> {
+  const p = store.packages.find((x) => x.id === id);
+  return resolve(p ? pkgWithRefs(p) : null);
+}
+
+export async function getIntakeCounts(): Promise<Record<PackageStatus, number>> {
+  const counts: Record<PackageStatus, number> = { arrived: 0, processed: 0, awaiting_inspection: 0, received: 0, discrepancy_hold: 0 };
+  store.packages.forEach((p) => (counts[p.status] += 1));
+  return resolve(counts);
+}
+
+export interface ArrivalInput {
+  source: PackageSource;
+  trackingNumber?: string;
+  carrier?: Carrier;
+  signatureNoted: boolean;
+  clientId?: string;
+}
+
+export async function logArrival(input: ArrivalInput): Promise<PackageWithRefs> {
+  const a = actor();
+  const tracking = input.trackingNumber?.trim() || undefined;
+  if (input.source === 'carrier' && !tracking) throw new Error('Tracking number is required');
+  if (tracking && store.packages.some((p) => p.trackingNumber === tracking)) throw new Error(`Tracking ${tracking} was already logged`);
+  store.counters.sub += 1;
+  const pkg: Package = {
+    id: `pk-${Date.now().toString(36)}`,
+    subNumber: `SUB-26-0${store.counters.sub}`,
+    source: input.source,
+    carrier: input.source === 'walk_in' ? 'Hand delivery' : input.carrier ?? detectCarrier(tracking!),
+    trackingNumber: tracking,
+    signatureNoted: input.signatureNoted,
+    clientId: input.clientId,
+    status: 'arrived',
+    arrivedAt: new Date().toISOString(),
+    arrivedBy: a.by,
+    arrivedStation: a.station,
+    contents: [],
+    photos: [],
+    receiptPrinted: false,
+  };
+  store.packages.unshift(pkg);
+  stamp(input.source === 'walk_in' ? `Walk-in logged (${pkg.carrier})` : `Package arrived via ${pkg.carrier}${input.signatureNoted ? ' · signature noted' : ''}`, pkg.subNumber);
+  return resolve(pkgWithRefs(pkg));
+}
+
+export async function lookupEstimate(numberOrId: string): Promise<EstimateWithRefs | null> {
+  const q = numberOrId.trim().toUpperCase();
+  const est = fx.estimates.find((e) => e.number.toUpperCase() === q || e.id === numberOrId || e.number.replace('EST-', '').toUpperCase() === q);
+  return resolve(est ? withRefs(est) : null);
+}
+
+export interface ReceivePackageInput {
+  trackingNumber?: string;
+  estimateId?: string;
+  clientId?: string;
+  contents: string[];
+  photos: PackagePhoto[];
+  notes?: string;
+}
+
+export async function receivePackage(id: string, input: ReceivePackageInput): Promise<{ pkg: PackageWithRefs; email: OutboxEmail | null }> {
+  const pkg = getPkg(id);
+  if (pkg.status !== 'arrived') throw new Error('Package is not awaiting processing');
+  if (input.contents.length === 0) throw new Error('Describe what was received (pick at least one pill)');
+  const a = actor();
+  const est = input.estimateId ? fx.estimates.find((e) => e.id === input.estimateId) : undefined;
+  pkg.trackingNumber = input.trackingNumber?.trim() || pkg.trackingNumber;
+  pkg.estimateId = est?.id;
+  pkg.clientId = est?.clientId ?? input.clientId ?? pkg.clientId;
+  pkg.contents = [...input.contents];
+  pkg.photos = [...input.photos];
+  pkg.notes = input.notes;
+  pkg.status = 'processed';
+  pkg.processedAt = new Date().toISOString();
+  pkg.processedBy = a.by;
+
+  let email: OutboxEmail | null = null;
+  const client = pkg.clientId ? fx.clients.find((c) => c.id === pkg.clientId) : undefined;
+  if (client) {
+    const watch = est ? store.watches.find((w) => w.id === est.watchId) : undefined;
+    const what = watch ? `${watch.brand} ${watch.model}` : 'package';
+    email = {
+      id: `ob-${Date.now().toString(36)}`,
+      to: client.email,
+      toName: `${client.firstName} ${client.lastName}`,
+      relatedRef: est ? `${pkg.subNumber} · ${est.number}` : pkg.subNumber,
+      status: 'pending',
+      subject: est ? `We’ve received your ${what} — ${est.number}` : `We’ve received your package — ${pkg.subNumber}`,
+      body: `Hello ${client.firstName},\n\nYour package arrived safely at RolliSuite today. We logged: ${pkg.contents.join(', ')}.\n\nIt now moves to inspection, where we verify the watch${est ? ` against your estimate ${est.number}` : ''} before any work begins. You’ll hear from us once inspection is complete.\n\nSub#: ${pkg.subNumber}\n\n— The RolliSuite team`,
+      createdAt: new Date().toISOString(),
+      createdBy: a.by,
+      station: a.station,
+    };
+    store.outbox.unshift(email);
+  }
+  stamp(`Package processed · ${pkg.contents.join(', ')} · ${pkg.photos.length} photo${pkg.photos.length === 1 ? '' : 's'}${est ? ` · linked ${est.number}` : ''}${email ? ' · confirmation email queued' : ' · no client email (unknown client)'}`, pkg.subNumber);
+  return resolve({ pkg: pkgWithRefs(pkg), email });
+}
+
+export async function printDropOffReceipt(id: string): Promise<PackageWithRefs> {
+  const pkg = getPkg(id);
+  pkg.receiptPrinted = true;
+  stamp('Drop-off receipt printed (mock)', pkg.subNumber);
+  return resolve(pkgWithRefs(pkg));
+}
+
+export async function recordWorkOrder(id: string, bin: Bin): Promise<PackageWithRefs> {
+  const pkg = getPkg(id);
+  if (pkg.status !== 'processed') throw new Error('Package must be processed before a work order');
+  const a = actor();
+  pkg.status = 'awaiting_inspection';
+  pkg.bin = bin;
+  pkg.workOrderAt = new Date().toISOString();
+  pkg.workOrderBy = a.by;
+  stamp(`Handwritten work order confirmed · assigned to ${bin} bin`, pkg.subNumber);
+  return resolve(pkgWithRefs(pkg));
+}
+
+export async function findPackageForInspection(estimateNumber: string): Promise<PackageWithRefs | null> {
+  const est = await lookupEstimate(estimateNumber);
+  if (!est) return null;
+  const pkg = store.packages.find((p) => p.estimateId === est.id && p.status === 'awaiting_inspection');
+  return pkg ? pkgWithRefs(pkg) : null;
+}
+
+const uniq = <T>(xs: T[]) => Array.from(new Set(xs));
+
+export async function getInspectionContext(packageId: string): Promise<InspectionContext> {
+  const pkg = pkgWithRefs(getPkg(packageId));
+  if (!pkg.estimate) throw new Error('Package has no linked estimate — go back to Receive Package');
+  const depts = uniq(pkg.estimate.lines.map((l) => l.dept));
+  const expectedComponents = uniq(depts.flatMap((d) => fx.DEPT_COMPONENTS[d]));
+  return resolve({ pkg, estimate: pkg.estimate, expectedComponents, suggestedWorkflow: depts });
+}
+
+export async function findWatchBySerial(reference: string, serial: string): Promise<WatchMatch | null> {
+  const ref = reference.trim().toUpperCase();
+  const ser = serial.trim().toUpperCase();
+  if (!ref || !ser || ser === 'NS') return resolve(null);
+  const watch = store.watches.find((w) => w.reference.toUpperCase() === ref && w.serial.toUpperCase() === ser);
+  if (!watch) return resolve(null);
+  const jobs = fx.jobs.filter((j) => j.watchId === watch.id);
+  const packages = store.packages.filter((p) => {
+    const est = p.estimateId ? fx.estimates.find((e) => e.id === p.estimateId) : undefined;
+    return est?.watchId === watch.id && (p.status === 'received' || p.status === 'discrepancy_hold');
+  });
+  // Only a watch with real history triggers the same-watch fork
+  if (jobs.length === 0 && packages.length === 0 && watch.status === 'expected') return resolve(null);
+  return resolve({ watch, client: byId(fx.clients, watch.clientId), jobs, packages });
+}
+
+const queueLabel = (l: Omit<LabelJob, 'id' | 'createdAt' | 'createdBy' | 'station' | 'printed'>) => {
+  const a = actor();
+  store.counters.label += 1;
+  const job: LabelJob = { ...l, id: `lb-${String(store.counters.label).padStart(2, '0')}`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station, printed: false };
+  store.labels.unshift(job);
+  return job;
+};
+
+export interface ReceiveWatchResult {
+  pkg: PackageWithRefs;
+  discrepancies: string[];
+  labels: LabelJob[];
+}
+
+export function computeDiscrepancies(ctx: InspectionContext, input: ReceiveWatchInput): string[] {
+  const out: string[] = [];
+  ctx.expectedComponents.filter((c) => !input.componentsReceived.includes(c)).forEach((c) => out.push(`Missing component: ${c}`));
+  const expectedSerial = ctx.estimate.watch.serial.toUpperCase();
+  const ser = input.serial.trim().toUpperCase();
+  if (ser && ser !== 'NS' && ser !== expectedSerial) out.push(`Serial ${ser} differs from estimate (expected ${expectedSerial})`);
+  if (input.reference.trim().toUpperCase() !== ctx.estimate.watch.reference.toUpperCase()) out.push(`Reference ${input.reference.trim()} differs from estimate (expected ${ctx.estimate.watch.reference})`);
+  if (input.extraWatch) out.push('Extra / unexpected watch in package');
+  if (input.sameWatchDecision === 'conflict') out.push('Serial matches a different watch on file — flagged for review');
+  return out;
+}
+
+export async function receiveWatch(packageId: string, input: ReceiveWatchInput): Promise<ReceiveWatchResult> {
+  const ctx = await getInspectionContext(packageId);
+  const pkg = getPkg(packageId);
+  if (pkg.status !== 'awaiting_inspection') throw new Error('Package is not awaiting inspection');
+  if (!input.reference.trim() || !input.serial.trim()) throw new Error('Reference and serial are required (use NS if unreadable)');
+  if (input.workflow.length === 0) throw new Error('Pick at least one workflow department');
+  const a = actor();
+  const discrepancies = computeDiscrepancies(ctx, input);
+  pkg.inspectedAt = new Date().toISOString();
+  pkg.inspectedBy = a.by;
+  pkg.workflow = [...input.workflow];
+  pkg.notes = input.notes || pkg.notes;
+
+  const watch = store.watches.find((w) => w.id === ctx.estimate.watchId);
+  if (watch) {
+    watch.reference = input.reference.trim().toUpperCase();
+    if (input.serial.trim().toUpperCase() !== 'NS') watch.serial = input.serial.trim().toUpperCase();
+    watch.status = discrepancies.length ? 'intake' : 'awaiting_approval';
+    watch.receivedAt = pkg.inspectedAt;
+  }
+
+  let labels: LabelJob[] = [];
+  if (discrepancies.length) {
+    pkg.status = 'discrepancy_hold';
+    pkg.discrepancyReason = discrepancies.join('. ');
+    stamp(`Discrepancy hold · ${pkg.discrepancyReason}`, pkg.subNumber);
+  } else {
+    pkg.status = 'received';
+    pkg.discrepancyReason = undefined;
+    const est = ctx.estimate;
+    const ref = input.reference.trim().toUpperCase();
+    const ser = input.serial.trim().toUpperCase();
+    labels = [
+      queueLabel({ type: 'pdf417_data', packageId: pkg.id, estimateNumber: est.number, payload: `${est.number}|${pkg.subNumber}|${ref}|${ser}|${input.workflow.join(',')}`, lines: [est.number, pkg.subNumber, `${est.client.firstName} ${est.client.lastName}`, `Workflow ${input.workflow.join(' · ')}`] }),
+      queueLabel({ type: 'ref_serial', packageId: pkg.id, estimateNumber: est.number, payload: `${ref} / ${ser}`, lines: [`${est.watch.brand} ${est.watch.model}`, `Ref ${ref}`, `Serial ${ser}`] }),
+    ];
+    stamp(`Watch received · ${ref} / ${ser} · workflow ${input.workflow.join('+')}${input.sameWatchDecision === 'returning' ? ' · same watch returning' : ''} · 2 labels queued`, pkg.subNumber);
+  }
+  return resolve({ pkg: pkgWithRefs(pkg), discrepancies, labels });
+}
+
+export async function getOutbox(): Promise<OutboxEmail[]> {
+  return resolve([...store.outbox]);
+}
+
+export async function getLabelQueue(): Promise<LabelJob[]> {
+  return resolve([...store.labels]);
+}
+
+export async function setLabelPrinted(id: string, printed: boolean): Promise<LabelJob> {
+  const l = byId(store.labels, id);
+  l.printed = printed;
+  stamp(`${l.type === 'pdf417_data' ? 'PDF417 data label' : 'Ref/serial label'} ${printed ? 'printed (mock)' : 'marked unprinted'}`, l.estimateNumber);
+  return resolve({ ...l });
 }

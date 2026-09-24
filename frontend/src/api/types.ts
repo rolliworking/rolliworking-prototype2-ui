@@ -30,7 +30,8 @@ export type AuditEventType =
   | 'sign_out'
   | 'station_registered'
   | 'station_renamed'
-  | 'station_reset';
+  | 'station_reset'
+  | 'intake';
 
 export interface AuditEvent {
   id: string;
@@ -61,6 +62,7 @@ export interface Client {
 }
 
 export type WatchStatus =
+  | 'expected'
   | 'intake'
   | 'in_service'
   | 'awaiting_approval'
@@ -86,10 +88,13 @@ export type Department = 'watchmaking' | 'band' | 'polish';
 
 export type EstimateStatus = 'draft' | 'sent' | 'awaiting_approval' | 'approved' | 'declined' | 'expired';
 
+export type DeptCode = 'W' | 'B' | 'P' | 'PM';
+
 export interface EstimateLine {
   description: string;
   qty: number;
   unitPrice: number;
+  dept: DeptCode;
 }
 
 export interface Estimate {
@@ -101,6 +106,7 @@ export interface Estimate {
   status: EstimateStatus;
   lines: EstimateLine[];
   total: number;
+  concerns: string;
   createdAt: string;
   sentAt?: string;
 }
@@ -180,3 +186,100 @@ export interface DashboardStats {
 
 export type EstimateWithRefs = Estimate & { client: Client; watch: Watch };
 export type JobWithRefs = Job & { client: Client; watch: Watch };
+
+// ---- Intake -----------------------------------------------------------------
+
+export type PackageStatus = 'arrived' | 'processed' | 'awaiting_inspection' | 'received' | 'discrepancy_hold';
+export type PackageSource = 'carrier' | 'walk_in';
+export type Carrier = 'FedEx' | 'UPS' | 'USPS' | 'DHL' | 'Hand delivery';
+export type Bin = 'inspection' | 'concierge';
+
+export interface PackagePhoto {
+  id: string;
+  source: 'webcam' | 'upload';
+  dataUrl: string;
+  fileName?: string;
+}
+
+export interface Package {
+  id: string;
+  subNumber: string;
+  source: PackageSource;
+  carrier: Carrier;
+  trackingNumber?: string;
+  signatureNoted: boolean;
+  clientId?: string;
+  estimateId?: string;
+  status: PackageStatus;
+  arrivedAt: string;
+  arrivedBy: string;
+  arrivedStation: string;
+  contents: string[];
+  photos: PackagePhoto[];
+  receiptPrinted: boolean;
+  processedAt?: string;
+  processedBy?: string;
+  workOrderAt?: string;
+  workOrderBy?: string;
+  bin?: Bin;
+  inspectedAt?: string;
+  inspectedBy?: string;
+  workflow?: DeptCode[];
+  discrepancyReason?: string;
+  notes?: string;
+}
+
+export type PackageWithRefs = Package & { client: Client | null; estimate: EstimateWithRefs | null };
+
+export interface OutboxEmail {
+  id: string;
+  to: string;
+  toName: string;
+  subject: string;
+  body: string;
+  relatedRef: string;
+  createdAt: string;
+  createdBy: string;
+  station: string;
+  status: 'pending';
+}
+
+export type LabelType = 'pdf417_data' | 'ref_serial';
+
+export interface LabelJob {
+  id: string;
+  type: LabelType;
+  packageId: string;
+  estimateNumber: string;
+  payload: string;
+  lines: string[];
+  createdAt: string;
+  createdBy: string;
+  station: string;
+  printed: boolean;
+}
+
+export interface WatchMatch {
+  watch: Watch;
+  client: Client;
+  jobs: Job[];
+  packages: Package[];
+}
+
+export interface InspectionContext {
+  pkg: PackageWithRefs;
+  estimate: EstimateWithRefs;
+  expectedComponents: string[];
+  suggestedWorkflow: DeptCode[];
+}
+
+export interface ReceiveWatchInput {
+  reference: string;
+  serial: string;
+  linesVerified: number[];
+  componentsReceived: string[];
+  extraWatch: boolean;
+  workflow: DeptCode[];
+  sameWatchDecision: 'n/a' | 'returning' | 'conflict';
+  notes?: string;
+}

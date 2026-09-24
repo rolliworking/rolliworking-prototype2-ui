@@ -1,12 +1,21 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import AppShell from '@/components/layout/AppShell';
+import IntakeLayout from '@/components/intake/IntakeLayout';
 import { findNavItem } from '@/config/navigation';
 import AuditLogPage from '@/pages/AuditLogPage';
 import ClientDetailPage from '@/pages/ClientDetailPage';
 import Dashboard from '@/pages/Dashboard';
 import EstimatesPage from '@/pages/EstimatesPage';
 import HitListPage from '@/pages/HitListPage';
+import ArrivalPage from '@/pages/intake/ArrivalPage';
+import LabelQueuePage from '@/pages/intake/LabelQueuePage';
+import OutboxPage from '@/pages/intake/OutboxPage';
+import ReceivePackageListPage from '@/pages/intake/ReceivePackageListPage';
+import ReceivePackagePage from '@/pages/intake/ReceivePackagePage';
+import ReceiveWatchListPage from '@/pages/intake/ReceiveWatchListPage';
+import ReceiveWatchPage from '@/pages/intake/ReceiveWatchPage';
+import WorkOrderPage from '@/pages/intake/WorkOrderPage';
 import JobsPage from '@/pages/JobsPage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
@@ -30,7 +39,6 @@ function TierGate() {
 }
 
 const PLACEHOLDER_PATHS = [
-  '/intake',
   '/inspection-photos',
   '/sales',
   '/purchasing',
@@ -55,6 +63,16 @@ export default function App() {
               <Route path="/hit-list" element={<HitListPage />} />
               <Route path="/estimates" element={<EstimatesPage />} />
               <Route path="/jobs" element={<JobsPage />} />
+              <Route path="/intake" element={<IntakeLayout />}>
+                <Route index element={<ArrivalPage />} />
+                <Route path="receive" element={<ReceivePackageListPage />} />
+                <Route path="receive/:id" element={<ReceivePackagePage />} />
+                <Route path="work-order" element={<WorkOrderPage />} />
+                <Route path="inspection" element={<ReceiveWatchListPage />} />
+                <Route path="inspection/:id" element={<ReceiveWatchPage />} />
+                <Route path="outbox" element={<OutboxPage />} />
+                <Route path="labels" element={<LabelQueuePage />} />
+              </Route>
               <Route path="/clients/:id" element={<ClientDetailPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />

@@ -20,6 +20,22 @@ const TONE: Record<string, string> = {
   awaiting_pickup: 'bg-teal-50 text-teal-800',
   shipped: 'bg-slate-100 text-slate-600',
   released: 'bg-slate-100 text-slate-500',
+  expected: 'bg-slate-100 text-slate-500',
+  // packages
+  arrived: 'bg-amber-50 text-amber-800',
+  processed: 'bg-brand-50 text-brand',
+  awaiting_inspection: 'bg-violet-50 text-violet-700',
+  received: 'bg-moss-50 text-moss-700',
+  discrepancy_hold: 'bg-rose-50 text-rose-700',
+};
+
+const LABEL: Record<string, string> = {
+  qc: 'QC',
+  arrived: 'Arrived — awaiting processing',
+  processed: 'Processed — awaiting work order',
+  awaiting_inspection: 'Awaiting inspection',
+  received: 'Received — awaiting approval',
+  discrepancy_hold: 'Discrepancy hold',
 };
 
 export const StatusPill = ({ status, testId }: { status: string; testId?: string }) => (
@@ -30,7 +46,20 @@ export const StatusPill = ({ status, testId }: { status: string; testId?: string
       TONE[status] ?? 'bg-slate-100 text-slate-700',
     )}
   >
-    {status === 'qc' ? 'QC' : humanize(status)}
+    {LABEL[status] ?? humanize(status)}
+  </span>
+);
+
+const DEPT_TONE: Record<string, string> = {
+  W: 'bg-brand-50 text-brand ring-brand-100',
+  B: 'bg-violet-50 text-violet-700 ring-violet-100',
+  P: 'bg-teal-50 text-teal-800 ring-teal-100',
+  PM: 'bg-amber-50 text-amber-800 ring-amber-100',
+};
+
+export const DeptBadge = ({ code, className }: { code: string; className?: string }) => (
+  <span className={clsx('inline-flex h-5 min-w-[22px] items-center justify-center rounded-sm px-1 font-mono text-[10px] font-semibold ring-1 ring-inset', DEPT_TONE[code] ?? 'bg-slate-100 text-slate-700 ring-slate-200', className)} title={code}>
+    {code}
   </span>
 );
 
