@@ -6,10 +6,12 @@ import {
   lookupShipQueue,
   PrototypeApiError,
 } from "./api/client";
+import { AuthGate } from "./AuthGate";
 import { EstimatesPage } from "./EstimatesPage";
 import { HitListPage } from "./HitListPage";
 import { IntakePage } from "./IntakePage";
 import { SalesPage } from "./SalesPage";
+import { clearSession, loadSession, SessionUser } from "./session";
 
 type NavId = "dashboard" | "estimates" | "hit-list" | "sales" | "intake";
 
@@ -258,17 +260,18 @@ function Dashboard() {
   );
 }
 
-function Placeholder({ title, note }: { title: string; note: string }) {
-  return (
-    <>
-      <h1>{title}</h1>
-      <p className="sub">{note}</p>
-    </>
-  );
-}
-
 export function App() {
   const [nav, setNav] = useState<NavId>("dashboard");
+  const [user, setUser] = useState<SessionUser | null>(() => loadSession().user);
+
+  useEffect(() => {
+    const { user: stored } = loadSession();
+    if (stored) setUser(stored);
+  }, []);
+
+  if (!user) {
+    return <AuthGate onSignedIn={setUser} />;
+  }
 
   return (
     <div className="shell">
@@ -292,6 +295,18 @@ export function App() {
             {label}
           </button>
         ))}
+        <div className="nav-user">
+          <span>{String(user.display_name || user.username || "signed in")}</span>
+          <button
+            type="button"
+            onClick={() => {
+              clearSession();
+              setUser(null);
+            }}
+          >
+            Sign out
+          </button>
+        </div>
       </nav>
       <main className="main">
         <div className="banner">
