@@ -158,6 +158,50 @@ export function EstimatesPage() {
     }
   }
 
+  async function onDuplicate(id: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const src = (await getEstimate(id)) as Row;
+      const customerId = String(
+        src.customer_id || (src.customer as { id?: string } | null)?.id || ""
+      );
+      if (!customerId) {
+        setError("Cannot duplicate — missing customer on source estimate");
+        return;
+      }
+      const srcLines = Array.isArray(src.lines) ? (src.lines as Row[]) : [];
+      const created = (await createEstimate({
+        customer_id: customerId,
+        watch_brand: src.watch_brand || undefined,
+        watch_model: src.watch_model || undefined,
+        watch_serial: src.watch_serial || undefined,
+        note_to_customer: src.note_to_customer || undefined,
+        lines: srcLines.map((line) => ({
+          description: line.description || "",
+          quantity: line.quantity ?? 1,
+          unit_price: line.unit_price ?? 0,
+          part_number: line.part_number || undefined,
+          department_flag: line.department_flag || "W",
+        })),
+      })) as Row;
+      const newId = String(created.id || "");
+      setNotice(`Duplicated as draft E${String(created.estimate_number || "").replace(/^E/i, "")}`);
+      await reload();
+      if (newId) setSelectedId(newId);
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onPrint() {
+    if (!detail) return;
+    window.print();
+  }
+
   async function onMarkSent() {
     if (!selectedId || !detail) return;
     setBusy(true);
@@ -335,8 +379,8 @@ export function EstimatesPage() {
     <>
       <h1>Estimates</h1>
       <p className="sub">
-        E3 list, create, detail, send, decline/reopen, convert to SO or intake. Print / duplicate:
-        UNKNOWN — omitted.
+        E3 list, create, detail, send, decline/reopen, convert to SO or intake. Duplicate creates a
+        new draft via createEstimate; Print uses the browser print dialog.
       </p>
 
       <div className="toolbar">
@@ -463,6 +507,17 @@ export function EstimatesPage() {
                           disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation();
+                            void onDuplicate(id);
+                          }}
+                        >
+                          Duplicate
+                        </button>{" "}
+                        <button
+                          type="button"
+                          className="linkish"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             void onDelete(id, num);
                           }}
                         >
@@ -497,7 +552,17 @@ export function EstimatesPage() {
                   ? ` · ${[detail.watch_brand, detail.watch_model].filter(Boolean).join(" ")}`
                   : ""}
               </p>
-              <div className="actions">
+              <div className="actions print-hide">
+                <button type="button" disabled={busy} onClick={() => onPrint()}>
+                  Print
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onDuplicate(selectedId)}
+                >
+                  Duplicate
+                </button>
                 <button
                   type="button"
                   disabled={busy || String(detail.status) === "converted"}
