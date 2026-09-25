@@ -1,3 +1,4 @@
+import { SetupRsPanels } from '@/pages/SetupRsPanels';
 import { ArrowRight, MonitorSmartphone, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,8 +9,6 @@ import { Card } from '@/components/ui/Card';
 import { Table, Td, Th } from '@/components/ui/Table';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtTime } from '@/lib/format';
-
-import { SetupRsPanels } from '@/pages/SetupRsPanels';
 
 export default function SetupPage() {
   const { user, station, refreshStation } = useAuth();

@@ -1,4 +1,4 @@
-import { BookOpen, Link2, Tag, XCircle } from 'lucide-react';
+import { BookOpen, Link2, Tag, XCircle, BadgeCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { Part, PartsKnowledgeEntry } from '@/api/client';
@@ -7,8 +7,8 @@ import { Card } from '@/components/ui/Card';
 import { Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtTime } from '@/lib/format';
 
-const ICON = { association_confirmed: Link2, alias_added: Tag, rejected: XCircle };
-const TONE = { association_confirmed: 'text-moss-700', alias_added: 'text-brand', rejected: 'text-rose-700' };
+const ICON = { association_confirmed: Link2, alias_added: Tag, rejected: XCircle, price_verified: BadgeCheck, model_resolved: Link2 };
+const TONE = { association_confirmed: 'text-moss-700', alias_added: 'text-brand', rejected: 'text-rose-700', price_verified: 'text-moss-700', model_resolved: 'text-ink-500' };
 
 export default function PartsKnowledgePage() {
   const [log, setLog] = useState<PartsKnowledgeEntry[]>([]);

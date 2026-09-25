@@ -51,7 +51,8 @@ export type AuditEventType =
   | 'setup'
   | 'evidence'
   | 'labels'
-  | 'accounting';
+  | 'accounting'
+  | 'companion';
 
 export interface AuditEvent {
   id: string;
@@ -611,7 +612,7 @@ export interface PartsRequest {
 
 export interface PartsKnowledgeEntry extends Stamp {
   id: string;
-  kind: 'association_confirmed' | 'alias_added' | 'rejected';
+  kind: 'association_confirmed' | 'alias_added' | 'rejected' | 'price_verified' | 'model_resolved';
   partId: string;
   partNumber: string;
   reference?: string;
@@ -851,3 +852,19 @@ export interface ReportRow { label: string; values: Record<string, number | stri
 export interface Report { key: string; title: string; columns: string[]; rows: ReportRow[]; note: string; generatedAt: string }
 export interface QboQueueRow { salesOrderId: string; number: string; client: string; total: number; qboInvoiceId?: string; syncState: 'not_queued' | 'queued' | 'pushed_stub' | 'error_stub'; at: string }
 export interface IntegrationTile { key: 'qbo' | 'shipping' | 'rollitime' | 'email'; name: string; health: 'not_connected' | 'stub'; blurb: string; lastCheck: string }
+
+// ---- E10 Companion panel (scripted assistant) ------------------------------------------------------
+export interface ModelReference { id: string; model: string; aliases: string[]; yearFrom: number; yearTo: number; reference: string; brand: 'Rolex' | 'Tudor' }
+export interface PriceEvidence { partId: string; uses: number; avg: number; last: string }
+export interface PriceCandidate { part: Part; uses: number; avg: number; last: string; verified?: Stamp; stale: boolean; fits: boolean }
+export interface PriceMemoryAnswer { query: string; resolution: { reference?: string; model?: string; via: 'reference' | 'alias' | 'year' | 'none'; clarify?: string }; candidates: PriceCandidate[]; text: string }
+export type BriefLineKey = 'relationship' | 'history' | 'service_debt';
+export interface BriefCitation { label: string; hitKey: string }
+export interface BriefLine { key: BriefLineKey; text: string; citations: BriefCitation[]; corrected?: BriefCorrection; moneyMasked?: boolean }
+export interface BriefCorrection extends Stamp { id: string; clientId: string; key: BriefLineKey; text: string; original: string }
+export interface ClientBrief { clientId: string; lines: BriefLine[]; debt?: { jobNumber: string; daysLate: number; jobId: string }; generatedAt: string }
+export interface KnowledgeCard extends Stamp { id: string; title: string; body: string; tags: string[]; sourceTaskId?: string; askedBy?: string }
+export interface RoutedQuestion extends Stamp { id: string; question: string; taskId: string; status: 'open' | 'answered'; cardId?: string; division: Division }
+export interface AskAnswer { query: string; card?: KnowledgeCard; score: number; text: string; routed?: RoutedQuestion }
+export type LabelPillGroup = 'dial' | 'hands' | 'bracelet' | 'condition';
+export interface PhotoLabel extends Stamp { id: string; photoId: string; jobId: string; watchId: string; source: 'inspection' | 'evidence'; tags: string[]; skipped: boolean }

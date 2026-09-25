@@ -1,10 +1,11 @@
-import { MonitorSmartphone, Plus, UserRound } from 'lucide-react';
+import { Bot, MonitorSmartphone, Plus, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { QUICK_ACTIONS } from '@/config/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { UserSwitcher } from './UserSwitcher';
 import { useQuickAdd } from '@/components/today/QuickAddOverlay';
+import { useCompanion } from '@/components/companion/CompanionPanel';
 
 const DIVISION_LABEL: Record<string, string> = { rolliworks: 'Rolliworks', rollishop: 'RolliShop' };
 const DIVISION_CLS: Record<string, string> = {
@@ -16,6 +17,7 @@ export const TopBar = () => {
   const { user, station } = useAuth();
   const navigate = useNavigate();
   const { open: openQuickAdd } = useQuickAdd();
+  const companion = useCompanion();
   const div = station?.division ?? 'rolliworks';
 
   return (
@@ -63,6 +65,15 @@ export const TopBar = () => {
           className="flex h-7 w-7 items-center justify-center rounded-sm border border-line bg-canvas text-ink-500 hover:border-ink-400 hover:text-ink"
         >
           <Plus size={14} />
+        </button>
+        <button
+          type="button"
+          data-testid="topbar-companion-btn"
+          onClick={companion.toggle}
+          title="Companion panel (Alt+M) — scripted assistant"
+          className={`flex h-7 w-7 items-center justify-center rounded-sm border ${companion.open ? 'border-ink bg-ink text-white' : 'border-line bg-canvas text-ink-500 hover:border-ink-400 hover:text-ink'}`}
+        >
+          <Bot size={14} />
         </button>
 
         <div className="flex items-center gap-2 text-right">

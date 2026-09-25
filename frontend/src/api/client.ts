@@ -2819,4 +2819,107 @@ export async function captureEvidence(jobId: string, input: EvidenceInput): Prom
 }
 
 // Restore client-initiated writes on load (fixtures are in-memory; the portal log is not)
+// ---- E10 Companion panel — SCRIPTED assistant over fixtures (no model) ------------------------------
+import type { Stamp, AskAnswer, BriefCorrection, BriefLine, BriefLineKey, ClientBrief, KnowledgeCard, ModelReference, PhotoLabel, PriceCandidate, PriceMemoryAnswer, RoutedQuestion } from './types';
+
+const cp = {
+  models: fx.modelReferences.map((m): ModelReference => ({ ...m })),
+  evidence: fx.priceEvidence.map((e) => ({ ...e })),
+  verifications: { ...fx.priceVerifications } as Record<string, Stamp>,
+  cards: fx.knowledgeCards.map((c): KnowledgeCard => ({ ...c })),
+  questions: fx.routedQuestions.map((q): RoutedQuestion => ({ ...q })),
+  corrections: [] as BriefCorrection[],
+  labels: fx.photoLabels.map((l): PhotoLabel => ({ ...l })),
+};
+store.tasks.push(...fx.routedTasks.map((t) => ({ ...t })));
+export { LABEL_PILLS } from './fixtures/companion';
+const cpStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'companion', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); };
+const YEAR_MS = 365 * 86_400_000;
+const canSeeMoney = () => actor().user?.accessTier === 'manager';
+
+// 1 — Price Memory ---------------------------------------------------------------------------------
+export const resolveModel = (text: string): PriceMemoryAnswer['resolution'] => {
+  const q = text.toLowerCase();
+  const ref = q.match(/\b(m?\d{5,6}[a-z]{0,3}(?:-\d{4})?)\b/i)?.[1];
+  if (ref) { const m = cp.models.find((x) => x.reference.toLowerCase() === ref); return { reference: ref.toUpperCase(), model: m?.model, via: 'reference' }; }
+  const year = Number(q.match(/\b(19[5-9]\d|20[0-2]\d)\b/)?.[1]);
+  const hits = cp.models.filter((m) => m.aliases.some((a) => q.includes(a))).sort((a, b) => b.aliases.reduce((t, x) => Math.max(t, q.includes(x) ? x.length : 0), 0) - a.aliases.reduce((t, x) => Math.max(t, q.includes(x) ? x.length : 0), 0));
+  if (!hits.length) return { via: 'none', clarify: 'Which model or reference? Say a reference (e.g. 16234) or a model + year (e.g. "2010 Daytona").' };
+  const family = hits.filter((m) => m.model.split(' ')[0] === hits[0].model.split(' ')[0]);
+  if (year) { const y = family.find((m) => year >= m.yearFrom && year <= m.yearTo) ?? hits[0]; return { reference: y.reference, model: y.model, via: 'year' }; }
+  if (family.length > 1) return { model: hits[0].model.split(' ')[0], via: 'none', clarify: `${hits[0].model.split(' ')[0]} spans several references (${family.map((m) => `${m.reference} ${m.yearFrom}–${m.yearTo}`).join(' · ')}). Which year?` };
+  return { reference: hits[0].reference, model: hits[0].model, via: 'alias' };
+};
+const partTerms = (text: string) => text.toLowerCase().replace(/\b(how|much|is|a|an|the|for|price|cost|of|what|does|do|we|charge|on|to)\b/g, ' ').replace(/\b(19|20)\d{2}\b/g, ' ').split(/[^a-z0-9-]+/).filter((w) => w.length >= 3 && !cp.models.some((m) => m.aliases.includes(w) || m.reference.toLowerCase() === w));
+export async function priceMemory(query: string): Promise<PriceMemoryAnswer> {
+  const resolution = resolveModel(query); const terms = partTerms(query);
+  const scored = store.parts.map((p) => { let s = 0; terms.forEach((w) => { if (p.name.toLowerCase().includes(w)) s += 2; if (p.category === w) s += 2; if (p.aliases.some((a) => a.includes(w))) s += 2; }); const fits = !!resolution.reference && p.compatibleRefs.map((r) => r.toUpperCase()).includes(resolution.reference); if (fits) s += 3; return { p, s, fits }; }).filter((x) => x.s >= 2 && (terms.length ? x.s > (x.fits ? 3 : 0) : x.fits));
+  const candidates: PriceCandidate[] = scored.map(({ p, fits }) => { const ev = cp.evidence.find((e) => e.partId === p.id); const v = cp.verifications[p.id]; return { part: p, uses: ev?.uses ?? 0, avg: ev?.avg ?? p.price, last: ev?.last ?? '', verified: v, stale: !!v && Date.now() - new Date(v.at).getTime() > YEAR_MS, fits }; })
+    .sort((a, b) => Number(!!b.verified && !b.stale) - Number(!!a.verified && !a.stale) || Number(b.fits) - Number(a.fits) || b.uses - a.uses).slice(0, 5);
+  const text = resolution.clarify && !candidates.length ? resolution.clarify : !candidates.length ? `No priced part matches “${terms.join(' ')}”${resolution.reference ? ` for ${resolution.reference}` : ''}. Try the part name (crystal, crown, gasket…).` : `${resolution.reference ? `Resolved to ${resolution.model ?? ''} ${resolution.reference} (via ${resolution.via}). ` : ''}${candidates.length} candidate${candidates.length === 1 ? '' : 's'} with mined-price evidence — verified prices rank first.`;
+  if (resolution.reference && resolution.via !== 'reference') cpStamp(`Price memory · “${query.trim()}” → ${resolution.reference}`);
+  return resolve({ query, resolution, candidates, text });
+}
+export async function verifyPrice(partId: string): Promise<PriceCandidate> {
+  const p = byId(store.parts, partId); const a = actor(); const st: Stamp = { at: new Date().toISOString(), by: a.by, station: a.station }; cp.verifications[partId] = st;
+  const ev = cp.evidence.find((e) => e.partId === partId);
+  store.partsKnowledge.unshift({ id: newId('pk'), kind: 'price_verified', partId, partNumber: p.partNumber, requestId: '', detail: `Price verified at ${fmtMoney(ev?.avg ?? p.price)} (${ev?.uses ?? 0} uses) — ranks #1 in Price Memory for 12 months`, ...st });
+  cpStamp(`Price verified · ${p.partNumber} ${fmtMoney(ev?.avg ?? p.price)}`);
+  return resolve({ part: p, uses: ev?.uses ?? 0, avg: ev?.avg ?? p.price, last: ev?.last ?? '', verified: st, stale: false, fits: false });
+}
+
+// 2 — Client Brief ----------------------------------------------------------------------------------
+export async function getClientBrief(clientId: string): Promise<ClientBrief> {
+  const c = byId(fx.clients, clientId); const ws = store.watches.filter((w) => w.clientId === clientId); const jobs = store.jobs.filter((j) => j.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sos = store.salesOrders.filter((o) => o.clientId === clientId && o.status !== 'cancelled' && o.status !== 'draft'); const paid = sos.reduce((t, o) => t + (o.total - o.balanceDue), 0);
+  const years = Math.max(0, new Date().getFullYear() - new Date(c.since).getFullYear()); const money = canSeeMoney();
+  const late = jobs.filter((j) => j.finishedAt && j.dueAt && new Date(j.finishedAt).getTime() > new Date(j.dueAt).getTime()).map((j) => ({ j, days: Math.round((new Date(j.finishedAt!).getTime() - new Date(j.dueAt!).getTime()) / 86_400_000) })).sort((a, b) => b.days - a.days)[0];
+  const notes = jobs.flatMap((j) => j.notes.map((n) => ({ j, n }))).slice(0, 2); const lastSo = sos[0];
+  const lines: BriefLine[] = [
+    { key: 'relationship', text: `${c.type === 'trade' ? 'Trade' : 'Retail'} client since ${new Date(c.since).getFullYear()} (${years} yr) · ${ws.length} watch${ws.length === 1 ? '' : 'es'} · ${jobs.length} job${jobs.length === 1 ? '' : 's'} · lifetime value ${money ? fmtMoney(paid) : '•••• (hidden)'}`, citations: [{ label: 'client record', hitKey: 'top' }, ...sos.slice(0, 2).map((o) => ({ label: o.number, hitKey: `so-${o.id}` }))], moneyMasked: !money },
+    { key: 'history', text: [jobs[0] ? `Latest: ${jobs[0].number} ${jobs[0].status.replace(/_/g, ' ')} (${jobs[0].workflow.join('+')})` : 'No jobs yet', ...notes.map(({ j, n }) => `“${n.text.slice(0, 70)}${n.text.length > 70 ? '…' : ''}” — ${n.by}, ${j.number}`), lastSo ? `last invoice ${lastSo.number} ${lastSo.isPaid ? 'paid' : `balance ${money ? fmtMoney(lastSo.balanceDue) : 'hidden'}`}` : ''].filter(Boolean).join(' · '), citations: [...(jobs[0] ? [{ label: jobs[0].number, hitKey: `job-${jobs[0].id}` }] : []), ...notes.map(({ j }) => ({ label: `note · ${j.number}`, hitKey: `job-${j.id}` })), ...(lastSo ? [{ label: lastSo.number, hitKey: `so-${lastSo.id}` }] : [])] },
+    { key: 'service_debt', text: late ? `⚠ last job delivered ${late.days} days late (${late.j.number}) — consider preferential handling` : 'No service debt — every finished job met its promised date', citations: late ? [{ label: late.j.number, hitKey: `job-${late.j.id}` }] : [] },
+  ];
+  lines.forEach((l) => { const fix = cp.corrections.filter((x) => x.clientId === clientId && x.key === l.key).sort((a, b) => b.at.localeCompare(a.at))[0]; if (fix) { l.corrected = fix; l.text = fix.text; } });
+  return resolve({ clientId, lines, debt: late ? { jobNumber: late.j.number, daysLate: late.days, jobId: late.j.id } : undefined, generatedAt: new Date().toISOString() });
+}
+export async function correctBriefLine(clientId: string, key: BriefLineKey, text: string, original: string): Promise<BriefCorrection> {
+  if (!text.trim()) throw new Error('Correction cannot be empty'); const a = actor();
+  const fix: BriefCorrection = { id: newId('bc'), clientId, key, text: text.trim(), original, at: new Date().toISOString(), by: a.by, station: a.station }; cp.corrections.unshift(fix);
+  cpStamp(`Client brief corrected · ${clientName(clientId)} · ${key}`); return resolve({ ...fix });
+}
+export async function getBriefCorrections(clientId: string): Promise<BriefCorrection[]> { return resolve(cp.corrections.filter((x) => x.clientId === clientId)); }
+
+// 3 — Ask the shop ----------------------------------------------------------------------------------
+export async function getKnowledgeCards(): Promise<KnowledgeCard[]> { return resolve([...cp.cards].sort((a, b) => b.at.localeCompare(a.at))); }
+export async function getRoutedQuestions(): Promise<(RoutedQuestion & { task: Task | undefined })[]> { return resolve(cp.questions.map((q) => ({ ...q, task: store.tasks.find((t) => t.id === q.taskId) }))); }
+export async function askShop(query: string): Promise<AskAnswer> {
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const best = cp.cards.map((c) => ({ c, s: c.tags.reduce((t, tag) => t + (query.toLowerCase().includes(tag) ? 3 : 0), 0) + words.filter((w) => c.title.toLowerCase().includes(w) || c.body.toLowerCase().includes(w)).length })).sort((a, b) => b.s - a.s)[0];
+  if (best && best.s >= 3) return resolve({ query, card: best.c, score: best.s, text: `From the card “${best.c.title}” (by ${best.c.by}):` });
+  return resolve({ query, score: best?.s ?? 0, text: 'No card yet — route to MH/MM? A manager task is created and the answer becomes a new card.' });
+}
+export async function routeQuestion(query: string): Promise<RoutedQuestion> {
+  if (!query.trim()) throw new Error('Ask something first'); const a = actor();
+  const task = await createTask({ title: `Answer shop question: ${query.trim()}`, assignedTo: { type: 'role', role: 'manager' }, dueAt: new Date(Date.now() + 86_400_000).toISOString() });
+  const q: RoutedQuestion = { id: newId('rqa'), question: query.trim(), taskId: task.id, status: 'open', division: getSessionDivision(), at: new Date().toISOString(), by: a.by, station: a.station }; cp.questions.unshift(q);
+  cpStamp(`Question routed to managers · “${q.question}”`); return resolve({ ...q });
+}
+export async function answerQuestion(questionId: string, title: string, body: string, tags: string[]): Promise<KnowledgeCard> {
+  const q = byId(cp.questions, questionId); if (q.status === 'answered') throw new Error('Already answered'); if (!title.trim() || !body.trim()) throw new Error('Title and answer are required'); const a = actor();
+  const card: KnowledgeCard = { id: newId('kc'), title: title.trim(), body: body.trim(), tags: uniq([...tags.map((t) => t.trim().toLowerCase()).filter(Boolean), ...q.question.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4)]), sourceTaskId: q.taskId, askedBy: q.by, at: new Date().toISOString(), by: a.by, station: a.station };
+  cp.cards.unshift(card); q.status = 'answered'; q.cardId = card.id; const t = store.tasks.find((x) => x.id === q.taskId); if (t && t.status === 'open') await setTaskDone(t.id, true);
+  cpStamp(`Knowledge card created from routed question · “${card.title}”`); return resolve({ ...card });
+}
+
+// 4 — Photo labels ----------------------------------------------------------------------------------
+export async function getPhotoLabels(photoId?: string): Promise<PhotoLabel[]> { return resolve(cp.labels.filter((l) => !photoId || l.photoId === photoId).sort((a, b) => b.at.localeCompare(a.at))); }
+export async function labelPhoto(input: { photoId: string; jobId: string; source: 'inspection' | 'evidence'; tags: string[]; skipped?: boolean }): Promise<PhotoLabel> {
+  const j = getJobRow(input.jobId); const a = actor(); if (!input.skipped && !input.tags.length) throw new Error('Pick at least one label or skip');
+  const l: PhotoLabel = { id: newId('pl'), photoId: input.photoId, jobId: j.id, watchId: j.watchId, source: input.source, tags: input.skipped ? [] : uniq(input.tags), skipped: !!input.skipped, at: new Date().toISOString(), by: a.by, station: a.station };
+  cp.labels.unshift(l); cpStamp(input.skipped ? `Photo label skipped · ${j.number}` : `Photo labeled · ${j.number} · ${l.tags.join(', ')}`); if (!input.skipped) jobStamp(j, `Photo labels · ${l.tags.join(', ')}`);
+  return resolve({ ...l });
+}
+export const companionCanSeeMoney = canSeeMoney;
+
 replayRcEvents();

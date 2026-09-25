@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { QuickAddProvider } from '@/components/today/QuickAddOverlay';
+import { CompanionDock, CompanionProvider } from '@/components/companion/CompanionPanel';
 
 export const PrototypeBanner = () => (
   <div
@@ -15,6 +16,7 @@ export const PrototypeBanner = () => (
 export default function AppShell() {
   return (
     <QuickAddProvider>
+    <CompanionProvider>
       <div className="flex h-full flex-col">
         <PrototypeBanner />
         <div className="flex min-h-0 flex-1">
@@ -25,8 +27,10 @@ export default function AppShell() {
               <Outlet />
             </main>
           </div>
+          <CompanionDock />
         </div>
       </div>
+    </CompanionProvider>
     </QuickAddProvider>
   );
 }
