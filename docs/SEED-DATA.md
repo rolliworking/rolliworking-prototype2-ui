@@ -200,3 +200,10 @@ Messages: msg-01 (Harrison → staff, read), msg-02 (Vienna → Harrison, unread
 - Stock: 13 levels; low/zero rows: pt-02 (1/2), pt-03 (0/2), pt-05 (2/2), pt-07 (1/1), pt-09 (0/1) → 5 LOW flags. Movements 5 (receipt, issue, adjustment, receipt, count). Cycle count cc-01 posted (A1, 1 variance). Next CC-26-0004.
 - Templates: 6 keys. Evidence: j-08 (all 4, 100M/330ft, grade B), j-05 (hidden_serial + timing_sheet → gate blocks QC pass until pressure_test + parts_grading), j-16 (hidden_serial + pressure_test 50M/164ft; warranty set satisfied), j-25 (all 4, 2024 history for Naomi). Next ev-13.
 - Deliberately not covered: no rollishop stock movement; no `issue` movement created by code (only seed); no PO for a retired vendor; templates not yet consumed by Outbox writers; no evidence on a small_job.
+
+## E10 seeds (`fixtures/companion.ts`)
+- Model references: Daytona 116520 (2000–16) / 116500LN (2016–), Sub 16610 (1988–2010) / 126610LN (2010–), Datejust 16234, GMT 116710LN, OP41 124300, BB58 M79030B-0001. "crown for a daytona" → clarifying question; "2010 daytona" → 116520.
+- Price evidence for pt-01…pt-13 (e.g. 25-295-C1 used 11× avg $285). Verified: pt-04 (fresh), pt-02 (stale → "re-verify pricing").
+- Knowledge cards kc-01…kc-06 (magnetization, WR policy, turnaround, polishing, bracelet stretch, warranty). Routed question rq-ask-01 (Cellini quartz) with open manager task t-ask-01 — answer it from the panel to create kc-07.
+- Naomi j-08 E02018 `dueInDays: -100` → ~90 days late → service-debt line.
+- Photo labels pl-01 (ev-01), pl-02 (ev-09). Not covered: labels on inspection photos, corrections (none seeded), rollishop routed questions.

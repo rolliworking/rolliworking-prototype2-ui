@@ -225,3 +225,15 @@ Client 1─* Message   Client 1─* MagicLink   OutboxEmail.to = Client.email (s
 | EvidenceItem (12) | id, jobId, watchId, slot lookup `hidden_serial\|timing_sheet\|pressure_test\|parts_grading`, photo, labelScan, grades? `PartsGrade[]` (`B \| Ø/REPL \| D/REPL`), depthRating? (`50M/164ft`), note? & Stamp | keyed to watch AND job; counter `ev` |
 | IntegrationTile (4) | key, name, health `not_connected\|stub`, blurb, lastCheck | static |
 Derived: `StockRow`, `Report`, `QboQueueRow`. Catalog admin adds `retired` flag (separate admin copy; retired rows removed from live catalog).
+
+## 16. E10 additions (`fixtures/companion.ts`)
+| entity | fields | notes |
+|---|---|---|
+| ModelReference (8) | id, brand, model, aliases[], yearFrom, yearTo, reference | colloquial → reference lookup |
+| PriceEvidence (13) | partId, uses, avg, last | mined-price fixture (KEEPER: view over estimate/PO lines) |
+| price verification | `Record<partId, Stamp>` | pt-04 fresh, pt-02 > 12 months (stale) |
+| KnowledgeCard (6 + created) | id, title, body, tags[], sourceTaskId?, askedBy? & Stamp | |
+| RoutedQuestion (1 + created) | id, question, taskId→Task, status `open\|answered`, cardId?, division & Stamp | task t-ask-01 seeded to role manager |
+| BriefCorrection | id, clientId, key `relationship\|history\|service_debt`, text, original & Stamp | in-memory only |
+| PhotoLabel (2 + created) | id, photoId (job photo or evidence id), jobId, watchId, source `inspection\|evidence`, tags[], skipped & Stamp | |
+Derived: `PriceMemoryAnswer`, `ClientBrief`, `AskAnswer`.

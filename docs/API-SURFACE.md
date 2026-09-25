@@ -265,3 +265,14 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 | `captureEvidence(jobId, {slot, photo, labelScan, grades?, depthRating?, note?})` | `EvidenceItem` | label must match job #/ref/serial; depth `^\d+M/\d+ft$`; grading needs ≥1 grade; audit `evidence` + job stamp |
 | `transitionJob(…, 'qc_pass')` | | now also throws when `evidenceGaps(job)` non-empty |
 New audit types: `purchasing · inventory · setup · evidence · labels · accounting`.
+
+## 16. E10 — Companion (scripted; all audit type `companion`)
+| export | signature | notes |
+|---|---|---|
+| `resolveModel(text)` sync | `→ {reference?, model?, via: reference\|alias\|year\|none, clarify?}` | model_references fixture |
+| `priceMemory(query)` | `PriceMemoryAnswer {resolution, candidates: PriceCandidate[], text}` | candidates ranked verified-fresh → fits ref → uses; ≤5 |
+| `verifyPrice(partId)` | `PriceCandidate` | stores Stamp; knowledge log `price_verified` |
+| `getClientBrief(clientId)` / `correctBriefLine(clientId, key, text, original)` / `getBriefCorrections(clientId)` | `ClientBrief` / `BriefCorrection` | money masked unless manager tier (`moneyMasked`) |
+| `askShop(query)` / `routeQuestion(query)` / `answerQuestion(questionId, title, body, tags[])` / `getKnowledgeCards()` / `getRoutedQuestions()` | `AskAnswer` / `RoutedQuestion` / `KnowledgeCard` | route creates a manager-role Task; answer creates a card + closes the task |
+| `getPhotoLabels(photoId?)` / `labelPhoto({photoId, jobId, source, tags, skipped?})` / `LABEL_PILLS` | `PhotoLabel` | ≥1 tag unless skipped; job timeline stamp |
+| `companionCanSeeMoney()` sync | boolean | manager tier |

@@ -2845,9 +2845,10 @@ export const resolveModel = (text: string): PriceMemoryAnswer['resolution'] => {
   const year = Number(q.match(/\b(19[5-9]\d|20[0-2]\d)\b/)?.[1]);
   const hits = cp.models.filter((m) => m.aliases.some((a) => q.includes(a))).sort((a, b) => b.aliases.reduce((t, x) => Math.max(t, q.includes(x) ? x.length : 0), 0) - a.aliases.reduce((t, x) => Math.max(t, q.includes(x) ? x.length : 0), 0));
   if (!hits.length) return { via: 'none', clarify: 'Which model or reference? Say a reference (e.g. 16234) or a model + year (e.g. "2010 Daytona").' };
-  const family = hits.filter((m) => m.model.split(' ')[0] === hits[0].model.split(' ')[0]);
+  const family = cp.models.filter((m) => m.model.split(' ')[0] === hits[0].model.split(' ')[0]);
   if (year) { const y = family.find((m) => year >= m.yearFrom && year <= m.yearTo) ?? hits[0]; return { reference: y.reference, model: y.model, via: 'year' }; }
-  if (family.length > 1) return { model: hits[0].model.split(' ')[0], via: 'none', clarify: `${hits[0].model.split(' ')[0]} spans several references (${family.map((m) => `${m.reference} ${m.yearFrom}–${m.yearTo}`).join(' · ')}). Which year?` };
+  const fam = hits[0].model.split(' ')[0].toLowerCase(); const generic = hits[0].aliases.filter((a) => q.includes(a)).every((a) => fam.startsWith(a));
+  if (family.length > 1 && generic) return { model: hits[0].model.split(' ')[0], via: 'none', clarify: `${hits[0].model.split(' ')[0]} spans several references (${family.map((m) => `${m.reference} ${m.yearFrom}–${m.yearTo}`).join(' · ')}). Which year?` };
   return { reference: hits[0].reference, model: hits[0].model, via: 'alias' };
 };
 const partTerms = (text: string) => text.toLowerCase().replace(/\b(how|much|is|a|an|the|for|price|cost|of|what|does|do|we|charge|on|to)\b/g, ' ').replace(/\b(19|20)\d{2}\b/g, ' ').split(/[^a-z0-9-]+/).filter((w) => w.length >= 3 && !cp.models.some((m) => m.aliases.includes(w) || m.reference.toLowerCase() === w));
