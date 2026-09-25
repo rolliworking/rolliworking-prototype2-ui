@@ -117,6 +117,10 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Toast confirms: "Pinned to Vienna's list"
 - `QuickAddProvider` wraps AppShell
 
+### E15 — Portal-first client content (MH ruling 2026-09-25)
+- Principle locked: emails notify, portal renders. /rc/report/:token inspection report page (grades, photos, notes, approve/decline, supersede forwarding); staff issue flow; 9 short templates with {{portal.link}}; decisions auto-thread + flip status
+- Tested iteration_23 (~92%) → decline-error fix + timeline reason applied
+
 ### E14 — Comms hub (2026-09-25)
 - Inbox → client thread-space: anchored conversations, sources, mocked reply-token routing, 5 views, assign/snooze/close, template composer with merge-field preview + photos → Outbox, internal notes, reply indicators (jobs/estimates), Client 360 link, /today thread rows, auto-threaded portal/parts/pickup events
 - Tested iteration_22: 100%

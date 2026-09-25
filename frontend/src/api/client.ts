@@ -3050,7 +3050,7 @@ export async function issueInspectionReport(jobId: string, grades: { component: 
   const r: InspectionReportDoc = { id: newId('rep'), token: `IR-${j.number}-V${(prev?.version ?? 0) + 1}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, version: (prev?.version ?? 0) + 1, jobId, watchId: j.watchId, clientId: j.clientId, estimateId: j.estimateId, status: 'issued', supersedes: prev?.id, grades: grades.map((g) => ({ ...g, note: g.note?.trim() || undefined })), notes: notes.trim(), photoIds: j.photos.map((p) => p.id), issuedAt: new Date().toISOString(), issuedBy: a.by, station: a.station };
   if (prev && prev.status === 'issued') { prev.status = 'superseded'; prev.supersededById = r.id; }
   rp.reports.unshift(r);
-  if (j.status === 'in_review' && legalJobActions(j).some((x) => x.key === 'request_approval')) pushTransition(j, 'request_approval', 'awaiting_customer_approval', undefined, true);
+  if (j.status === 'in_review' && legalJobActions(j).some((x) => x.key === 'request_approval')) pushTransition(j, 'request_approval', 'awaiting_customer_approval', `Inspection report v${r.version} issued — portal link sent`, true);
   const t = renderTemplateFor('inspection_ready', { clientId: j.clientId, anchor: { kind: 'job', id: j.id } });
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: t.subject, body: t.body, createdAt: r.issuedAt, createdBy: a.by, station: a.station };
   store.outbox.unshift(email); r.emailId = email.id;

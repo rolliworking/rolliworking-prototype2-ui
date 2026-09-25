@@ -8,13 +8,13 @@ const GRADE: Record<ComponentGrade, { word: string; tone: string }> = { good: { 
 
 export default function RcReportPage() {
   const { token = '' } = useParams(); const navigate = useNavigate();
-  const [data, setData] = useState<PortalInspectionReport | null>(null); const [error, setError] = useState<string | null>(null); const [reason, setReason] = useState(''); const [declining, setDeclining] = useState(false);
+  const [data, setData] = useState<PortalInspectionReport | null>(null); const [error, setError] = useState<string | null>(null); const [decideError, setDecideError] = useState<string | null>(null); const [reason, setReason] = useState(''); const [declining, setDeclining] = useState(false);
   useEffect(() => { api.portalGetInspectionReport(token).then(setData).catch((e) => setError(e.message)); }, [token]);
   useEffect(() => { if (data?.newerToken) { const t = setTimeout(() => navigate(`/rc/report/${data.newerToken}`, { replace: true }), 2500); return () => clearTimeout(t); } }, [data?.newerToken, navigate]);
   if (error) return <RcCard testId="rc-report-error"><RcError text={error} /><Link to="/rc/home" className="text-sm text-rc-accent hover:underline">Back to your watches</Link></RcCard>;
   if (!data) return null;
   const { report: r, watch: w, photos } = data;
-  const decide = (d: 'approve' | 'decline') => api.portalDecideInspectionReport(token, d, reason).then((x) => { setData(x); setError(null); setDeclining(false); }).catch((e) => setError(e.message));
+  const decide = (d: 'approve' | 'decline') => api.portalDecideInspectionReport(token, d, reason).then((x) => { setData(x); setDecideError(null); setDeclining(false); }).catch((e) => setDecideError(e.message));
   return (
     <div data-testid="rc-report-page" className="space-y-6">
       {data.newerToken && <div data-testid="rc-report-superseded" className="rounded-lg border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900">A newer report replaces this one — taking you to it… <Link to={`/rc/report/${data.newerToken}`} className="underline">open now</Link></div>}
@@ -28,7 +28,7 @@ export default function RcReportPage() {
       <RcCard eyebrow="Photos from the bench" testId="rc-report-photos">{photos.length ? <div className="flex flex-wrap gap-3">{photos.map((p) => <img key={p.id} src={p.dataUrl} alt="" className="h-28 w-40 rounded-md border border-rc-line object-cover" />)}</div> : <p className="text-sm text-rc-muted">No photos attached to this report.</p>}</RcCard>
       <RcCard eyebrow="Our notes" testId="rc-report-notes"><p className="whitespace-pre-line text-sm">{r.notes}</p>{data.estimate && <p className="mt-3 text-sm">The matching estimate <Link to={`/rc/estimates/${data.estimate.id}`} className="text-rc-accent underline">{data.estimate.number}</Link> reflects this report.</p>}</RcCard>
       {r.status === 'issued' && !data.newerToken && <RcCard eyebrow="Your decision" testId="rc-report-decision">
-        <RcError text={error} />
+        <RcError text={decideError} />
         {!declining ? <div className="flex flex-wrap gap-3"><RcButton data-testid="rc-report-approve" onClick={() => decide('approve')}>Approve — go ahead</RcButton><RcButton tone="quiet" data-testid="rc-report-decline" onClick={() => setDeclining(true)}>Decline…</RcButton></div>
           : <div className="space-y-3"><RcLabel htmlFor="rc-decline-reason">Tell us why (required)</RcLabel><textarea id="rc-decline-reason" data-testid="rc-report-decline-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-md border border-rc-line bg-white px-3 py-2 text-sm" /><div className="flex gap-3"><RcButton data-testid="rc-report-decline-confirm" onClick={() => decide('decline')}>Send decline</RcButton><RcButton tone="quiet" onClick={() => setDeclining(false)}>Back</RcButton></div></div>}
       </RcCard>}
