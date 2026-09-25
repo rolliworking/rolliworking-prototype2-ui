@@ -45,7 +45,13 @@ export type AuditEventType =
   | 'pin'
   | 'sales'
   | 'parts'
-  | 'portal';
+  | 'portal'
+  | 'purchasing'
+  | 'inventory'
+  | 'setup'
+  | 'evidence'
+  | 'labels'
+  | 'accounting';
 
 export interface AuditEvent {
   id: string;
@@ -804,3 +810,44 @@ export interface PortalRequest { request: ServiceRequest; statusLabel: string; c
 export interface PortalHome { client: Client; needsYou: NeedsYouItem[]; watches: PortalWatch[]; requests: PortalRequest[]; unreadMessages: number }
 
 export interface StaffInboxThread { client: Client; messages: Message[]; unread: number; lastAt: string; watch?: Watch }
+
+
+// ---- E9 RS modules: purchasing, inventory, templates, users admin, evidence ----------------------
+
+export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string }
+
+export type POStatus = 'draft' | 'sent' | 'partially_received' | 'received' | 'cancelled';
+export interface POLine { id: string; partId: string; partNumber: string; description: string; qty: number; unitCost: number; receivedQty: number }
+export interface PurchaseOrder {
+  id: string; number: string; vendorId: string; status: POStatus; division: Division; locationId: string;
+  lines: POLine[]; total: number; memo?: string; createdAt: string; createdBy: string; station: string;
+  sentAt?: string; receivedAt?: string; cancelledAt?: string; cancelReason?: string;
+}
+export type PurchaseOrderWithRefs = PurchaseOrder & { vendor: Vendor; location: StockLocation };
+
+export interface StockLocation { id: string; name: string; division: Division; kind: 'drawer' | 'cabinet' | 'safe' | 'bench' }
+export interface StockLevel { partId: string; locationId: string; onHand: number; reorderPoint: number }
+export type MovementKind = 'receipt' | 'adjustment' | 'count' | 'issue';
+export interface StockMovement extends Stamp {
+  id: string; kind: MovementKind; partId: string; locationId: string; delta: number; before: number; after: number;
+  reason: string; ref?: string; poId?: string; jobId?: string; countId?: string; division: Division;
+}
+export interface CycleCountLine { partId: string; expected: number; counted?: number }
+export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number }
+export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
+
+export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped';
+export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string }
+
+export interface UserAdminInput { firstName: string; shortName: string; dutyLabel: string; accessTier: AccessTier; roles: Role[]; division: Division | 'both'; password: string; pin: string }
+
+export type EvidenceSlot = 'hidden_serial' | 'timing_sheet' | 'pressure_test' | 'parts_grading';
+export type PartsGrade = 'B' | 'Ø/REPL' | 'D/REPL';
+export interface EvidenceItem extends Stamp {
+  id: string; jobId: string; watchId: string; slot: EvidenceSlot; photo: PackagePhoto; labelScan: string;
+  grades?: PartsGrade[]; depthRating?: string; note?: string;
+}
+export interface ReportRow { label: string; values: Record<string, number | string> }
+export interface Report { key: string; title: string; columns: string[]; rows: ReportRow[]; note: string; generatedAt: string }
+export interface QboQueueRow { salesOrderId: string; number: string; client: string; total: number; qboInvoiceId?: string; syncState: 'not_queued' | 'queued' | 'pushed_stub' | 'error_stub'; at: string }
+export interface IntegrationTile { key: 'qbo' | 'shipping' | 'rollitime' | 'email'; name: string; health: 'not_connected' | 'stub'; blurb: string; lastCheck: string }

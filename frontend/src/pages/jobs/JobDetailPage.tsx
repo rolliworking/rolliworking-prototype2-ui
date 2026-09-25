@@ -8,6 +8,7 @@ import { HoldModal, KindPill, OwnerBadge, PriorityPill, Provisional, ReasonModal
 import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, NotesPanel, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
+import { EvidencePanel } from '@/components/jobs/EvidencePanel';
 import { PinModal } from '@/components/today/PinBits';
 import { TailPill } from '@/components/sales/SalesBits';
 import type { PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
@@ -107,6 +108,7 @@ export default function JobDetailPage() {
           <Card title="Line items" subtitle="Carried from the estimate · department tags route the shop floor" testId="job-lines-card" bodyClassName="p-0"><LinesTable job={j} /></Card>
           <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
           <Card title="Notes" subtitle="Freeform, stamped who / when / station" testId="job-notes-card"><NotesPanel job={j} run={run} /></Card>
+          <Card title="Service evidence" subtitle="Four QC slots · filed by scanning the watch label · keyed to watch AND job" testId="job-evidence-card"><EvidencePanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
           <Card title="Parts requests" subtitle="Chat-style lookup → attach → supervisor approval" testId="job-parts-card" bodyClassName="p-0">
             <ul className="divide-y divide-line/70">{prs.map((r) => <li key={r.id}><button type="button" data-testid={`job-pr-${r.id}`} onClick={() => setOpenPr(r)} className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-canvas"><span className="font-mono font-medium">{r.number}</span><span className="font-mono text-ink">{r.part?.partNumber ?? '—'}</span><span className="truncate text-ink-700">{r.part?.name ?? 'no part attached'}</span><span className="ml-auto text-ink-400">{r.requestedBy}</span><PartsRequestPill status={r.status} /></button></li>)}{prs.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">No parts requests — open one from the actions bar.</li>}</ul>

@@ -23,6 +23,7 @@ import type {
   EstimateRevision,
   EstimateStatus,
   EstimateWithRefs,
+  LineType,
   Assignee,
   BenchView,
   FloorLane,
@@ -1085,6 +1086,7 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
   if (action.needsReason && !reason?.trim()) throw new Error('A reason is required for this step');
   const gaps = reviewGaps(j);
   if (gaps.length) throw new Error(gaps.join(' · '));
+  if (action.key === 'qc_pass') { const ev = evidenceGaps(j); if (ev.length) throw new Error(`Evidence missing at QC: ${ev.map((k) => EVIDENCE_SLOTS.find((x) => x.key === k)!.label).join(', ')}`); }
   const mail = action.notifies ? EMAIL_FOR[action.key] : undefined;
   let queued = false;
   if (mail) { const [s, b] = mail(j, reason?.trim()); queueJobEmail(j, s, b); queued = true; }
@@ -1971,6 +1973,8 @@ export function partsAssistantReply(query: string, job: Job): { text: string; su
     return { p, score, why };
   }).filter((x) => x.score >= 4).sort((a, b) => b.score - a.score).slice(0, 4);
   if (!scored.length) {
+    const loose = store.parts.map((p) => ({ p, hits: words.filter((w) => p.name.toLowerCase().includes(w) || p.category === w || p.aliases.some((al) => al.includes(w))) })).filter((x) => x.hits.length).sort((a, b) => b.hits.length - a.hits.length || Number(b.p.compatibleRefs.includes(watch.reference)) - Number(a.p.compatibleRefs.includes(watch.reference))).slice(0, 3);
+    if (loose.length) return { text: `Best effort for “${query.trim()}” — low confidence without a reference. Add a reference to narrow (the job watch is ref ${watch.reference}).`, suggestions: loose.map((x) => ({ partId: x.p.id, reason: `low-ranked · ${x.hits.join(' ')}${x.p.compatibleRefs.includes(watch.reference) ? ` · fits ${watch.reference}` : ''}` })) };
     const hint = refs.length || cals.length ? 'Nothing in the catalog matches that reference or caliber.' : `I need a reference or caliber to be sure — the job watch is ref ${watch.reference}.`;
     return { text: `${hint} Try a part word plus a reference, e.g. “gasket ${watch.reference}”.`, suggestions: [] };
   }
@@ -2338,6 +2342,7 @@ const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefin
 const portalDocs = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalDocument[] => {
   const docs: PortalDocument[] = [];
   jobs.forEach((j) => j.photos.forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
+  jobs.forEach((j) => rs.evidence.filter((e) => e.jobId === j.id).forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'photo', title: `Service evidence · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label}${e.depthRating ? ` · ${e.depthRating}` : ''}${e.grades ? ` · ${e.grades.join(', ')}` : ''} · ${j.number}`, at: e.at, dataUrl: e.photo.dataUrl })));
   store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => p.photos.forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
   ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
   sos.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').forEach((o) => {
@@ -2579,6 +2584,238 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
   await markThreadRead(clientId);
   appendAudit({ type: 'portal', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Replied to ${c.firstName} ${c.lastName} in RolliConnect · email queued to Outbox` });
   return resolve(m);
+}
+
+// ---- E9 RS modules ---------------------------------------------------------------------------------
+import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateKey, UserAdminInput, Vendor } from './types';
+
+const rs = {
+  vendors: fx.vendors.map((v): Vendor => ({ ...v })),
+  locations: fx.locations.map((l): StockLocation => ({ ...l })),
+  stock: fx.stockLevels.map((s): StockLevel => ({ ...s })),
+  pos: fx.purchaseOrders.map((p): PurchaseOrder => ({ ...p, lines: p.lines.map((l) => ({ ...l })) })),
+  movements: fx.stockMovements.map((m): StockMovement => ({ ...m })),
+  counts: fx.cycleCounts.map((c): CycleCount => ({ ...c, lines: c.lines.map((l) => ({ ...l })) })),
+  templates: fx.templates.map((t): MessageTemplate => ({ ...t, mergeFields: [...t.mergeFields] })),
+  evidence: fx.evidence.map((e): EvidenceItem => ({ ...e })),
+  catalog: fx.catalog.map((c) => ({ ...c, retired: false as boolean })),
+  counters: { po: 25, cc: 3, ev: 12 },
+};
+// PO lines carry the part's number/description for display
+rs.pos.forEach((p) => p.lines.forEach((l) => { const pt = store.parts.find((x) => x.id === l.partId); l.partNumber = pt?.partNumber ?? l.partNumber; l.description = pt?.name ?? l.description; }));
+
+const rsStamp = (type: 'purchasing' | 'inventory' | 'setup' | 'evidence' | 'labels' | 'accounting', detail: string) => {
+  const a = actor();
+  appendAudit({ type, stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail });
+};
+const stockAt = (partId: string, locationId: string) => { let s = rs.stock.find((x) => x.partId === partId && x.locationId === locationId); if (!s) { s = { partId, locationId, onHand: 0, reorderPoint: 1 }; rs.stock.push(s); } return s; };
+const move = (kind: StockMovement['kind'], partId: string, locationId: string, delta: number, reason: string, extra: Partial<StockMovement> = {}) => {
+  const s = stockAt(partId, locationId); const a = actor(); const before = s.onHand; s.onHand += delta;
+  const part = byId(store.parts, partId); part.stock = rs.stock.filter((x) => x.partId === partId).reduce((t, x) => t + x.onHand, 0);
+  const m: StockMovement = { id: newId('mv'), kind, partId, locationId, delta, before, after: s.onHand, reason, division: byId(rs.locations, locationId).division, at: new Date().toISOString(), by: a.by, station: a.station, ...extra };
+  rs.movements.unshift(m);
+  rsStamp('inventory', `${part.partNumber} ${delta > 0 ? '+' : ''}${delta} @ ${byId(rs.locations, locationId).name} · ${kind} · ${reason}`);
+  return m;
+};
+
+// -- Purchasing
+const poRefs = (p: PurchaseOrder): PurchaseOrderWithRefs => ({ ...p, vendor: byId(rs.vendors, p.vendorId), location: byId(rs.locations, p.locationId) });
+const poTotal = (p: PurchaseOrder) => { p.total = p.lines.reduce((t, l) => t + l.qty * l.unitCost, 0); };
+export async function getVendors(): Promise<Vendor[]> { return resolve([...rs.vendors]); }
+export async function getVendor(id: string): Promise<Vendor | null> { return resolve(rs.vendors.find((v) => v.id === id) ?? null); }
+export async function saveVendor(input: Omit<Vendor, 'id' | 'active'> & { id?: string }): Promise<Vendor> {
+  if (!input.name.trim()) throw new Error('Vendor name is required');
+  const existing = input.id ? rs.vendors.find((v) => v.id === input.id) : undefined;
+  const v: Vendor = existing ? Object.assign(existing, { ...input }) : { ...input, id: newId('v'), active: true };
+  if (!existing) rs.vendors.push(v);
+  rsStamp('purchasing', `Vendor ${existing ? 'updated' : 'created'} · ${v.name}`);
+  return resolve({ ...v });
+}
+export async function setVendorActive(id: string, active: boolean): Promise<Vendor> { const v = byId(rs.vendors, id); v.active = active; rsStamp('purchasing', `Vendor ${active ? 'reactivated' : 'retired'} · ${v.name}`); return resolve({ ...v }); }
+export async function getPurchaseOrders(): Promise<PurchaseOrderWithRefs[]> { return resolve([...rs.pos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(poRefs)); }
+export async function getPurchaseOrder(id: string): Promise<PurchaseOrderWithRefs | null> { const p = rs.pos.find((x) => x.id === id); return resolve(p ? poRefs(p) : null); }
+export interface POLineInput { partId: string; qty: number; unitCost: number }
+export async function createPurchaseOrder(input: { vendorId: string; locationId: string; lines: POLineInput[]; memo?: string }): Promise<PurchaseOrderWithRefs> {
+  const vendor = byId(rs.vendors, input.vendorId); if (!vendor.active) throw new Error('Vendor is retired');
+  if (!input.lines.length) throw new Error('Add at least one line'); const a = actor();
+  const p: PurchaseOrder = { id: newId('po'), number: `PO-26-${String(++rs.counters.po).padStart(4, '0')}`, vendorId: vendor.id, status: 'draft', division: getSessionDivision(), locationId: input.locationId, memo: input.memo?.trim() || undefined, total: 0, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
+    lines: input.lines.map((l) => { const pt = byId(store.parts, l.partId); return { id: newId('pol'), partId: pt.id, partNumber: pt.partNumber, description: pt.name, qty: Math.max(1, l.qty), unitCost: l.unitCost, receivedQty: 0 }; }) };
+  poTotal(p); rs.pos.unshift(p);
+  rsStamp('purchasing', `${p.number} created · ${vendor.name} · ${p.lines.length} lines · ${fmtMoney(p.total)}`);
+  return resolve(poRefs(p));
+}
+export async function sendPurchaseOrder(id: string): Promise<PurchaseOrderWithRefs> {
+  const p = byId(rs.pos, id); if (p.status !== 'draft') throw new Error('Only a draft PO can be sent');
+  p.status = 'sent'; p.sentAt = new Date().toISOString(); const v = byId(rs.vendors, p.vendorId); const a = actor();
+  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}`, to: v.email, toName: v.name, relatedRef: p.number, status: 'pending', subject: `Purchase order ${p.number}`, body: `${p.lines.map((l) => `• ${l.partNumber} ${l.description} × ${l.qty} @ ${fmtMoney(l.unitCost)}`).join('\n')}\n\nTotal ${fmtMoney(p.total)} · ${v.terms}\n\n— RolliSuite purchasing (STUB — not sent)`, createdAt: p.sentAt, createdBy: a.by, station: a.station });
+  rsStamp('purchasing', `${p.number} sent to ${v.name} (stub · Outbox)`); return resolve(poRefs(p));
+}
+export async function cancelPurchaseOrder(id: string, reason: string): Promise<PurchaseOrderWithRefs> {
+  const p = byId(rs.pos, id); if (!reason.trim()) throw new Error('A reason is required'); if (p.status === 'received' || p.status === 'cancelled') throw new Error('PO is already closed');
+  p.status = 'cancelled'; p.cancelledAt = new Date().toISOString(); p.cancelReason = reason.trim(); rsStamp('purchasing', `${p.number} cancelled · ${p.cancelReason}`); return resolve(poRefs(p));
+}
+// Receive against PO: each received line increments stock at the PO's location with an audited movement
+export async function receivePurchaseOrder(id: string, qtyByLine: Record<string, number>): Promise<PurchaseOrderWithRefs> {
+  const p = byId(rs.pos, id); if (!['sent', 'partially_received'].includes(p.status)) throw new Error('PO must be sent before receiving');
+  let any = false;
+  p.lines.forEach((l) => { const q = Math.min(qtyByLine[l.id] ?? 0, l.qty - l.receivedQty); if (q > 0) { l.receivedQty += q; any = true; move('receipt', l.partId, p.locationId, q, `Received against ${p.number}`, { ref: p.number, poId: p.id }); } });
+  if (!any) throw new Error('Enter a quantity to receive');
+  const done = p.lines.every((l) => l.receivedQty >= l.qty); p.status = done ? 'received' : 'partially_received'; if (done) p.receivedAt = new Date().toISOString();
+  rsStamp('purchasing', `${p.number} ${done ? 'fully received' : 'partially received'}`); return resolve(poRefs(p));
+}
+
+// -- Inventory
+export async function getLocations(): Promise<StockLocation[]> { return resolve([...rs.locations]); }
+export async function getStockRows(): Promise<StockRow[]> {
+  return resolve(rs.stock.map((s): StockRow => ({ part: byId(store.parts, s.partId), location: byId(rs.locations, s.locationId), onHand: s.onHand, reorderPoint: s.reorderPoint, low: s.onHand <= s.reorderPoint })).sort((a, b) => Number(b.low) - Number(a.low) || a.part.partNumber.localeCompare(b.part.partNumber)));
+}
+export async function getLowStock(): Promise<StockRow[]> { return (await getStockRows()).filter((r) => r.low); }
+export async function getStockMovements(partId?: string): Promise<StockMovement[]> { return resolve(rs.movements.filter((m) => !partId || m.partId === partId).sort((a, b) => b.at.localeCompare(a.at))); }
+export async function adjustStock(partId: string, locationId: string, delta: number, reason: string): Promise<StockMovement> {
+  if (!Number.isInteger(delta) || delta === 0) throw new Error('Enter a non-zero whole number'); if (!reason.trim()) throw new Error('A reason is required');
+  if (stockAt(partId, locationId).onHand + delta < 0) throw new Error('Stock cannot go negative'); return resolve(move('adjustment', partId, locationId, delta, reason.trim()));
+}
+export async function getCycleCounts(): Promise<CycleCount[]> { return resolve([...rs.counts].sort((a, b) => b.at.localeCompare(a.at))); }
+export async function startCycleCount(locationId: string): Promise<CycleCount> {
+  if (rs.counts.some((c) => c.locationId === locationId && c.status === 'open')) throw new Error('A count is already open for this location'); const a = actor();
+  const c: CycleCount = { id: newId('cc'), number: `CC-26-${String(++rs.counters.cc).padStart(4, '0')}`, locationId, status: 'open', lines: rs.stock.filter((s) => s.locationId === locationId).map((s) => ({ partId: s.partId, expected: s.onHand })), variances: 0, at: new Date().toISOString(), by: a.by, station: a.station };
+  if (!c.lines.length) throw new Error('Nothing stocked at this location'); rs.counts.unshift(c); rsStamp('inventory', `${c.number} started · ${byId(rs.locations, locationId).name}`); return resolve({ ...c });
+}
+export async function postCycleCount(id: string, counted: Record<string, number>): Promise<CycleCount> {
+  const c = byId(rs.counts, id); if (c.status !== 'open') throw new Error('Count already posted'); const a = actor();
+  c.lines.forEach((l) => { l.counted = counted[l.partId]; if (l.counted === undefined) throw new Error('Count every line'); });
+  c.variances = 0; c.lines.forEach((l) => { const d = (l.counted ?? 0) - l.expected; if (d !== 0) { c.variances += 1; move('count', l.partId, c.locationId, d, `Cycle count ${c.number} variance ${d > 0 ? '+' : ''}${d}`, { ref: c.number, countId: c.id }); } });
+  c.status = 'posted'; c.postedAt = new Date().toISOString(); c.postedBy = a.by; rsStamp('inventory', `${c.number} posted · ${c.variances} variance${c.variances === 1 ? '' : 's'}`); return resolve({ ...c });
+}
+
+// -- Labels (batch reprint → existing Label Queue, unprinted)
+export async function queueLabelsFor(kind: 'estimate' | 'job' | 'watch', ids: string[]): Promise<LabelJob[]> {
+  const out: LabelJob[] = [];
+  ids.forEach((id) => {
+    const job = kind === 'job' ? store.jobs.find((j) => j.id === id) : kind === 'watch' ? store.jobs.find((j) => j.watchId === id) : store.jobs.find((j) => j.estimateId === id);
+    const est = kind === 'estimate' ? store.estimates.find((e) => e.id === id) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
+    const w = kind === 'watch' ? store.watches.find((x) => x.id === id) : job ? store.watches.find((x) => x.id === job.watchId) : est?.watchId ? store.watches.find((x) => x.id === est.watchId) : undefined;
+    if (!w) return; const c = byId(fx.clients, w.clientId); const num = job?.number ?? est?.number ?? w.id; const pkgId = job?.packageId ?? store.packages.find((p) => p.estimateId === est?.id)?.id ?? '';
+    out.push(queueLabel({ type: 'pdf417_data', packageId: pkgId, estimateNumber: num, payload: `${num}|${w.reference}|${w.serial}|${job?.workflow.join(',') ?? ''}`, lines: [num, `${c.firstName} ${c.lastName}`, job ? `Workflow ${job.workflow.join(' · ')}` : 'Reprint'] }));
+    out.push(queueLabel({ type: 'ref_serial', packageId: pkgId, estimateNumber: num, payload: `${w.reference} / ${w.serial}`, lines: [`${w.brand} ${w.model}`, `Ref ${w.reference}`, `Serial ${w.serial}`] }));
+  });
+  if (!out.length) throw new Error('Nothing matched — pick records with a watch');
+  rsStamp('labels', `${out.length} labels queued (batch reprint by ${kind})`); return resolve(out);
+}
+
+// -- Reports (each reconciles with getDashboardStats)
+const monthKey = (iso: string) => iso.slice(0, 7);
+const ageBucket = (iso: string) => { const d = (Date.now() - new Date(iso).getTime()) / 86_400_000; return d <= 7 ? '0–7d' : d <= 30 ? '8–30d' : d <= 90 ? '31–90d' : '90d+'; };
+const isLabor = (l: EstimateLine) => l.type === 'service';
+export async function getReport(key: 'funnel' | 'throughput' | 'aging' | 'pnl'): Promise<Report> {
+  const now = new Date().toISOString(); const es = store.estimates; const js = store.jobs;
+  if (key === 'funnel') return resolve({ key, title: 'Estimate funnel', columns: ['stage', 'count', 'value'], note: 'created = all estimates · sent = ever sent (status ≥ sent) · approved = approved or converted · converted = has a job. "Awaiting approval" on the dashboard = status sent.', generatedAt: now, rows: [
+    { label: 'created', values: { stage: 'Created', count: es.length, value: es.reduce((t, e) => t + e.total, 0) } },
+    { label: 'sent', values: { stage: 'Sent', count: es.filter((e) => e.status !== 'draft').length, value: es.filter((e) => e.status !== 'draft').reduce((t, e) => t + e.total, 0) } },
+    { label: 'approved', values: { stage: 'Approved', count: es.filter((e) => e.status === 'approved' || e.status === 'converted').length, value: es.filter((e) => e.status === 'approved' || e.status === 'converted').reduce((t, e) => t + e.total, 0) } },
+    { label: 'converted', values: { stage: 'Converted', count: es.filter((e) => e.status === 'converted').length, value: es.filter((e) => e.status === 'converted').reduce((t, e) => t + e.total, 0) } },
+    { label: 'open', values: { stage: 'Open now (draft + sent)', count: es.filter((e) => OPEN_ESTIMATE.includes(e.status)).length, value: es.filter((e) => OPEN_ESTIMATE.includes(e.status)).reduce((t, e) => t + e.total, 0) } } ] });
+  if (key === 'throughput') { const months = uniq(js.map((j) => monthKey(j.createdAt))).sort().reverse().slice(0, 6); const wf = uniq(js.map((j) => j.workflow.join('+'))).sort();
+    return resolve({ key, title: 'Job throughput by workflow × month', columns: ['workflow', ...months, 'total'], note: 'Counts jobs by creation month; closed shown in parentheses. Dashboard "in progress" = approved + in_service + testing across all months.', generatedAt: now,
+      rows: [...wf.map((w) => ({ label: w, values: Object.fromEntries([['workflow', w], ...months.map((m) => { const g = js.filter((j) => j.workflow.join('+') === w && monthKey(j.createdAt) === m); return [m, `${g.length} (${g.filter((j) => j.status === 'closed').length})`]; }), ['total', js.filter((j) => j.workflow.join('+') === w).length]]) })),
+        { label: 'in_progress', values: { workflow: 'In progress now (dashboard)', total: js.filter((j) => ACTIVE_JOB.includes(j.status)).length } }] }); }
+  if (key === 'aging') { const b = ['0–7d', '8–30d', '31–90d', '90d+']; const openJ = js.filter((j) => j.status !== 'closed'); const openE = es.filter((e) => OPEN_ESTIMATE.includes(e.status));
+    return resolve({ key, title: 'Aging — open jobs & estimates', columns: ['bucket', 'open jobs', 'held jobs', 'open estimates', 'estimate value'], note: 'Age from createdAt. Open estimates = draft + sent (matches dashboard). Held = active hold.', generatedAt: now,
+      rows: b.map((k) => ({ label: k, values: { bucket: k, 'open jobs': openJ.filter((j) => ageBucket(j.createdAt) === k).length, 'held jobs': openJ.filter((j) => ageBucket(j.createdAt) === k && activeHold(j)).length, 'open estimates': openE.filter((e) => ageBucket(e.createdAt) === k).length, 'estimate value': openE.filter((e) => ageBucket(e.createdAt) === k).reduce((t, e) => t + e.total, 0) } })) }); }
+  const closed = js.filter((j) => isThisMonth(j.finishedAt)); const depts: DeptCode[] = ['W', 'B', 'P', 'PM'];
+  const labor = (d: DeptCode) => closed.reduce((t, j) => t + j.lines.filter((l) => isLabor(l) && l.dept === d).reduce((s, l) => s + l.qty * l.unitPrice, 0), 0);
+  const goods = closed.reduce((t, j) => t + j.lines.filter((l) => !isLabor(l)).reduce((s, l) => s + l.qty * l.unitPrice, 0), 0);
+  return resolve({ key, title: 'Department P&L (labor only) — this month', columns: ['department', 'labor revenue', 'closed jobs'], note: 'Labor lines (type service) attribute to W/B/P/PM; parts & shipping lines are excluded as no_dept_product. Sum of all rows = dashboard "revenue this month".', generatedAt: now,
+    rows: [...depts.map((d) => ({ label: d, values: { department: `${fx.DEPT_LABEL[d]} (${d})`, 'labor revenue': labor(d), 'closed jobs': closed.filter((j) => j.lines.some((l) => isLabor(l) && l.dept === d)).length } })),
+      { label: 'no_dept_product', values: { department: 'no_dept_product (goods, excluded)', 'labor revenue': goods, 'closed jobs': closed.filter((j) => j.lines.some((l) => !isLabor(l))).length } },
+      { label: 'total', values: { department: 'Total = dashboard revenue', 'labor revenue': closed.reduce((t, j) => t + j.total, 0), 'closed jobs': closed.length } }] });
+}
+export const reportToCsv = (r: Report): string => [r.columns.join(','), ...r.rows.map((row) => r.columns.map((c) => { const v = row.values[c] ?? ''; return typeof v === 'string' && /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : String(v); }).join(','))].join('\n');
+
+// -- Accounting (QBO stub views)
+export async function getQboQueue(): Promise<QboQueueRow[]> {
+  return resolve(store.salesOrders.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').map((o): QboQueueRow => ({ salesOrderId: o.id, number: o.number, client: clientName(o.clientId), total: o.total, qboInvoiceId: o.qboInvoiceId, syncState: o.qboStatus === 'queued' ? (o.number.endsWith('5') ? 'error_stub' : o.status === 'picked_up' || o.status === 'shipped' ? 'pushed_stub' : 'queued') : 'not_queued', at: o.fulfilledAt ?? o.orderDate })).sort((a, b) => b.at.localeCompare(a.at)));
+}
+export async function exportAccountingCsv(kind: 'invoices' | 'payments' | 'qbo'): Promise<string> {
+  rsStamp('accounting', `Export file generated · ${kind} (stub CSV)`);
+  if (kind === 'payments') return resolve(['so,date,method,amount,by', ...store.salesOrders.flatMap((o) => o.payments.map((p) => `${o.number},${p.at},${p.method},${p.amount.toFixed(2)},${p.by}`))].join('\n'));
+  if (kind === 'qbo') return resolve(['so,qbo_id,state,total', ...(await getQboQueue()).map((r) => `${r.number},${r.qboInvoiceId ?? ''},${r.syncState},${r.total.toFixed(2)}`)].join('\n'));
+  return resolve(['so,client,status,total,paid,balance', ...store.salesOrders.map((o) => `${o.number},"${clientName(o.clientId)}",${o.status},${o.total.toFixed(2)},${(o.total - o.balanceDue).toFixed(2)},${o.balanceDue.toFixed(2)}`)].join('\n'));
+}
+export async function getIntegrations(): Promise<IntegrationTile[]> { return resolve(fx.integrations.map((t) => ({ ...t, lastCheck: new Date().toISOString() }))); }
+
+// -- Setup: users & roles (mock), catalog editor, message templates
+export async function adminSaveUser(input: UserAdminInput & { id?: string }): Promise<User> {
+  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Managing users needs a manager');
+  if (!input.firstName.trim() || !input.shortName.trim()) throw new Error('Name and short name are required'); if (!/^\d{4}$/.test(input.pin)) throw new Error('PIN must be 4 digits'); if (input.password.length < 4) throw new Error('Password too short');
+  if (!input.roles.length) throw new Error('Pick at least one role');
+  const existing = input.id ? fx.users.find((u) => u.id === input.id) : undefined;
+  if (!existing && fx.users.some((u) => u.shortName.toLowerCase() === input.shortName.trim().toLowerCase())) throw new Error('Short name already in use');
+  const u: User = existing ?? { id: `u-${input.firstName.trim().toLowerCase()}-${Date.now().toString(36).slice(-3)}`, firstName: '', shortName: '', displayName: '', dutyLabel: '', accessTier: 'concierge', roles: [], division: 'rolliworks', password: '', pin: '' };
+  Object.assign(u, { firstName: input.firstName.trim().toLowerCase(), shortName: input.shortName.trim(), dutyLabel: input.dutyLabel.trim(), accessTier: input.accessTier, roles: [...input.roles], division: input.division, password: input.password, pin: input.pin, displayName: `${input.shortName.trim()} — ${input.dutyLabel.trim() || input.roles.join(' · ')}` });
+  if (!existing) fx.users.push(u);
+  rsStamp('setup', `User ${existing ? 'updated' : 'created'} · ${u.shortName} · ${u.accessTier} · ${u.roles.join('/')} · ${u.division}`); return resolve({ ...u });
+}
+export async function adminDeactivateUser(id: string): Promise<void> {
+  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Managing users needs a manager'); if (a.user.id === id) throw new Error('You cannot deactivate yourself');
+  const u = byId(fx.users, id); if (fx.users.filter((x) => x.accessTier === 'manager').length <= 1 && u.accessTier === 'manager') throw new Error('Keep at least one manager');
+  fx.users.splice(fx.users.indexOf(u), 1); rsStamp('setup', `User deactivated · ${u.shortName}`); return resolve(undefined);
+}
+export async function getCatalogAdmin(): Promise<(CatalogService & { retired: boolean })[]> { return resolve(rs.catalog.map((c) => ({ ...c }))); }
+export async function saveCatalogService(input: { id?: string; name: string; dept: DeptCode; rate: number; type: LineType }): Promise<CatalogService> {
+  if (!input.name.trim()) throw new Error('Service name is required'); if (!(input.rate >= 0)) throw new Error('Rate must be ≥ 0');
+  const existing = input.id ? rs.catalog.find((c) => c.id === input.id) : undefined;
+  const row = existing ? Object.assign(existing, { name: input.name.trim(), dept: input.dept, rate: input.rate, type: input.type }) : { id: newId('cat'), name: input.name.trim(), dept: input.dept, rate: input.rate, type: input.type, retired: false };
+  if (!existing) { rs.catalog.push(row); fx.catalog.push({ id: row.id, name: row.name, dept: row.dept, rate: row.rate, type: row.type }); } else { const live = fx.catalog.find((c) => c.id === row.id); if (live) Object.assign(live, { name: row.name, dept: row.dept, rate: row.rate, type: row.type }); }
+  rsStamp('setup', `Catalog service ${existing ? 'updated' : 'added'} · ${row.name} · ${row.dept} · ${fmtMoney(row.rate)}`); return resolve({ id: row.id, name: row.name, dept: row.dept, rate: row.rate, type: row.type });
+}
+export async function retireCatalogService(id: string, retired = true): Promise<void> {
+  const row = byId(rs.catalog, id); row.retired = retired; const i = fx.catalog.findIndex((c) => c.id === id);
+  if (retired && i >= 0) fx.catalog.splice(i, 1); if (!retired && i < 0) fx.catalog.push({ id: row.id, name: row.name, dept: row.dept, rate: row.rate, type: row.type });
+  rsStamp('setup', `Catalog service ${retired ? 'retired' : 'restored'} · ${row.name}`); return resolve(undefined);
+}
+export { MERGE_FIELDS } from './fixtures/rs';
+export async function getTemplates(): Promise<MessageTemplate[]> { return resolve(rs.templates.map((t) => ({ ...t }))); }
+export async function saveTemplate(key: TemplateKey, subject: string, body: string): Promise<MessageTemplate> {
+  const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required'); const a = actor();
+  Object.assign(t, { subject: subject.trim(), body: body.trim(), mergeFields: fx.MERGE_FIELDS.filter((f) => body.includes(f) || subject.includes(f)), at: new Date().toISOString(), by: a.by, station: a.station, updatedBy: a.by });
+  rsStamp('setup', `Template saved · ${t.name}`); return resolve({ ...t });
+}
+
+// -- Service Evidence (MH 2026-09-24): four slots at QC, keyed to watch identity AND job
+export const EVIDENCE_SLOTS: { key: EvidenceSlot; label: string; hint: string }[] = [
+  { key: 'hidden_serial', label: 'Hidden serial', hint: 'Between-lugs / rehaut serial, legible' },
+  { key: 'timing_sheet', label: 'Timing sheet', hint: 'Convention: BEFORE on the left, AFTER on the right' },
+  { key: 'pressure_test', label: 'Pressure test', hint: 'Record the depth rating tested (e.g. 50M/164ft)' },
+  { key: 'parts_grading', label: 'Parts grading', hint: 'Tag grades: B · Ø/REPL · D/REPL' },
+];
+export const PARTS_GRADES: PartsGrade[] = ['B', 'Ø/REPL', 'D/REPL'];
+// Per-kind expected slots — service expects all four; small_job / warranty fewer (PROVISIONAL)
+export const EVIDENCE_REQUIRED: Record<JobKind, EvidenceSlot[]> = { service: ['hidden_serial', 'timing_sheet', 'pressure_test', 'parts_grading'], small_job: ['hidden_serial'], warranty: ['hidden_serial', 'timing_sheet'] };
+export const evidenceGaps = (j: Job): EvidenceSlot[] => (j.status !== 'testing' ? [] : EVIDENCE_REQUIRED[j.kind].filter((s) => !rs.evidence.some((e) => e.jobId === j.id && e.slot === s)));
+export async function getEvidenceForJob(jobId: string): Promise<EvidenceItem[]> { return resolve(rs.evidence.filter((e) => e.jobId === jobId).sort((a, b) => b.at.localeCompare(a.at))); }
+export async function getEvidenceForWatch(watchId: string): Promise<(EvidenceItem & { jobNumber: string; serviceDate: string })[]> {
+  return resolve(rs.evidence.filter((e) => e.watchId === watchId).map((e) => { const j = store.jobs.find((x) => x.id === e.jobId); return { ...e, jobNumber: j?.number ?? e.jobId, serviceDate: (j?.finishedAt ?? j?.createdAt ?? e.at).slice(0, 10) }; }).sort((a, b) => b.at.localeCompare(a.at)));
+}
+export async function getEvidenceForClient(clientId: string): Promise<(EvidenceItem & { jobNumber: string; serviceDate: string; watchLabel: string })[]> {
+  const ws = store.watches.filter((w) => w.clientId === clientId);
+  const rows = await Promise.all(ws.map(async (w) => (await getEvidenceForWatch(w.id)).map((e) => ({ ...e, watchLabel: `${w.brand} ${w.model}` }))));
+  return resolve(rows.flat().sort((a, b) => b.at.localeCompare(a.at)));
+}
+export interface EvidenceInput { slot: EvidenceSlot; photo: PackagePhoto; labelScan: string; grades?: PartsGrade[]; depthRating?: string; note?: string }
+export async function captureEvidence(jobId: string, input: EvidenceInput): Promise<EvidenceItem> {
+  const j = getJobRow(jobId); const w = byId(store.watches, j.watchId); const scan = input.labelScan.trim().toUpperCase();
+  if (!scan) throw new Error('Scan or enter the watch label first — evidence must key to the watch');
+  const okScan = [j.number, w.reference, w.serial, `${w.reference} / ${w.serial}`, `${w.reference}/${w.serial}`].map((s) => s.toUpperCase()).some((s) => scan === s || scan.startsWith(`${j.number}|`) || scan.includes(w.serial.toUpperCase()));
+  if (!okScan) throw new Error(`Label does not match this watch (expected ${j.number}, ref ${w.reference} or serial ${w.serial})`);
+  if (input.slot === 'pressure_test' && !/^\d+\s*M\s*\/\s*\d+\s*FT$/i.test(input.depthRating?.trim() ?? '')) throw new Error('Depth rating must look like 50M/164ft');
+  if (input.slot === 'parts_grading' && !input.grades?.length) throw new Error('Tag at least one grade (B · Ø/REPL · D/REPL)');
+  const a = actor();
+  const e: EvidenceItem = { id: `ev-${++rs.counters.ev}`, jobId, watchId: w.id, slot: input.slot, photo: input.photo, labelScan: scan, grades: input.slot === 'parts_grading' ? input.grades : undefined, depthRating: input.slot === 'pressure_test' ? input.depthRating!.trim().toUpperCase().replace(/\s/g, '') : undefined, note: input.note?.trim() || (input.slot === 'timing_sheet' ? 'before left / after right' : undefined), at: new Date().toISOString(), by: a.by, station: a.station };
+  rs.evidence.unshift(e);
+  rsStamp('evidence', `${j.number} · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label} captured · ${w.reference}/${w.serial}${e.depthRating ? ` · ${e.depthRating}` : ''}${e.grades ? ` · ${e.grades.join(', ')}` : ''}`);
+  jobStamp(j, `Evidence · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label}`);
+  return resolve({ ...e });
 }
 
 // Restore client-initiated writes on load (fixtures are in-memory; the portal log is not)

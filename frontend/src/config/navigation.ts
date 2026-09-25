@@ -57,14 +57,14 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
   { key: 'inspection-photos', label: 'Inspection Photos', path: '/inspection-photos', icon: Camera, tiers: MGR, blurb: 'Before / after photo sets per watch.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
-  { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, blurb: 'Purchase orders, vendors and receiving.' },
-  { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, blurb: 'Parts, stock levels and reorder alerts.' },
-  { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, blurb: 'Bag tags, shipping labels and QR codes.' },
-  { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, blurb: 'Revenue, throughput and turnaround reporting.' },
-  { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
+  { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, built: true, blurb: 'Purchase orders, vendors and receiving.' },
+  { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, built: true, blurb: 'Parts, stock levels and reorder alerts.' },
+  { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, built: true, blurb: 'Bag tags, shipping labels and QR codes.' },
+  { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
+  { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
   { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },
-  { key: 'integrations', label: 'Integrations', path: '/integrations', icon: Plug, tiers: MGR, blurb: 'QuickBooks, email, SMS and shipping carriers.' },
-  { key: 'help', label: 'Help', path: '/help', icon: HelpCircle, tiers: ALL, blurb: 'Guides, keyboard shortcuts and support.' },
+  { key: 'integrations', label: 'Integrations', path: '/integrations', icon: Plug, tiers: MGR, built: true, blurb: 'QuickBooks, email, SMS and shipping carriers.' },
+  { key: 'help', label: 'Help', path: '/help', icon: HelpCircle, tiers: ALL, built: true, blurb: 'Guides, keyboard shortcuts and support.' },
 ];
 
 export interface QuickAction {

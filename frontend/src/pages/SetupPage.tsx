@@ -9,6 +9,8 @@ import { Table, Td, Th } from '@/components/ui/Table';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtTime } from '@/lib/format';
 
+import { SetupRsPanels } from '@/pages/SetupRsPanels';
+
 export default function SetupPage() {
   const { user, station, refreshStation } = useAuth();
   const navigate = useNavigate();
@@ -149,6 +151,7 @@ export default function SetupPage() {
           </tbody>
         </Table>
       </Card>
+      <SetupRsPanels />
     </div>
   );
 }

@@ -43,6 +43,9 @@ import FloorMapPage from '@/pages/workshop/FloorMapPage';
 import PartsKnowledgePage from '@/pages/workshop/PartsKnowledgePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
+import PurchasingPage from '@/pages/rs/PurchasingPage';
+import InventoryPage from '@/pages/rs/InventoryPage';
+import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
 import SignInPage from '@/pages/SignInPage';
 import StationSetupPage from '@/pages/StationSetupPage';
 
@@ -62,17 +65,7 @@ function TierGate() {
   return <Outlet />;
 }
 
-const PLACEHOLDER_PATHS = [
-  '/inspection-photos',
-  '/sales',
-  '/purchasing',
-  '/inventory',
-  '/labels',
-  '/reports',
-  '/accounting',
-  '/integrations',
-  '/help',
-];
+const PLACEHOLDER_PATHS = ['/inspection-photos'];
 
 export default function App() {
   return (
@@ -123,6 +116,13 @@ export default function App() {
               <Route path="/supervisor" element={<SupervisorPage />} />
               <Route path="/floor" element={<FloorMapPage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
+              <Route path="/purchasing" element={<PurchasingPage />} />
+              <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/labels" element={<LabelsPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/accounting" element={<AccountingPage />} />
+              <Route path="/integrations" element={<IntegrationsPage />} />
+              <Route path="/help" element={<HelpPage />} />
               <Route path="/sales" element={<SalesOrdersPage />} />
               <Route path="/sales/new" element={<SalesOrderDetailPage />} />
               <Route path="/sales/pickup" element={<PickupStationPage />} />
