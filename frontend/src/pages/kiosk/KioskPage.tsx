@@ -46,7 +46,7 @@ export default function KioskPage() {
         {step === 'idle' && <IdleStep onStart={() => setStep('brand')} />}
         {step === 'brand' && <BrandStep onPick={(d) => { setBrand(d); setStep('services'); }} />}
         {step === 'services' && <ServicesStep selected={services} onToggle={(k) => setServices((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))} onBack={() => setStep('brand')} onContinue={() => setStep('form')} />}
-        {step === 'form' && <FormStep form={form} onChange={setForm} error={err} onBack={() => setStep('services')} onSubmit={submit} />}
+        {step === 'form' && <FormStep form={form} onChange={(f) => { setForm(f); setErr(null); }} error={err} onBack={() => setStep('services')} onSubmit={submit} />}
         {step === 'thanks' && result && <ThanksStep result={result} brand={brand!} />}
       </div>
       {step !== 'idle' && <footer className="flex items-center justify-between px-8 pb-4 text-[11px] text-rc-muted"><span>{brand ? api.KIOSK_BRANDS.find((b) => b.division === brand)!.name : ''}</span><button data-testid="kiosk-start-over" onClick={reset} className="underline">Start over</button></footer>}

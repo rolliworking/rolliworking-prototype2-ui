@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-09-24  
+**Last updated**: 2026-09-25  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -48,6 +48,9 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 | E6 | Workshop / Parts | ✅ Done |
 | E7 | Client 360 | ✅ Done |
 | E8 | RolliConnect (Client Portal) | ✅ Done |
+| E9–E10, E12, E14–E15 | RS modules, Companion, RolliTime, Comms, Portal-first | ✅ Done |
+| E13 | RGTime /rg + Kiosk /kiosk + /requests | ✅ Done |
+| E11 | (never briefed) | — |
 
 ---
 
@@ -117,6 +120,13 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Toast confirms: "Pinned to Vienna's list"
 - `QuickAddProvider` wraps AppShell
 
+### E13 — RGTime /rg + public Kiosk /kiosk (2026-09-25, MH ruling: NFC tap)
+- RGTime phone PWA (manifest /rg-manifest.webmanifest, start_url /rg): remembered per-device login (`rollisuite.rg.session`), status card, today's punches, Simulate-NFC-tap picker → real tag URL `/rg/clock?tag=<id>` one-button confirm (in/out toggles, division from tag, `simulated` flag), `/rg/manager` card+password manager-only week grid (Mon–Sun, totals, open-punch amber, prev/next, division toggle, day detail). Seeded tags: tag-fd-rw, tag-rs-counter; ~2 weeks punches.
+- Kiosk: idle → brand → services (Skip — Continue) → form → thanks (5 s reset); 30 s dim, 2 min abandon reset; creates ServiceRequest source kiosk + General-thread message + `kiosk` audit; email/phone match → `possible existing client`.
+- New staff `/requests` page (nav): division-scoped queue, Confirm link / Not the same → new client actions. Audit filters Kiosk/RGTime added.
+- Hardening (NTAG 424 rotating codes / geolocation check) recorded in DECISIONS as Keeper decision — not built. Staff identity: Keeper RGTime owns (D-026), mocked via users fixture.
+- Tested iteration_25: 100%; two design notes fixed (kiosk noValidate email error, audit filter chips)
+
 ### E12 — RolliTime /rt timing bench (2026-09-25)
 - Own shell + bench sign-in, testing queue, label scan, Witschi-style 6-position test with caliber tolerances, live highlighting, auto-suggested verdict, PASS (email + QC flag) / REJECT (reason → qc_fail + email), append-only watch history, job Timing card. Tested iteration_24: 100%
 
@@ -167,7 +177,7 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - P2: cross-division inventory rules unruled (amber)
 
 ### Upcoming
-- E9 or next module brief from MH
+- E11 brief from MH (never briefed); amber items in DECISIONS (RGTime hardening, punch corrections, kiosk signature capture)
 
 ---
 

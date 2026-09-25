@@ -48,7 +48,7 @@ const Field = ({ label, testId, value, onChange, type = 'text', required, autoFo
 
 export const FormStep = ({ form, onChange, error, onBack, onSubmit }: { form: KioskForm; onChange: (f: KioskForm) => void; error: string | null; onBack: () => void; onSubmit: () => void }) => {
   const set = (k: keyof KioskForm) => (v: string) => onChange({ ...form, [k]: v });
-  return <form data-testid="kiosk-form" onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="w-full max-w-2xl space-y-6 text-center">
+  return <form data-testid="kiosk-form" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="w-full max-w-2xl space-y-6 text-center">
     <div><h2 className="font-serif text-4xl font-light">How can we reach you?</h2><p className="mt-2 text-rc-muted">A concierge will be with you shortly.</p></div>
     <div className="grid gap-4 sm:grid-cols-2"><Field label="First name" testId="kiosk-first" value={form.firstName} onChange={set('firstName')} required autoFocus /><Field label="Last name" testId="kiosk-last" value={form.lastName} onChange={set('lastName')} required /><Field label="Email" testId="kiosk-email" type="email" value={form.email} onChange={set('email')} required /><Field label="Phone" testId="kiosk-phone" type="tel" value={form.phone} onChange={set('phone')} required /></div>
     <label className="block text-left"><span className="text-xs uppercase tracking-wide text-rc-muted">Anything we should know? (optional)</span><textarea data-testid="kiosk-notes" value={form.notes} onChange={(e) => set('notes')(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-rc-line bg-rc-paper px-4 py-3 text-base outline-none focus:border-rc-accent" /></label>

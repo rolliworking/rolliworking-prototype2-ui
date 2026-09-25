@@ -38,7 +38,7 @@ const TYPE_TONE: Record<AuditEventType, string> = {
   portal: 'bg-amber-50 text-amber-800',
 };
 
-type Filter = 'all' | 'sign_in' | 'station' | 'intake' | 'estimate' | 'job' | 'sales' | 'portal';
+type Filter = 'all' | 'sign_in' | 'station' | 'intake' | 'estimate' | 'job' | 'sales' | 'portal' | 'kiosk' | 'rgtime';
 
 export default function AuditLogPage() {
   const { data } = useAsync(() => api.getAuditLog());
@@ -55,6 +55,8 @@ export default function AuditLogPage() {
         if (filter === 'job') return e.type === 'job' || e.type === 'task' || e.type === 'pin' || e.type === 'parts';
         if (filter === 'sales') return e.type === 'sales';
         if (filter === 'portal') return e.type === 'portal';
+        if (filter === 'kiosk') return e.type === 'kiosk';
+        if (filter === 'rgtime') return e.type === 'rgtime';
         return true;
       }),
     [data, filter],
@@ -76,6 +78,8 @@ export default function AuditLogPage() {
         <FilterChip active={filter === 'job'} onClick={() => setFilter('job')} testId="audit-filter-job">Jobs</FilterChip>
         <FilterChip active={filter === 'sales'} onClick={() => setFilter('sales')} testId="audit-filter-sales">Sales</FilterChip>
         <FilterChip active={filter === 'portal'} onClick={() => setFilter('portal')} testId="audit-filter-portal">RolliConnect</FilterChip>
+        <FilterChip active={filter === 'kiosk'} onClick={() => setFilter('kiosk')} testId="audit-filter-kiosk">Kiosk</FilterChip>
+        <FilterChip active={filter === 'rgtime'} onClick={() => setFilter('rgtime')} testId="audit-filter-rgtime">RGTime</FilterChip>
       </div>
 
       <Card bodyClassName="p-0">
