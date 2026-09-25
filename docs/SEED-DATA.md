@@ -207,3 +207,13 @@ Messages: msg-01 (Harrison → staff, read), msg-02 (Vienna → Harrison, unread
 - Knowledge cards kc-01…kc-06 (magnetization, WR policy, turnaround, polishing, bracelet stretch, warranty). Routed question rq-ask-01 (Cellini quartz) with open manager task t-ask-01 — answer it from the panel to create kc-07.
 - Naomi j-08 E02018 `dueInDays: -100` → ~90 days late → service-debt line.
 - Photo labels pl-01 (ev-01), pl-02 (ev-09). Not covered: labels on inspection photos, corrections (none seeded), rollishop routed questions.
+
+## E14 seeds (`fixtures/comms.ts`) — all rolliworks
+| id | client | anchor | state | notable |
+|---|---|---|---|---|
+| cv-01 | Harrison c-01 | job j-01 | **needs reply** (5h), assigned Vienna | cm-05 inbound email `↩ matched RT-CV01-2`, unread; internal note cm-04; template `job_in_progress` outbound |
+| cv-02 | Harrison | — | closed | kiosk submission cm-06 |
+| cv-03 | Grace c-14 | estimate e-12 | **snoozed** until +2d, role concierge | email reply matched RT-CV03-1 |
+| cv-04 | Eleanor c-02 | estimate e-02 | open, no reply needed, Walter | photo submission event + **approval event** (rev 1) mid-thread; last message outbound |
+| cv-05 | Naomi c-10 | request rq-03 | needs reply (3d), unassigned | portal inbound, unread |
+Not covered: rollishop threads; kiosk/email ingestion (fixtures only); a thread anchored to a request that gets quoted.

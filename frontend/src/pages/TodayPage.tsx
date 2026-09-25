@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/Card';
 import { FilterChip, PageHeader } from '@/components/ui/Button';
 
 const SOURCES: TodaySource[] = ['owner', 'assignee', 'hold', 'discrepancy', 'task'];
-const LABEL: Record<TodaySource, string> = { owner: 'Owner actions', assignee: 'Bench', hold: 'Holds', discrepancy: 'Discrepancies', task: 'Tasks' };
+const LABEL: Record<TodaySource, string> = { owner: 'Owner actions', assignee: 'Bench', hold: 'Holds', discrepancy: 'Discrepancies', task: 'Tasks', thread: 'Replies' };
 
 export default function TodayPage() {
   const { user, station } = useAuth();

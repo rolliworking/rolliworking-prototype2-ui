@@ -129,7 +129,7 @@ export default function EstimatesListPage() {
             {visible.map((e) => (
               <tr key={e.id} data-testid={`estimate-row-${e.id}`} onClick={() => navigate(`/estimates/${e.id}`)} className="cursor-pointer transition-colors hover:bg-canvas/70">
                 <Td className="tabular text-ink-500">{fmtDate(e.createdAt)}</Td>
-                <Td className="font-mono text-xs font-medium text-ink">{e.number}{e.revision > 1 && <span className="ml-1 text-ink-400">r{e.revision}</span>}{e.historical && <span className="ml-1 rounded-sm bg-slate-100 px-1 text-[10px] text-slate-500">HIST</span>}</Td>
+                <Td className="font-mono text-xs font-medium text-ink">{e.number}{api.threadNeedsReplyFor({ kind: 'estimate', id: e.id }) && <span data-testid={`reply-indicator-${e.id}`} title="Client reply waiting" className="ml-1 rounded bg-rose-50 px-1 text-[10px] font-semibold text-rose-700">reply</span>}{e.revision > 1 && <span className="ml-1 text-ink-400">r{e.revision}</span>}{e.historical && <span className="ml-1 rounded-sm bg-slate-100 px-1 text-[10px] text-slate-500">HIST</span>}</Td>
                 <Td><span className="font-medium text-ink">{fullName(e.client)}</span><span className="ml-1.5 text-xs text-ink-400">{e.client.email}</span></Td>
                 <Td className="text-ink-700">{e.watch ? <>{e.watch.brand} {e.watch.model} <span className="font-mono text-xs text-ink-400">{e.watch.reference}</span></> : <span className="text-ink-300">—</span>}</Td>
                 <Td className="tabular text-right font-medium">{fmtMoneyCents(e.total)}</Td>

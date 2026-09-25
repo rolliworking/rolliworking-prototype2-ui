@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlertTriangle, ArrowRight, Check, Clock, Inbox, PauseCircle, Pin, Send, UserCog, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Clock, Inbox, PauseCircle, Pin, Send, UserCog, Wrench, MessageSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Task, TodayRow, TodaySource } from '@/api/client';
@@ -10,6 +10,7 @@ const SOURCE: Record<TodaySource, { label: string; icon: typeof Wrench; tone: st
   owner: { label: 'Owner action', icon: UserCog, tone: 'bg-amber-50 text-amber-900' },
   assignee: { label: 'Bench', icon: Wrench, tone: 'bg-brand-50 text-brand' },
   hold: { label: 'Hold', icon: PauseCircle, tone: 'bg-rose-50 text-rose-700' },
+  thread: { label: 'Reply', icon: MessageSquare, tone: 'bg-violet-50 text-violet-700' },
   discrepancy: { label: 'Discrepancy', icon: Inbox, tone: 'bg-rose-50 text-rose-700' },
   task: { label: 'Task', icon: Check, tone: 'bg-moss-50 text-moss-700' },
 };
@@ -21,7 +22,7 @@ export const SourcePill = ({ source }: { source: TodaySource }) => {
 };
 
 export const TodayRowItem = ({ row: r, onDone, onPin, dense }: { row: TodayRow; onDone?: (taskId: string) => void; onPin?: (row: TodayRow) => void; dense?: boolean }) => {
-  const href = r.jobId ? `/jobs/${r.jobId}` : r.packageId ? `/intake/inspection/${r.packageId}` : undefined;
+  const href = r.source === 'thread' ? `/inbox?thread=${r.id.replace('thread-', '')}` : r.jobId ? `/jobs/${r.jobId}` : r.packageId ? `/intake/inspection/${r.packageId}` : undefined;
   return (
     <li data-testid={`today-row-${r.id}`} className={clsx('group flex items-center gap-3 px-4 transition-colors hover:bg-canvas/70', dense ? 'py-1.5' : 'py-2.5')}>
       {r.source === 'task' && r.taskId && onDone ? (

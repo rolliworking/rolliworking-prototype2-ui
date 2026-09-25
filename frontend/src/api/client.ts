@@ -1518,6 +1518,7 @@ export async function getToday(userId?: string): Promise<TodayView> {
     rows.push({ id: `task-${t.id}`, source: 'task', title: t.title, detail: job ? `${job.number} · ${clientOf(job.clientId)}` : t.clientId ? clientOf(t.clientId) : 'Task', via: t.assignedTo.type === 'role' ? `role · ${t.assignedTo.role}` : 'assigned to me', taskId: t.id, jobId: job?.id, sentBy: t.createdBy !== me.shortName ? t.createdBy : undefined, urgent: false, ...due(t.dueAt) });
   });
 
+  threadsNeedingReplyForUser(me).forEach((c) => rows.push({ id: `thread-${c.id}`, source: 'thread', title: `Reply to ${c.client.firstName} ${c.client.lastName} · ${c.subject}`, detail: `${c.anchorLabel ?? 'General'} · waiting ${c.ageHours}h`, via: 'assigned thread', overdue: c.ageHours > 24, urgent: false, dueAt: c.lastInboundAt }));
   rows.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.urgent) - Number(a.urgent) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9'));
   const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.division === sessionDiv && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
   const pinned = store.pinned.filter((p) => !p.dismissedAt && p.division === sessionDiv && assigneeMatches(p.assignedTo, me));
@@ -2025,6 +2026,7 @@ export async function approvePartsRequest(requestId: string, note?: string, plac
   const a = actor();
   if (a.user?.accessTier !== 'manager') throw new Error('Parts approval is a supervisor action');
   if (r.status !== 'pending' || !r.partId) throw new Error('Only a pending request with a part can be approved');
+  { const pj = getJobRow(r.jobId); const pp = byId(store.parts, r.partId); threadEvent(pj.clientId, { kind: 'job', id: pj.id }, 'parts', a.by, `Parts approved for ${pj.number}: ${pp.partNumber} ${pp.name} (${r.number})`, { kind: 'parts_approved', refId: r.id, label: `Parts · ${r.number}` }); }
   const p = byId(store.parts, r.partId);
   const j = byId(store.jobs, r.jobId);
   const w = byId(store.watches, j.watchId);
@@ -2483,6 +2485,7 @@ export async function portalApproveEstimate(clientId: string, id: string): Promi
   const job = store.jobs.find((j) => j.estimateId === id && j.status === 'awaiting_customer_approval');
   if (job) await asClient(clientId, () => transitionJob(job.id, 'approve'));
   portalStamp(clientId, `Approved estimate ${r.number} rev ${r.revision}${job ? ` · job ${job.number} → approved` : ''}`);
+  threadEvent(clientId, { kind: 'estimate', id }, 'approval', clientName(clientId), `Approved estimate ${r.number} rev ${r.revision} in RolliConnect`, { kind: 'estimate_approved', refId: id, label: `Approval · ${r.number}` });
   return r;
 }
 
@@ -2492,6 +2495,7 @@ export async function portalDeclineEstimate(clientId: string, id: string, reason
   recordRcEvent({ t: 'decline', clientId, id, reason });
   const r = await asClient(clientId, () => declineEstimate(id, reason, 'portal'));
   portalStamp(clientId, `Declined estimate ${r.number} · ${reason.trim()}`);
+  threadEvent(clientId, { kind: 'estimate', id }, 'approval', clientName(clientId), `Declined estimate ${r.number}: ${reason.trim()}`, { kind: 'estimate_declined', refId: id, label: `Decline · ${r.number}` });
   return r;
 }
 
@@ -2516,6 +2520,7 @@ export async function portalConfirmPickupWindow(clientId: string, id: string, da
   if (!date) throw new Error('Pick a day');
   recordRcEvent({ t: 'pickup', clientId, id, date, slot, note });
   o.pickupWindow = { date, slot, confirmedAt: new Date().toISOString(), note: note?.trim() || undefined };
+  { const pj = o.jobId ? store.jobs.find((j) => j.id === o.jobId) : undefined; threadEvent(clientId, pj ? { kind: 'job', id: pj.id } : undefined, 'pickup', clientName(clientId), `Pickup window confirmed for ${o.number}: ${date} ${slot}${note?.trim() ? ` · ${note.trim()}` : ''}`, { kind: 'pickup_window', refId: o.id, label: `Pickup · ${o.number}` }); }
   o.updatedAt = o.pickupWindow.confirmedAt;
   const c = byId(fx.clients, clientId);
   const when = `${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${slot}`;
@@ -2548,6 +2553,7 @@ export async function portalSendMessage(clientId: string, text: string, watchId?
   const c = byId(fx.clients, clientId);
   const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, from: 'client', by: `${c.firstName} ${c.lastName}`, text: text.trim(), at: new Date().toISOString(), readByStaff: false, readByClient: true };
   store.messages.push(m);
+  { const job = watchId ? store.jobs.find((j) => j.watchId === watchId && j.status !== 'closed') : undefined; threadEvent(clientId, job ? { kind: 'job', id: job.id } : undefined, 'portal', `${c.firstName} ${c.lastName}`, text.trim()); }
   portalStamp(clientId, `Message sent to the team${watchId ? ` about ${store.watches.find((w) => w.id === watchId)?.model ?? 'a watch'}` : ''}`);
   return resolve(m);
 }
@@ -2923,5 +2929,100 @@ export async function labelPhoto(input: { photoId: string; jobId: string; source
   return resolve({ ...l });
 }
 export const companionCanSeeMoney = canSeeMoney;
+
+// ---- E14 Comms hub — one thread-space per client; Outbox-only sends; reply-token routing (mocked) ----
+import type { ConvMessage, Conversation, ConversationAnchor, ConversationWithRefs, InboxView, MessageSource, RenderedTemplate, ThreadView } from './types';
+
+const cx = { conversations: fx.conversations.map((c): Conversation => ({ ...c })), messages: fx.convMessages.map((m): ConvMessage => ({ ...m })) };
+const cxStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); };
+const wakeSnoozed = () => { const now = new Date().toISOString(); cx.conversations.forEach((c) => { if (c.status === 'snoozed' && c.snoozedUntil && c.snoozedUntil <= now) { c.status = 'open'; c.snoozedUntil = undefined; } }); };
+const convNeedsReply = (c: Conversation) => c.status === 'open' && !!c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt);
+const anchorRef = (a?: ConversationAnchor): { label?: string; path?: string } => {
+  if (!a) return {};
+  if (a.kind === 'job') { const j = store.jobs.find((x) => x.id === a.id); return j ? { label: `Job ${j.number}`, path: `/jobs/${j.id}` } : {}; }
+  if (a.kind === 'estimate') { const e = store.estimates.find((x) => x.id === a.id); return e ? { label: `Estimate ${e.number}`, path: `/estimates/${e.id}` } : {}; }
+  const r = store.requests.find((x) => x.id === a.id); return r ? { label: `Request ${r.number}`, path: `/clients/${r.clientId}?hit=req-${r.id}` } : {};
+};
+const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined }; };
+const convOf = (id: string) => byId(cx.conversations, id);
+const ensureConversation = (clientId: string, subject: string, anchor?: ConversationAnchor): Conversation => {
+  const found = cx.conversations.find((c) => c.clientId === clientId && c.status !== 'closed' && (anchor ? c.anchor?.kind === anchor.kind && c.anchor.id === anchor.id : !c.anchor));
+  if (found) return found;
+  const c: Conversation = { id: newId('cv'), clientId, subject, anchor, status: 'open', division: getSessionDivision(), createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), tokenSeq: 0 };
+  cx.conversations.unshift(c); return c;
+};
+const pushConv = (c: Conversation, m: Omit<ConvMessage, 'id' | 'conversationId' | 'clientId' | 'readByStaff'> & { readByStaff?: boolean }): ConvMessage => {
+  const row: ConvMessage = { id: newId('cm'), conversationId: c.id, clientId: c.clientId, readByStaff: m.direction !== 'in', ...m };
+  cx.messages.push(row); c.lastAt = row.at; if (row.direction === 'in') { c.lastInboundAt = row.at; if (c.status === 'closed' || c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; } } if (row.direction === 'out') c.lastOutboundAt = row.at;
+  return row;
+};
+// Auto-threading hook used by portal / parts / pickup flows: structured event lands in the client's thread
+const threadEvent = (clientId: string, anchor: ConversationAnchor | undefined, source: MessageSource, by: string, text: string, event?: ConvMessage['event']) => {
+  const c = ensureConversation(clientId, anchor ? `${anchorRef(anchor).label ?? anchor.kind}` : 'General', anchor);
+  return pushConv(c, { direction: source === 'staff' || source === 'system' ? 'out' : 'in', source, by, text, at: new Date().toISOString(), event, readByStaff: false });
+};
+
+export async function getInbox(view: InboxView, userId?: string): Promise<ConversationWithRefs[]> {
+  wakeSnoozed(); const me = userId ? fx.users.find((u) => u.id === userId) : actor().user; const div = getSessionDivision();
+  let rows = cx.conversations.filter((c) => c.division === div).map(convRefs);
+  if (view === 'needs_reply') rows = rows.filter((r) => r.needsReply).sort((a, b) => (a.lastInboundAt ?? '').localeCompare(b.lastInboundAt ?? ''));
+  else if (view === 'mine') rows = rows.filter((r) => r.status !== 'closed' && r.assignedTo && me && assigneeMatches(r.assignedTo, me)).sort((a, b) => Number(b.needsReply) - Number(a.needsReply) || b.lastAt.localeCompare(a.lastAt));
+  else if (view === 'open') rows = rows.filter((r) => r.status === 'open').sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  else if (view === 'snoozed') rows = rows.filter((r) => r.status === 'snoozed').sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
+  else rows = rows.filter((r) => r.status === 'closed').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''));
+  return resolve(rows);
+}
+export async function getInboxCounts(userId?: string): Promise<Record<InboxView, number>> {
+  const views: InboxView[] = ['needs_reply', 'mine', 'open', 'snoozed', 'closed']; const out = {} as Record<InboxView, number>;
+  for (const v of views) out[v] = (await getInbox(v, userId)).length; return out;
+}
+export async function getClientFolder(clientId: string): Promise<ConversationWithRefs[]> { wakeSnoozed(); return resolve(cx.conversations.filter((c) => c.clientId === clientId).map(convRefs).sort((a, b) => b.lastAt.localeCompare(a.lastAt))); }
+export async function getThread(id: string): Promise<ThreadView> {
+  const c = convOf(id); const messages = cx.messages.filter((m) => m.conversationId === id).sort((a, b) => a.at.localeCompare(b.at));
+  return resolve({ conversation: convRefs(c), messages, folder: await getClientFolder(c.clientId) });
+}
+export async function markConversationRead(id: string): Promise<void> { cx.messages.filter((m) => m.conversationId === id && m.direction === 'in').forEach((m) => { m.readByStaff = true; }); return resolve(undefined); }
+export async function assignConversation(id: string, assignee: Assignee | null): Promise<ConversationWithRefs> { const c = convOf(id); c.assignedTo = assignee ?? undefined; cxStamp(`Thread ${c.subject} → ${assignee ? assigneeLabel(assignee) : 'unassigned'}`); return resolve(convRefs(c)); }
+export async function snoozeConversation(id: string, untilIso: string): Promise<ConversationWithRefs> { const c = convOf(id); if (!untilIso || new Date(untilIso).getTime() <= Date.now()) throw new Error('Pick a future date'); c.status = 'snoozed'; c.snoozedUntil = untilIso; c.snoozedBy = actor().by; cxStamp(`Thread snoozed until ${untilIso.slice(0, 10)} · ${c.subject}`); return resolve(convRefs(c)); }
+export async function wakeConversation(id: string): Promise<ConversationWithRefs> { const c = convOf(id); c.status = 'open'; c.snoozedUntil = undefined; cxStamp(`Thread woken · ${c.subject}`); return resolve(convRefs(c)); }
+export async function closeConversation(id: string): Promise<ConversationWithRefs> { const c = convOf(id); c.status = 'closed'; c.closedAt = new Date().toISOString(); c.closedBy = actor().by; cxStamp(`Thread closed · ${c.subject}`); return resolve(convRefs(c)); }
+export async function reopenConversation(id: string): Promise<ConversationWithRefs> { const c = convOf(id); c.status = 'open'; c.closedAt = undefined; cxStamp(`Thread reopened · ${c.subject}`); return resolve(convRefs(c)); }
+export async function createConversation(clientId: string, subject: string, anchor?: ConversationAnchor): Promise<ConversationWithRefs> { if (!subject.trim()) throw new Error('Subject required'); const c: Conversation = { id: newId('cv'), clientId, subject: subject.trim(), anchor, status: 'open', division: getSessionDivision(), createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), tokenSeq: 0 }; cx.conversations.unshift(c); cxStamp(`Thread opened · ${c.subject}`); return resolve(convRefs(c)); }
+
+// Merge-field rendering with real values for the thread's client / anchor
+const mergeValues = (c: Conversation): Record<string, string> => {
+  const client = byId(fx.clients, c.clientId); const job = c.anchor?.kind === 'job' ? store.jobs.find((j) => j.id === c.anchor!.id) : undefined;
+  const est = c.anchor?.kind === 'estimate' ? store.estimates.find((e) => e.id === c.anchor!.id) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
+  const watch = store.watches.find((w) => w.id === (job?.watchId ?? est?.watchId)) ?? store.watches.find((w) => w.clientId === c.clientId);
+  const so = job ? store.salesOrders.find((o) => o.jobId === job.id && o.status !== 'cancelled') : undefined; const pkg = job?.packageId ? store.packages.find((p) => p.id === job.packageId) : undefined;
+  return { '{{client.first_name}}': client.firstName, '{{watch.brand}}': watch?.brand ?? '', '{{watch.model}}': watch?.model ?? '', '{{estimate.number}}': est?.number ?? '', '{{job.number}}': job?.number ?? '', '{{sub.number}}': pkg?.subNumber ?? '', '{{so.number}}': so?.number ?? '', '{{pickup.code}}': so?.pickupCode ?? '', '{{tracking}}': so?.tracking ?? '', '{{balance_due}}': so ? fmtMoney(so.balanceDue) : '', '{{shop.name}}': 'RolliSuite' };
+};
+export async function renderTemplate(conversationId: string, key: TemplateKey): Promise<RenderedTemplate> {
+  const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); const vals = mergeValues(convOf(conversationId)); const missing: string[] = [];
+  const fill = (s: string) => s.replace(/\{\{[a-z_.]+\}\}/g, (f) => { const v = vals[f]; if (!v) missing.push(f); return v || f; });
+  return resolve({ key, subject: fill(t.subject), body: fill(t.body), missing: uniq(missing) });
+}
+export async function replyInThread(id: string, input: { text: string; subject?: string; templateKey?: TemplateKey; photos?: PackagePhoto[] }): Promise<ConvMessage> {
+  const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId);
+  const token = `RT-${c.id.replace(/[^a-z0-9]/gi, '').toUpperCase()}-${++c.tokenSeq}`;
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: anchorRef(c.anchor).label ?? c.subject, status: 'pending', subject: input.subject?.trim() || `Re: ${c.subject}`, body: `${input.text.trim()}\n\n[reply token ${token}]${input.photos?.length ? `\n[${input.photos.length} photo${input.photos.length === 1 ? '' : 's'} attached]` : ''}`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  store.outbox.unshift(email);
+  const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: input.text.trim(), at: email.createdAt, token, emailId: email.id, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
+  await markConversationRead(id); if (c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; }
+  cxStamp(`Reply queued → Outbox · ${client.firstName} ${client.lastName} · ${token}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
+}
+export async function addThreadNote(id: string, text: string): Promise<ConvMessage> { const c = convOf(id); if (!text.trim()) throw new Error('Write the note first'); const a = actor(); const m = pushConv(c, { direction: 'internal', source: 'note', by: a.by, station: a.station, text: text.trim(), at: new Date().toISOString() }); cxStamp(`Internal note on thread · ${c.subject}`); return resolve(m); }
+// MOCK: a client reply arriving by email, routed back to its thread by the reply token of the last outbound message
+export async function simulateInboundReply(id: string, text: string): Promise<ConvMessage> {
+  const c = convOf(id); const lastOut = cx.messages.filter((m) => m.conversationId === id && m.direction === 'out' && m.token).sort((a, b) => b.at.localeCompare(a.at))[0];
+  if (!lastOut) throw new Error('No outbound token to match — send a reply first'); const client = byId(fx.clients, c.clientId);
+  const m = pushConv(c, { direction: 'in', source: 'email', by: `${client.firstName} ${client.lastName}`, text: text.trim() || 'Thanks, sounds good.', at: new Date().toISOString(), matchedToken: lastOut.token, readByStaff: false });
+  cxStamp(`Inbound email matched by token ${lastOut.token} → ${c.subject} (mock)`); return resolve(m);
+}
+// Signals for cards / Client 360 / today
+export const threadNeedsReplyFor = (anchor: ConversationAnchor): ConversationWithRefs | undefined => { const c = cx.conversations.find((x) => x.anchor?.kind === anchor.kind && x.anchor.id === anchor.id && convNeedsReply(x)); return c ? convRefs(c) : undefined; };
+export const clientNeedsReplyCount = (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;
+export const threadsNeedingReplyForUser = (me: User) => { wakeSnoozed(); const div = getSessionDivision(); return cx.conversations.filter((c) => c.division === div && convNeedsReply(c) && c.assignedTo && assigneeMatches(c.assignedTo, me)).map(convRefs); };
+export async function getCommsUnread(): Promise<number> { wakeSnoozed(); return resolve(cx.conversations.filter((c) => c.division === getSessionDivision() && convNeedsReply(c)).length); }
 
 replayRcEvents();

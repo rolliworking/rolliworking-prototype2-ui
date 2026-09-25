@@ -52,7 +52,8 @@ export type AuditEventType =
   | 'evidence'
   | 'labels'
   | 'accounting'
-  | 'companion';
+  | 'companion'
+  | 'comms';
 
 export interface AuditEvent {
   id: string;
@@ -319,7 +320,7 @@ export interface PinnedItem {
   dismissedBy?: string;
 }
 
-export type TodaySource = 'owner' | 'assignee' | 'hold' | 'discrepancy' | 'task';
+export type TodaySource = 'owner' | 'assignee' | 'hold' | 'discrepancy' | 'task' | 'thread';
 
 export interface TodayRow {
   id: string;
@@ -868,3 +869,21 @@ export interface RoutedQuestion extends Stamp { id: string; question: string; ta
 export interface AskAnswer { query: string; card?: KnowledgeCard; score: number; text: string; routed?: RoutedQuestion }
 export type LabelPillGroup = 'dial' | 'hands' | 'bracelet' | 'condition';
 export interface PhotoLabel extends Stamp { id: string; photoId: string; jobId: string; watchId: string; source: 'inspection' | 'evidence'; tags: string[]; skipped: boolean }
+
+// ---- E14 Comms hub -----------------------------------------------------------------------------------
+export type ConversationStatus = 'open' | 'snoozed' | 'closed';
+export interface ConversationAnchor { kind: 'request' | 'estimate' | 'job'; id: string }
+export interface Conversation {
+  id: string; clientId: string; subject: string; anchor?: ConversationAnchor; status: ConversationStatus; assignedTo?: Assignee; division: Division;
+  createdAt: string; lastAt: string; lastInboundAt?: string; lastOutboundAt?: string; snoozedUntil?: string; snoozedBy?: string; closedAt?: string; closedBy?: string; tokenSeq: number;
+}
+export type MessageSource = 'portal' | 'email' | 'kiosk' | 'approval' | 'photo' | 'parts' | 'pickup' | 'staff' | 'note' | 'system';
+export interface ConvMessage {
+  id: string; conversationId: string; clientId: string; direction: 'in' | 'out' | 'internal'; source: MessageSource; by: string; station?: string; text: string; at: string;
+  token?: string; matchedToken?: string; readByStaff: boolean; photos?: PackagePhoto[]; emailId?: string; templateKey?: TemplateKey;
+  event?: { kind: 'estimate_approved' | 'estimate_declined' | 'parts_approved' | 'parts_rejected' | 'pickup_window' | 'photo_submitted'; refId: string; label: string };
+}
+export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
+export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string }
+export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
+export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[] }

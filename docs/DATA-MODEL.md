@@ -237,3 +237,10 @@ Derived: `StockRow`, `Report`, `QboQueueRow`. Catalog admin adds `retired` flag 
 | BriefCorrection | id, clientId, key `relationship\|history\|service_debt`, text, original & Stamp | in-memory only |
 | PhotoLabel (2 + created) | id, photoId (job photo or evidence id), jobId, watchId, source `inspection\|evidence`, tags[], skipped & Stamp | |
 Derived: `PriceMemoryAnswer`, `ClientBrief`, `AskAnswer`.
+
+## 17. E14 additions (`fixtures/comms.ts`)
+| entity | fields | notes |
+|---|---|---|
+| Conversation (5) | id, clientId, subject, anchor? `{kind: request\|estimate\|job, id}`, status `open\|snoozed\|closed`, assignedTo? `Assignee`, division, createdAt, lastAt, lastInboundAt?, lastOutboundAt?, snoozedUntil?, snoozedBy?, closedAt?, closedBy?, tokenSeq | needsReply derived = open ∧ lastInbound > lastOutbound |
+| ConvMessage (14) | id, conversationId, clientId, direction `in\|out\|internal`, source lookup, by, station?, text, at, token?, matchedToken?, readByStaff, photos?, emailId?→OutboxEmail, templateKey?, event? `{kind: estimate_approved\|estimate_declined\|parts_approved\|parts_rejected\|pickup_window\|photo_submitted, refId, label}` | append-only |
+Derived: `ConversationWithRefs` (client, anchorLabel/Path, unread, needsReply, ageHours, last, assigneeLabel), `ThreadView`, `RenderedTemplate`. `TodaySource` gains `thread`.

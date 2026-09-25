@@ -68,7 +68,7 @@ export const JobCard = ({ job: j }: { job: JobWithRefs }) => (
   <Link to={`/jobs/${j.id}`} data-testid={`job-card-${j.id}`} className="block rounded-md border border-line bg-surface p-2.5 shadow-card transition-[transform,border-color] duration-150 hover:-translate-y-px hover:border-ink-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
     <div className="flex items-center justify-between gap-2">
       <span className="font-mono text-xs font-semibold text-ink">{j.number}</span>
-      <div className="flex items-center gap-1">{j.kind !== 'service' && <KindPill kind={j.kind} />}{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} /></div>
+      <div className="flex items-center gap-1">{api.threadNeedsReplyFor({ kind: 'job', id: j.id }) && <span data-testid={`reply-indicator-${j.id}`} title="Client reply waiting" className="rounded bg-rose-50 px-1 text-[10px] font-semibold text-rose-700">reply</span>}{j.kind !== 'service' && <KindPill kind={j.kind} />}{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} /></div>
     </div>
     <div className="mt-1 truncate text-[13px] font-medium text-ink">{fullName(j.client)}</div>
     <div className="truncate text-xs text-ink-500">{j.watch.brand} {j.watch.model} <span className="font-mono text-ink-400">{j.watch.reference}</span></div>

@@ -276,3 +276,16 @@ New audit types: `purchasing · inventory · setup · evidence · labels · acco
 | `askShop(query)` / `routeQuestion(query)` / `answerQuestion(questionId, title, body, tags[])` / `getKnowledgeCards()` / `getRoutedQuestions()` | `AskAnswer` / `RoutedQuestion` / `KnowledgeCard` | route creates a manager-role Task; answer creates a card + closes the task |
 | `getPhotoLabels(photoId?)` / `labelPhoto({photoId, jobId, source, tags, skipped?})` / `LABEL_PILLS` | `PhotoLabel` | ≥1 tag unless skipped; job timeline stamp |
 | `companionCanSeeMoney()` sync | boolean | manager tier |
+
+## 17. E14 — Comms hub (audit type `comms`)
+| export | signature | notes |
+|---|---|---|
+| `getInbox(view: InboxView, userId?)` / `getInboxCounts(userId?)` | `ConversationWithRefs[]` / counts | wakes snoozed threads whose date passed; division-scoped |
+| `getClientFolder(clientId)` / `getThread(id)` / `markConversationRead(id)` | folder / `ThreadView {conversation, messages, folder}` | |
+| `assignConversation(id, Assignee \| null)` / `snoozeConversation(id, untilIso)` / `wakeConversation(id)` / `closeConversation(id)` / `reopenConversation(id)` / `createConversation(clientId, subject, anchor?)` | `ConversationWithRefs` | snooze needs a future date |
+| `renderTemplate(conversationId, key)` | `RenderedTemplate {subject, body, missing[]}` | merge fields from client / anchor job / estimate / SO / package |
+| `replyInThread(id, {text, subject?, templateKey?, photos?})` | `ConvMessage` (out, token) | Outbox email with `[reply token …]`; marks inbound read; wakes snoozed |
+| `addThreadNote(id, text)` | `ConvMessage` (internal) | never sent |
+| `simulateInboundReply(id, text)` | `ConvMessage` (in, `matchedToken`) | **MOCK** email reply routed by last outbound token |
+| `threadNeedsReplyFor(anchor)` sync / `clientNeedsReplyCount(clientId)` sync / `threadsNeedingReplyForUser(user)` sync / `getCommsUnread()` | indicators | used by job cards, estimate rows, `/today` |
+Hooks: `portalApproveEstimate`, `portalDeclineEstimate`, `portalSendMessage`, `portalConfirmPickupWindow`, `approvePartsRequest` now also call the internal `threadEvent(...)`.

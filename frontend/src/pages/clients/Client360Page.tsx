@@ -38,7 +38,7 @@ export default function Client360Page() {
           <RequestsSection requests={data.requests} watches={data.watches} reload={reload} />
           <NotesTasksSection notes={data.notes} tasks={data.tasks} />
           <CustodySection custody={data.custody} />
-          <EmailsSection emails={data.emails} />
+          <EmailsSection emails={data.emails} clientId={data.client.id} />
         </div>
       </div>
     </div>
