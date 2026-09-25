@@ -117,6 +117,10 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Toast confirms: "Pinned to Vienna's list"
 - `QuickAddProvider` wraps AppShell
 
+### E10 — Companion panel (2026-09-25)
+- Docked scripted assistant (Bot button / Alt+M), context-aware; Price Memory (model_references, evidence, Verify/stale), Client Brief (citations, service debt, corrections), Ask-the-shop (cards, route → manager task → answer → card), Photo labels (pills, provenance, log); money hidden for non-managers (amber)
+- Tested iteration_20/21; final clarify fix applied after run 21 (logic-only change)
+
 ### E9b — Remaining RS modules + evidence (2026-09-25)
 - Polish: pickup code pre-check, parts best-effort fallback, concierge Floor Map routing
 - Purchasing, Inventory, Labels, Reports, Accounting, Setup (Users/Catalog/Templates/Locations/Printers), Integrations, Help — all seeded, audited, stubs amber
