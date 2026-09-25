@@ -790,7 +790,7 @@ export interface Message {
 export type PortalStatusKey = 'on_file' | 'expecting' | 'awaiting_approval' | 'inspecting' | 'queued' | 'on_bench' | 'awaiting_part' | 'with_specialist' | 'final_checks' | 'finishing' | 'ready_pickup' | 'preparing_ship' | 'on_its_way' | 'back_with_you';
 export interface PortalStatus { key: PortalStatusKey; label: string; blurb: string; active: boolean }
 
-export type NeedsYouKind = 'approve_estimate' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply';
+export type NeedsYouKind = 'approve_estimate' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply' | 'review_inspection';
 export interface NeedsYouItem { id: string; kind: NeedsYouKind; title: string; detail: string; path: string; at: string; watchId?: string }
 
 export interface PortalDocument { id: string; kind: 'photo' | 'estimate' | 'invoice' | 'receipt' | 'label'; title: string; at: string; dataUrl?: string; path?: string }
@@ -806,6 +806,7 @@ export interface PortalWatch {
   eta?: string;
   history: PortalHistoryRow[];
   documents: PortalDocument[];
+  inspectionReportToken?: string;
 }
 
 export interface PortalRequest { request: ServiceRequest; statusLabel: string; canClose: boolean; watch?: Watch; duplicateOf?: ServiceRequest }
@@ -838,7 +839,7 @@ export interface CycleCountLine { partId: string; expected: number; counted?: nu
 export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
-export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped';
+export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available';
 export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string }
 
 export interface UserAdminInput { firstName: string; shortName: string; dutyLabel: string; accessTier: AccessTier; roles: Role[]; division: Division | 'both'; password: string; pin: string }
@@ -887,3 +888,13 @@ export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
 export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string }
 export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
 export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[] }
+
+// ---- E15 Portal-first inspection report (MH 2026-09-25) --------------------------------------------
+export type ComponentGrade = 'good' | 'fair' | 'worn' | 'replace';
+export interface InspectionReportDoc {
+  id: string; token: string; version: number; jobId: string; watchId: string; clientId: string; estimateId?: string;
+  status: 'issued' | 'approved' | 'declined' | 'superseded'; supersededById?: string; supersedes?: string;
+  grades: { component: string; grade: ComponentGrade; note?: string }[]; notes: string; photoIds: string[];
+  issuedAt: string; issuedBy: string; station: string; emailId?: string; decidedAt?: string; decidedVia?: 'portal' | 'staff'; declineReason?: string;
+}
+export interface PortalInspectionReport { report: InspectionReportDoc; watch: Watch; client: Client; job: Job; estimate?: Estimate; photos: PackagePhoto[]; newerToken?: string }

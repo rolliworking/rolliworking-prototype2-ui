@@ -1,4 +1,4 @@
-import { ArrowRight, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { NeedsYouKind, PortalWatch } from '@/api/client';
@@ -7,7 +7,7 @@ import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
 import { RcRequestsCard } from './RcRequestsCard';
 
-const NY_ICON: Record<NeedsYouKind, LucideIcon> = { approve_estimate: FileCheck2, pay_balance: CreditCard, confirm_pickup: PackageCheck, shipping_info: MapPin, staff_reply: MessageCircle };
+const NY_ICON: Record<NeedsYouKind, LucideIcon> = { approve_estimate: FileCheck2, pay_balance: CreditCard, confirm_pickup: PackageCheck, shipping_info: MapPin, staff_reply: MessageCircle, review_inspection: ClipboardCheck };
 
 const WatchRow = ({ pw }: { pw: PortalWatch }) => {
   const { watch: w, status } = pw;
@@ -20,6 +20,7 @@ const WatchRow = ({ pw }: { pw: PortalWatch }) => {
           <div className="mt-0.5 text-sm text-rc-muted">Ref. {w.reference} · {w.dial} dial · {w.bracelet}</div>
         </div>
         <StatusWord status={status} testId={`rc-watch-status-${w.id}`} />
+        {pw.inspectionReportToken && <span data-testid={`rc-watch-report-${w.id}`} onClick={(e) => { e.preventDefault(); window.location.assign(`/rc/report/${pw.inspectionReportToken}`); }} className="rounded-full border border-rc-accent/50 px-3 py-1 text-xs text-rc-accent hover:bg-rc-accent/10">Inspection report ready →</span>}
       </div>
       <p className="mt-3 text-[15px] leading-relaxed text-rc-muted">{status.blurb}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">

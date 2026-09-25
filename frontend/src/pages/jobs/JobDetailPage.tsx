@@ -9,6 +9,7 @@ import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, No
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
+import { InspectionReportPanel } from '@/components/jobs/InspectionReportPanel';
 import { PinModal } from '@/components/today/PinBits';
 import { TailPill } from '@/components/sales/SalesBits';
 import type { PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
@@ -108,6 +109,7 @@ export default function JobDetailPage() {
           <Card title="Line items" subtitle="Carried from the estimate · department tags route the shop floor" testId="job-lines-card" bodyClassName="p-0"><LinesTable job={j} /></Card>
           <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
           <Card title="Notes" subtitle="Freeform, stamped who / when / station" testId="job-notes-card"><NotesPanel job={j} run={run} /></Card>
+          <Card title="Inspection report to client" subtitle="Portal-first · short notification + link · approve/decline on the portal page" testId="job-report-card"><InspectionReportPanel job={j} run={run} /></Card>
           <Card title="Service evidence" subtitle="Four QC slots · filed by scanning the watch label · keyed to watch AND job" testId="job-evidence-card"><EvidencePanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
           <Card title="Parts requests" subtitle="Chat-style lookup → attach → supervisor approval" testId="job-parts-card" bodyClassName="p-0">

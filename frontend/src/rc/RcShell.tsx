@@ -7,7 +7,7 @@ const PUBLIC = ['/rc', '/rc/'];
 function Frame() {
   const { client, loading, signOut } = useRcSession();
   const { pathname } = useLocation();
-  const isPublic = PUBLIC.includes(pathname) || pathname.startsWith('/rc/auth/');
+  const isPublic = PUBLIC.includes(pathname) || pathname.startsWith('/rc/auth/') || pathname.startsWith('/rc/report/');
   if (loading) return null;
   if (!client && !isPublic) return <Navigate to="/rc" replace />;
   return (

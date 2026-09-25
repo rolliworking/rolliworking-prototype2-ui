@@ -912,8 +912,8 @@ export async function sendEstimate(id: string): Promise<{ estimate: EstimateWith
     id: `ob-${Date.now().toString(36)}`,
     to: c.email, toName: `${c.firstName} ${c.lastName}`,
     relatedRef: `${e.number} rev ${e.revision}`, status: 'pending',
-    subject: `${again ? 'Updated estimate' : 'Your estimate'} ${e.number}${w ? ` — ${w.brand} ${w.model}` : ''}`,
-    body: `Hello ${c.firstName},\n\n${again ? 'Here is the updated estimate' : 'Here is your estimate'} ${e.number} (revision ${e.revision})${w ? ` for your ${w.brand} ${w.model} ${w.reference}` : ''}.\n\n${e.lines.map((l) => `• ${l.description} × ${l.qty} — $${(l.qty * l.unitPrice).toFixed(2)}`).join('\n')}\n\nTotal: $${e.total.toFixed(2)}\nValid until ${new Date(e.validUntil).toLocaleDateString('en-US')}\n\n${e.messageNotes}\n\n— The RolliSuite team`,
+    subject: `${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`,
+    body: `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. Review and approve it here:\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/estimates/${e.id}\n\n— The RolliSuite team`,
     createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
   };
   store.outbox.unshift(email);
@@ -2388,11 +2388,13 @@ const portalWatchFor = (clientId: string, w: Watch): PortalWatch => {
   const openEstimate = ests.find((e) => e.status === 'sent') ?? ests.find((e) => e.status === 'approved' && !e.jobId);
   const invoice = sos.find((o) => o.status !== 'cancelled' && o.status !== 'draft' && (o.jobId === job?.id || !job));
   const status = portalStatusFor(w, job && job.status !== 'closed' ? job : invoice && (invoice.status === 'shipped' || invoice.status === 'picked_up') ? job : undefined, openEstimate, invoice && (invoice.jobId === job?.id) ? invoice : undefined);
-  return { watch: w, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos) };
+  const issued = rp.reports.find((r) => r.watchId === w.id && r.clientId === clientId && r.status === 'issued');
+  return { watch: w, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
 };
 
 const needsYouFor = (clientId: string, watches: PortalWatch[]): NeedsYouItem[] => {
   const items: NeedsYouItem[] = [];
+  rp.reports.filter((r) => r.clientId === clientId && r.status === 'issued').forEach((r) => { const w = store.watches.find((x) => x.id === r.watchId); items.push({ id: `ny-rep-${r.id}`, kind: 'review_inspection', title: `Review the inspection report for your ${w?.model ?? 'watch'}`, detail: `Condition grades, photos and notes · approve or decline on the page`, path: `/rc/report/${r.token}`, at: r.issuedAt, watchId: r.watchId }); });
   store.estimates.filter((e) => e.clientId === clientId && e.status === 'sent').forEach((e) => {
     const w = e.watchId ? store.watches.find((x) => x.id === e.watchId) : undefined;
     items.push({ id: `ny-est-${e.id}`, kind: 'approve_estimate', title: `Approve or decline estimate ${e.number}`, detail: `${w ? `${w.brand} ${w.model} · ` : ''}${fmtMoney(e.total)} · valid until ${new Date(e.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, path: `/rc/estimates/${e.id}`, at: e.sentAt ?? e.updatedAt, watchId: e.watchId });
@@ -2990,12 +2992,15 @@ export async function reopenConversation(id: string): Promise<ConversationWithRe
 export async function createConversation(clientId: string, subject: string, anchor?: ConversationAnchor): Promise<ConversationWithRefs> { if (!subject.trim()) throw new Error('Subject required'); const c: Conversation = { id: newId('cv'), clientId, subject: subject.trim(), anchor, status: 'open', division: getSessionDivision(), createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), tokenSeq: 0 }; cx.conversations.unshift(c); cxStamp(`Thread opened · ${c.subject}`); return resolve(convRefs(c)); }
 
 // Merge-field rendering with real values for the thread's client / anchor
-const mergeValues = (c: Conversation): Record<string, string> => {
+const mergeValues = (c: { clientId: string; anchor?: ConversationAnchor }): Record<string, string> => {
   const client = byId(fx.clients, c.clientId); const job = c.anchor?.kind === 'job' ? store.jobs.find((j) => j.id === c.anchor!.id) : undefined;
   const est = c.anchor?.kind === 'estimate' ? store.estimates.find((e) => e.id === c.anchor!.id) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
   const watch = store.watches.find((w) => w.id === (job?.watchId ?? est?.watchId)) ?? store.watches.find((w) => w.clientId === c.clientId);
   const so = job ? store.salesOrders.find((o) => o.jobId === job.id && o.status !== 'cancelled') : undefined; const pkg = job?.packageId ? store.packages.find((p) => p.id === job.packageId) : undefined;
-  return { '{{client.first_name}}': client.firstName, '{{watch.brand}}': watch?.brand ?? '', '{{watch.model}}': watch?.model ?? '', '{{estimate.number}}': est?.number ?? '', '{{job.number}}': job?.number ?? '', '{{sub.number}}': pkg?.subNumber ?? '', '{{so.number}}': so?.number ?? '', '{{pickup.code}}': so?.pickupCode ?? '', '{{tracking}}': so?.tracking ?? '', '{{balance_due}}': so ? fmtMoney(so.balanceDue) : '', '{{shop.name}}': 'RolliSuite' };
+  const rep = job ? rp.reports.find((r) => r.jobId === job.id && r.status === 'issued') : undefined;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const link = rep ? `${origin}/rc/report/${rep.token}` : c.anchor?.kind === 'estimate' && est ? `${origin}/rc/estimates/${est.id}` : watch ? `${origin}/rc/watches/${watch.id}` : `${origin}/rc/home`;
+  return { '{{portal.link}}': link, '{{client.first_name}}': client.firstName, '{{watch.brand}}': watch?.brand ?? '', '{{watch.model}}': watch?.model ?? '', '{{estimate.number}}': est?.number ?? '', '{{job.number}}': job?.number ?? '', '{{sub.number}}': pkg?.subNumber ?? '', '{{so.number}}': so?.number ?? '', '{{pickup.code}}': so?.pickupCode ?? '', '{{tracking}}': so?.tracking ?? '', '{{balance_due}}': so ? fmtMoney(so.balanceDue) : '', '{{shop.name}}': 'RolliSuite' };
 };
 export async function renderTemplate(conversationId: string, key: TemplateKey): Promise<RenderedTemplate> {
   const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); const vals = mergeValues(convOf(conversationId)); const missing: string[] = [];
@@ -3024,5 +3029,53 @@ export const threadNeedsReplyFor = (anchor: ConversationAnchor): ConversationWit
 export const clientNeedsReplyCount = (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;
 export const threadsNeedingReplyForUser = (me: User) => { wakeSnoozed(); const div = getSessionDivision(); return cx.conversations.filter((c) => c.division === div && convNeedsReply(c) && c.assignedTo && assigneeMatches(c.assignedTo, me)).map(convRefs); };
 export async function getCommsUnread(): Promise<number> { wakeSnoozed(); return resolve(cx.conversations.filter((c) => c.division === getSessionDivision() && convNeedsReply(c)).length); }
+
+// ---- E15 Portal-first inspection report (MH 2026-09-25): emails notify, the portal renders ----------
+import type { ComponentGrade, InspectionReportDoc, PortalInspectionReport } from './types';
+export { REPORT_COMPONENTS } from './fixtures/reports';
+export const COMPONENT_GRADES: ComponentGrade[] = ['good', 'fair', 'worn', 'replace'];
+const rp = { reports: fx.inspectionReports.map((r): InspectionReportDoc => ({ ...r, grades: r.grades.map((g) => ({ ...g })) })) };
+// seeded short notification for Eleanor's v2 report
+store.outbox.push({ id: 'ob-rep-02', to: 'eleanor.vance@example.com', toName: 'Eleanor Vance', relatedRef: 'E02021', status: 'pending', subject: 'Your inspection report is ready — Cosmograph Daytona', body: `Hello Eleanor,\n\nWe have finished inspecting your Rolex Cosmograph Daytona. Condition grades, photos and our notes are on your report page, where you can approve or decline:\n\n▶ /rc/report/IR-ELEANOR-V2\n\n— The RolliSuite team`, createdAt: rp.reports[1].issuedAt, createdBy: 'Walter', station: 'Inspection Bench' });
+
+const renderTemplateFor = (key: TemplateKey, ctx: { clientId: string; anchor?: ConversationAnchor }) => { const t = rs.templates.find((x) => x.key === key)!; const vals = mergeValues(ctx); const fill = (x: string) => x.replace(/\{\{[a-z_.]+\}\}/g, (f) => vals[f] || ''); return { subject: fill(t.subject), body: fill(t.body) }; };
+const chainEnd = (r: InspectionReportDoc): InspectionReportDoc => (r.supersededById ? chainEnd(byId(rp.reports, r.supersededById)) : r);
+
+export async function getInspectionReportsForJob(jobId: string): Promise<InspectionReportDoc[]> { return resolve(rp.reports.filter((r) => r.jobId === jobId).sort((a, b) => b.version - a.version)); }
+export async function issueInspectionReport(jobId: string, grades: { component: string; grade: ComponentGrade; note?: string }[], notes: string): Promise<InspectionReportDoc> {
+  const j = getJobRow(jobId); const a = actor(); const client = byId(fx.clients, j.clientId);
+  if (!j.photos.length) throw new Error('Inspection photos required before a report can go to the client');
+  if (!grades.length || grades.some((g) => !g.grade)) throw new Error('Grade every component');
+  const prev = rp.reports.filter((r) => r.jobId === jobId).sort((a, b) => b.version - a.version)[0];
+  const r: InspectionReportDoc = { id: newId('rep'), token: `IR-${j.number}-V${(prev?.version ?? 0) + 1}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, version: (prev?.version ?? 0) + 1, jobId, watchId: j.watchId, clientId: j.clientId, estimateId: j.estimateId, status: 'issued', supersedes: prev?.id, grades: grades.map((g) => ({ ...g, note: g.note?.trim() || undefined })), notes: notes.trim(), photoIds: j.photos.map((p) => p.id), issuedAt: new Date().toISOString(), issuedBy: a.by, station: a.station };
+  if (prev && prev.status === 'issued') { prev.status = 'superseded'; prev.supersededById = r.id; }
+  rp.reports.unshift(r);
+  if (j.status === 'in_review' && legalJobActions(j).some((x) => x.key === 'request_approval')) pushTransition(j, 'request_approval', 'awaiting_customer_approval', undefined, true);
+  const t = renderTemplateFor('inspection_ready', { clientId: j.clientId, anchor: { kind: 'job', id: j.id } });
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: t.subject, body: t.body, createdAt: r.issuedAt, createdBy: a.by, station: a.station };
+  store.outbox.unshift(email); r.emailId = email.id;
+  threadEvent(j.clientId, { kind: 'job', id: j.id }, 'system', a.by, `Inspection report v${r.version} issued — notification queued with portal link /rc/report/${r.token}`);
+  jobStamp(j, `Inspection report v${r.version} issued to client (portal-first)`);
+  return resolve({ ...r });
+}
+export async function portalGetInspectionReport(token: string): Promise<PortalInspectionReport> {
+  const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid');
+  const job = getJobRow(r.jobId); const end = chainEnd(r);
+  return resolve({ report: r, watch: byId(store.watches, r.watchId), client: byId(fx.clients, r.clientId), job, estimate: r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined, photos: job.photos.filter((p) => !r.photoIds.length || r.photoIds.includes(p.id)), newerToken: end.id !== r.id ? end.token : undefined });
+}
+export async function portalDecideInspectionReport(token: string, decision: 'approve' | 'decline', reason?: string): Promise<PortalInspectionReport> {
+  const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid');
+  if (r.status === 'superseded') throw new Error('A newer report replaces this one'); if (r.status !== 'issued') throw new Error('This report has already been decided');
+  if (decision === 'decline' && !reason?.trim()) throw new Error('Please tell us why');
+  const j = getJobRow(r.jobId); const est = r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined;
+  await asClient(r.clientId, async () => {
+    if (decision === 'approve') { if (j.status === 'awaiting_customer_approval') await transitionJob(j.id, 'approve'); if (est?.status === 'sent') await approveEstimate(est.id, 'portal'); }
+    else { if (j.status === 'awaiting_customer_approval') await transitionJob(j.id, 'back_to_review', `Client declined inspection report v${r.version}: ${reason!.trim()}`); if (est?.status === 'sent') await declineEstimate(est.id, reason!.trim(), 'portal'); }
+  });
+  r.status = decision === 'approve' ? 'approved' : 'declined'; r.decidedAt = new Date().toISOString(); r.decidedVia = 'portal'; r.declineReason = decision === 'decline' ? reason!.trim() : undefined;
+  threadEvent(r.clientId, { kind: 'job', id: j.id }, 'approval', clientName(r.clientId), decision === 'approve' ? `Approved inspection report v${r.version} (${j.number}) in RolliConnect${est ? ` · estimate ${est.number} approved` : ''}` : `Declined inspection report v${r.version} (${j.number}): ${reason!.trim()}`, { kind: decision === 'approve' ? 'estimate_approved' : 'estimate_declined', refId: r.id, label: `Inspection · ${j.number}` });
+  portalStamp(r.clientId, `${decision === 'approve' ? 'Approved' : 'Declined'} inspection report v${r.version} · ${j.number}`);
+  return portalGetInspectionReport(token);
+}
 
 replayRcEvents();

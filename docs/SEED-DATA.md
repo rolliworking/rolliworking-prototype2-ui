@@ -217,3 +217,7 @@ Messages: msg-01 (Harrison → staff, read), msg-02 (Vienna → Harrison, unread
 | cv-04 | Eleanor c-02 | estimate e-02 | open, no reply needed, Walter | photo submission event + **approval event** (rev 1) mid-thread; last message outbound |
 | cv-05 | Naomi c-10 | request rq-03 | needs reply (3d), unassigned | portal inbound, unread |
 Not covered: rollishop threads; kiosk/email ingestion (fixtures only); a thread anchored to a request that gets quoted.
+
+## E15 seeds
+- Eleanor c-02 · j-11 (awaiting customer approval) · rep-01 `IR-ELEANOR-V1` superseded → rep-02 `IR-ELEANOR-V2` issued (8 grades, notes reference the bezel photo and e-02 rev 2); Outbox `ob-rep-02` short notification with `/rc/report/IR-ELEANOR-V2`. Loop: open `/rc/report/IR-ELEANOR-V1` → forwards to V2 → Approve → j-11 approved, e-02 approved, comms cv-04 gains an approval event.
+- To exercise issuing: /jobs/j-13 or j-18 (in_review) → add a photo → Issue inspection report → Outbox + `/rc/report/<token>`.

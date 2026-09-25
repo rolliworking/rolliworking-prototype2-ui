@@ -289,3 +289,13 @@ New audit types: `purchasing · inventory · setup · evidence · labels · acco
 | `simulateInboundReply(id, text)` | `ConvMessage` (in, `matchedToken`) | **MOCK** email reply routed by last outbound token |
 | `threadNeedsReplyFor(anchor)` sync / `clientNeedsReplyCount(clientId)` sync / `threadsNeedingReplyForUser(user)` sync / `getCommsUnread()` | indicators | used by job cards, estimate rows, `/today` |
 Hooks: `portalApproveEstimate`, `portalDeclineEstimate`, `portalSendMessage`, `portalConfirmPickupWindow`, `approvePartsRequest` now also call the internal `threadEvent(...)`.
+
+## 18. E15 — Portal-first inspection report
+| export | signature | notes |
+|---|---|---|
+| `REPORT_COMPONENTS`, `COMPONENT_GRADES` | lookups | 8 components · `good\|fair\|worn\|replace` |
+| `getInspectionReportsForJob(jobId)` | `InspectionReportDoc[]` newest version first | |
+| `issueInspectionReport(jobId, grades[], notes)` | `InspectionReportDoc` | photos required; supersedes; in_review → awaiting_customer_approval; Outbox `inspection_ready`; comms system message; job stamp |
+| `portalGetInspectionReport(token)` | `PortalInspectionReport {report, watch, client, job, estimate?, photos, newerToken?}` | public by token; `newerToken` when superseded |
+| `portalDecideInspectionReport(token, 'approve'\|'decline', reason?)` | `PortalInspectionReport` | as client: job approve / back_to_review(reason), estimate approve / decline; comms approval event; audit `portal` |
+Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; merge field `{{portal.link}}`; `PortalWatch.inspectionReportToken`; `NeedsYouKind.review_inspection`.
