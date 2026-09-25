@@ -117,6 +117,9 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Toast confirms: "Pinned to Vienna's list"
 - `QuickAddProvider` wraps AppShell
 
+### E12 — RolliTime /rt timing bench (2026-09-25)
+- Own shell + bench sign-in, testing queue, label scan, Witschi-style 6-position test with caliber tolerances, live highlighting, auto-suggested verdict, PASS (email + QC flag) / REJECT (reason → qc_fail + email), append-only watch history, job Timing card. Tested iteration_24: 100%
+
 ### E15 — Portal-first client content (MH ruling 2026-09-25)
 - Principle locked: emails notify, portal renders. /rc/report/:token inspection report page (grades, photos, notes, approve/decline, supersede forwarding); staff issue flow; 9 short templates with {{portal.link}}; decisions auto-thread + flip status
 - Tested iteration_23 (~92%) → decline-error fix + timeline reason applied
