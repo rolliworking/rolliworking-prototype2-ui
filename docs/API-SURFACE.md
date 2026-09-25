@@ -1,182 +1,242 @@
-# API-SURFACE — `frontend/src/api/client.ts`
+# API-SURFACE — `frontend/src/api/client.ts` (the contract KEEPER implements)
 
-The ONLY data-access module. Screens import `* as api from '@/api/client'` and call these. All async functions resolve after 120 ms simulated latency; writes mutate the in-memory `store` and audit-stamp via `appendAudit` (localStorage). "Stub" = deliberately throws / does nothing real. `*WithRefs` = row joined with client/watch(/estimate/pkg).
+Rules: this is the ONLY data-access module; screens `import * as api from '@/api/client'`. Every `async` function resolves after 120 ms fake latency and **throws `Error(message)`** on guard failure (messages are user-facing; keep them). Writes mutate the in-memory `store`, audit via `appendAudit`, and return the fresh row (usually `*WithRefs`). Sync exports are pure helpers or lookup constants the UI reads. Re-export: `export * from './types'`.
 
-Re-exports: `export * from './types'`; constants `CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS, JOB_FLOW, DEPT_OF_CODE, computeEstimateTotals, ESTIMATE_TAX_RATE_DISPLAY`.
+Actor resolution (`actor()`): `{by: user.shortName | 'Unknown', station: station.name | 'Unregistered device'}`; while a portal call runs inside `asClient()`, `by = "<First Last> (client)"`, `station = 'RolliConnect'`.
 
-## Station / device
-| function | returns | notes |
+Legend: **STUB** = deliberately fake / throws · **sync** = not a Promise · `WithRefs` joins per DATA-MODEL §10.
+
+## 1. Station / device / division
+| export | signature | returns | side effects / notes |
+|---|---|---|---|
+| `getSessionDivision` sync | `() => Division` | station.division ?? 'rolliworks' | |
+| `getDivisionStaff` sync | `(div) => User[]` | users with `division === div \|\| 'both'` | |
+| `getDivisionRoles` sync | `(div) => Role[]` | roles with ≥1 holder in div | |
+| `getStation` | `() => Station \| null` | | first call on a fresh device auto-registers `st-01` and audits `station_registered` (mock) |
+| `getStations` | `() => Station[]` | | backfills `division='rolliworks'` on legacy saved rows |
+| `addStation` | `(name, division='rolliworks') => Station` | existing row if name matches (case-insensitive) | persists list |
+| `registerStation` | `(stationId, adminUserId, password) => Station` | | throws unless manager tier + correct password; audit |
+| `renameStation` | `(name) => Station` | | audit `station_renamed` |
+| `resetDeviceRegistration` | `() => void` | | clears station + current user; audit `station_reset` |
+
+## 2. Audit / auth
+| export | signature | returns | notes |
+|---|---|---|---|
+| `getAuditLog` | `() => AuditEvent[]` | newest first, ≤60 | |
+| `getUsers` | `() => User[]` | | includes password/pin (prototype) |
+| `getCurrentUser` | `() => User \| null` | | localStorage session |
+| `hasSignedInToday` | `(userId) => boolean` | | a `sign_in` + `password_photo` audit row today |
+| `getUsersSignedInToday` | `() => User[]` | | |
+| `signInWithPassword` | `(userId, password, photo: VerificationPhoto) => User` | | wrong password → audit `sign_in_failed` + throw "Incorrect password"; success audits with camera status + photo |
+| `switchUserWithPin` | `(userId, pin) => User` | | throws if no password sign-in today; wrong PIN audited |
+| `signOut` | `() => void` | | audit |
+
+## 3. Clients / watches
+| export | signature | returns | notes |
+|---|---|---|---|
+| `getClients` / `getClient(id)` | | `Client[]` / `Client \| null` | |
+| `searchClients` | `(q) => Client[]` ≤8 | | name / email / company substring; phone digits (≥3) |
+| `getWatches` / `getWatchesForClient(clientId)` | | `Watch[]` | |
+| `createClient` | `(NewClientInput {firstName, lastName, email, phone}) => Client` | | blank address, type retail; **not audited** |
+| `createWatch` | `(clientId, NewWatchInput {brand, model, reference, serial, partNumber?}) => Watch` | | status expected; ref uppercased, serial default `NS`; **not audited** |
+
+## 4. Estimates
+| export | signature | returns | notes |
+|---|---|---|---|
+| `getEstimates` | `() => EstimateWithRefs[]` | newest createdAt first | |
+| `getEstimate(id)` / `getEstimatesForClient(clientId)` | | `EstimateWithRefs \| null` / `[]` | |
+| `searchEstimates` | `(q, status?: EstimateStatus \| 'all') => EstimateWithRefs[]` | | number digits prefix / client name / email |
+| `lookupEstimate` | `(numberOrId) => EstimateWithRefs \| null` | | scan-friendly: strips `EST-`, `E`, leading zeros |
+| `getServiceCatalog` | `() => CatalogService[]` | | |
+| `getQuoteContext` | `(clientId, watchId?, excludeId?) => QuoteContext {clientEstimates, watchEstimates}` | | |
+| `createEstimate` | `(EstimateInput) => EstimateWithRefs` | draft | audit `estimate` |
+| `updateEstimate` | `(id, EstimatePatch) => EstimateWithRefs` | | draft only; **not audited** (autosave) |
+| `reviseEstimate` | `(id, EstimatePatch) => EstimateWithRefs` | | draft/sent; snapshot; audit |
+| `duplicateEstimate` | `(id) => EstimateWithRefs` | new draft | audit |
+| `deleteEstimate` | `(id) => void` | | throws if converted or package-linked; audit |
+| `markEstimateSent` | `(id) => EstimateWithRefs` | sent, no sentAt | audit |
+| `sendEstimate` | `(id) => {estimate, email: OutboxEmail}` | sent + sentAt | Outbox email with line list |
+| `declineEstimate` | `(id, reason, via='staff') => EstimateWithRefs` | declined | |
+| `approveEstimate` | `(id, via='staff') => EstimateWithRefs` | approved (provisional) | |
+| `reopenEstimate` | `(id) => EstimateWithRefs` | draft | |
+| `convertEstimate` | `(id, 'job' \| 'intake' \| 'sales_order') => JobWithRefs` | | `job` → `createJobFromEstimate`; `intake` → `convertEstimateToIntake`; **`sales_order` STUB → throws** "Use convertEstimateToSalesOrder for sales orders" |
+| `calcShipping` sync | `(ShippingCalcInput {units, hiAk, saturday}) => {amount, overnight, insuredValue}` | | display only, never persisted |
+| `computeEstimateTotals` sync | `(lines) => {subtotal, shippingAmount, taxAmount, total}` | | re-export of `totalsFor` |
+| `ESTIMATE_TAX_RATE_DISPLAY` | `0.0825` | | shown "not applied" |
+Types exported: `NewClientInput, NewWatchInput, EstimateInput, EstimatePatch = Partial<Omit<EstimateInput,'clientId'>>, ShippingCalcInput`.
+
+## 5. Intake
+| export | signature | returns | notes |
+|---|---|---|---|
+| `CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS` | lookups | | re-exported from fixtures |
+| `detectCarrier` sync | `(tracking) => Carrier` | | `1Z…`→UPS · `9[2-5]\d{18,20}`→USPS · 12/15 digits→FedEx · 10 digits→DHL · else FedEx |
+| `getPackages` | `(status?) => PackageWithRefs[]` | newest arrival first | |
+| `getPackage(id)` | | `PackageWithRefs \| null` | |
+| `getIntakeCounts` | `() => Record<PackageStatus, number>` | | lane counts |
+| `logArrival` | `(ArrivalInput {source, trackingNumber?, carrier?, signatureNoted, clientId?}) => PackageWithRefs` | arrived | throws: carrier without tracking; duplicate tracking |
+| `receivePackage` | `(id, ReceivePackageInput {trackingNumber?, estimateId?, clientId?, contents, photos, notes?}) => {pkg, email \| null}` | processed | email only if client resolvable |
+| `printDropOffReceipt` | `(id) => PackageWithRefs` | | mock flag + audit |
+| `recordWorkOrder` | `(id, bin: Bin) => PackageWithRefs` | awaiting_inspection | |
+| `findPackageForInspection` | `(estimateNumber) => PackageWithRefs \| null` | | package with that estimate at awaiting_inspection |
+| `getInspectionContext` | `(packageId) => InspectionContext` | | throws if package lacks estimate+watch |
+| `findWatchBySerial` | `(reference, serial) => WatchMatch \| null` | | null for NS or history-less expected watches |
+| `computeDiscrepancies` sync | `(ctx, ReceiveWatchInput) => string[]` | | pure |
+| `receiveWatch` | `(packageId, ReceiveWatchInput) => ReceiveWatchResult {pkg, discrepancies, labels}` | received / discrepancy_hold | see STATE-MACHINES §4 |
+| `getOutbox` | `() => OutboxEmail[]` | | never sends |
+| `getLabelQueue` / `setLabelPrinted(id, printed)` | | `LabelJob[]` / `LabelJob` | mock print, audited |
+
+## 6. Jobs
+| export | signature | returns | notes |
+|---|---|---|---|
+| `JOB_FLOW`, `DEPT_OF_CODE` | lookups | | |
+| `JOB_KIND_CONFIG` | `Record<JobKind, {label, defaultOwnerRole, skipStages, inspectionReport, inspectionPhotos}>` | | per-kind table |
+| `INSPECTION_QUESTIONS` | `{key, label, options[]}[]` | 5 rows | placeholder set |
+| `ROLES` | `Role[]` | | |
+| `roleHolders` sync | `(role) => User[]` | | |
+| `activeHold` sync | `(job) => JobHold \| undefined` | | |
+| `canHold` sync | `(job) => boolean` | | |
+| `legalJobActions` sync | `(job) => JobAction[]` | `JobAction {key, label, to, needsReason?, notifies?, tone?, provisional?}` | [] while held; per-kind redirect |
+| `reviewGaps` sync | `(job) => string[]` | | empty unless in_review |
+| `getJobs` | `() => JobWithRefs[]` | newest first | |
+| `getJob(id)` / `getJobsForClient(clientId)` | | | |
+| `searchJobs` | `(q) => JobWithRefs[]` | | number / client / ref / serial / model / assignee / owner |
+| `transitionJob` | `(id, actionKey, reason?) => JobWithRefs` | | full guard chain; ✉ when `notifies` |
+| `saveInspectionReport` | `(id, answers: Record<key, option>) => JobWithRefs` | | throws for kinds without report; all questions required |
+| `setJobOwner` | `(id, role \| null) => JobWithRefs` | | |
+| `toggleAssignee` | `(id, shortName) => JobWithRefs` | | must be a staff shortName |
+| `placeHold` | `(id, type: HoldType, reason) => JobWithRefs` | | |
+| `releaseHold` | `(id, note?) => JobWithRefs` | | |
+| `addJobNote` | `(id, text) => JobWithRefs` | | |
+| `addJobPhotos` | `(id, photos: PackagePhoto[]) => JobWithRefs` | | stamps each photo |
+| `updateJobFields` | `(id, JobFieldsPatch {priority?, dueAt?: string \| null, conditionNotes?, intakeNotes?}) => JobWithRefs` | | audits only changed fields |
+| `createJob` | `(CreateJobInput {clientId, watchId, estimateId?, kind?, priority?, dueAt?, assignees?, conditionNotes?, intakeNotes?, onHand, workflow?, lines?}) => JobWithRefs` | intake | number from `counters.job`; existence check |
+| `createJobFromEstimate` | `(estimateId) => JobWithRefs` | | approved estimates only |
+| `convertEstimateToIntake` | `(estimateId) => JobWithRefs` | | |
+| `deleteJob` | `(id) => void` | | manager tier; cascades shop time + tasks; unlinks estimate |
+| `invoiceJob` | `(id) => SalesOrderWithRefs` | **open SO** | job must be ready_to_ship/closed and have no live SO. (Earlier doc said STUB — **drift: it is real since E5**) |
+| `getShopTime` | `(jobId?) => ShopTimeEntry[]` | newest first | |
+| `getOnHandJobs` | `() => JobWithRefs[]` | | simpleStatus on_hand |
+| `addShopTime` | `(jobId, minutes, note) => ShopTimeEntry` | | on_hand only; minutes > 0; never changes status |
+Types exported: `JobAction, JobFieldsPatch, CreateJobInput`.
+
+## 7. Tasks / Today / Pins
+| export | signature | returns | notes |
+|---|---|---|---|
+| `assigneeLabel` sync | `(Assignee) => string` | `"MM"` or `"concierge role → Vienna"` | |
+| `getTasks` | `() => Task[]` | open first, then by dueAt | not division-filtered |
+| `getTasksForJob(jobId)` / `getTasksForClient(clientId)` | | `Task[]` | |
+| `createTask` | `(TaskInput {title, assignedTo, jobId?, dueAt?}) => Task` | | division = session; copies watch/client from job; audits task + job |
+| `setTaskDone` | `(id, done) => Task` | | |
+| `parsePin` sync | `(raw, fallback: Assignee) => {title, assignedTo}` | | `^[#@](\w+)\s+` → user by shortName/firstName, else role, else fallback; prefix stays in title |
+| `pinToHitList` | `(PinInput {title, assignedTo?, jobId?, taskId?, clientId?, estimateId?}) => PinnedItem` | | mention in title **overrides** explicit `assignedTo`; division = session; audit `pin`; job audit if linked |
+| `dismissPinned` | `(id) => PinnedItem` | | |
+| `getToday` | `(userId?) => TodayView {pinned, rows, waitingOn}` | | **division-scoped** to the session station; rows: owner actions (`intake`, `awaiting_customer_approval`, `ready_to_ship` for jobs whose owner role ∈ my roles), bench (`approved/in_service/testing` where I'm an assignee), holds (owner or placer), discrepancy packages (concierge role or flagging inspector; rolliworks only), open tasks to me/my roles; sort overdue → urgent → dueAt; `waitingOn` = my open tasks assigned to others; `pinned` = active pins to me/my roles |
+
+## 8. Dashboard / activity
+| export | signature | notes |
 |---|---|---|
-| `getStation()` | `Station \| null` | first call on a fresh device mocks pre-registration as "Front Desk 1" |
-| `getStations()` | `Station[]` | |
-| `addStation(name)` | `Station` | dedupes by name |
-| `registerStation(stationId, adminUserId, password)` | `Station` | manager + password; audit `station_registered` |
-| `renameStation(name)` | `Station` | audit |
-| `resetDeviceRegistration()` | `void` | clears station + session |
+| `getDashboardStats` | `() => DashboardStats` | inHouse = watches not released/expected; openEstimates = draft+sent; awaitingApproval = sent; inProgress = approved+in_service+testing; awaitingPickup = ready_to_ship; revenue = Σ total of jobs finished this month; per-department P&L |
+| `getRecentActivity` | `(limit=10) => ActivityEvent[]` | **static fixture**, not derived |
 
-## Audit / auth
-| function | returns | notes |
+## 9. Sales orders / pickup / ship
+| export | signature | returns | notes |
+|---|---|---|---|
+| `SO_BADGE` sync | `(so) => 'picked_up' \| 'shipped' \| 'paid' \| 'unpaid'` | | |
+| `tailStage` sync | `(job) => TailStage \| null` | | |
+| `getSalesOrders` | `() => SalesOrderWithRefs[]` | newest orderDate first | |
+| `getSalesOrder(id)` / `getSalesOrderForJob(jobId)` | | `\| null` | job lookup ignores cancelled |
+| `findSalesOrders` | `(q) => SalesOrderWithRefs[]` | | SO #, digits suffix, client, job #, estimate #, pickup code prefix (≥3) |
+| `createSalesOrder` | `(SalesOrderInput {clientId, jobId?, estimateId?, lines: SOLineInput[], shippingAmount?, memo?, channel?, status?: 'draft' \| 'open'}) => SalesOrderWithRefs` | | |
+| `convertEstimateToSalesOrder` | `(estimateId) => SalesOrderWithRefs` | draft | does not change estimate status |
+| `updateSalesOrder` | `(id, SalesOrderPatch {lines?, shippingAmount?, memo?, channel?}) => SalesOrderWithRefs` | | draft/open only |
+| `openSalesOrder` / `cancelSalesOrder(id, reason)` / `fulfillSalesOrder(id)` | | | fulfil = **QBO STUB** (`qboInvoiceId`, `qboStatus: queued`) |
+| `recordPayment` | `(id, amount, method: PaymentMethod, note?) => SalesOrderWithRefs` | | **STUB ledger**; partial allowed |
+| `setFulfillmentChannel` | `(id, 'pickup' \| 'ship') => SalesOrderWithRefs` | | |
+| `regeneratePickupCode` / `requestShippingInfo` / `setShippingAddress(id, Address)` | | | |
+| `SHIP_CARRIERS` | `ShipCarrier[]` | | |
+| `normalizeDeclaredValue` sync | `(n) => n` | `0<n<1000 → n×1000` | pack rule |
+| `shippingProvider.createShipment` | `(CreateShipmentInput {carrier, declaredValue, address, reference}) => MockShipment {labelId, tracking, service, coverage, labelDataUrl}` | | **STUB carrier seam** — SVG label, fake tracking; the one object a real carrier replaces |
+| `confirmShipment` | `(id, ConfirmShipmentInput {carrier, declaredValue, photos, label: MockShipment, bypassReason?}) => SalesOrderWithRefs` | shipped | closes custody |
+| `confirmPickup` | `(id, ConfirmPickupInput {code?, proxyName?, proxyIdPhoto?, photos, lineQty?, bypassReason?}) => SalesOrderWithRefs` | picked_up / partial | closes custody when complete |
+| `adminMarkComplete` | `(id, 'pickup' \| 'ship', note) => SalesOrderWithRefs` | | manager tier |
+| `getPickupQueue` / `getShipQueue` | `() => SalesOrderWithRefs[]` | | |
+Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentInput, MockShipment, ConfirmShipmentInput, ConfirmPickupInput`.
+
+## 10. Workshop lenses / parts
+| export | signature | returns | notes |
+|---|---|---|---|
+| `pullNextCandidate` sync | `(me: shortName) => Job \| null` | | approved · on_hand · no hold · unassigned; priority then oldest |
+| `getBenchView` | `(userId?) => BenchView {jobs(+nextAction, blocked), holds, pullNext, partsRequests}` | | pullNext only for watchmaker/inspector roles; partsRequests = mine, non-draft |
+| `pullNext` | `() => JobWithRefs` | | bench roles only; self-assign; audit (does **not** start service) |
+| `getSupervisorBoard` | `() => SupervisorBoard {unassigned, byTech, partsQueue, holds, qcQueue}` | | techs = watchmaker/inspector users |
+| `supervisorAssign` | `(jobId, shortNames[]) => JobWithRefs` | | manager tier; **overwrites** assignees |
+| `getShopFloorMap` | `() => FloorMap {lanes[9]}` | | open jobs + closed within 14 days; `case_cleaning` = in_service with P/PM-only workflow (provisional) |
+| `getParts` / `partsById(id)` sync / `getPartsKnowledge` | | `Part[]` / `Part \| undefined` / `PartsKnowledgeEntry[]` | |
+| `getPartsRequests` / `getPartsRequest(id)` / `getPartsRequestsForJob(jobId)` | | `PartsRequestWithRefs` | |
+| `openPartsRequest` | `(jobId) => PartsRequestWithRefs` | draft | |
+| `partsAssistantReply` sync | `(query, job) => {text, suggestions: {partId, reason}[]}` | | **SCRIPTED** scorer: ref +5, caliber +5, alias +4, word ×2, fits job ref +1; threshold 4; top 4 |
+| `partsChat` | `(requestId, text) => PartsRequestWithRefs` | | |
+| `attachPart` | `(requestId, partId, qty=1, note?) => PartsRequestWithRefs` | | |
+| `submitPartsRequest` | `(requestId, note?) => PartsRequestWithRefs` | pending | |
+| `approvePartsRequest` | `(requestId, note?, placeHoldToo=true) => PartsRequestWithRefs` | approved | manager tier; learning loop; auto parts hold |
+| `rejectPartsRequest` | `(requestId, reason) => PartsRequestWithRefs` | rejected | manager tier |
+
+## 11. Client 360 / search / requests
+| export | signature | returns | notes |
+|---|---|---|---|
+| `resolveIdentifier` | `(q) => SearchResults {query, groups: SearchGroup[], total}` | | clients (any length), watches/SO/packages/requests (≥3 chars), estimates/jobs (≥2); ≤6 hits per group; `hit.path` = `/clients/:id?hit=<key>` or record route when no client |
+| `getClient360` | `(clientId) => Client360 \| null` | | full bundle; notes = job notes + estimate internalNotes; custody derived |
+| `getClientDirectory` | `() => ClientDirectoryRow[]` | by last activity | |
+| `getRequests` / `getRequestsForClient(clientId)` | | `ServiceRequest[]` newest first | **no create / quote function** |
+| `closeRequest` | `(id, reason: RequestCloseReason, note?, duplicateOfId?) => ServiceRequest` | closed | staff |
+| `REQUEST_CLOSE_REASONS` | `{key, label}[]` | 3 rows | |
+
+## 12. RolliConnect (portal)
+| export | signature | returns | notes |
+|---|---|---|---|
+| `portalRequestMagicLink` | `(email) => {link: MagicLink, path}` | | **STUB**: Outbox email + link returned for on-screen display; throws if email unknown |
+| `portalRedeemMagicLink` | `(token) => Client` | | sets `usedAt`, writes session; not single-use |
+| `portalGetSession` | `() => {session, client} \| null` | | |
+| `portalSignOut` | `() => void` | | |
+| `portalGetHome` | `(clientId) => PortalHome {client, needsYou, watches, requests, unreadMessages}` | | watches sorted active first |
+| `portalGetWatch` | `(clientId, watchId) => PortalWatch` | | owner-checked |
+| `portalGetEstimate` | `(clientId, id) => EstimateWithRefs` | | owner-checked; drafts throw |
+| `portalApproveEstimate` | `(clientId, id) => EstimateWithRefs` | | `approveEstimate(id,'portal')` as client + `transitionJob(job,'approve')` if job awaits customer; replayed |
+| `portalDeclineEstimate` | `(clientId, id, reason) => EstimateWithRefs` | | replayed |
+| `portalGetInvoice` | `(clientId, id) => SalesOrderWithRefs` | | |
+| `portalPayBalance` | `(clientId, id) => SalesOrderWithRefs` | | **STUB**: full balance, card, note "Paid online via RolliConnect (stub)"; replayed |
+| `portalConfirmPickupWindow` | `(clientId, id, date 'YYYY-MM-DD', slot, note?) => SalesOrderWithRefs` | | channel must be pickup; writes `pickupWindow` + concierge Task (division rolliworks, createdBy 'RolliConnect'); replayed |
+| `portalSubmitShippingInfo` | `(clientId, id, Address, phone) => SalesOrderWithRefs` | | `setShippingAddress` as client; phone appended to memo; replayed |
+| `portalGetMessages` | `(clientId) => Message[]` | oldest first | marks staff messages read (replayed) |
+| `portalSendMessage` | `(clientId, text, watchId?) => Message` | | replayed |
+| `portalCloseRequest` | `(clientId, id, reason, duplicateOfId?) => PortalRequest` | | `new` only; replayed |
+| `getStaffInbox` | `() => StaffInboxThread[]` | unread first | |
+| `getStaffInboxUnread` | `() => number` | | |
+| `markThreadRead` | `(clientId) => void` | | replayed |
+| `replyToClient` | `(clientId, text, watchId?, replayBy?) => Message` | | Outbox email + staff message; audit `portal`; replayed with original `by` |
+| `PORTAL_STATUS` | `Record<PortalStatusKey, {label, blurb, active}>` | 14 rows | |
+| `replayRcEvents` sync | `() => number` | | runs at module load; audit muted |
+| `resetRcEvents` | `() => void` | | Setup → "Reset RolliConnect data" |
+
+## 13. Stubs / seams (explicit list)
+| where | behaviour | KEEPER replaces with |
 |---|---|---|
-| `getAuditLog()` | `AuditEvent[]` | newest first, cap 60 |
-| `getUsers()` | `User[]` | |
-| `getCurrentUser()` | `User \| null` | localStorage session |
-| `hasSignedInToday(userId)` / `getUsersSignedInToday()` | `boolean` / `User[]` | derived from audit log |
-| `signInWithPassword(userId, password, photo)` | `User` | throws on bad password (audited) |
-| `switchUserWithPin(userId, pin)` | `User` | requires prior password sign-in today |
-| `signOut()` | `void` | |
+| `convertEstimate(id,'sales_order')` | throws | remove; use `convertEstimateToSalesOrder` |
+| `fulfillSalesOrder` QBO | fake id + `queued` | QBO push job / webhook |
+| `recordPayment`, `portalPayBalance` | ledger rows only | processor |
+| `shippingProvider` | SVG label + random tracking | carrier API |
+| Outbox (`store.outbox`) | never sends | email provider |
+| labels / receipts | `printed` flags | print service |
+| `portalRequestMagicLink` | link shown on screen; no expiry | auth provider |
+| `partsAssistantReply` | scripted scorer | optional LLM behind same signature |
+| `getRecentActivity` | static rows | derived from audit/transition tables |
+| `replayRcEvents` / localStorage | prototype persistence | real DB (delete entirely) |
+| "Convert to invoice" row on Estimates list menu | display-only | wire to `convertEstimateToSalesOrder` |
 
-## Clients / watches
-| function | returns | notes |
-|---|---|---|
-| `getClients()` / `getClient(id)` | `Client[]` / `Client \| null` | |
-| `searchClients(q)` | `Client[]` (≤8) | name, email, company, phone digits |
-| `getWatches()` / `getWatchesForClient(clientId)` | `Watch[]` | |
-| `createClient(NewClientInput)` | `Client` | |
-| `createWatch(clientId, NewWatchInput)` | `Watch` | status `expected` |
-
-## Estimates
-| function | returns | notes |
-|---|---|---|
-| `getEstimates()` / `getEstimate(id)` / `getEstimatesForClient(clientId)` | `EstimateWithRefs` rows | |
-| `searchEstimates(q, status?)` | `EstimateWithRefs[]` | number digits / name / email |
-| `lookupEstimate(numberOrId)` | `EstimateWithRefs \| null` | scan-friendly (strips E/EST/zeros) |
-| `getServiceCatalog()` | `CatalogService[]` | |
-| `getQuoteContext(clientId, watchId?, excludeId?)` | `QuoteContext` | |
-| `createEstimate(EstimateInput)` | `EstimateWithRefs` | draft |
-| `updateEstimate(id, EstimatePatch)` | `EstimateWithRefs` | draft only (autosave) |
-| `reviseEstimate(id, patch)` | `EstimateWithRefs` | rev N+1, snapshot |
-| `duplicateEstimate(id)` | `EstimateWithRefs` | new draft |
-| `deleteEstimate(id)` | `void` | blocked if converted / package linked |
-| `markEstimateSent(id)` / `sendEstimate(id)` | `EstimateWithRefs` / `{estimate, email}` | send queues Outbox |
-| `declineEstimate(id, reason)` / `approveEstimate(id)` / `reopenEstimate(id)` | `EstimateWithRefs` | approve is provisional |
-| `convertEstimate(id, 'job'\|'intake'\|'sales_order')` | `JobWithRefs` | `job`→createJobFromEstimate, `intake`→convertEstimateToIntake, **`sales_order` STUB (throws)** |
-| `calcShipping(ShippingCalcInput)` | `{amount, overnight, insuredValue}` | sync, display-only |
-
-## Intake
-| function | returns | notes |
-|---|---|---|
-| `detectCarrier(tracking)` | `Carrier` | sync |
-| `getPackages(status?)` / `getPackage(id)` / `getIntakeCounts()` | | |
-| `logArrival(ArrivalInput)` | `PackageWithRefs` | stage 1 |
-| `receivePackage(id, ReceivePackageInput)` | `{pkg, email}` | stage 2, Outbox email if client known |
-| `printDropOffReceipt(id)` | `PackageWithRefs` | mock print flag |
-| `recordWorkOrder(id, bin)` | `PackageWithRefs` | stage 3 |
-| `findPackageForInspection(estimateNumber)` | `PackageWithRefs \| null` | scan → stage 4 |
-| `getInspectionContext(packageId)` | `InspectionContext` | expected components, suggested workflow |
-| `findWatchBySerial(ref, serial)` | `WatchMatch \| null` | same-watch fork; includes job history |
-| `computeDiscrepancies(ctx, input)` | `string[]` | sync, pure |
-| `receiveWatch(packageId, ReceiveWatchInput)` | `ReceiveWatchResult` | received + labels, or discrepancy_hold |
-| `getOutbox()` | `OutboxEmail[]` | never sends |
-| `getLabelQueue()` / `setLabelPrinted(id, bool)` | `LabelJob[]` / `LabelJob` | mock print |
-
-## Jobs (E4)
-| function | returns | notes |
-|---|---|---|
-| `getJobs()` / `getJob(id)` / `getJobsForClient(clientId)` | `JobWithRefs` rows (client, watch, estimate, pkg) | |
-| `searchJobs(q)` | `JobWithRefs[]` | number, client, ref, serial, model, assignee, owner |
-| `legalJobActions(job)` | `JobAction[]` | sync; empty while held; applies per-kind skipStages |
-| `activeHold(job)` / `canHold(job)` | `JobHold \| undefined` / `boolean` | sync |
-| `JOB_KIND_CONFIG` | const | `{label, defaultOwnerRole, skipStages, inspectionReport, inspectionPhotos}` per kind |
-| `INSPECTION_QUESTIONS` | const | multiple-choice form rows (key, label, options) |
-| `reviewGaps(job)` | `string[]` | sync; what blocks leaving in_review (photos every kind; report if kind requires) |
-| `saveInspectionReport(id, answers)` | `JobWithRefs` | service kind only; every question required |
-| `ROLES` / `roleHolders(role)` | `Role[]` / `User[]` | sync |
-| `transitionJob(id, actionKey, reason?)` | `JobWithRefs` | validates legality; queues email if action notifies |
-| `setJobOwner(id, role \| null)` | `JobWithRefs` | owner = role |
-| `toggleAssignee(id, shortName)` | `JobWithRefs` | add/remove working tech |
-| `placeHold(id, type, reason)` / `releaseHold(id, note?)` | `JobWithRefs` | |
-| `addJobNote(id, text)` / `addJobPhotos(id, photos)` | `JobWithRefs` | |
-| `updateJobFields(id, {priority?, dueAt?, conditionNotes?, intakeNotes?})` | `JobWithRefs` | |
-| `createJob(CreateJobInput)` | `JobWithRefs` | status intake; owner from kind config; existence check on number |
-| `createJobFromEstimate(estimateId)` | `JobWithRefs` | approved only; marks estimate converted |
-| `convertEstimateToIntake(estimateId)` | `JobWithRefs` | existing job → on_hand, else insert |
-| `deleteJob(id)` | `void` | manager only (can-delete-jobs); cascades shop time + tasks, unlinks estimate |
-| `invoiceJob(id)` | `never` | **STUB — throws** "Invoicing arrives in E5" (audited) |
-| `getShopTime(jobId?)` / `getOnHandJobs()` | `ShopTimeEntry[]` / `JobWithRefs[]` | |
-| `addShopTime(jobId, minutes, note)` | `ShopTimeEntry` | on_hand only; never changes status |
-
-## Sales orders / fulfil / pickup / ship (E5)
-| function | returns | notes |
-|---|---|---|
-| `getSalesOrders()` / `getSalesOrder(id)` / `getSalesOrderForJob(jobId)` | `SalesOrderWithRefs` (client, job, watch) | |
-| `findSalesOrders(q)` | `SalesOrderWithRefs[]` | SO #, estimate #, job #, name, pickup code |
-| `SO_BADGE(order)` / `tailStage(job)` | `'picked_up'\|'shipped'\|'paid'\|'unpaid'` / `TailStage \| null` | sync read models |
-| `createSalesOrder(input)` / `updateSalesOrder(id, patch)` | `SalesOrderWithRefs` | customer required; edit draft/open only |
-| `convertEstimateToSalesOrder(estimateId)` | `SalesOrderWithRefs` | draft; shipping lines → shippingAmount |
-| `invoiceJob(jobId)` | `SalesOrderWithRefs` | **now real**: open SO from a ready_to_ship job's lines |
-| `openSalesOrder` / `cancelSalesOrder(id, reason)` / `fulfillSalesOrder(id)` | `SalesOrderWithRefs` | fulfil = QBO **STUB** (queued state only) |
-| `recordPayment(id, amount, method, note?)` | `SalesOrderWithRefs` | stub ledger, partial ok |
-| `setFulfillmentChannel(id, 'pickup'\|'ship')` / `regeneratePickupCode(id)` | `SalesOrderWithRefs` | |
-| `requestShippingInfo(id)` / `setShippingAddress(id, address)` | `SalesOrderWithRefs` | Outbox / address |
-| `shippingProvider.createShipment({carrier, declaredValue, address, reference})` | `MockShipment {labelId, tracking, service, coverage, labelDataUrl}` | **the seam** a real carrier replaces; `SHIP_CARRIERS`, `normalizeDeclaredValue` |
-| `confirmShipment(id, {carrier, declaredValue, photos, label, bypassReason?})` | `SalesOrderWithRefs` | shipped + custody closed |
-| `confirmPickup(id, {code?, proxyName?, proxyIdPhoto?, photos, lineQty?, bypassReason?})` | `SalesOrderWithRefs` | picked_up / partial + custody closed |
-| `adminMarkComplete(id, 'pickup'\|'ship', note)` | `SalesOrderWithRefs` | manager only, audited |
-| `getPickupQueue()` / `getShipQueue()` | `SalesOrderWithRefs[]` | station queues |
-
-## Workshop lenses + parts (E6)
-| function | returns | notes |
-|---|---|---|
-| `getBenchView(userId?)` | `BenchView {jobs(+nextAction, blocked), holds, pullNext, partsRequests}` | derived for the signed-in user |
-| `pullNextCandidate(me)` / `pullNext()` | `Job \| null` / `JobWithRefs` | self-assign, audited |
-| `getSupervisorBoard()` | `SupervisorBoard {unassigned, byTech, partsQueue, holds, qcQueue}` | |
-| `supervisorAssign(jobId, shortNames[])` | `JobWithRefs` | manager; overwrites assignees, audited |
-| `getShopFloorMap()` | `FloorMap {lanes[]}` | 9 lanes incl. case_cleaning |
-| `getParts()` / `partsById(id)` / `getPartsKnowledge()` | | catalog + knowledge log |
-| `getPartsRequests()` / `getPartsRequest(id)` / `getPartsRequestsForJob(jobId)` | `PartsRequestWithRefs` | |
-| `openPartsRequest(jobId)` / `partsChat(id, text)` / `attachPart(id, partId, qty?)` / `submitPartsRequest(id, note?)` | `PartsRequestWithRefs` | |
-| `partsAssistantReply(query, job)` | `{text, suggestions}` | sync, **scripted** — no AI |
-| `approvePartsRequest(id, note?)` / `rejectPartsRequest(id, reason)` | `PartsRequestWithRefs` | manager; labeling loop |
-
-## Tasks + Today
-| function | returns | notes |
-|---|---|---|
-| `getTasks()` / `getTasksForJob(jobId)` / `getTasksForClient(clientId)` | `Task[]` | |
-| `createTask({title, assignedTo, jobId?, dueAt?})` | `Task` | links watch/client from job; stamps job audit |
-| `setTaskDone(id, done)` | `Task` | |
-| `assigneeLabel(Assignee)` | `string` | sync; role → holders |
-| `getToday(userId?)` | `TodayView {pinned, rows, waitingOn}` | rows derived (no curation); pinned = manual layer for me / my roles |
-| `parsePin(raw, fallback)` | `{title, assignedTo}` | sync; `#vienna …` / `#manager …` prefix → assignee |
-| `pinToHitList({title, assignedTo?, jobId?, taskId?})` | `PinnedItem` | audit type `pin`; job-linked pins also stamp the job |
-| `dismissPinned(id)` | `PinnedItem` | done = dismissed, kept |
-
-## Dashboard / activity
-| function | returns | notes |
-|---|---|---|
-| `getDashboardStats()` | `DashboardStats` | inProgress = approved+in_service+testing; awaitingPickup = ready_to_ship; revenue = closed this month |
-| `getRecentActivity(limit)` | `ActivityEvent[]` | static fixture |
-
-## Client 360 (E7)
-| function | returns | notes |
-|---|---|---|
-| `resolveIdentifier(q)` | `SearchResults {query, groups[], total}` | ANY identifier → grouped `SearchHit[]` (client · watch · estimate · job · sales_order · package · request), ≤6 per group; `hit.path` = `/clients/:id?hit=<hitKey>` or the record path when no client |
-| `getClient360(clientId)` | `Client360 \| null` | read model: summary, `watches: WatchGroup[]` (per-watch merged history newest first), requests, estimates (with `revisions[]`), jobs, salesOrders, payments (flattened), notes (job notes + estimate internal notes), tasks (client-linked or via jobs), custody (derived), emails (Outbox to client.email), packages |
-| `getClientDirectory()` | `ClientDirectoryRow[]` | `/clients` list: watch counts, open estimates, active jobs, balance, last activity |
-| `getRequests()` / `getRequestsForClient(clientId)` | `ServiceRequest[]` | read-only in E7 (no create/close yet) |
-
-## RolliConnect — client portal (E8)
-| function | returns | notes |
-|---|---|---|
-| `portalRequestMagicLink(email)` | `{link, path}` | stub: Outbox email + on-screen link `/rc/auth/:token`; links persisted (`rollisuite.rc.magicLinks`) |
-| `portalRedeemMagicLink(token)` / `portalGetSession()` / `portalSignOut()` | `Client` / `{session, client} \| null` / void | session key `rollisuite.rc.session` |
-| `portalGetHome(clientId)` | `PortalHome {client, needsYou[], watches: PortalWatch[], unreadMessages}` | needs-you kinds: approve_estimate · pay_balance · confirm_pickup · shipping_info · staff_reply |
-| `portalGetWatch(clientId, watchId)` | `PortalWatch {status, job?, openEstimate?, invoice?, eta?, history[], documents[]}` | owner-checked; drafts hidden |
-| `portalGetEstimate` / `portalApproveEstimate` / `portalDeclineEstimate(.., reason)` | `EstimateWithRefs` | via `approveEstimate(id,'portal')`; approve also `transitionJob(job,'approve')` when the linked job waits on the customer |
-| `portalGetInvoice` / `portalPayBalance` | `SalesOrderWithRefs` | pay = full balance, card, stub note |
-| `portalConfirmPickupWindow(clientId, soId, date, slot, note?)` | `SalesOrderWithRefs` | sets `pickupWindow`, creates concierge task |
-| `portalSubmitShippingInfo(clientId, soId, address, phone)` | `SalesOrderWithRefs` | via `setShippingAddress`; phone appended to memo |
-| `portalCloseRequest(clientId, requestId, reason, duplicateOfId?)` | `PortalRequest` | only `new` requests; duplicate needs a sibling request |
-| `closeRequest(id, reason, note?, duplicateOfId?)` | `ServiceRequest` | staff; any open status; never deletes |
-| `REQUEST_CLOSE_REASONS` | lookup | duplicate · no_longer_needed · mistake |
-| `portalGetMessages(clientId)` / `portalSendMessage(clientId, text, watchId?)` | `Message[]` / `Message` | reading marks staff replies read |
-| `getStaffInbox()` / `getStaffInboxUnread()` / `markThreadRead(clientId)` / `replyToClient(clientId, text, watchId?)` | threads / number / void / `Message` | staff side; reply queues Outbox email |
-| `PORTAL_STATUS` | lookup | 14 plain-language statuses (label, blurb, active) |
-| `replayRcEvents()` / `resetRcEvents()` | number / void | portal write log persisted in `rollisuite.rc.events`, replayed at module load |
-
-## Stubs / not wired (explicit)
-- `convertEstimate(id,'sales_order')` — throws (use `convertEstimateToSalesOrder`).
-- QBO push — state only (`qboStatus`, fake id). Payments — ledger only. Carrier — `shippingProvider` mock.
-- Estimates list "Convert to invoice" menu row — display-only.
-- Email sending, label printing, receipt printing — mocked flags / Outbox only.
-- RolliConnect: magic link (no email, no expiry), payment (ledger only), messages (no push). Nothing external.
-- No HTTP, no `fetch`; repoint this file to the real API when it exists.
+## 14. Drift vs earlier API-SURFACE
+- `invoiceJob` listed twice before (STUB and real) — **real** only.
+- `addStation(name)` → `addStation(name, division)`.
+- `getToday` now division-scoped; `getDivisionStaff/Roles`, `getSessionDivision` new.
+- `parsePin` accepts `@` and `#`.
+- `PinInput` gained `clientId`, `estimateId`.
+- Reference contract: `docs/reference/contract-v1-client.ts` (uploaded HTTP client) — operation names should converge where possible (`convertEstimateToSalesOrder`, `fulfillSalesOrder`, `confirmShipment`…).
