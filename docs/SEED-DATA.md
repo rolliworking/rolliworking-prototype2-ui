@@ -225,3 +225,7 @@ Not covered: rollishop threads; kiosk/email ingestion (fixtures only); a thread 
 ## E12 seeds
 - Tolerances: 3135 (Crit1 <25, Crit2 −1/+10, beat 0.8, amp 200–280, 44 h), 3235/3285 (<12, −2/+2, 0.6, 220–300, 70 h), 4130, MT5402, generic.
 - Tests: tt-01 j-16 / w-16 **reject** (matches the seeded QC-fail history; Δ 25, beat 1.1, reserve 41), tt-02 j-08 / w-10 **pass** (Naomi history). Queue at a rolliworks station: j-05 and j-16.
+## E13 seeds
+- NFC tags: `tag-fd-rw` "Front Desk — Rolliworks" (rolliworks), `tag-rs-counter` "RS Counter" (rollishop). URL `/rg/clock?tag=<id>`.
+- Punches (generated relative to today, Sundays closed, walter off Saturdays): vienna ~8:4x–17:xx and mm ~8:0x–17:3x at Front Desk; walter ~9:5x–18:xx at RS Counter; michael RS Counter Tue/Thu, Front Desk otherwise, Friday lunch punch-out 12:30/13:15. Today: mm in 8:05, michael in 8:32 / out 12:30 / in 13:15, vienna in 8:45, walter in 9:58 — all still **open** (seeded only once the wall clock has passed each time).
+- Kiosk: no seeded kiosk requests — submit one at `/kiosk`. Using a seeded client's email or phone (e.g. harrison.whitfield@example.com / (212) 555-0101) produces a **possible existing client** row on `/requests`.

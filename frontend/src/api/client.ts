@@ -105,6 +105,7 @@ const KEYS = {
   portalSession: 'rollisuite.rc.session',
   rcEvents: 'rollisuite.rc.events',
   rcLinks: 'rollisuite.rc.magicLinks',
+  rgSession: 'rollisuite.rg.session',
 };
 const AUDIT_CAP = 60;
 
@@ -2947,10 +2948,10 @@ const anchorRef = (a?: ConversationAnchor): { label?: string; path?: string } =>
 };
 const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined }; };
 const convOf = (id: string) => byId(cx.conversations, id);
-const ensureConversation = (clientId: string, subject: string, anchor?: ConversationAnchor): Conversation => {
+const ensureConversation = (clientId: string, subject: string, anchor?: ConversationAnchor, division?: Division): Conversation => {
   const found = cx.conversations.find((c) => c.clientId === clientId && c.status !== 'closed' && (anchor ? c.anchor?.kind === anchor.kind && c.anchor.id === anchor.id : !c.anchor));
   if (found) return found;
-  const c: Conversation = { id: newId('cv'), clientId, subject, anchor, status: 'open', division: getSessionDivision(), createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), tokenSeq: 0 };
+  const c: Conversation = { id: newId('cv'), clientId, subject, anchor, status: 'open', division: division ?? getSessionDivision(), createdAt: new Date().toISOString(), lastAt: new Date().toISOString(), tokenSeq: 0 };
   cx.conversations.unshift(c); return c;
 };
 const pushConv = (c: Conversation, m: Omit<ConvMessage, 'id' | 'conversationId' | 'clientId' | 'readByStaff'> & { readByStaff?: boolean }): ConvMessage => {
@@ -3123,6 +3124,114 @@ export async function recordTimingTest(jobId: string, input: TimingInput): Promi
     rtStamp(`${j.number} timing REJECT · ${tol.caliber} · ${input.reason!.trim()} · flags: ${ev.flags.join('; ') || 'none'}${ev.suggested === 'pass' ? ' · OVERRIDE (auto-eval suggested pass)' : ''}`);
   }
   return resolve({ ...t });
+}
+
+// ---- E13 RGTime `/rg` — NFC-tap time-clock (phone PWA). In Keeper RGTime owns staff identity (D-026); here it reads the same `users` fixture. ------
+import type { ClockState, KioskDetails, KioskResult, KioskSubmission, NfcTag, Punch, RequestRow, WeekDay, WeekRow, WeekView } from './types';
+export { KIOSK_SERVICES, KIOSK_BRANDS, RG_DIVISION_LABEL } from './fixtures';
+const rg = { punches: fx.punches.map((p): Punch => ({ ...p })) };
+const RG_STATION = 'Phone (RGTime PWA)';
+const rgAudit = (u: User | undefined, detail: string, type: 'rgtime' | 'sign_in' | 'sign_in_failed' | 'sign_out' = 'rgtime') => appendAudit({ type, stationName: RG_STATION, userShortName: u?.shortName, userDisplayName: u?.displayName, method: type === 'sign_in' || type === 'sign_in_failed' ? 'password_photo' : undefined, detail });
+const dayKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const todayKey = () => dayKey(new Date().toISOString());
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const summarizeDay = (rows: Punch[], isToday: boolean): { hours: number; open: boolean } => {
+  const sorted = [...rows].sort((a, b) => a.at.localeCompare(b.at)); let ms = 0; let openAt: string | null = null;
+  for (const p of sorted) { if (p.kind === 'in') openAt = p.at; else if (openAt) { ms += new Date(p.at).getTime() - new Date(openAt).getTime(); openAt = null; } }
+  if (openAt && isToday) ms += Date.now() - new Date(openAt).getTime();
+  return { hours: round2(ms / 3_600_000), open: !!openAt };
+};
+
+export const rgGetSession = (): User | null => { const id = localStorage.getItem(KEYS.rgSession); return id ? fx.users.find((u) => u.id === id) ?? null : null; };
+export const rgAllStaff = (): User[] => [...fx.users];
+export async function rgSignIn(userId: string, password: string): Promise<User> {
+  const u = byId(fx.users, userId);
+  if (u.password !== password) { rgAudit(u, 'RGTime sign-in failed · incorrect password', 'sign_in_failed'); throw new Error('Incorrect password'); }
+  localStorage.setItem(KEYS.rgSession, u.id); rgAudit(u, 'RGTime sign-in · remembered on this phone', 'sign_in'); return resolve(u);
+}
+export async function rgSignOut(): Promise<void> { const u = rgGetSession(); localStorage.removeItem(KEYS.rgSession); if (u) rgAudit(u, 'RGTime sign-out · phone forgotten', 'sign_out'); return resolve(undefined); }
+export async function rgVerifyManager(userId: string, password: string): Promise<User> {
+  const u = byId(fx.users, userId);
+  if (u.accessTier !== 'manager') throw new Error('Manager access only');
+  if (u.password !== password) { rgAudit(u, 'RGTime manager view · incorrect password', 'sign_in_failed'); throw new Error('Incorrect password'); }
+  rgAudit(u, 'RGTime manager view opened'); return resolve(u);
+}
+export const getNfcTags = (): NfcTag[] => fx.nfcTags.map((t) => ({ ...t }));
+export const getNfcTag = (id: string): NfcTag | undefined => fx.nfcTags.find((t) => t.id === id);
+export async function getClockState(userId: string): Promise<ClockState> {
+  const user = byId(fx.users, userId); const tk = todayKey();
+  const todayPunches = rg.punches.filter((p) => p.userId === userId && dayKey(p.at) === tk).sort((a, b) => b.at.localeCompare(a.at));
+  const last = rg.punches.filter((p) => p.userId === userId).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const onClock = last?.kind === 'in'; const { hours } = summarizeDay(todayPunches, true);
+  return resolve({ user, onClock, since: onClock ? last.at : undefined, sinceLocation: onClock ? last.location : undefined, todayPunches, todayHours: hours });
+}
+export async function punchClock(tagId: string, simulated: boolean): Promise<Punch> {
+  const u = rgGetSession(); if (!u) throw new Error('Sign in to RGTime on this phone first');
+  const tag = getNfcTag(tagId); if (!tag) throw new Error('Unknown tag — this NFC tag is not registered');
+  if (u.division !== 'both' && u.division !== tag.division) throw new Error(`${u.shortName} is ${fx.RG_DIVISION_LABEL[u.division]} staff — this tag belongs to ${fx.RG_DIVISION_LABEL[tag.division]}`);
+  const last = rg.punches.filter((p) => p.userId === u.id).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const kind: Punch['kind'] = last?.kind === 'in' ? 'out' : 'in';
+  const p: Punch = { id: newId('pu'), userId: u.id, kind, at: new Date().toISOString(), tagId: tag.id, location: tag.label, division: tag.division, simulated };
+  rg.punches.push(p);
+  rgAudit(u, `Clock ${kind.toUpperCase()} · ${tag.label} · ${fx.RG_DIVISION_LABEL[tag.division]}${simulated ? ' · simulated tap (prototype)' : ' · NFC tap'}`);
+  return resolve({ ...p });
+}
+export async function getTodayBoard(division: Division): Promise<ClockState[]> {
+  const rows = await Promise.all(getDivisionStaff(division).map((u) => getClockState(u.id)));
+  return resolve(rows.filter((r) => r.todayPunches.some((p) => p.division === division) || r.onClock).map((r) => ({ ...r, todayPunches: r.todayPunches.filter((p) => p.division === division) })));
+}
+export async function getWeekHours(division: Division, weekOffset: number): Promise<WeekView> {
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + weekOffset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return dayKey(d.toISOString()); });
+  const tk = todayKey();
+  const rows: WeekRow[] = getDivisionStaff(division).map((user) => {
+    const mine = rg.punches.filter((p) => p.userId === user.id && p.division === division);
+    const dayRows: WeekDay[] = days.map((date) => { const punches = mine.filter((p) => dayKey(p.at) === date).sort((a, b) => a.at.localeCompare(b.at)); const s = summarizeDay(punches, date === tk); return { date, punches, hours: s.hours, open: s.open }; });
+    return { user, days: dayRows, total: round2(dayRows.reduce((t, d) => t + d.hours, 0)), openNow: dayRows.some((d) => d.date === tk && d.open) };
+  });
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  return resolve({ start: start.toISOString(), end: end.toISOString(), division, rows, weekOffset });
+}
+
+// ---- E13 Kiosk `/kiosk` — public walk-in check-in (legacy kiosk, improved: match existing clients instead of duplicating) ------
+const KIOSK_STATION = 'Kiosk';
+const normEmail = (s: string) => s.trim().toLowerCase();
+const normPhone = (s: string) => s.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+const nextRequestNumber = () => `RQ-26-${String(Math.max(...store.requests.map((r) => Number(r.number.split('-')[2]) || 0)) + 1).padStart(4, '0')}`;
+const kioskSummary = (k: Pick<KioskDetails, 'services' | 'notes'>, brand: Division) => `Kiosk check-in (${fx.RG_DIVISION_LABEL[brand]}) · ${k.services.length ? k.services.map((s) => fx.KIOSK_SERVICES.find((x) => x.key === s)!.label).join(', ') : 'no service selected'}${k.notes ? ` · “${k.notes}”` : ''}`;
+const newKioskClient = (k: Pick<KioskDetails, 'firstName' | 'lastName' | 'email' | 'phone'>): Client => { const c: Client = { id: newId('c'), firstName: k.firstName, lastName: k.lastName, email: k.email, phone: k.phone, street: '', city: '', state: '', type: 'retail', since: new Date().toISOString() }; fx.clients.push(c); return c; };
+const kioskAudit = (detail: string) => appendAudit({ type: 'kiosk', stationName: KIOSK_STATION, detail });
+export async function submitKioskCheckIn(input: KioskSubmission): Promise<KioskResult> {
+  const firstName = input.firstName.trim(), lastName = input.lastName.trim(), email = normEmail(input.email), phone = input.phone.trim();
+  if (!firstName || !lastName) throw new Error('Please enter your first and last name');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Please enter a valid email address');
+  if (normPhone(phone).length < 10) throw new Error('Please enter a phone number with area code');
+  const matchedOn: ('email' | 'phone')[] = []; const byEmail = fx.clients.find((c) => normEmail(c.email) === email); const byPhone = fx.clients.find((c) => normPhone(c.phone) === normPhone(phone));
+  if (byEmail) matchedOn.push('email'); if (byPhone && (!byEmail || byPhone.id === byEmail.id)) matchedOn.push('phone');
+  const matched = byEmail ?? byPhone;
+  const details: KioskDetails = { firstName, lastName, email, phone, services: [...input.services], notes: input.notes?.trim() || undefined, matchState: matched ? 'possible' : 'none', matchedClientId: matched?.id, matchedOn: matched ? matchedOn : undefined };
+  const client = matched ?? newKioskClient(details);
+  const at = new Date().toISOString();
+  const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'kiosk', status: 'new', summary: kioskSummary(details, input.brand), createdAt: at, createdBy: 'Kiosk', station: KIOSK_STATION, division: input.brand, kiosk: details };
+  store.requests.unshift(r);
+  const c = ensureConversation(client.id, 'General', undefined, input.brand);
+  pushConv(c, { direction: 'in', source: 'kiosk', by: `${firstName} ${lastName}`, station: KIOSK_STATION, text: `${kioskSummary(details, input.brand)} · ${r.number}${matched ? ` · possible existing client (${matchedOn.join(' + ')})` : ' · new client created'}`, at });
+  kioskAudit(`${r.number} · ${firstName} ${lastName} · ${fx.RG_DIVISION_LABEL[input.brand]} · ${details.services.length} service(s)${matched ? ` · possible match ${client.firstName} ${client.lastName} on ${matchedOn.join(' + ')}` : ' · new client'}`);
+  return resolve({ request: { ...r }, client, possibleExisting: !!matched });
+}
+const requestRow = (r: ServiceRequest): RequestRow => ({ ...r, client: byId(fx.clients, r.clientId), watch: r.watchId ? store.watches.find((w) => w.id === r.watchId) : undefined });
+export async function getRequestsQueue(): Promise<RequestRow[]> {
+  const div = getSessionDivision();
+  return resolve(store.requests.filter((r) => (r.division ?? 'rolliworks') === div).sort((a, b) => Number(isOpenRequest(b)) - Number(isOpenRequest(a)) || b.createdAt.localeCompare(a.createdAt)).map(requestRow));
+}
+const isOpenRequest = (r: ServiceRequest) => r.status === 'new' || r.status === 'quoted';
+export async function resolveKioskMatch(requestId: string, decision: 'confirm' | 'split'): Promise<RequestRow> {
+  const r = byId(store.requests, requestId); if (!r.kiosk || r.kiosk.matchState !== 'possible') throw new Error('This request has no pending client match');
+  const a = actor(); const prev = byId(fx.clients, r.clientId);
+  if (decision === 'confirm') { r.kiosk.matchState = 'confirmed'; }
+  else { const c = newKioskClient(r.kiosk); r.clientId = c.id; r.kiosk.matchState = 'split'; cx.conversations.filter((x) => x.clientId === prev.id && cx.messages.some((m) => m.conversationId === x.id && m.source === 'kiosk' && m.text.includes(r.number))).forEach((x) => { x.clientId = c.id; cx.messages.filter((m) => m.conversationId === x.id).forEach((m) => { m.clientId = c.id; }); }); }
+  appendAudit({ type: 'kiosk', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${r.number} · ${decision === 'confirm' ? `linked to existing client ${prev.firstName} ${prev.lastName}` : `split from ${prev.firstName} ${prev.lastName} → new client ${r.kiosk.firstName} ${r.kiosk.lastName}`}` });
+  return resolve(requestRow(r));
 }
 
 replayRcEvents();

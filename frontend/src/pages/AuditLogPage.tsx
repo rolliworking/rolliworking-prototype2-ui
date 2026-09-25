@@ -16,6 +16,8 @@ const TYPE_TONE: Record<AuditEventType, string> = {
   companion: 'bg-violet-50 text-violet-700',
   comms: 'bg-sky-50 text-sky-700',
   rollitime: 'bg-indigo-50 text-indigo-700',
+  rgtime: 'bg-indigo-50 text-indigo-700',
+  kiosk: 'bg-amber-50 text-amber-800',
   inventory: 'bg-teal-50 text-teal-800',
   setup: 'bg-slate-100 text-slate-700',
   evidence: 'bg-violet-50 text-violet-700',

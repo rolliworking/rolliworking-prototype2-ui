@@ -1,0 +1,14 @@
+{
+  "name": "RGTime — time-clock",
+  "short_name": "RGTime",
+  "description": "Tap an NFC tag to clock in or out. Staff time-clock for Rolliworks and RolliShop.",
+  "start_url": "/rg",
+  "scope": "/rg",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f6",
+  "theme_color": "#1c2430",
+  "icons": [
+    { "src": "/rg-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

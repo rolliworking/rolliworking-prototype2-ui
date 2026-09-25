@@ -17,3 +17,5 @@ export { modelReferences, priceEvidence, priceVerifications, knowledgeCards, rou
 export { conversations, convMessages } from './comms';
 export { inspectionReports, REPORT_COMPONENTS } from './reports';
 export { caliberTolerances, GENERIC_TOLERANCE, timingTests, TIMING_POSITIONS } from './rollitime';
+export { nfcTags, punches, RG_DIVISION_LABEL } from './rgtime';
+export { KIOSK_SERVICES, KIOSK_BRANDS } from './kiosk';

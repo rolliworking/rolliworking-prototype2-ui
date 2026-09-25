@@ -54,7 +54,9 @@ export type AuditEventType =
   | 'accounting'
   | 'companion'
   | 'comms'
-  | 'rollitime';
+  | 'rollitime'
+  | 'rgtime'
+  | 'kiosk';
 
 export interface AuditEvent {
   id: string;
@@ -645,7 +647,7 @@ export interface FloorMap { lanes: { key: FloorLane; label: string; jobs: JobWit
 
 // ---- E7 Client 360 ---------------------------------------------------------------
 
-export type RequestSource = 'call' | 'email' | 'web' | 'walk_in';
+export type RequestSource = 'call' | 'email' | 'web' | 'walk_in' | 'kiosk';
 export type RequestStatus = 'new' | 'quoted' | 'closed' | 'closed_by_client';
 export type RequestCloseReason = 'duplicate' | 'no_longer_needed' | 'mistake';
 
@@ -666,6 +668,8 @@ export interface ServiceRequest {
   closedBy?: 'staff' | 'client';
   closeReason?: RequestCloseReason;
   duplicateOfId?: string;
+  division?: Division;
+  kiosk?: KioskDetails;
 }
 
 export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request';
@@ -910,3 +914,19 @@ export interface TimingTest extends Stamp {
   evaluation: TimingEvaluation; verdict: 'pass' | 'reject'; reason?: string; emailId?: string;
 }
 export interface TimingInput { readings: TimingReading[]; liftAngle: number; powerReserve: number; verdict: 'pass' | 'reject'; reason?: string }
+
+// ---- E13 RGTime `/rg` (NFC tap time-clock, phone PWA) + public Kiosk `/kiosk` --------------------
+export interface NfcTag { id: string; label: string; division: Division; url: string }
+export type PunchKind = 'in' | 'out';
+export interface Punch { id: string; userId: string; kind: PunchKind; at: string; tagId: string; location: string; division: Division; simulated: boolean }
+export interface ClockState { user: User; onClock: boolean; since?: string; sinceLocation?: string; todayPunches: Punch[]; todayHours: number }
+export interface WeekDay { date: string; hours: number; punches: Punch[]; open: boolean }
+export interface WeekRow { user: User; days: WeekDay[]; total: number; openNow: boolean }
+export interface WeekView { start: string; end: string; division: Division; rows: WeekRow[]; weekOffset: number }
+
+export type KioskService = 'mov_service' | 'case_work' | 'band_repair' | 'band_polish' | 'recut_bezel';
+export type KioskMatchState = 'none' | 'possible' | 'confirmed' | 'split';
+export interface KioskDetails { firstName: string; lastName: string; email: string; phone: string; services: KioskService[]; notes?: string; matchState: KioskMatchState; matchedClientId?: string; matchedOn?: ('email' | 'phone')[] }
+export interface KioskSubmission { brand: Division; services: KioskService[]; firstName: string; lastName: string; email: string; phone: string; notes?: string }
+export interface KioskResult { request: ServiceRequest; client: Client; possibleExisting: boolean }
+export interface RequestRow extends ServiceRequest { client: Client; watch?: Watch }

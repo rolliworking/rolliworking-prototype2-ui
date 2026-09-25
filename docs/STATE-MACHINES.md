@@ -208,3 +208,8 @@ Division wall enforced only in `getToday` (rows/tasks/pins) and pickers (`getDiv
 - **Stock invariant**: `onHand ≥ 0` (adjustments rejected otherwise); `Part.stock = Σ StockLevel.onHand`.
 - **QC evidence gate** (job §1.2 guard 6): `qc_pass` throws while `EVIDENCE_REQUIRED[kind]` slots are missing for the job (service: all 4; small_job: hidden_serial; warranty: hidden_serial + timing_sheet — provisional). Evidence itself has no states; items are append-only.
 - **Vendor**: `active ⇄ retired`. **Catalog service**: `live ⇄ retired`. **User**: `active → deactivated (removed)` — manager only, not self, not last manager.
+
+## 14. E13 machines
+- **Punch** (per person): `off ⇄ on` — every tap toggles on the person's **last** punch (`in` → next is `out`). No edits; punches are append-only. Day hours = Σ paired in→out; a trailing `in` is an **open punch** (amber; accrues live only if today).
+- **Kiosk screen**: `idle → brand → services → form → thanks → (5 s) idle`. Any step ≠ idle/thanks with 120 s no input → `idle`. Overlay `dimmed` after 30 s idle on any step; any pointer/key clears it. "Start over" → `idle` from any step.
+- **Kiosk match** (`ServiceRequest.kiosk.matchState`): `none` (new client created) · `possible → confirmed` (staff: Confirm link) · `possible → split` (staff: Not the same → new client, request re-homed). Terminal states never revert.

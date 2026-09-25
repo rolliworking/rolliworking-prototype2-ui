@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, Globe, Mail, PackageCheck, PauseCircle, Phone, PlayCircle, ShieldAlert, Truck, User, type LucideIcon } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, Globe, Mail, PackageCheck, PauseCircle, Phone, PlayCircle, ShieldAlert, Truck, User, type LucideIcon, Tablet } from 'lucide-react';
 import { useState } from 'react';
 import * as api from '@/api/client';
 import { Link } from 'react-router-dom';
@@ -10,7 +10,7 @@ import { fmtDate, fmtTime } from '@/lib/format';
 
 const when = (iso: string) => { const d = new Date(iso); const y = d.getFullYear() !== new Date().getFullYear() ? ` ${d.getFullYear()}` : ''; return `${fmtDate(iso)}${y} · ${fmtTime(iso)}`; };
 
-const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User };
+const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User, kiosk: Tablet };
 
 const StaffClose = ({ r, all, onDone }: { r: ServiceRequest; all: ServiceRequest[]; onDone: () => void }) => {
   const [reason, setReason] = useState<RequestCloseReason>('no_longer_needed');

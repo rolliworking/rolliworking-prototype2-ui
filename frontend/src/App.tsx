@@ -9,6 +9,12 @@ import Client360Page from '@/pages/clients/Client360Page';
 import InboxPage from '@/pages/InboxPage';
 import RcShell from '@/rc/RcShell';
 import RtShell from '@/pages/rt/RtShell';
+import RgShell from '@/pages/rg/RgShell';
+import RgHomePage from '@/pages/rg/RgHomePage';
+import RgClockPage from '@/pages/rg/RgClockPage';
+import RgManagerPage from '@/pages/rg/RgManagerPage';
+import KioskPage from '@/pages/kiosk/KioskPage';
+import RequestsPage from '@/pages/RequestsPage';
 import RtQueuePage from '@/pages/rt/RtQueuePage';
 import RtTestPage from '@/pages/rt/RtTestPage';
 import RcLoginPage from '@/pages/rc/RcLoginPage';
@@ -79,6 +85,13 @@ export default function App() {
           <Route path="/station-setup" element={<StationSetupPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
           {/* RolliConnect — client portal. Separate shell, separate session, no staff routes reachable. */}
+          {/* E13 — RGTime phone time-clock (own remembered session) and the public walk-in kiosk (no session, no chrome) */}
+          <Route path="/rg" element={<RgShell />}>
+            <Route index element={<RgHomePage />} />
+            <Route path="clock" element={<RgClockPage />} />
+            <Route path="manager" element={<RgManagerPage />} />
+          </Route>
+          <Route path="/kiosk" element={<KioskPage />} />
           <Route path="/rt" element={<RtShell />}>
             <Route index element={<RtQueuePage />} />
             <Route path="test/:jobId" element={<RtTestPage />} />
@@ -117,6 +130,7 @@ export default function App() {
                 <Route path="labels" element={<LabelQueuePage />} />
               </Route>
               <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/requests" element={<RequestsPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/setup" element={<SetupPage />} />

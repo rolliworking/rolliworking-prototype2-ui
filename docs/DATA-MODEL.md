@@ -253,3 +253,18 @@ Derived: `ConversationWithRefs` (client, anchorLabel/Path, unread, needsReply, a
 |---|---|
 | CaliberTolerance (4 + generic) | caliber, label, refPrefixes[], crit1MaxDelta, crit2Min, crit2Max, beatMax, ampMin, ampMax, reserveHours, liftAngle |
 | TimingTest (2 seeded) | id, jobId, watchId, jobNumber, caliber, readings[6] {position, rate, beat, amp}, avgRate, avgBeat, avgAmp, delta, liftAngle, powerReserve, evaluation {crit1, crit2, beat, amp, reserve, suggested, flags[]}, verdict pass\|reject, reason?, emailId? & Stamp — **append-only** |
+
+## 20. E13 — RGTime + Kiosk (`fixtures/rgtime.ts`, `fixtures/kiosk.ts`)
+| entity | fields |
+|---|---|
+| NfcTag (2) | id, label, division, url (`/rg/clock?tag=<id>` — written on the physical tag) |
+| Punch (~2 weeks × 4 staff, append-only) | id, userId, kind in\|out, at, tagId, location, division (from the tag), simulated |
+| ClockState (projection) | user, onClock, since?, sinceLocation?, todayPunches[], todayHours |
+| WeekView / WeekRow / WeekDay (projection) | start, end, division, weekOffset, rows[{user, days[{date, hours, punches[], open}], total, openNow}] |
+| ServiceRequest (extended) | + `division?` (kiosk rows carry it; legacy rows default rolliworks in the queue), + `kiosk?: KioskDetails`; `RequestSource` gains `kiosk` |
+| KioskDetails | firstName, lastName, email, phone, services[KioskService], notes?, matchState none\|possible\|confirmed\|split, matchedClientId?, matchedOn? ('email'\|'phone')[] |
+| KioskSubmission (input) | brand (Division), services[], firstName, lastName, email, phone, notes? |
+| KioskResult | request, client, possibleExisting |
+| RequestRow (projection) | ServiceRequest & { client, watch? } |
+| Client (kiosk-created) | id `c-<ts>`, names/email/phone from the form, empty address, `type: retail`, `since: now` — pushed into the clients fixture |
+- Session key `rollisuite.rg.session` (userId) — RGTime's remembered phone login. Audit types added: `rgtime`, `kiosk`.

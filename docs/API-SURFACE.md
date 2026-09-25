@@ -310,3 +310,21 @@ Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; 
 | `findJobByLabel(scan)` | `JobWithRefs \| null` | job #, ref/serial, PDF417 payload head |
 | `getTimingTests({jobId?, watchId?})` | `TimingTest[]` newest first | |
 | `recordTimingTest(jobId, TimingInput {readings[6], liftAngle, powerReserve, verdict, reason?})` | `TimingTest` | testing only; reject needs reason → `qc_fail`; pass → Outbox "Testing complete" + job stamp |
+
+## 20. E13 — RGTime (audit `rgtime`, station "Phone (RGTime PWA)") + Kiosk (audit `kiosk`, station "Kiosk")
+| export | signature | notes |
+|---|---|---|
+| `rgGetSession()` sync | `User \| null` | remembered phone login |
+| `rgAllStaff()` sync | `User[]` | phone is not station-bound → all staff on the card list |
+| `rgSignIn(userId, password)` | `User` | writes `rollisuite.rg.session`; audit `sign_in` / `sign_in_failed` |
+| `rgSignOut()` | `void` | "Forget phone" |
+| `rgVerifyManager(userId, password)` | `User` | manager tier only; does not change the session |
+| `getNfcTags()` / `getNfcTag(id)` sync | `NfcTag[]` / `NfcTag?` | |
+| `getClockState(userId)` | `ClockState` | onClock = last punch is `in`; today's hours accrue live |
+| `punchClock(tagId, simulated)` | `Punch` | requires rg session; unknown tag / wrong-division tag throw; kind toggles on last punch |
+| `getTodayBoard(division)` | `ClockState[]` | division staff who punched today or are on the clock |
+| `getWeekHours(division, weekOffset)` | `WeekView` | Mon–Sun; punches at that division's tags only; open punch flagged |
+| `KIOSK_SERVICES`, `KIOSK_BRANDS`, `RG_DIVISION_LABEL` | consts | |
+| `submitKioskCheckIn(input)` | `KioskResult` | validates names/email/phone; email-or-phone match → `possible`, else new client; request `source: kiosk` + General-thread message + audit |
+| `getRequestsQueue()` | `RequestRow[]` | session division (`r.division ?? rolliworks`); open first, newest first |
+| `resolveKioskMatch(requestId, 'confirm' \| 'split')` | `RequestRow` | confirm keeps the link; split creates a new client and re-homes the request + its kiosk thread; audited |
