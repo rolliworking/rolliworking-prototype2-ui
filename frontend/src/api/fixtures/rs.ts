@@ -80,6 +80,6 @@ export const evidence: EvidenceItem[] = [
 export const integrations: IntegrationTile[] = [
   { key: 'qbo', name: 'QuickBooks Online', health: 'stub', blurb: 'Invoices queue locally with a fake QBO id. No OAuth, no push.', lastCheck: daysAgo(0, 8) },
   { key: 'shipping', name: 'Shipping provider', health: 'stub', blurb: 'Mock carrier seam issues SVG labels and fake tracking. No rates, no pickups.', lastCheck: daysAgo(0, 8) },
-  { key: 'rollitime', name: 'RolliTime', health: 'not_connected', blurb: 'Timing-machine import for timing sheets. Nothing wired.', lastCheck: daysAgo(0, 8) },
+  { key: 'rollitime', name: 'RolliTime', health: 'stub', blurb: 'Timing bench runs inside this prototype at /rt (manual Witschi-style entry). No timing-machine import is wired.', lastCheck: daysAgo(0, 8) },
   { key: 'email', name: 'Email (Outbox)', health: 'stub', blurb: 'All client email lands in the Outbox and never sends.', lastCheck: daysAgo(0, 8) },
 ];

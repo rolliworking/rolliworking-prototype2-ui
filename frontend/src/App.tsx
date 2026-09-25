@@ -8,6 +8,9 @@ import ClientsPage from '@/pages/clients/ClientsPage';
 import Client360Page from '@/pages/clients/Client360Page';
 import InboxPage from '@/pages/InboxPage';
 import RcShell from '@/rc/RcShell';
+import RtShell from '@/pages/rt/RtShell';
+import RtQueuePage from '@/pages/rt/RtQueuePage';
+import RtTestPage from '@/pages/rt/RtTestPage';
 import RcLoginPage from '@/pages/rc/RcLoginPage';
 import RcAuthPage from '@/pages/rc/RcAuthPage';
 import RcHomePage from '@/pages/rc/RcHomePage';
@@ -76,6 +79,10 @@ export default function App() {
           <Route path="/station-setup" element={<StationSetupPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
           {/* RolliConnect — client portal. Separate shell, separate session, no staff routes reachable. */}
+          <Route path="/rt" element={<RtShell />}>
+            <Route index element={<RtQueuePage />} />
+            <Route path="test/:jobId" element={<RtTestPage />} />
+          </Route>
           <Route path="/rc" element={<RcShell />}>
             <Route index element={<RcLoginPage />} />
             <Route path="auth/:token" element={<RcAuthPage />} />

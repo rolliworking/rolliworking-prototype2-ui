@@ -247,3 +247,9 @@ Derived: `ConversationWithRefs` (client, anchorLabel/Path, unread, needsReply, a
 
 ## 18. E15 — InspectionReportDoc (`fixtures/reports.ts`)
 `id, token (public link key), version, jobId, watchId, clientId, estimateId?, status issued|approved|declined|superseded, supersededById?, supersedes?, grades[] {component, grade, note?}, notes, photoIds[], issuedAt/By, station, emailId?, decidedAt?, decidedVia? portal|staff, declineReason?`. Chain: `supersedes → supersededById`; the portal always forwards to the chain end.
+
+## 19. E12 — RolliTime (`fixtures/rollitime.ts`)
+| entity | fields |
+|---|---|
+| CaliberTolerance (4 + generic) | caliber, label, refPrefixes[], crit1MaxDelta, crit2Min, crit2Max, beatMax, ampMin, ampMax, reserveHours, liftAngle |
+| TimingTest (2 seeded) | id, jobId, watchId, jobNumber, caliber, readings[6] {position, rate, beat, amp}, avgRate, avgBeat, avgAmp, delta, liftAngle, powerReserve, evaluation {crit1, crit2, beat, amp, reserve, suggested, flags[]}, verdict pass\|reject, reason?, emailId? & Stamp — **append-only** |

@@ -3078,4 +3078,51 @@ export async function portalDecideInspectionReport(token: string, decision: 'app
   return portalGetInspectionReport(token);
 }
 
+// ---- E12 RolliTime timing bench (NEW automation — legacy never had it) ------------------------------
+import type { CaliberTolerance, TimingEvaluation, TimingInput, TimingTest } from './types';
+export { TIMING_POSITIONS } from './fixtures/rollitime';
+const rt = { tests: fx.timingTests.map((t): TimingTest => ({ ...t, readings: t.readings.map((r) => ({ ...r })) })) };
+const rtStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'rollitime', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); };
+export const toleranceForWatch = (w: Watch): CaliberTolerance => fx.caliberTolerances.find((c) => c.refPrefixes.some((p) => w.reference.toUpperCase().startsWith(p.toUpperCase()))) ?? fx.GENERIC_TOLERANCE;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+export const evaluateTiming = (tol: CaliberTolerance, input: Pick<TimingInput, 'readings' | 'powerReserve'>): TimingEvaluation & { avgRate: number; avgBeat: number; avgAmp: number; delta: number } => {
+  const rs = input.readings; const n = rs.length || 1;
+  const avgRate = round1(rs.reduce((t, r) => t + r.rate, 0) / n); const avgBeat = round1(rs.reduce((t, r) => t + r.beat, 0) / n * 10) / 10; const avgAmp = round1(rs.reduce((t, r) => t + r.amp, 0) / n);
+  const delta = rs.length ? Math.max(...rs.map((r) => r.rate)) - Math.min(...rs.map((r) => r.rate)) : 0;
+  const flags: string[] = [];
+  const crit1 = delta < tol.crit1MaxDelta; if (!crit1) flags.push(`Δ ${delta} s/d ≥ ${tol.crit1MaxDelta}`);
+  const crit2 = avgRate >= tol.crit2Min && avgRate <= tol.crit2Max; if (!crit2) flags.push(`avg ${avgRate} s/d outside ${tol.crit2Min}/+${tol.crit2Max}`);
+  const beat = rs.every((r) => r.beat <= tol.beatMax); if (!beat) flags.push(`beat ${Math.max(...rs.map((r) => r.beat))} ms > ${tol.beatMax}`);
+  const amp = rs.every((r) => r.amp >= tol.ampMin && r.amp <= tol.ampMax); if (!amp) flags.push(`amplitude outside ${tol.ampMin}–${tol.ampMax}°`);
+  const reserve = input.powerReserve >= tol.reserveHours; if (!reserve) flags.push(`reserve ${input.powerReserve} h < ${tol.reserveHours}`);
+  return { crit1, crit2, beat, amp, reserve, suggested: crit1 && crit2 && beat && amp && reserve ? 'pass' : 'reject', flags, avgRate, avgBeat, avgAmp, delta };
+};
+export async function getTestingQueue(): Promise<JobWithRefs[]> { return resolve(store.jobs.filter((j) => j.status === 'testing' && j.division === getSessionDivision()).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map(jobRefs)); }
+export async function findJobByLabel(scan: string): Promise<JobWithRefs | null> {
+  const q = scan.trim().toUpperCase(); if (!q) return resolve(null); const head = q.split('|')[0];
+  const j = store.jobs.find((x) => x.number === head) ?? store.jobs.filter((x) => x.status !== 'closed').find((x) => { const w = byId(store.watches, x.watchId); return q.includes(w.serial.toUpperCase()) || q === w.reference.toUpperCase() || q === `${w.reference}/${w.serial}`.toUpperCase() || q === `${w.reference} / ${w.serial}`.toUpperCase(); });
+  return resolve(j ? jobRefs(j) : null);
+}
+export async function getTimingTests(filter: { jobId?: string; watchId?: string }): Promise<TimingTest[]> { return resolve(rt.tests.filter((t) => (!filter.jobId || t.jobId === filter.jobId) && (!filter.watchId || t.watchId === filter.watchId)).sort((a, b) => b.at.localeCompare(a.at))); }
+export async function recordTimingTest(jobId: string, input: TimingInput): Promise<TimingTest> {
+  const j = getJobRow(jobId); if (j.status !== 'testing') throw new Error('Only jobs in testing can be timed'); const w = byId(store.watches, j.watchId); const tol = toleranceForWatch(w); const a = actor();
+  if (input.readings.length !== 6 || input.readings.some((r) => [r.rate, r.beat, r.amp].some((v) => !Number.isFinite(v)))) throw new Error('Enter rate, beat error and amplitude for all six positions');
+  if (!(input.powerReserve > 0) || !(input.liftAngle > 0)) throw new Error('Lift angle and power reserve are required');
+  if (input.verdict === 'reject' && !input.reason?.trim()) throw new Error('A rejection reason is required');
+  const ev = evaluateTiming(tol, input);
+  const t: TimingTest = { id: newId('tt'), jobId, watchId: w.id, jobNumber: j.number, caliber: tol.caliber, readings: input.readings.map((r) => ({ ...r })), avgRate: ev.avgRate, avgBeat: ev.avgBeat, avgAmp: ev.avgAmp, delta: ev.delta, liftAngle: input.liftAngle, powerReserve: input.powerReserve, evaluation: { crit1: ev.crit1, crit2: ev.crit2, beat: ev.beat, amp: ev.amp, reserve: ev.reserve, suggested: ev.suggested, flags: ev.flags }, verdict: input.verdict, reason: input.reason?.trim() || undefined, at: new Date().toISOString(), by: a.by, station: a.station };
+  rt.tests.unshift(t);
+  const client = byId(fx.clients, j.clientId);
+  if (input.verdict === 'pass') {
+    const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: `Testing complete — ${w.model}`, body: `Hello ${client.firstName},\n\nYour ${w.brand} ${w.model} has completed timing tests on our bench and moves to final quality control. Details are on your watch page:\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/watches/${w.id}\n\n— The RolliSuite team`, createdAt: t.at, createdBy: a.by, station: a.station };
+    store.outbox.unshift(email); t.emailId = email.id;
+    jobStamp(j, `Timing test PASS · avg ${t.avgRate} s/d · Δ ${t.delta} · ${t.powerReserve} h — to QC queue`);
+    rtStamp(`${j.number} timing PASS · ${tol.caliber} · avg ${t.avgRate} s/d · Δ ${t.delta} · beat ${t.avgBeat} ms · amp ${t.avgAmp}° · reserve ${t.powerReserve} h${ev.suggested === 'reject' ? ' · OVERRIDE (auto-eval suggested reject)' : ''}`);
+  } else {
+    await transitionJob(j.id, 'qc_fail', `Timing rejected: ${input.reason!.trim()}`);
+    rtStamp(`${j.number} timing REJECT · ${tol.caliber} · ${input.reason!.trim()} · flags: ${ev.flags.join('; ') || 'none'}${ev.suggested === 'pass' ? ' · OVERRIDE (auto-eval suggested pass)' : ''}`);
+  }
+  return resolve({ ...t });
+}
+
 replayRcEvents();

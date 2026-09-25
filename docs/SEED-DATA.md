@@ -221,3 +221,7 @@ Not covered: rollishop threads; kiosk/email ingestion (fixtures only); a thread 
 ## E15 seeds
 - Eleanor c-02 · j-11 (awaiting customer approval) · rep-01 `IR-ELEANOR-V1` superseded → rep-02 `IR-ELEANOR-V2` issued (8 grades, notes reference the bezel photo and e-02 rev 2); Outbox `ob-rep-02` short notification with `/rc/report/IR-ELEANOR-V2`. Loop: open `/rc/report/IR-ELEANOR-V1` → forwards to V2 → Approve → j-11 approved, e-02 approved, comms cv-04 gains an approval event.
 - To exercise issuing: /jobs/j-13 or j-18 (in_review) → add a photo → Issue inspection report → Outbox + `/rc/report/<token>`.
+
+## E12 seeds
+- Tolerances: 3135 (Crit1 <25, Crit2 −1/+10, beat 0.8, amp 200–280, 44 h), 3235/3285 (<12, −2/+2, 0.6, 220–300, 70 h), 4130, MT5402, generic.
+- Tests: tt-01 j-16 / w-16 **reject** (matches the seeded QC-fail history; Δ 25, beat 1.1, reserve 41), tt-02 j-08 / w-10 **pass** (Naomi history). Queue at a rolliworks station: j-05 and j-16.

@@ -115,3 +115,7 @@ One entry per build session: what was built · what was decided · what was test
 ## E15 — Portal-first client content (2026-09-25)
 - **Built**: `/rc/report/:token` public inspection-report page (grades, photos, notes, approve/decline with reason, supersede forwarding); staff issue flow on the job page; templates converted to short notification + `{{portal.link}}` (+3 new keys); `sendEstimate` body shortened; Needs-you + watch card entry points; decisions auto-thread into Comms and flip job/estimate status. Principle recorded in DECISIONS.
 - **Open questions**: 43. Token TTL / revocation for report links? 44. Should staff be able to record a client's verbal decision on a report (`decidedVia: staff`)? 45. Component list & grade words — final vocabulary? 46. Persist portal report decisions in the RC replay log?
+
+## E12 — RolliTime `/rt` (2026-09-25)
+- **Built**: `/rt` shell + bench sign-in, testing queue with label scan, Witschi-style six-position test with caliber targets, live out-of-tolerance highlighting, AVG/Δ, lift angle, reserve, auto-eval suggestion, PASS (email + QC flag) / REJECT (reason → qc_fail + email), append-only watch history on `/rt` and the job page. Integrations tile updated.
+- **Open questions**: 47. Should PASS be an explicit sub-status/lane rather than a timeline flag? 48. Per-caliber Crit1/Crit2 exact definitions and per-position rate bounds? 49. Witschi file import format? 50. Should the client see timing results on the portal (evidence timing_sheet vs. RolliTime numbers)?

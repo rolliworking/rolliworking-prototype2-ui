@@ -53,7 +53,8 @@ export type AuditEventType =
   | 'labels'
   | 'accounting'
   | 'companion'
-  | 'comms';
+  | 'comms'
+  | 'rollitime';
 
 export interface AuditEvent {
   id: string;
@@ -898,3 +899,14 @@ export interface InspectionReportDoc {
   issuedAt: string; issuedBy: string; station: string; emailId?: string; decidedAt?: string; decidedVia?: 'portal' | 'staff'; declineReason?: string;
 }
 export interface PortalInspectionReport { report: InspectionReportDoc; watch: Watch; client: Client; job: Job; estimate?: Estimate; photos: PackagePhoto[]; newerToken?: string }
+
+// ---- E12 RolliTime timing bench -----------------------------------------------------------------------
+export type TimingPosition = 'DU' | 'DD' | 'CD' | 'CL' | 'CU' | 'CR';
+export interface CaliberTolerance { caliber: string; label: string; refPrefixes: string[]; crit1MaxDelta: number; crit2Min: number; crit2Max: number; beatMax: number; ampMin: number; ampMax: number; reserveHours: number; liftAngle: number }
+export interface TimingReading { position: TimingPosition; rate: number; beat: number; amp: number }
+export interface TimingEvaluation { crit1: boolean; crit2: boolean; beat: boolean; amp: boolean; reserve: boolean; suggested: 'pass' | 'reject'; flags: string[] }
+export interface TimingTest extends Stamp {
+  id: string; jobId: string; watchId: string; jobNumber: string; caliber: string; readings: TimingReading[]; avgRate: number; avgBeat: number; avgAmp: number; delta: number; liftAngle: number; powerReserve: number;
+  evaluation: TimingEvaluation; verdict: 'pass' | 'reject'; reason?: string; emailId?: string;
+}
+export interface TimingInput { readings: TimingReading[]; liftAngle: number; powerReserve: number; verdict: 'pass' | 'reject'; reason?: string }

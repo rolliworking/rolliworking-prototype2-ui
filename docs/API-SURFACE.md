@@ -299,3 +299,14 @@ Hooks: `portalApproveEstimate`, `portalDeclineEstimate`, `portalSendMessage`, `p
 | `portalGetInspectionReport(token)` | `PortalInspectionReport {report, watch, client, job, estimate?, photos, newerToken?}` | public by token; `newerToken` when superseded |
 | `portalDecideInspectionReport(token, 'approve'\|'decline', reason?)` | `PortalInspectionReport` | as client: job approve / back_to_review(reason), estimate approve / decline; comms approval event; audit `portal` |
 Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; merge field `{{portal.link}}`; `PortalWatch.inspectionReportToken`; `NeedsYouKind.review_inspection`.
+
+## 19. E12 — RolliTime (audit type `rollitime`)
+| export | signature | notes |
+|---|---|---|
+| `TIMING_POSITIONS` | `['DU','DD','CD','CL','CU','CR']` | |
+| `toleranceForWatch(watch)` sync | `CaliberTolerance` | by reference prefix; generic fallback |
+| `evaluateTiming(tol, {readings, powerReserve})` sync | `TimingEvaluation & {avgRate, avgBeat, avgAmp, delta}` | pure |
+| `getTestingQueue()` | `JobWithRefs[]` | status testing, session division, oldest first |
+| `findJobByLabel(scan)` | `JobWithRefs \| null` | job #, ref/serial, PDF417 payload head |
+| `getTimingTests({jobId?, watchId?})` | `TimingTest[]` newest first | |
+| `recordTimingTest(jobId, TimingInput {readings[6], liftAngle, powerReserve, verdict, reason?})` | `TimingTest` | testing only; reject needs reason → `qc_fail`; pass → Outbox "Testing complete" + job stamp |
