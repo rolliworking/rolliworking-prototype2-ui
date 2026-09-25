@@ -201,3 +201,10 @@ Never deleted.
 | portal `requireOwner` | row.clientId === session client |
 | UI-only (route tiers in `config/navigation.ts`) | Jobs, Supervisor, Parts Knowledge, Setup (+ unbuilt sections) = manager; everything else both tiers |
 Division wall enforced only in `getToday` (rows/tasks/pins) and pickers (`getDivisionStaff/Roles`); **no** write is division-checked.
+
+## 13. E9 machines
+- **PurchaseOrder**: `draft → sent → partially_received → received`; `{draft, sent, partially_received} → cancelled (reason*)`. Receiving writes one `receipt` movement per line qty at `po.locationId`.
+- **CycleCount**: `open → posted`; one open per location; posting writes `count` movements for non-zero variances.
+- **Stock invariant**: `onHand ≥ 0` (adjustments rejected otherwise); `Part.stock = Σ StockLevel.onHand`.
+- **QC evidence gate** (job §1.2 guard 6): `qc_pass` throws while `EVIDENCE_REQUIRED[kind]` slots are missing for the job (service: all 4; small_job: hidden_serial; warranty: hidden_serial + timing_sheet — provisional). Evidence itself has no states; items are append-only.
+- **Vendor**: `active ⇄ retired`. **Catalog service**: `live ⇄ retired`. **User**: `active → deactivated (removed)` — manager only, not self, not last manager.

@@ -240,3 +240,28 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 - `parsePin` accepts `@` and `#`.
 - `PinInput` gained `clientId`, `estimateId`.
 - Reference contract: `docs/reference/contract-v1-client.ts` (uploaded HTTP client) — operation names should converge where possible (`convertEstimateToSalesOrder`, `fulfillSalesOrder`, `confirmShipment`…).
+
+## 15. E9 — RS modules (appended; all async unless marked sync)
+| export | signature | notes |
+|---|---|---|
+| `getVendors` / `getVendor(id)` / `saveVendor(input)` / `setVendorActive(id, active)` | `Vendor` rows | save = create or update; audit `purchasing` |
+| `getPurchaseOrders` / `getPurchaseOrder(id)` | `PurchaseOrderWithRefs {vendor, location}` | |
+| `createPurchaseOrder({vendorId, locationId, lines: POLineInput[], memo?})` | draft PO `PO-26-nnnn` | vendor must be active; division = session |
+| `sendPurchaseOrder(id)` | sent | Outbox email to vendor (**STUB**) |
+| `receivePurchaseOrder(id, qtyByLine)` | partially_received / received | each qty → `StockMovement receipt` at PO location; `Part.stock` re-summed |
+| `cancelPurchaseOrder(id, reason)` | cancelled | reason required |
+| `getLocations` / `getStockRows` / `getLowStock` / `getStockMovements(partId?)` | `StockLocation[]` / `StockRow[]` / `StockMovement[]` | `StockRow.low = onHand ≤ reorderPoint` |
+| `adjustStock(partId, locationId, delta, reason)` | `StockMovement` | non-zero integer, reason, never negative |
+| `getCycleCounts` / `startCycleCount(locationId)` / `postCycleCount(id, counted)` | `CycleCount` | one open count per location; variances → `count` movements |
+| `queueLabelsFor('estimate'\|'job'\|'watch', ids[])` | `LabelJob[]` | 2 labels per record, unprinted; audit `labels` |
+| `getReport('funnel'\|'throughput'\|'aging'\|'pnl')` / `reportToCsv(report)` sync | `Report {columns, rows, note}` | reconciles with `getDashboardStats` |
+| `getQboQueue()` / `exportAccountingCsv('invoices'\|'payments'\|'qbo')` | `QboQueueRow[]` / csv string | **STUB**; export audited `accounting` |
+| `getIntegrations()` | `IntegrationTile[]` | all stub / not connected |
+| `adminSaveUser(input)` / `adminDeactivateUser(id)` | `User` / void | manager only; guards self + last manager |
+| `getCatalogAdmin()` / `saveCatalogService(input)` / `retireCatalogService(id, retired=true)` | catalog rows with `retired` | retired rows removed from live `getServiceCatalog` |
+| `getTemplates()` / `saveTemplate(key, subject, body)` / `MERGE_FIELDS` | `MessageTemplate` | not yet used by Outbox writers |
+| `EVIDENCE_SLOTS`, `PARTS_GRADES`, `EVIDENCE_REQUIRED`, `evidenceGaps(job)` sync | lookups | gaps only while `testing` |
+| `getEvidenceForJob(jobId)` / `getEvidenceForWatch(watchId)` / `getEvidenceForClient(clientId)` | `EvidenceItem[]` (+ jobNumber, serviceDate, watchLabel) | |
+| `captureEvidence(jobId, {slot, photo, labelScan, grades?, depthRating?, note?})` | `EvidenceItem` | label must match job #/ref/serial; depth `^\d+M/\d+ft$`; grading needs ≥1 grade; audit `evidence` + job stamp |
+| `transitionJob(…, 'qc_pass')` | | now also throws when `evidenceGaps(job)` non-empty |
+New audit types: `purchasing · inventory · setup · evidence · labels · accounting`.

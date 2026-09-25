@@ -93,3 +93,11 @@ One entry per build session: what was built · what was decided · what was test
 26. **Custody close at hand-back vs fulfil** — provisional (pack says release at fulfil). Confirm hand-back.
 27. **Date anomaly** — E9 rows are dated 2026-09-24 while the prototype environment reports June 2026. Treat E9 dates as labels, not timestamps.
 28. **Concierge access to `/jobs/:id`** — Floor Map links dead-end concierge users (Restricted). Read-only job view for concierge, or hide the chips?
+
+## E9b — Remaining RS modules + Service Evidence (2026-09-25)
+- **Polish**: pickup code verified before the photo step; parts assistant best-effort low-ranked suggestions + "add a reference to narrow"; Floor Map chips route concierge to Client 360.
+- **Built**: Purchasing (vendors, POs create/send-stub/cancel, receive-against-PO → audited stock receipts), Inventory (stock by location with LOW flags, movements, reasoned adjustments, cycle counts with variances, low-stock → Create PO shortcut), Labels (batch reprint by job/estimate/watch, ranges → Label Queue), Reports (funnel, throughput, aging, labor-only P&L; CSV; reconcile line), Accounting (invoice/payment registers, QBO queue with fake sync states, CSV export stub), Setup (Users & Roles, catalog editor, 6 message templates with merge fields, Locations/Printers stubs), Integrations tiles, Help quickstarts, **Service Evidence** four-slot capture at QC keyed to watch label + job with QC-pass gate, Client 360 Evidence section, portal documents.
+- **Decided**: see DECISIONS "E9". Cross-division inventory rules and per-kind evidence sets stay amber.
+- **Tested**: testing agent iteration_19 — 17/18 confirmed, the one wording mismatch (parts fallback phrase) fixed after the run; zero console errors.
+- **Stubbed**: PO send (Outbox), QBO sync states, CSV "export file", printers, integrations connect, template wiring into Outbox bodies.
+- **New open questions**: 29. Cross-division stock visibility / transfer rules? 30. Should `Part.stock` be dropped in favour of Σ StockLevel? 31. Evidence retention & who may delete/redo a slot (currently append-only, multiple items per slot allowed)? 32. Should templates drive the Outbox writers (merge-field rendering rules)? 33. `issue` movements — should job part fitting create them automatically (parts request approval → issue on hold release)?

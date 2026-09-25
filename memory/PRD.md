@@ -117,6 +117,12 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Toast confirms: "Pinned to Vienna's list"
 - `QuickAddProvider` wraps AppShell
 
+### E9b — Remaining RS modules + evidence (2026-09-25)
+- Polish: pickup code pre-check, parts best-effort fallback, concierge Floor Map routing
+- Purchasing, Inventory, Labels, Reports, Accounting, Setup (Users/Catalog/Templates/Locations/Printers), Integrations, Help — all seeded, audited, stubs amber
+- Service Evidence: 4 QC slots keyed to watch label + job, QC-pass gate, Client 360 section
+- Tested iteration_19 (17/18 → wording fix applied)
+
 ### Documentation pass for KEEPER (this fork)
 - Rewrote `/app/docs/` from code as truth: DATA-MODEL, STATE-MACHINES, API-SURFACE, DESIGN-PRINCIPLES, DECISIONS (+ restated rulings), SEED-DATA; created SESSION-LOG (E1–E9 + 28 open questions for KEEPER's builder)
 - Drift noted explicitly (counts, station list, `invoiceJob` real, `addStation` division arg, watch.status seed lag, `closeRequest` audit type)
@@ -141,7 +147,9 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 ## Pending / Backlog
 
 ### P2 Issues
-- **Concierge Floor Map dead-end link** (P2): Concierge clicking a job from Floor Map gets a "Restricted" page. The link should be suppressed or adjusted. File: `src/pages/workshop/FloorMap.tsx`
+- (fixed E9b) Concierge Floor Map dead-end
+- P2: message templates edited in Setup are not yet used by Outbox writers
+- P2: cross-division inventory rules unruled (amber)
 
 ### Upcoming
 - E9 or next module brief from MH

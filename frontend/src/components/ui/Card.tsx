@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 interface CardProps {
   title?: ReactNode;
-  subtitle?: string;
+  subtitle?: ReactNode;
   action?: ReactNode;
   accent?: 'none' | 'moss';
   className?: string;

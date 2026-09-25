@@ -193,3 +193,10 @@ Messages: msg-01 (Harrison → staff, read), msg-02 (Vienna → Harrison, unread
 - Audit log persists across reloads and is capped at 60 rows — long runs evict early rows.
 - Device auto-registers as Front Desk 1 (rolliworks) on first load; the division wall needs an explicit re-registration at RS Counter.
 - Pickup Station lets a wrong code reach the photo step before `confirmPickup` rejects it (known UX gap). Floor Map chips dead-end concierge users at a Restricted `/jobs/:id` (P2).
+
+## E9 seeds (`fixtures/rs.ts`)
+- Vendors v-rsc, v-tudor, v-gold (outsource), v-ap (rollishop), v-old (retired). Locations loc-a1, loc-a2, loc-safe, loc-b1 (rolliworks), loc-rs (rollishop).
+- POs: po-01 received · po-02 **sent** (receive it to test stock increments: 24-7030-0 ×2, 29-5220-0 ×2 into A1) · po-03 partially received (1 of 3) · po-04 draft (PM safe) · po-05 sent, rollishop. Next PO-26-0026.
+- Stock: 13 levels; low/zero rows: pt-02 (1/2), pt-03 (0/2), pt-05 (2/2), pt-07 (1/1), pt-09 (0/1) → 5 LOW flags. Movements 5 (receipt, issue, adjustment, receipt, count). Cycle count cc-01 posted (A1, 1 variance). Next CC-26-0004.
+- Templates: 6 keys. Evidence: j-08 (all 4, 100M/330ft, grade B), j-05 (hidden_serial + timing_sheet → gate blocks QC pass until pressure_test + parts_grading), j-16 (hidden_serial + pressure_test 50M/164ft; warranty set satisfied), j-25 (all 4, 2024 history for Naomi). Next ev-13.
+- Deliberately not covered: no rollishop stock movement; no `issue` movement created by code (only seed); no PO for a retired vendor; templates not yet consumed by Outbox writers; no evidence on a small_job.

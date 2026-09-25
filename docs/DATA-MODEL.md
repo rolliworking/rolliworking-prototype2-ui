@@ -211,3 +211,17 @@ Client 1─* Message   Client 1─* MagicLink   OutboxEmail.to = Client.email (s
 - `Job.division`, `Task.division`, `PinnedItem.division`, `PinnedItem.clientId/estimateId`, `User.division`, `Station.division` added (E9) — earlier DATA-MODEL omitted them.
 - `Estimate.approvedVia`, `SalesOrder.pickupWindow`, `ServiceRequest.closedBy/closeReason/duplicateOfId` present (E8).
 - Removed for good: `HitListItem`, legacy `Job.technician/startedAt/completedAt/assignedTo`.
+
+## 15. E9 additions (`fixtures/rs.ts`)
+| entity | fields | notes |
+|---|---|---|
+| Vendor (5) | id, name, contact, email, phone, terms, division, active, notes? | retire = `active=false` |
+| PurchaseOrder (5) | id, number `PO-26-nnnn`, vendorId, status lookup `draft\|sent\|partially_received\|received\|cancelled`, division, locationId, lines[] `POLine {id, partId, partNumber, description, qty, unitCost, receivedQty}`, total, memo?, createdAt/By, station, sentAt?, receivedAt?, cancelledAt?, cancelReason? | counter `po` (next PO-26-0026) |
+| StockLocation (5) | id, name, division, kind `drawer\|cabinet\|safe\|bench` | |
+| StockLevel (13) | partId, locationId, onHand, reorderPoint | PK (partId, locationId); `Part.stock` = Σ onHand (derived) |
+| StockMovement (5) | id, kind `receipt\|adjustment\|count\|issue`, partId, locationId, delta, before, after, reason, ref?, poId?, jobId?, countId?, division & Stamp | append-only |
+| CycleCount (1) | id, number `CC-26-nnnn`, locationId, status `open\|posted`, lines[] `{partId, expected, counted?}`, variances, postedAt/By & Stamp | counter `cc` |
+| MessageTemplate (6) | key lookup, name, subject, body, mergeFields[], updatedBy & Stamp | |
+| EvidenceItem (12) | id, jobId, watchId, slot lookup `hidden_serial\|timing_sheet\|pressure_test\|parts_grading`, photo, labelScan, grades? `PartsGrade[]` (`B \| Ø/REPL \| D/REPL`), depthRating? (`50M/164ft`), note? & Stamp | keyed to watch AND job; counter `ev` |
+| IntegrationTile (4) | key, name, health `not_connected\|stub`, blurb, lastCheck | static |
+Derived: `StockRow`, `Report`, `QboQueueRow`. Catalog admin adds `retired` flag (separate admin copy; retired rows removed from live catalog).
