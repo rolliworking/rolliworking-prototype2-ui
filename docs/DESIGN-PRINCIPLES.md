@@ -34,3 +34,9 @@ These are decided. Extend them; re-litigate only with a DECISIONS.md entry. For 
 - Silent dead buttons — a stub must throw a visible message and be audited.
 - Percent / progress bars or internal status enums in RolliConnect; links from `/rc` into staff routes.
 - Cross-division visibility "because they're a manager".
+
+## Route-spaces are access boundaries (E11, MH ruling)
+- `/` RolliSuite (front desk / management), `/rw` RolliWorking (bench), `/rc` RolliConnect (clients), `/rt` RolliTime (timing bench), `/rg` RGTime (phone time-clock), `/kiosk` (public walk-in). Each has its own shell, identity and entry point.
+- In Keeper, **bench tiers authenticate into `/rw` only and cannot reach RS**; RS keeps embedded "RW-mini" workshop views for managers. The prototype shares one origin and one station session and enforces the boundary by rewriting `/jobs/:id` links and blocking other RS links inside `/rw` — a stand-in for server-side tier enforcement.
+- Money is never rendered in `/rw` (hide-money amber default). Components read `MoneyContext`; RS shows money, RW hides it.
+- Re-home, don't fork: the same E6 components render in both shells; a dark skin (`.rw-dark`) restyles them without code changes.

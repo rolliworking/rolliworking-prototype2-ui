@@ -63,3 +63,39 @@ body {
     background-color: transparent;
   }
 }
+
+/* E11 RolliWorking — dark workshop skin for re-homed RS components (class overrides, same specificity rules as Tailwind utilities) */
+.rw-dark .bg-surface { background-color: #1f2630; }
+.rw-dark .bg-canvas, .rw-dark .bg-canvas\/60, .rw-dark .bg-canvas\/50, .rw-dark .bg-canvas\/70 { background-color: #161b22; }
+.rw-dark .hover\:bg-canvas:hover { background-color: rgba(255, 255, 255, 0.05); }
+.rw-dark .text-ink { color: #f1f5f9; }
+.rw-dark .text-ink-700 { color: #e2e8f0; }
+.rw-dark .text-ink-500 { color: #94a3b8; }
+.rw-dark .text-ink-400, .rw-dark .text-ink-300 { color: #64748b; }
+.rw-dark .border-line { border-color: rgba(255, 255, 255, 0.1); }
+.rw-dark .divide-line\/70 > :not([hidden]) ~ :not([hidden]), .rw-dark .divide-line\/60 > :not([hidden]) ~ :not([hidden]), .rw-dark .divide-line > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255, 255, 255, 0.08); }
+.rw-dark .shadow-card { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.rw-dark .bg-ink { background-color: #fbbf24; color: #161b22; }
+.rw-dark .bg-ink:hover, .rw-dark .hover\:bg-ink-700:hover { background-color: #fcd34d; }
+.rw-dark .bg-ink.text-white, .rw-dark .bg-ink .text-white { color: #161b22; }
+.rw-dark .bg-moss-50 { background-color: rgba(6, 78, 59, 0.35); }
+.rw-dark .bg-rose-50, .rw-dark .bg-rose-50\/70 { background-color: rgba(136, 19, 55, 0.3); }
+.rw-dark .bg-amber-50, .rw-dark .bg-amber-50\/60, .rw-dark .bg-amber-50\/40 { background-color: rgba(120, 53, 15, 0.3); }
+.rw-dark .bg-slate-100, .rw-dark .bg-slate-100\/70 { background-color: rgba(255, 255, 255, 0.06); }
+.rw-dark .text-slate-600 { color: #cbd5e1; }
+.rw-dark .bg-violet-50 { background-color: rgba(76, 29, 149, 0.3); }
+.rw-dark .text-ink-600 { color: #cbd5e1; }
+.rw-dark input, .rw-dark select, .rw-dark textarea { background-color: #0f131a; color: #f1f5f9; border-color: rgba(255, 255, 255, 0.12); }
+.rw-dark .text-brand { color: #fbbf24; }
+.rw-dark .bg-brand-50 { background-color: rgba(251, 191, 36, 0.12); }
+.rw-dark .text-moss-700, .rw-dark .text-moss { color: #6ee7b7; }
+.rw-dark .border-moss-100 { border-color: rgba(110, 231, 183, 0.35); }
+.rw-dark .text-amber-800, .rw-dark .text-amber-900 { color: #fcd34d; }
+.rw-dark .ring-amber-200 { --tw-ring-color: rgba(252, 211, 77, 0.35); }
+.rw-dark .text-rose-700, .rw-dark .text-rose-900 { color: #fda4af; }
+.rw-dark .text-orange-800 { color: #fdba74; }
+.rw-dark .text-brand { color: #fbbf24; }
+.rw-dark .text-slate-700, .rw-dark .text-slate-500 { color: #cbd5e1; }
+.rw-dark .text-violet-700 { color: #c4b5fd; }
+.rw-dark .text-teal-800 { color: #5eead4; }
+.rw-dark .text-indigo-700 { color: #a5b4fc; }

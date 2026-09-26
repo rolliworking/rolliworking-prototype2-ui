@@ -10,6 +10,13 @@ import InboxPage from '@/pages/InboxPage';
 import RcShell from '@/rc/RcShell';
 import RtShell from '@/pages/rt/RtShell';
 import RgShell from '@/pages/rg/RgShell';
+import RwShell, { RwRestricted } from '@/pages/rw/RwShell';
+import RwJobsPage from '@/pages/rw/RwJobsPage';
+import RwJobPage from '@/pages/rw/RwJobPage';
+import RwPartsPage from '@/pages/rw/RwPartsPage';
+import RwQcPage from '@/pages/rw/RwQcPage';
+import RwEvidencePage from '@/pages/rw/RwEvidencePage';
+import RwFloorPage from '@/pages/rw/RwFloorPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
 import RgManagerPage from '@/pages/rg/RgManagerPage';
@@ -77,6 +84,11 @@ function TierGate() {
 
 const PLACEHOLDER_PATHS = ['/inspection-photos'];
 
+function RwManagerOnly({ label, children }: { label: string; children: JSX.Element }) {
+  const { user } = useAuth();
+  return user?.accessTier === 'manager' ? children : <RwRestricted label={label} />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -85,6 +97,19 @@ export default function App() {
           <Route path="/station-setup" element={<StationSetupPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
           {/* RolliConnect — client portal. Separate shell, separate session, no staff routes reachable. */}
+          {/* E11 — RolliWorking standalone: workshop route-space, own shell, RS routes not reachable (access boundary) */}
+          <Route path="/rw" element={<RwShell />}>
+            <Route index element={<BenchPage />} />
+            <Route path="jobs" element={<RwJobsPage />} />
+            <Route path="jobs/:id" element={<RwJobPage />} />
+            <Route path="parts" element={<RwPartsPage />} />
+            <Route path="qc" element={<RwManagerOnly label="QC"><RwQcPage /></RwManagerOnly>} />
+            <Route path="supervisor" element={<RwManagerOnly label="Supervisor board"><SupervisorPage /></RwManagerOnly>} />
+            <Route path="floor" element={<RwFloorPage />} />
+            <Route path="evidence" element={<RwEvidencePage />} />
+            <Route path="today" element={<TodayPage />} />
+            <Route path="*" element={<Navigate to="/rw" replace />} />
+          </Route>
           {/* E13 — RGTime phone time-clock (own remembered session) and the public walk-in kiosk (no session, no chrome) */}
           <Route path="/rg" element={<RgShell />}>
             <Route index element={<RgHomePage />} />

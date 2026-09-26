@@ -268,3 +268,17 @@ Derived: `ConversationWithRefs` (client, anchorLabel/Path, unread, needsReply, a
 | RequestRow (projection) | ServiceRequest & { client, watch? } |
 | Client (kiosk-created) | id `c-<ts>`, names/email/phone from the form, empty address, `type: retail`, `since: now` — pushed into the clients fixture |
 - Session key `rollisuite.rg.session` (userId) — RGTime's remembered phone login. Audit types added: `rgtime`, `kiosk`.
+
+## 21. E11 — RolliWorking (no new persisted entities)
+| type | fields |
+|---|---|
+| RwStage (projection) | key intake\|review\|bench\|polish, label, jobs[] |
+| RwFloorMap (projection) | division, head[], band[], finalAssembly[], intoSafe[{key, label, jobs}] |
+- No new stores or session keys: `/rw` uses the station session (`rollisuite.prototype.currentUserId`) — in Keeper RW has its own authentication boundary.
+
+## 22. Per-component completion (MH ruling 2026-09-26)
+| entity | fields |
+|---|---|
+| JobComponent (on `Job.components[]`) | key head\|band\|case, label, depts[] (W / B / P+PM; empty = implicit single), completedAt?, completedBy?, completedStation?, amendedAt?, amendedBy?, amendedFrom?, rework[{at, reason, by}] |
+| TechCompletionRow / CompletionsReport (projection) | tech, months{ 'YYYY-MM': { total, byDept{W,B,P,PM} } }, total; months[] (last 6), rows[] |
+- Seeds (`fixtures/components.ts`): j-03 case done (Walter) → Awaiting components; j-06 head done (MM); j-05, j-16 fully complete. Jobs in testing/ready/closed with no seed derive all components complete at their testing/finished time, attributed to the W-assignee (MM/MH) or Walter.

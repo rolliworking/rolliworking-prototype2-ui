@@ -9,11 +9,11 @@ import { StatusPill } from '@/components/ui/Pills';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents, fullName, humanize } from '@/lib/format';
 
-export type Lane = JobStatus | 'on_hold';
-export const LANES: Lane[] = ['intake', 'in_review', 'awaiting_customer_approval', 'approved', 'in_service', 'on_hold', 'testing', 'ready_to_ship', 'closed'];
-export const LANE_LABEL: Record<Lane, string> = { intake: 'Intake', in_review: 'In review', awaiting_customer_approval: 'Awaiting customer', approved: 'Approved', in_service: 'In service', on_hold: 'On hold', testing: 'Testing / QC', ready_to_ship: 'Ready to ship', closed: 'Closed' };
+export type Lane = JobStatus | 'on_hold' | 'awaiting_components';
+export const LANES: Lane[] = ['intake', 'in_review', 'awaiting_customer_approval', 'approved', 'in_service', 'awaiting_components', 'on_hold', 'testing', 'ready_to_ship', 'closed'];
+export const LANE_LABEL: Record<Lane, string> = { intake: 'Intake', in_review: 'In review', awaiting_customer_approval: 'Awaiting customer', approved: 'Approved', in_service: 'In service', awaiting_components: 'Awaiting components', on_hold: 'On hold', testing: 'Testing / QC', ready_to_ship: 'Ready to ship', closed: 'Closed' };
 
-export const laneOf = (j: JobWithRefs): Lane => (api.activeHold(j) ? 'on_hold' : j.status);
+export const laneOf = (j: JobWithRefs): Lane => (api.activeHold(j) ? 'on_hold' : api.awaitingComponents(j) ? 'awaiting_components' : j.status);
 
 export const groupByLane = (jobs: JobWithRefs[]) => {
   const g = Object.fromEntries(LANES.map((l) => [l, [] as JobWithRefs[]])) as Record<Lane, JobWithRefs[]>;
@@ -26,7 +26,7 @@ export const JobBoard = ({ jobs }: { jobs: JobWithRefs[] }) => {
   return (
     <div data-testid="jobs-board" className="flex gap-2.5 overflow-x-auto pb-3">
       {LANES.map((lane) => (
-        <section key={lane} data-testid={`lane-${lane}`} className={clsx('flex w-[236px] shrink-0 flex-col rounded-md p-2', lane === 'on_hold' ? 'bg-rose-50/60 ring-1 ring-inset ring-rose-100' : 'bg-canvas')}>
+        <section key={lane} data-testid={`lane-${lane}`} className={clsx('flex w-[236px] shrink-0 flex-col rounded-md p-2', lane === 'on_hold' ? 'bg-rose-50/60 ring-1 ring-inset ring-rose-100' : lane === 'awaiting_components' ? 'bg-amber-50/50 ring-1 ring-inset ring-amber-100' : 'bg-canvas')}>
           <header className="mb-2 flex items-center justify-between px-0.5">
             <span className={clsx('inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide', lane === 'on_hold' ? 'text-rose-700' : 'text-ink-500')}>{lane === 'on_hold' && <PauseCircle size={11} />}{LANE_LABEL[lane]}</span>
             <span data-testid={`lane-count-${lane}`} className="rounded-full bg-surface px-1.5 font-mono text-[11px] text-ink-500 shadow-card">{groups[lane].length}</span>

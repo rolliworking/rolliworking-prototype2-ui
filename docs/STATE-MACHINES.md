@@ -213,3 +213,8 @@ Division wall enforced only in `getToday` (rows/tasks/pins) and pickers (`getDiv
 - **Punch** (per person): `off ⇄ on` — every tap toggles on the person's **last** punch (`in` → next is `out`). No edits; punches are append-only. Day hours = Σ paired in→out; a trailing `in` is an **open punch** (amber; accrues live only if today).
 - **Kiosk screen**: `idle → brand → services → form → thanks → (5 s) idle`. Any step ≠ idle/thanks with 120 s no input → `idle`. Overlay `dimmed` after 30 s idle on any step; any pointer/key clears it. "Start over" → `idle` from any step.
 - **Kiosk match** (`ServiceRequest.kiosk.matchState`): `none` (new client created) · `possible → confirmed` (staff: Confirm link) · `possible → split` (staff: Not the same → new client, request re-homed). Terminal states never revert.
+
+## 15. Per-component completion (MH ruling 2026-09-26)
+- **Component**: `out → complete` (one-way; `completedBy/At/Station`). Attribution may be amended by manager tier (`amendedFrom/By/At`); the state does not change. `rework[]` appends on every `qc_fail` while complete — state stays `complete` (amber: MH to confirm).
+- **Job ↔ components**: `in_service` + some-but-not-all complete ⇒ derived bin **awaiting_components** (not a status). Last completion ⇒ `pushTransition(to_testing → testing)` automatically. Manual `to_testing` on a split job with outstanding components ⇒ error; on a single-component job ⇒ completes the implicit component, then transitions. Holds block completion (release first).
+- **Credit**: counted at `completedAt` month per `completedBy`, independent of `finishedAt` / sales order — see Reports → Tech completions.

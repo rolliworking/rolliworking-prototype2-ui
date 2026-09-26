@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, Kanban, PauseCircle, Plus, UserCog } from 'lucide
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import * as api from '@/api/client';
+import { ComponentChips } from '@/components/jobs/ComponentBits';
 import type { HoldType, JobKind, JobPriority, JobWithRefs, Role } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
@@ -77,6 +78,7 @@ export const JobCard = ({ job: j }: { job: JobWithRefs }) => (
         <AssigneeChips assignees={j.assignees} />
         {j.owner && <OwnerBadge owner={j.owner} compact />}
         <HoldBadge job={j} compact />
+        {j.components.length > 1 && j.components.some((c) => c.completedAt) && <ComponentChips job={j} />}
         <TailPill stage={api.tailStage(j)} />
       </div>
       {j.dueAt && <span className={clsx('inline-flex items-center gap-1 tabular text-[11px]', isOverdue(j) ? 'font-semibold text-rose-700' : 'text-ink-400')}><Clock size={10} /> {fmtDate(j.dueAt)}</span>}

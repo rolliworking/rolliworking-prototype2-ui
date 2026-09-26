@@ -40,7 +40,7 @@ export default function SupervisorPage() {
         <div className="space-y-4">
           <Card title="Unassigned bench work" subtitle={`${b?.unassigned.length ?? 0} approved / in service / testing with nobody on them`} testId="sup-unassigned"><ul className="space-y-1.5">{b?.unassigned.map((j) => <Chip key={j.id} j={j} techs={techs} onAssign={assign} />)}{b && b.unassigned.length === 0 && <li className="text-xs text-ink-400">Everything is assigned.</li>}</ul></Card>
           {b?.byTech.map(({ user: u, jobs }) => (
-            <Card key={u.id} title={<span className="inline-flex items-center gap-2"><OwnerChip owner={u.shortName} /> {u.displayName}</span>} subtitle={`${jobs.length} on the bench`} testId={`sup-tech-${u.shortName.toLowerCase()}`}>
+            <Card key={u.id} title={<span className="inline-flex items-center gap-2"><OwnerChip owner={u.shortName} /> {u.displayName}</span>} subtitle={<span>{jobs.length} on the bench · <span data-testid={`sup-completions-${u.shortName.toLowerCase()}`} className="font-medium text-moss-700">{api.completionsThisMonth(u.shortName)} component completion{api.completionsThisMonth(u.shortName) === 1 ? '' : 's'} this month</span></span>} testId={`sup-tech-${u.shortName.toLowerCase()}`}>
               <ul className="space-y-1.5">{jobs.map((j) => <Chip key={j.id} j={j} techs={techs} onAssign={assign} />)}{jobs.length === 0 && <li className="text-xs text-ink-400">Free.</li>}</ul>
             </Card>
           ))}

@@ -328,3 +328,22 @@ Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; 
 | `submitKioskCheckIn(input)` | `KioskResult` | validates names/email/phone; email-or-phone match → `possible`, else new client; request `source: kiosk` + General-thread message + audit |
 | `getRequestsQueue()` | `RequestRow[]` | session division (`r.division ?? rolliworks`); open first, newest first |
 | `resolveKioskMatch(requestId, 'confirm' \| 'split')` | `RequestRow` | confirm keeps the link; split creates a new client and re-homes the request + its kiosk thread; audited |
+
+## 21. E11 — RolliWorking `/rw`
+| export | signature | notes |
+|---|---|---|
+| `getRwFloorMap()` | `RwFloorMap { division, head: RwStage[], band: RwStage[], finalAssembly: JobWithRefs[], intoSafe[{key hold\|approval\|ready, label, jobs}] }` | session division, non-closed jobs; head = workflow has W (or empty), band = has B/P/PM; stages from status (`intake`, `in_review`, `approved`/`in_service` → bench, in-service P/PM-only → polish); testing → finalAssembly; hold/awaiting approval/ready → intoSafe. PROVISIONAL |
+| (reused) `getBenchView`, `pullNext`, `getSupervisorBoard`, `supervisorAssign`, `searchJobs`, `findJobByLabel`, `getJob`, `legalJobActions`, `reviewGaps`, `transitionJob`, `placeHold`, `releaseHold`, `openPartsRequest`, `getPartsRequests`, `getPartsRequestsForJob`, `evidenceGaps`, `EVIDENCE_REQUIRED`, `EVIDENCE_SLOTS`, `captureEvidence`, `getToday`, `hasSignedInToday`, `signInWithPassword`, `switchUserWithPin` | — | RW calls the same functions as RS; no RW-only writes exist |
+| UI: `MoneyContext` (`components/MoneyContext.tsx`) | `createContext(true)`; `useShowMoney()` | RW shell provides `false`; `LinesTable` honours it |
+
+## 22. Per-component completion (audit type `job`)
+| export | signature | notes |
+|---|---|---|
+| `ensureComponents(job)` sync | `JobComponent[]` | derives from workflow on first touch; `JobWithRefs.components` always populated |
+| `componentsDone(job)` / `componentsOutstanding(job)` / `awaitingComponents(job)` / `canCompleteComponent(job)` sync | number / `JobComponent[]` / boolean / boolean | bin + gating helpers |
+| `completeComponent(jobId, key)` | `JobWithRefs` | in_service only, not on hold; stamps actor; last one auto-transitions to testing |
+| `amendComponentAttribution(jobId, key, shortName)` | `JobWithRefs` | manager tier; completed components only; audited |
+| `getCompletionsReport()` | `CompletionsReport` | tech × month × dept |
+| `getReport('completions')` | `Report` | table form for the Reports page |
+| `completionsThisMonth(tech)` sync | number | Supervisor board header |
+| `transitionJob(id, 'to_testing')` (changed) | — | gated by components (see STATE-MACHINES §15); `qc_fail` logs rework on completed components |

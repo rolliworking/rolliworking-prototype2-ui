@@ -31,7 +31,7 @@ export function LabelsPage() {
 }
 
 // ---- Reports ---------------------------------------------------------------------------------------
-const REPORTS = [{ key: 'funnel', label: 'Estimate funnel' }, { key: 'throughput', label: 'Job throughput' }, { key: 'aging', label: 'Aging' }, { key: 'pnl', label: 'Department P&L' }] as const;
+const REPORTS = [{ key: 'funnel', label: 'Estimate funnel' }, { key: 'throughput', label: 'Job throughput' }, { key: 'aging', label: 'Aging' }, { key: 'pnl', label: 'Department P&L' }, { key: 'completions', label: 'Tech completions' }] as const;
 export function ReportsPage() {
   const [key, setKey] = useState<typeof REPORTS[number]['key']>('funnel');
   const { data: r } = useLoad<Report>(() => api.getReport(key), [key]);

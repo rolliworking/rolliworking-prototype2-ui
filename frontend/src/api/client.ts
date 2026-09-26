@@ -2,6 +2,10 @@
 // Today they resolve from local fixtures; later this file alone is repointed at the real API.
 import * as fx from './fixtures';
 import type {
+  ComponentKey,
+  CompletionsReport,
+  JobComponent,
+  TechCompletionRow,
   ActivityEvent,
   AuditEvent,
   Bin,
@@ -390,6 +394,7 @@ export async function getEstimatesForClient(clientId: string): Promise<EstimateW
 
 const jobRefs = (j: Job): JobWithRefs => ({
   ...j,
+  components: ensureComponents(j),
   client: byId(fx.clients, j.clientId),
   watch: byId(store.watches, j.watchId),
   estimate: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) ?? null : null,
@@ -990,6 +995,26 @@ export interface JobAction {
 
 // Only these buttons render — never a free status dropdown. Linear order is the pack's full status list;
 // notify points are UNKNOWN in the pack (flagged provisional in the UI).
+
+// ---- Per-component completion (MH ruling, first board walk) — decoupled from invoicing ----------------------------------
+const COMPONENT_DEF: { key: ComponentKey; label: string; depts: DeptCode[] }[] = [{ key: 'head', label: 'Watch head', depts: ['W'] }, { key: 'band', label: 'Band', depts: ['B'] }, { key: 'case', label: 'Case', depts: ['P', 'PM'] }];
+const DONE_STATUSES: JobStatus[] = ['testing', 'ready_to_ship', 'closed'];
+const techForDepts = (j: Job, depts: DeptCode[]) => (depts.includes('W') ? j.assignees.find((a) => a === 'MM' || a === 'MH') : j.assignees.find((a) => a === 'Walter')) ?? j.assignees[0] ?? j.createdBy;
+// Components are derived from the workflow on first touch (fixtures predate the ruling); a job with no workflow gets one implicit component.
+export const ensureComponents = (j: Job): JobComponent[] => {
+  if (j.components) return j.components;
+  const defs = COMPONENT_DEF.filter((d) => d.depts.some((x) => j.workflow.includes(x)));
+  const comps: JobComponent[] = (defs.length ? defs : [{ key: 'head' as ComponentKey, label: 'Watch', depts: [] as DeptCode[] }]).map((d) => ({ ...d, depts: [...d.depts], rework: [] }));
+  const seed = fx.componentSeeds[j.id];
+  if (seed) seed.forEach((s) => { const c = comps.find((x) => x.key === s.key); if (c) { c.completedAt = s.at; c.completedBy = s.by; c.completedStation = 'Bench 1'; } });
+  else if (DONE_STATUSES.includes(j.status)) { const at = j.finishedAt ?? j.timeline.find((t) => t.to === 'testing')?.at ?? j.createdAt; comps.forEach((c) => { c.completedAt = at; c.completedBy = techForDepts(j, c.depts); c.completedStation = 'Bench 1'; }); }
+  j.components = comps; return comps;
+};
+export const componentsDone = (j: Job) => ensureComponents(j).filter((c) => c.completedAt).length;
+export const componentsOutstanding = (j: Job): JobComponent[] => ensureComponents(j).filter((c) => !c.completedAt);
+export const awaitingComponents = (j: Job) => j.status === 'in_service' && !activeHold(j) && componentsDone(j) > 0 && componentsOutstanding(j).length > 0;
+export const canCompleteComponent = (j: Job) => j.status === 'in_service' && !activeHold(j);
+
 const JOB_ACTIONS: Record<JobStatus, JobAction[]> = {
   intake: [{ key: 'start_review', label: 'Start review', to: 'in_review', tone: 'primary' }],
   in_review: [
@@ -1088,6 +1113,12 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
   const gaps = reviewGaps(j);
   if (gaps.length) throw new Error(gaps.join(' · '));
   if (action.key === 'qc_pass') { const ev = evidenceGaps(j); if (ev.length) throw new Error(`Evidence missing at QC: ${ev.map((k) => EVIDENCE_SLOTS.find((x) => x.key === k)!.label).join(', ')}`); }
+  if (action.key === 'to_testing') {
+    const comps = ensureComponents(j); const out = componentsOutstanding(j);
+    if (comps.length === 1 && out.length === 1) { const a = actor(); const c = out[0]; c.completedAt = new Date().toISOString(); c.completedBy = a.by; c.completedStation = a.station; jobStamp(j, `Component complete · ${c.label} · by ${a.by} (implicit single component)`); }
+    else if (out.length) throw new Error(`Reunification rule: mark every component complete first — still out: ${out.map((c) => c.label).join(', ')}`);
+  }
+  if (action.key === 'qc_fail') ensureComponents(j).filter((c) => c.completedAt).forEach((c) => c.rework.push({ at: new Date().toISOString(), reason: reason!.trim(), by: actor().by }));
   const mail = action.notifies ? EMAIL_FOR[action.key] : undefined;
   let queued = false;
   if (mail) { const [s, b] = mail(j, reason?.trim()); queueJobEmail(j, s, b); queued = true; }
@@ -1097,6 +1128,33 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
 }
 
 const humanizeStatus = (s: string) => s.replace(/_/g, ' ');
+export async function completeComponent(jobId: string, key: ComponentKey): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); if (!canCompleteComponent(j)) throw new Error(activeHold(j) ? 'Job is on hold — release it first' : 'Components complete only while the job is in service');
+  const c = ensureComponents(j).find((x) => x.key === key); if (!c) throw new Error('No such component on this job'); if (c.completedAt) throw new Error(`${c.label} is already complete (${c.completedBy})`);
+  const a = actor(); c.completedAt = new Date().toISOString(); c.completedBy = a.by; c.completedStation = a.station;
+  const out = componentsOutstanding(j);
+  jobStamp(j, `Component complete · ${c.label} · by ${a.by}${out.length ? ` · still out: ${out.map((x) => x.label).join(', ')} → awaiting components` : ' · all components in'}`);
+  if (!out.length) { pushTransition(j, 'to_testing', skipForward(j.kind, 'testing'), 'All components complete — reunified'); jobStamp(j, 'All components complete → testing / QC (auto, reunification)'); }
+  return resolve(jobRefs(j));
+}
+export async function amendComponentAttribution(jobId: string, key: ComponentKey, shortName: string): Promise<JobWithRefs> {
+  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Only a supervisor / manager can amend attribution');
+  if (!fx.users.some((u) => u.shortName === shortName)) throw new Error('Pick someone from the staff list');
+  const j = getJobRow(jobId); const c = ensureComponents(j).find((x) => x.key === key); if (!c?.completedAt) throw new Error('Only completed components can be re-attributed');
+  if (c.completedBy === shortName) return resolve(jobRefs(j));
+  c.amendedFrom = c.completedBy; c.completedBy = shortName; c.amendedAt = new Date().toISOString(); c.amendedBy = a.by;
+  jobStamp(j, `Attribution amended · ${c.label} · ${c.amendedFrom} → ${shortName} · by ${a.by}`);
+  return resolve(jobRefs(j));
+}
+export async function getCompletionsReport(): Promise<CompletionsReport> {
+  const rows: Record<string, TechCompletionRow> = {}; const months = new Set<string>();
+  store.jobs.forEach((j) => ensureComponents(j).forEach((c) => { if (!c.completedAt || !c.completedBy) return; const m = monthKey(c.completedAt); months.add(m);
+    const r = rows[c.completedBy] ??= { tech: c.completedBy, months: {}, total: 0 }; const cell = r.months[m] ??= { total: 0, byDept: { W: 0, B: 0, P: 0, PM: 0 } };
+    cell.total += 1; r.total += 1; (c.depts.length ? c.depts.filter((d) => j.workflow.includes(d)) : ['W' as DeptCode]).forEach((d) => { cell.byDept[d] += 1; }); }));
+  return resolve({ months: [...months].sort().reverse().slice(0, 6), rows: Object.values(rows).sort((a, b) => b.total - a.total), generatedAt: new Date().toISOString() });
+}
+export const completionsThisMonth = (tech: string) => { const m = monthKey(new Date().toISOString()); return store.jobs.reduce((t, j) => t + ensureComponents(j).filter((c) => c.completedBy === tech && c.completedAt && monthKey(c.completedAt) === m).length, 0); };
+
 
 // Assignees = working techs (many). Owner = accountable role (one) — never called "PM" (that code is precious metals).
 export async function toggleAssignee(id: string, shortName: string): Promise<JobWithRefs> {
@@ -2716,8 +2774,11 @@ export async function queueLabelsFor(kind: 'estimate' | 'job' | 'watch', ids: st
 const monthKey = (iso: string) => iso.slice(0, 7);
 const ageBucket = (iso: string) => { const d = (Date.now() - new Date(iso).getTime()) / 86_400_000; return d <= 7 ? '0–7d' : d <= 30 ? '8–30d' : d <= 90 ? '31–90d' : '90d+'; };
 const isLabor = (l: EstimateLine) => l.type === 'service';
-export async function getReport(key: 'funnel' | 'throughput' | 'aging' | 'pnl'): Promise<Report> {
+export async function getReport(key: 'funnel' | 'throughput' | 'aging' | 'pnl' | 'completions'): Promise<Report> {
   const now = new Date().toISOString(); const es = store.estimates; const js = store.jobs;
+  if (key === 'completions') { const c = await getCompletionsReport(); const cell = (x?: { total: number; byDept: Record<DeptCode, number> }) => (x ? `${x.total} (${(['W', 'B', 'P', 'PM'] as DeptCode[]).filter((d) => x.byDept[d]).map((d) => `${d}${x.byDept[d]}`).join(' ') || '—'})` : '');
+    return resolve({ key, title: 'Component completions by tech × month', columns: ['tech', ...c.months, 'total'], note: 'Credits each tech in the month their component completed (head / band / case), regardless of when the job invoices — MH ruling. Cell = count (by department). Invoicing is untouched.', generatedAt: now,
+      rows: [...c.rows.map((r) => ({ label: r.tech, values: Object.fromEntries([['tech', r.tech], ...c.months.map((m) => [m, cell(r.months[m])]), ['total', r.total]]) })), { label: 'total', values: { tech: 'Total completions', total: c.rows.reduce((t, r) => t + r.total, 0) } }] }); }
   if (key === 'funnel') return resolve({ key, title: 'Estimate funnel', columns: ['stage', 'count', 'value'], note: 'created = all estimates · sent = ever sent (status ≥ sent) · approved = approved or converted · converted = has a job. "Awaiting approval" on the dashboard = status sent.', generatedAt: now, rows: [
     { label: 'created', values: { stage: 'Created', count: es.length, value: es.reduce((t, e) => t + e.total, 0) } },
     { label: 'sent', values: { stage: 'Sent', count: es.filter((e) => e.status !== 'draft').length, value: es.filter((e) => e.status !== 'draft').reduce((t, e) => t + e.total, 0) } },
@@ -3232,6 +3293,41 @@ export async function resolveKioskMatch(requestId: string, decision: 'confirm' |
   else { const c = newKioskClient(r.kiosk); r.clientId = c.id; r.kiosk.matchState = 'split'; cx.conversations.filter((x) => x.clientId === prev.id && cx.messages.some((m) => m.conversationId === x.id && m.source === 'kiosk' && m.text.includes(r.number))).forEach((x) => { x.clientId = c.id; cx.messages.filter((m) => m.conversationId === x.id).forEach((m) => { m.clientId = c.id; }); }); }
   appendAudit({ type: 'kiosk', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${r.number} · ${decision === 'confirm' ? `linked to existing client ${prev.firstName} ${prev.lastName}` : `split from ${prev.firstName} ${prev.lastName} → new client ${r.kiosk.firstName} ${r.kiosk.lastName}`}` });
   return resolve(requestRow(r));
+}
+
+// ---- E11 RolliWorking `/rw` — two-lane floor (legacy RW research, reference not gospel) ------------------------------------------
+import type { RwFloorMap, RwStage } from './types';
+const HEAD_STAGES: { key: RwStage['key']; label: string }[] = [{ key: 'intake', label: 'Intake' }, { key: 'review', label: 'Review' }, { key: 'bench', label: 'Movement bench' }];
+const BAND_STAGES: { key: RwStage['key']; label: string }[] = [{ key: 'intake', label: 'Intake' }, { key: 'review', label: 'Review' }, { key: 'bench', label: 'Band bench' }, { key: 'polish', label: 'Polish' }];
+const rwStageOf = (j: Job, lane: 'head' | 'band'): RwStage['key'] | null => {
+  switch (j.status) {
+    case 'intake': return 'intake';
+    case 'in_review': return 'review';
+    case 'approved': return 'bench';
+    case 'in_service': return lane === 'band' && j.workflow.some((d) => d === 'P' || d === 'PM') && !j.workflow.includes('B') ? 'polish' : 'bench';
+    default: return null;
+  }
+};
+export async function getRwFloorMap(): Promise<RwFloorMap> {
+  const division = getSessionDivision();
+  const live = store.jobs.filter((j) => j.division === division && j.status !== 'closed');
+  const safe = (j: Job) => !!activeHold(j) || j.status === 'awaiting_customer_approval' || j.status === 'ready_to_ship';
+  const flowing = live.filter((j) => !safe(j) && !awaitingComponents(j));
+  const isHead = (j: Job) => j.workflow.includes('W') || j.workflow.length === 0;
+  const isBand = (j: Job) => j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
+  const lane = (stages: typeof HEAD_STAGES, pick: (j: Job) => boolean, which: 'head' | 'band'): RwStage[] => stages.map((s) => ({ ...s, jobs: flowing.filter((j) => pick(j) && rwStageOf(j, which) === s.key).map(jobRefs) }));
+  return resolve({
+    division,
+    head: lane(HEAD_STAGES, isHead, 'head'),
+    band: lane(BAND_STAGES, isBand, 'band'),
+    finalAssembly: flowing.filter((j) => j.status === 'testing').map(jobRefs),
+    intoSafe: [
+      { key: 'components', label: 'Awaiting components', jobs: live.filter((j) => awaitingComponents(j)).map(jobRefs) },
+      { key: 'hold', label: 'On hold', jobs: live.filter((j) => !!activeHold(j)).map(jobRefs) },
+      { key: 'approval', label: 'Awaiting approval', jobs: live.filter((j) => !activeHold(j) && j.status === 'awaiting_customer_approval').map(jobRefs) },
+      { key: 'ready', label: 'Ready — in safe', jobs: live.filter((j) => !activeHold(j) && j.status === 'ready_to_ship').map(jobRefs) },
+    ],
+  });
 }
 
 replayRcEvents();

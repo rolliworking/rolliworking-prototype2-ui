@@ -283,7 +283,20 @@ export interface Job {
   notes: JobNote[];
   photos: JobPhoto[];
   inspection?: InspectionReport;
+  components?: JobComponent[];
 }
+
+// MH ruling (first board walk): per-component completion, decoupled from invoicing
+export type ComponentKey = 'head' | 'band' | 'case';
+export interface ComponentRework { at: string; reason: string; by: string }
+export interface JobComponent {
+  key: ComponentKey; label: string; depts: DeptCode[];
+  completedAt?: string; completedBy?: string; completedStation?: string;
+  amendedAt?: string; amendedBy?: string; amendedFrom?: string;
+  rework: ComponentRework[];
+}
+export interface TechCompletionRow { tech: string; months: Record<string, { total: number; byDept: Record<DeptCode, number> }>; total: number }
+export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]; generatedAt: string }
 
 // ---- Tasks (explicit 20%) + derived /today rows -----------------------------
 
@@ -384,7 +397,7 @@ export interface DashboardStats {
 }
 
 export type EstimateWithRefs = Estimate & { client: Client; watch: Watch | null };
-export type JobWithRefs = Job & { client: Client; watch: Watch; estimate: Estimate | null; pkg: Package | null };
+export type JobWithRefs = Job & { client: Client; watch: Watch; estimate: Estimate | null; pkg: Package | null; components: JobComponent[] };
 
 // ---- Intake -----------------------------------------------------------------
 
@@ -930,3 +943,8 @@ export interface KioskDetails { firstName: string; lastName: string; email: stri
 export interface KioskSubmission { brand: Division; services: KioskService[]; firstName: string; lastName: string; email: string; phone: string; notes?: string }
 export interface KioskResult { request: ServiceRequest; client: Client; possibleExisting: boolean }
 export interface RequestRow extends ServiceRequest { client: Client; watch?: Watch }
+
+// ---- E11 RolliWorking `/rw` — legacy two-lane floor (head lane / band lane → Final assembly; Into safe off-ramp) — PROVISIONAL vs the 9-lane RS map
+export type RwStageKey = 'intake' | 'review' | 'bench' | 'polish';
+export interface RwStage { key: RwStageKey; label: string; jobs: JobWithRefs[] }
+export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage[]; finalAssembly: JobWithRefs[]; intoSafe: { key: 'components' | 'hold' | 'approval' | 'ready'; label: string; jobs: JobWithRefs[] }[] }

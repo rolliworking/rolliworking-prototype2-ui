@@ -9,21 +9,25 @@ import { Button } from '@/components/ui/Button';
 import { DeptBadge } from '@/components/ui/Pills';
 import { Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents, fmtTime } from '@/lib/format';
+import { useShowMoney } from '@/components/MoneyContext';
 
 type Refresh = (fn: () => Promise<unknown>, msg: string) => Promise<void>;
 
-export const LinesTable = ({ job: j }: { job: JobWithRefs }) => (
+export const LinesTable = ({ job: j }: { job: JobWithRefs }) => {
+  const money = useShowMoney();
+  return (
   <Table testId="job-lines">
-    <thead><tr><Th className="w-10">Dept</Th><Th>Description</Th><Th className="text-right">Qty</Th><Th className="text-right">Rate</Th><Th className="text-right">Ext</Th></tr></thead>
+    <thead><tr><Th className="w-10">Dept</Th><Th>Description</Th><Th className="text-right">Qty</Th>{money && <><Th className="text-right">Rate</Th><Th className="text-right">Ext</Th></>}</tr></thead>
     <tbody>
       {j.lines.map((l) => (
-        <tr key={l.id} data-testid={`job-line-${l.id}`}><Td><DeptBadge code={l.dept} /></Td><Td className="text-ink">{l.description}{l.partNumber && <span className="ml-1.5 font-mono text-xs text-ink-400">{l.partNumber}</span>}</Td><Td className="tabular text-right">{l.qty}</Td><Td className="tabular text-right text-ink-500">{fmtMoneyCents(l.unitPrice)}</Td><Td className="tabular text-right font-medium">{fmtMoneyCents(l.qty * l.unitPrice)}</Td></tr>
+        <tr key={l.id} data-testid={`job-line-${l.id}`}><Td><DeptBadge code={l.dept} /></Td><Td className="text-ink">{l.description}{l.partNumber && <span className="ml-1.5 font-mono text-xs text-ink-400">{l.partNumber}</span>}</Td><Td className="tabular text-right">{l.qty}</Td>{money && <><Td className="tabular text-right text-ink-500">{fmtMoneyCents(l.unitPrice)}</Td><Td className="tabular text-right font-medium">{fmtMoneyCents(l.qty * l.unitPrice)}</Td></>}</tr>
       ))}
-      {j.lines.length === 0 && <tr><Td colSpan={5} className="text-center text-xs text-ink-400">No line items — job created without an estimate.</Td></tr>}
-      <tr className="bg-canvas/60"><Td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-500">Total</Td><Td className="tabular text-right font-semibold" data-testid="job-total">{fmtMoneyCents(j.total)}</Td></tr>
+      {j.lines.length === 0 && <tr><Td colSpan={money ? 5 : 3} className="text-center text-xs text-ink-400">No line items — job created without an estimate.</Td></tr>}
+      {money ? <tr className="bg-canvas/60"><Td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-500">Total</Td><Td className="tabular text-right font-semibold" data-testid="job-total">{fmtMoneyCents(j.total)}</Td></tr> : <tr className="bg-canvas/60"><Td colSpan={3} data-testid="job-lines-no-money" className="text-right text-[11px] text-ink-400">Amounts hidden in RolliWorking (hide-money default, pending MH)</Td></tr>}
     </tbody>
   </Table>
-);
+  );
+};
 
 export const AssignmentPanel = ({ job: j, run }: { job: JobWithRefs; run: Refresh }) => {
   const [users, setUsers] = useState<User[]>([]);

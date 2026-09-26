@@ -11,6 +11,7 @@ import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
 import { InspectionReportPanel } from '@/components/jobs/InspectionReportPanel';
 import { TimingCard } from '@/components/jobs/TimingCard';
+import { ComponentsPanel } from '@/components/jobs/ComponentBits';
 import { PinModal } from '@/components/today/PinBits';
 import { TailPill } from '@/components/sales/SalesBits';
 import type { PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
@@ -108,6 +109,7 @@ export default function JobDetailPage() {
             </div>
           </Card>
           <Card title="Line items" subtitle="Carried from the estimate · department tags route the shop floor" testId="job-lines-card" bodyClassName="p-0"><LinesTable job={j} /></Card>
+          <Card title="Components" subtitle="Per-component completion — head / band / case — decoupled from invoicing (MH ruling)" testId="job-components-card"><ComponentsPanel job={j} run={run} /></Card>
           <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
           <Card title="Notes" subtitle="Freeform, stamped who / when / station" testId="job-notes-card"><NotesPanel job={j} run={run} /></Card>
           <Card title="Inspection report to client" subtitle="Portal-first · short notification + link · approve/decline on the portal page" testId="job-report-card"><InspectionReportPanel job={j} run={run} /></Card>
