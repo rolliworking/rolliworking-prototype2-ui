@@ -1,8 +1,8 @@
 import clsx from 'clsx';
-import { FileText, Inbox, MessageSquare, Receipt, User, Watch as WatchIcon, Wrench, type LucideIcon } from 'lucide-react';
+import { FileText, Inbox, MessageSquare, Receipt, Truck, User, Watch as WatchIcon, Wrench, type LucideIcon } from 'lucide-react';
 import type { IdentifierKind, SearchHit, SearchResults } from '@/api/client';
 
-const ICON: Record<IdentifierKind, LucideIcon> = { client: User, watch: WatchIcon, estimate: FileText, job: Wrench, sales_order: Receipt, package: Inbox, request: MessageSquare };
+const ICON: Record<IdentifierKind, LucideIcon> = { client: User, watch: WatchIcon, estimate: FileText, job: Wrench, sales_order: Receipt, package: Inbox, request: MessageSquare, shipment: Truck };
 
 export const flattenHits = (r: SearchResults | null): SearchHit[] => (r ? r.groups.flatMap((g) => g.hits) : []);
 

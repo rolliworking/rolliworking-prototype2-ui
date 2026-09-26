@@ -533,6 +533,7 @@ export async function logArrival(input: ArrivalInput): Promise<PackageWithRefs> 
     receiptPrinted: false,
   };
   store.packages.unshift(pkg);
+  if (tracking) { const sh = shp.rows.find((x) => x.trackingNumber === tracking && x.direction === 'inbound' && x.stage !== 'arrived'); if (sh) { const e = byId(store.estimates, sh.estimateId); sh.stage = 'arrived'; sh.arrivedAt = new Date().toISOString(); pkg.estimateId = e.id; pkg.clientId = sh.clientId; shipStamp(sh, `arrival scan matched · ${pkg.subNumber} · linked ${e.number}`); } }
   stamp(input.source === 'walk_in' ? `Walk-in logged (${pkg.carrier})` : `Package arrived via ${pkg.carrier}${input.signatureNoted ? ' · signature noted' : ''}`, pkg.subNumber);
   return resolve(pkgWithRefs(pkg));
 }
@@ -2123,8 +2124,8 @@ const clientName = (id: string) => fullNameOf(byId(fx.clients, id));
 const fullNameOf = (c: Client) => `${c.firstName} ${c.lastName}`;
 const clientPath = (clientId: string | undefined, hitKey: string, fallback: string) => (clientId ? `/clients/${clientId}?hit=${hitKey}` : fallback);
 
-const GROUP_LABEL: Record<IdentifierKind, string> = { client: 'Clients', estimate: 'Estimates', job: 'Jobs', package: 'Packages / SUB#', sales_order: 'Invoices (SO)', watch: 'Watches', request: 'Requests' };
-const GROUP_ORDER: IdentifierKind[] = ['client', 'watch', 'estimate', 'job', 'sales_order', 'package', 'request'];
+const GROUP_LABEL: Record<IdentifierKind, string> = { client: 'Clients', estimate: 'Estimates', job: 'Jobs', package: 'Packages / SUB#', sales_order: 'Invoices (SO)', watch: 'Watches', request: 'Requests', shipment: 'Shipments' };
+const GROUP_ORDER: IdentifierKind[] = ['client', 'watch', 'estimate', 'job', 'sales_order', 'package', 'request', 'shipment'];
 
 export async function getRequests(): Promise<ServiceRequest[]> { return resolve([...store.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
 export async function getRequestsForClient(clientId: string): Promise<ServiceRequest[]> { return resolve(store.requests.filter((r) => r.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
@@ -2178,6 +2179,8 @@ export async function resolveIdentifier(query: string): Promise<SearchResults> {
     });
   }
 
+  shp.rows.forEach((sh) => { const e = byId(store.estimates, sh.estimateId); const name = clientName(sh.clientId); const tn = sh.trackingNumber ?? '';
+    if ((tn && norm(tn).includes(nq) && nq.length >= 4) || (estD && estimateDigits(e.number).startsWith(estD)) || name.toLowerCase().includes(q)) hits.push({ kind: 'shipment', id: sh.id, hitKey: `ship-${sh.id}`, label: `${sh.direction === 'inbound' ? 'Inbound' : 'Outbound'} · ${e.number}`, detail: `${sh.carrier} · ${SHIP_STAGE_LABEL[sh.stage]}${tn ? ` · ${tn}` : ''}`, matched: tn && norm(tn).includes(nq) ? tn : e.number, clientId: sh.clientId, clientName: name, path: `/shipping/inbound?track=${sh.id}` }); });
   const groups: SearchGroup[] = GROUP_ORDER.map((kind) => ({ kind, label: GROUP_LABEL[kind], hits: hits.filter((h) => h.kind === kind).slice(0, 6) })).filter((g) => g.hits.length > 0);
   return resolve({ query: raw, groups, total: groups.reduce((n, g) => n + g.hits.length, 0) });
 }
@@ -3657,5 +3660,57 @@ export async function getColleagueInbox(shortName: string): Promise<Conversation
   const u = fx.users.find((x) => x.shortName === shortName); if (!u) throw new Error(`No staff member ${shortName}`);
   return resolve(openAssignedTo(u).map(convRefs).sort((a, b) => Number(b.needsReply) - Number(a.needsReply) || b.lastAt.localeCompare(a.lastAt)));
 }
+
+// ---- Inbound shipping (pre-arrival) + tracking lookup. Carrier calls go ONLY through src/api/carriers/parcelpro.ts ----
+import * as parcelpro from './carriers/parcelpro';
+import type { InboundCounts, LabelPrep, ShipAddress, ShipCarrierName, ShipStage, InboundShipment, ShipmentWithRefs } from './types';
+const shp = { rows: fx.shipments.map((s): InboundShipment => ({ ...s, events: [...s.events], stamps: [...s.stamps], emailIds: [...s.emailIds] })) };
+export const SHIP_STAGE_LABEL: Record<ShipStage, string> = { label_requested: 'Label requested', label_sent: 'Label sent', in_transit: 'In transit', delivered_unscanned: 'Delivered · unscanned', arrived: 'Arrived' };
+const shipStamp = (s: InboundShipment, action: string) => { const a = actor(); s.stamps.push({ at: new Date().toISOString(), by: a.by, station: a.station, action }); appendAudit({ type: 'intake', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${byId(store.estimates, s.estimateId).number} · shipping · ${action}` }); };
+const dayDiff = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+const shipRefs = (s: InboundShipment): ShipmentWithRefs => { const e = byId(store.estimates, s.estimateId); const last = s.events[s.events.length - 1]; const cl = byId(fx.clients, s.clientId); return { ...s, destinationState: s.stage === 'label_requested' ? cl.state || s.destinationState : s.destinationState, estimate: e, client: cl, watch: e.watchId ? store.watches.find((w) => w.id === e.watchId) : undefined, ageDays: dayDiff(s.requestedAt), outstandingDays: s.labelSentAt ? dayDiff(s.labelSentAt) : 0, lastEvent: last, arrivingToday: s.stage === 'in_transit' && !!last && /out for delivery/i.test(last.status), unscannedHours: s.deliveredAt ? Math.floor((Date.now() - new Date(s.deliveredAt).getTime()) / 3_600_000) : 0 }; };
+const shipOf = (id: string) => byId(shp.rows, id);
+export async function getInboundBoard(): Promise<{ rows: ShipmentWithRefs[]; counts: InboundCounts }> {
+  const rows = shp.rows.filter((s) => s.direction === 'inbound' && s.stage !== 'arrived').map(shipRefs).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+  const n = (st: ShipStage) => rows.filter((r) => r.stage === st).length;
+  return resolve({ rows, counts: { label_requested: n('label_requested'), label_sent: n('label_sent'), in_transit: n('in_transit'), delivered_unscanned: n('delivered_unscanned'), red30: rows.filter((r) => r.stage === 'label_sent' && r.outstandingDays > 30).length, arrivingToday: rows.filter((r) => r.arrivingToday).length } });
+}
+export async function getShipment(id: string): Promise<ShipmentWithRefs | null> { const s = shp.rows.find((x) => x.id === id); return resolve(s ? shipRefs(s) : null); }
+export async function getShipmentsForClient(clientId: string): Promise<ShipmentWithRefs[]> { return resolve(shp.rows.filter((s) => s.clientId === clientId).map(shipRefs).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))); }
+export async function getShipmentForEstimate(estimateId: string): Promise<ShipmentWithRefs | null> { const s = shp.rows.find((x) => x.estimateId === estimateId && x.stage !== 'arrived'); return resolve(s ? shipRefs(s) : null); }
+export async function prepareLabel(id: string): Promise<LabelPrep> {
+  const s = shipRefs(shipOf(id)); const c = s.client; const recipient: ShipAddress = { name: `${c.firstName} ${c.lastName}`, street: c.street, city: c.city, state: c.state || s.destinationState };
+  return { shipment: s, recipient, validation: await parcelpro.validateAddress(recipient), declaredValue: s.declaredValue || s.estimate.total };
+}
+export async function createInboundLabel(id: string, recipient: ShipAddress, declaredValue: number, carrier: ShipCarrierName): Promise<ShipmentWithRefs> {
+  const s = shipOf(id); if (s.stage !== 'label_requested') throw new Error('Label already created'); if (!(declaredValue > 0)) throw new Error('Declared value is required'); const e = byId(store.estimates, s.estimateId);
+  const v = await parcelpro.validateAddress(recipient); if (!v.valid) throw new Error(`Address not valid: ${v.riskFlag ?? 'incomplete'}`);
+  const label = await parcelpro.createLabel({ estimateNumber: e.number, recipient: v.cleaned, declaredValue, carrier });
+  s.carrier = carrier; s.service = carrier === 'UPS' ? 'UPS Next Day Air Saver' : 'FedEx Priority Overnight'; s.declaredValue = declaredValue; s.destinationState = v.cleaned.state; s.trackingNumber = label.trackingNumber; s.labelUrl = label.labelUrl; s.cost = label.cost; s.stage = 'label_sent'; s.labelSentAt = new Date().toISOString();
+  s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label').id); shipStamp(s, `label created · ${carrier} ${label.trackingNumber} · insured $${declaredValue.toLocaleString()} · cost $${label.cost} · emailed`);
+  return resolve(shipRefs(s));
+}
+const queueShipEmail = (s: InboundShipment, subject: string, extra = '') => { const e = byId(store.estimates, s.estimateId); const c = byId(fx.clients, s.clientId); const a = actor(); const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e.number} · ${s.trackingNumber ?? 'label'}`, status: 'pending', subject: `${subject} — ${e.number}`, body: `Hello ${c.firstName},\n\n${extra || `Your prepaid, fully insured ${s.carrier} label for estimate ${e.number} is attached (insured value $${s.declaredValue.toLocaleString()}). Print it, pack the watch securely, and drop it at any ${s.carrier} location.`}\n\nLabel: ${s.labelUrl}\nTracking: ${s.trackingNumber}\nTrack it any time in RolliConnect: ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }; store.outbox.unshift(email); return email; };
+export async function resendLabelEmail(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label (resent)').id); shipStamp(s, 'label email re-queued'); return resolve(shipRefs(s)); }
+export async function followUpLabel(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Still planning to send your watch in?', `We sent you a prepaid ${s.carrier} label ${dayDiff(s.labelSentAt!)} days ago and haven't seen the package move yet. No rush — just let us know if you need a new label or a different date.`).id); shipStamp(s, 'follow-up reminder queued'); return resolve(shipRefs(s)); }
+export async function voidAndReissue(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (s.stage !== 'label_sent') throw new Error('Only outstanding labels can be voided'); await parcelpro.voidLabel(s.trackingNumber!); shipStamp(s, `label ${s.trackingNumber} voided · back to Label Requests (reissue)`); s.trackingNumber = undefined; s.labelUrl = undefined; s.cost = undefined; s.labelSentAt = undefined; s.stage = 'label_requested'; s.reissued = true; s.requestedAt = new Date().toISOString(); return resolve(shipRefs(s)); }
+const SIM_STEPS: [RegExp | null, string, string, string?][] = [[null, 'Picked up', 'Origin facility'], [/picked up/i, 'In transit', 'Louisville, KY', 'Arrived at hub'], [/in transit/i, 'Out for delivery', 'New York, NY'], [/out for delivery/i, 'Delivered', 'New York, NY', 'Signed: FRONT DESK']];
+export async function simulateTrackingEvent(id: string): Promise<ShipmentWithRefs> {
+  const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label to track'); if (s.stage === 'delivered_unscanned' || s.stage === 'arrived') throw new Error('Already delivered');
+  const last = s.events[s.events.length - 1]; const step = SIM_STEPS.find(([m]) => (last ? m && m.test(last.status) : m === null)) ?? SIM_STEPS[0];
+  s.events.push({ at: new Date().toISOString(), status: step[1], location: step[2], note: step[3] }); if (s.stage === 'label_sent') s.stage = 'in_transit';
+  if (step[1] === 'Out for delivery') s.eta = new Date().toISOString(); if (step[1] === 'Delivered') { s.stage = s.direction === 'inbound' ? 'delivered_unscanned' : 'arrived'; s.deliveredAt = new Date().toISOString(); }
+  const t = await parcelpro.getTracking(s.trackingNumber, s.events); if (t.eta) s.eta = t.eta; shipStamp(s, `tracking event (simulated) · ${step[1]} · ${step[2]}`); return resolve(shipRefs(s));
+}
+// One line the concierge can read to a caller or paste into a reply
+export const clientStatusLine = (s: ShipmentWithRefs): string => {
+  const who = s.direction === 'inbound' ? 'Your watch' : 'Your watch'; const last = s.lastEvent; const when = (iso: string) => { const d = dayDiff(iso); const h = new Date(iso).getHours(); return d === 0 ? (h < 12 ? 'this morning' : 'this afternoon') : d === 1 ? 'yesterday' : `on ${new Date(iso).toLocaleDateString('en-US', { weekday: 'long' })}`; };
+  const eta = s.eta ? ` and is expected ${dayDiff(s.eta) === 0 ? 'today' : new Date(s.eta).toLocaleDateString('en-US', { weekday: 'long' })}` : '';
+  if (s.stage === 'label_requested') return `We're preparing your prepaid ${s.carrier} shipping label for ${s.estimate.number} — it will be in your inbox shortly.`;
+  if (s.stage === 'label_sent') return `Your prepaid ${s.carrier} label (${s.trackingNumber}) was emailed ${when(s.labelSentAt!)}; ${s.carrier} hasn't scanned the package yet — once you drop it off, tracking updates the same day.`;
+  if (s.stage === 'delivered_unscanned') return `${s.carrier} shows your watch delivered to us ${when(s.deliveredAt!)}; our intake team is checking it in and you'll get a confirmation email shortly.`;
+  if (s.stage === 'arrived') return `Your watch arrived safely and has been checked in at our workshop.`;
+  return `${who} is ${s.direction === 'inbound' ? 'on its way to us' : 'on its way to you'} with ${s.carrier}${last ? `, last scanned in ${last.location} ${when(last.at)}` : ''}${eta}.`;
+};
 
 replayRcEvents();

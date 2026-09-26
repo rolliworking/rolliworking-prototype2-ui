@@ -710,7 +710,22 @@ export interface ServiceRequest {
   kiosk?: KioskDetails;
 }
 
-export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request';
+export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request' | 'shipment';
+
+// ---- Inbound shipping (pre-arrival) + tracking lookup -------------------------------------------------
+export type ShipStage = 'label_requested' | 'label_sent' | 'in_transit' | 'delivered_unscanned' | 'arrived';
+export type ShipCarrierName = 'UPS' | 'FedEx';
+export interface TrackingEvent { at: string; status: string; location: string; note?: string }
+export interface ShipStamp extends Stamp { action: string }
+export interface InboundShipment {
+  id: string; direction: 'inbound' | 'outbound'; estimateId: string; clientId: string; stage: ShipStage; carrier: ShipCarrierName; service: string;
+  declaredValue: number; destinationState: string; requestedAt: string; labelSentAt?: string; trackingNumber?: string; labelUrl?: string; cost?: number;
+  events: TrackingEvent[]; eta?: string; deliveredAt?: string; arrivedAt?: string; reissued?: boolean; stamps: ShipStamp[]; emailIds: string[];
+}
+export interface ShipmentWithRefs extends InboundShipment { estimate: Estimate; client: Client; watch?: Watch; ageDays: number; outstandingDays: number; lastEvent?: TrackingEvent; arrivingToday: boolean; unscannedHours: number }
+export interface InboundCounts { label_requested: number; label_sent: number; in_transit: number; delivered_unscanned: number; red30: number; arrivingToday: number }
+export interface ShipAddress { name: string; street: string; city: string; state: string; zip?: string }
+export interface LabelPrep { shipment: ShipmentWithRefs; recipient: ShipAddress; validation: { valid: boolean; cleaned: ShipAddress; riskFlag?: string }; declaredValue: number }
 
 export interface SearchHit {
   kind: IdentifierKind;

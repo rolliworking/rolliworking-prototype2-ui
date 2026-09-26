@@ -49,6 +49,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'clients', label: 'Clients', path: '/clients', icon: Users, tiers: ALL, built: true, blurb: 'Client 360 — search any identifier, see their whole world.' },
   { key: 'requests', label: 'Requests', path: '/requests', icon: MessageSquarePlus, tiers: ALL, built: true, blurb: 'Service requests queue — calls, emails, web forms and kiosk check-ins; kiosk matches to confirm.' },
   { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, built: true, blurb: 'Client messages from RolliConnect; replies queue to Outbox.' },
+  { key: 'inbound', label: 'Inbound', path: '/shipping/inbound', icon: Truck, tiers: ALL, built: true, blurb: 'Pre-arrival shipping: label requests, outstanding labels, in transit, delivered-unscanned. Track a package for a caller.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, built: true, blurb: 'Quotes awaiting approval and approved work.' },
   { key: 'jobs', label: 'Jobs', path: '/jobs', icon: Wrench, tiers: MGR, built: true, blurb: 'Bench work in progress across departments.' },

@@ -4,6 +4,7 @@ import { ClientHeader } from '@/components/clients/ClientHeader';
 import { EstimatesSection, InvoicesSection, JobsSection } from '@/components/clients/RecordSections';
 import { EvidenceSection } from '@/components/jobs/EvidencePanel';
 import { CustodySection, EmailsSection, NotesTasksSection, RequestsSection } from '@/components/clients/SideSections';
+import { TrackButton } from '@/components/shipping/ShippingBits';
 import { WatchGroups } from '@/components/clients/WatchGroups';
 import { useAsync } from '@/hooks/useAsync';
 import { useHitHighlight } from '@/hooks/useHitHighlight';
@@ -26,6 +27,7 @@ export default function Client360Page() {
   return (
     <div data-testid="client360-page" className="space-y-4">
       <ClientHeader data={data} />
+      <div data-testid="client360-shipments" className="flex flex-wrap items-center gap-1.5 text-xs"><span className="text-ink-500">Shipments:</span><TrackButton clientId={data.client.id} testId="client360-track" /></div>
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 space-y-4 xl:col-span-7">
           <WatchGroups groups={data.watches} />
