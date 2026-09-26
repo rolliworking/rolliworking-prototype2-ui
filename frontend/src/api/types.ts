@@ -469,6 +469,7 @@ export interface OutboxEmail {
   createdBy: string;
   station: string;
   status: 'pending';
+  payLink?: string;
 }
 
 export type LabelType = 'pdf417_data' | 'ref_serial';
@@ -561,6 +562,11 @@ export interface PickupSession extends Stamp {
   adminOverride?: boolean;
 }
 
+// One row per "Send invoice" — what the client was told at that moment (the link itself always shows the LIVE balance)
+export interface InvoiceSend { at: string; by: string; total: number; balanceDue: number; emailId: string }
+// Public mock hosted-payment page payload (Intuit placeholder)
+export interface PayPage { order: SalesOrderWithRefs; paid: number; sends: InvoiceSend[]; merchant: string; mock: true }
+
 export interface SalesOrder {
   id: string;
   number: string;
@@ -580,6 +586,9 @@ export interface SalesOrder {
   payments: Payment[];
   balanceDue: number;
   isPaid: boolean;
+  payLinkToken: string;
+  invoiceSentAt?: string;
+  invoiceSends: InvoiceSend[];
   pickupCode?: string;
   pickupCodeIssuedAt?: string;
   shippingAddress?: Address;

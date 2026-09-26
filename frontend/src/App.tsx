@@ -28,6 +28,7 @@ import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
 import RgManagerPage from '@/pages/rg/RgManagerPage';
 import KioskPage from '@/pages/kiosk/KioskPage';
+import PayPage from '@/pages/PayPage';
 import RequestsPage from '@/pages/RequestsPage';
 import RtQueuePage from '@/pages/rt/RtQueuePage';
 import RtTestPage from '@/pages/rt/RtTestPage';
@@ -132,6 +133,7 @@ export default function App() {
             <Route path="manager" element={<RgManagerPage />} />
           </Route>
           <Route path="/kiosk" element={<KioskPage />} />
+          <Route path="/pay/:token" element={<PayPage />} />
           <Route path="/rt" element={<RtShell />}>
             <Route index element={<RtQueuePage />} />
             <Route path="test/:jobId" element={<RtTestPage />} />

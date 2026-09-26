@@ -33,6 +33,7 @@ import type {
   FloorLane,
   FloorMap,
   FulfillmentChannel,
+  PayPage,
   Part,
   PartsKnowledgeEntry,
   PartsRequest,
@@ -136,7 +137,7 @@ const store = {
   parts: fx.parts.map((p): Part => ({ ...p, compatibleRefs: [...p.compatibleRefs], aliases: [...p.aliases] })),
   partsRequests: fx.partsRequests.map((r): PartsRequest => ({ ...r, chat: [...r.chat], searchTerms: [...r.searchTerms], history: [...(r.history ?? [])], items: r.items?.map((i) => ({ ...i })) })),
   partsKnowledge: fx.partsKnowledge.map((k): PartsKnowledgeEntry => ({ ...k })),
-  salesOrders: fx.salesOrders.map((o): SalesOrder => ({ ...o, lines: o.lines.map((l) => ({ ...l })), payments: [...o.payments] })),
+  salesOrders: fx.salesOrders.map((o): SalesOrder => ({ ...o, lines: o.lines.map((l) => ({ ...l })), payments: [...o.payments], invoiceSends: [] })),
   packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
   outbox: fx.outbox.map((e) => ({ ...e })),
   labels: fx.labels.map((l) => ({ ...l })),
@@ -1608,10 +1609,10 @@ const soStamp = (o: SalesOrder, detail: string) => {
   const a = actor();
   appendAudit({ type: 'sales', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${o.number} · ${detail}` });
 };
-const soEmail = (o: SalesOrder, subject: string, body: string) => {
+const soEmail = (o: SalesOrder, subject: string, body: string, payLink?: string) => {
   const a = actor();
   const c = byId(fx.clients, o.clientId);
-  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', subject: `${subject} — ${o.number}`, body: `Hello ${c.firstName},\n\n${body}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink, subject: `${subject} — ${o.number}`, body: `Hello ${c.firstName},\n\n${body}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
 };
 
 export const SO_BADGE = (o: SalesOrder): 'picked_up' | 'shipped' | 'paid' | 'unpaid' => (o.pickedUpAt ? 'picked_up' : o.tracking || o.shipDate ? 'shipped' : o.isPaid ? 'paid' : 'unpaid');
@@ -1664,7 +1665,7 @@ const buildSO = (input: SalesOrderInput): SalesOrder => {
     id: newId('so'), number: nextSONumber(), clientId: input.clientId, jobId: input.jobId, estimateId: input.estimateId,
     status: input.status ?? 'draft', channel: input.channel, orderDate: now,
     lines: input.lines.filter((l) => l.description.trim()).map((l) => ({ id: newId('sol'), description: l.description.trim(), partNumber: l.partNumber, qty: l.qty || 1, rate: l.rate || 0, dept: l.dept, pickedUpQty: 0, shippedQty: 0 })),
-    shippingAmount: input.shippingAmount ?? 0, total: 0, memo: input.memo?.trim() || undefined, qboStatus: 'not_queued', payments: [], balanceDue: 0, isPaid: false,
+    shippingAmount: input.shippingAmount ?? 0, total: 0, memo: input.memo?.trim() || undefined, qboStatus: 'not_queued', payments: [], balanceDue: 0, isPaid: false, payLinkToken: newId('pl'), invoiceSends: [],
     createdAt: now, createdBy: a.by, updatedAt: now,
   };
   soTotals(o);
@@ -1692,14 +1693,44 @@ export async function convertEstimateToSalesOrder(estimateId: string): Promise<S
 export interface SalesOrderPatch { lines?: SOLineInput[]; shippingAmount?: number; memo?: string; channel?: FulfillmentChannel }
 export async function updateSalesOrder(id: string, patch: SalesOrderPatch): Promise<SalesOrderWithRefs> {
   const o = getSO(id);
-  if (!['draft', 'open'].includes(o.status)) throw new Error('Only draft or open orders can be edited');
+  if (!['draft', 'open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Completed or cancelled orders cannot be edited');
+  const before = { total: o.total, balanceDue: o.balanceDue, isPaid: o.isPaid };
   if (patch.lines) o.lines = patch.lines.filter((l) => l.description.trim()).map((l) => ({ id: newId('sol'), description: l.description.trim(), partNumber: l.partNumber, qty: l.qty || 1, rate: l.rate || 0, dept: l.dept, pickedUpQty: 0, shippedQty: 0 }));
   if (patch.shippingAmount !== undefined) o.shippingAmount = patch.shippingAmount;
   if (patch.memo !== undefined) o.memo = patch.memo.trim() || undefined;
   if (patch.channel !== undefined) o.channel = patch.channel;
   soTotals(o);
-  soStamp(o, `Edited · ${fmtMoney(o.total)}`);
+  // Edit-after-send (VB4): the payment link is the same URL and now shows the new live balance — nothing to resend
+  const afterSend = !!o.invoiceSentAt && before.total !== o.total;
+  soStamp(o, afterSend ? `Edited after send · total ${fmtMoney(before.total)} → ${fmtMoney(o.total)} · balance ${fmtMoney(before.balanceDue)} → ${fmtMoney(o.balanceDue)} · payment link updated${o.qboStatus === 'queued' ? ' · QBO re-push queued (stub)' : ''}${before.isPaid && !o.isPaid ? ' · NO LONGER PAID IN FULL' : ''}` : `Edited · ${fmtMoney(o.total)}`);
   return resolve(soRefs(o));
+}
+
+// ---- Send invoice + mock hosted payment page (Intuit placeholder) --------------------------------------------------------------
+// The pay link is minted once per SO and never changes; the page behind it always renders the LIVE total / balance (VB4 edit-after-send).
+export const payLinkPath = (o: SalesOrder) => `/pay/${o.payLinkToken}`;
+export const payLinkUrl = (o: SalesOrder) => `${window.location.origin}${payLinkPath(o)}`;
+export async function sendInvoice(id: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Open the order before sending the invoice');
+  if (o.lines.length === 0) throw new Error('Nothing to invoice');
+  const a = actor(); const url = payLinkUrl(o); const emailId = `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
+  const c = byId(fx.clients, o.clientId);
+  store.outbox.unshift({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  o.invoiceSentAt = new Date().toISOString(); o.invoiceSends.push({ at: o.invoiceSentAt, by: a.by, total: o.total, balanceDue: o.balanceDue, emailId }); soTotals(o);
+  soStamp(o, `Invoice sent · ${fmtMoney(o.total)} · balance ${fmtMoney(o.balanceDue)} · pay link ${payLinkPath(o)} (send #${o.invoiceSends.length})`);
+  if (o.jobId) jobStamp(byId(store.jobs, o.jobId), `Invoice ${o.number} sent · pay link emailed`);
+  return resolve(soRefs(o));
+}
+const soByToken = (token: string) => { const o = store.salesOrders.find((x) => x.payLinkToken === token); if (!o || o.status === 'cancelled') throw new Error('This payment link is not valid'); return o; };
+// Public read (no staff session) — the hosted page renders whatever the SO says RIGHT NOW
+export async function getPayPage(token: string): Promise<PayPage> { const o = soByToken(token); return resolve({ order: soRefs(o), paid: o.payments.reduce((t, p) => t + p.amount, 0), sends: o.invoiceSends, merchant: 'Rolliworks · Luxury Watch Service', mock: true }); }
+export async function payViaLink(token: string, amount: number): Promise<PayPage> {
+  const o = soByToken(token);
+  if (o.status === 'draft') throw new Error('This invoice is not open for payment yet');
+  if (o.balanceDue <= 0) throw new Error('This invoice is already paid in full');
+  await asClient(o.clientId, () => recordPayment(o.id, amount, 'card', `Paid online via payment link (MOCK Intuit) · ${amount + 0.005 >= o.balanceDue ? 'balance cleared' : 'partial'}`));
+  return getPayPage(token);
 }
 
 // SO machine: draft → open → partial_fulfilled → fulfilled → shipped | picked_up ; any → cancelled

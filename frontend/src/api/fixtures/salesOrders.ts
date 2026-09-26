@@ -8,11 +8,11 @@ const pay = (amount: number, method: Payment['method'], d: number, by = 'Vienna'
 const addr = (name: string, street: string, city: string, state: string): Address => ({ name, street, city, state });
 
 const total = (lines: SOLine[], ship = 0) => lines.reduce((t, l) => t + l.qty * l.rate, 0) + ship;
-const so = (s: Omit<SalesOrder, 'total' | 'balanceDue' | 'isPaid' | 'qboStatus' | 'updatedAt' | 'createdBy' | 'shippingAmount'> & { shippingAmount?: number }): SalesOrder => {
+const so = (s: Omit<SalesOrder, 'total' | 'balanceDue' | 'isPaid' | 'qboStatus' | 'updatedAt' | 'createdBy' | 'shippingAmount' | 'payLinkToken' | 'invoiceSends'> & { shippingAmount?: number }): SalesOrder => {
   const shippingAmount = s.shippingAmount ?? 0;
   const t = total(s.lines, shippingAmount);
   const paid = s.payments.reduce((a, p) => a + p.amount, 0);
-  return { ...s, shippingAmount, total: t, balanceDue: Math.max(0, t - paid), isPaid: paid >= t && t > 0, qboStatus: s.qboInvoiceId ? 'queued' : 'not_queued', updatedAt: s.createdAt, createdBy: 'Vienna' };
+  return { ...s, payLinkToken: `pl-${s.id}`, invoiceSends: [], shippingAmount, total: t, balanceDue: Math.max(0, t - paid), isPaid: paid >= t && t > 0, qboStatus: s.qboInvoiceId ? 'queued' : 'not_queued', updatedAt: s.createdAt, createdBy: 'Vienna' };
 };
 
 // One SO per tail stage: draft · open unpaid (awaiting payment) · fulfilled+pickup (ready for pickup) · fulfilled+ship (ready to ship) · shipped · picked_up · cancelled

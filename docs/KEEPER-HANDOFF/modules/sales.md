@@ -31,3 +31,9 @@
 - Pickup code pre-check (E9b): code validated before the photo step so the concierge sees a wrong code early.
 - Portal (RC) can schedule a pickup window and submit a shipping address; both create staff-side threads/tasks.
 - `⚠ DRIFT`: shipping labels/tracking are fabricated strings; insurance is only a declared value field (seam → shippingProvider).
+
+## Post-E16 additions (2026-09-26) — Send invoice + payment link
+- **Send invoice** action (open / partial_fulfilled / fulfilled): queues an Outbox email with a **Pay invoice** button (`OutboxEmail.payLink`) and records the send (`invoiceSends[] {at, by, total, balanceDue, emailId}`); re-send reuses the same link.
+- **Pay link** `/pay/<payLinkToken>` — minted once per SO (`pl-…`), public, renders the LIVE lines / total / paid / balance (`getPayPage`), accepts partial payments (`payViaLink` → `recordPayment` as the client, method card). Portal Pay button (`/rc/invoices/:id`) opens the same page. Page is a **MOCK Intuit placeholder** (banner, fake card block, "no card is charged").
+- **Edit after send** (VB4): `updateSalesOrder` now allowed through `fulfilled`; stamps "Edited after send · total A → B · balance … · payment link updated · QBO re-push queued (stub)". The SO page's Payment-link card shows each send's "told" figures vs "now".
+- `⚠ DRIFT` QBO re-push after an edit is a stamp only; production must void/replace the QBO invoice and keep the hosted link valid. `⚠ DRIFT` The hosted page is same-origin SPA navigation (store is per tab) — production is an Intuit-hosted URL.

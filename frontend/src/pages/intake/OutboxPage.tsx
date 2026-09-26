@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { Mail, MailX } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { OutboxEmail } from '@/api/client';
 import { Card } from '@/components/ui/Card';
@@ -50,6 +51,7 @@ export default function OutboxPage() {
                 <dt className="text-ink-400">Queued by</dt><dd className="text-ink-700">{open.createdBy} · {open.station} · {fmtDate(open.createdAt)} {fmtTime(open.createdAt)}</dd>
               </dl>
               <pre className="mt-4 whitespace-pre-wrap rounded-md border border-line bg-canvas p-4 font-sans text-[13px] leading-5 text-ink-700" data-testid="outbox-body">{open.body}</pre>
+              {open.payLink && <Link data-testid="outbox-pay-button" to={open.payLink} className="mt-3 inline-flex h-10 items-center gap-2 rounded-md bg-[#0d2b1f] px-5 text-sm font-semibold text-white hover:opacity-90">Pay invoice → <span className="text-[10px] font-normal uppercase tracking-wide text-white/70">MOCK PAYMENT PAGE</span></Link>}
             </div>
           ) : (
             <p className="text-xs text-ink-400">Select an email to preview it.</p>

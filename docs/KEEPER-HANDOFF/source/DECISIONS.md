@@ -234,3 +234,10 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **VB3-18** Carrier adapter seam: ALL carrier calls through `parcelpro.ts` — createLabel, voidLabel, getTracking, validateAddress; mocked now with production-real shapes; tracking numbers born attached to the est# (arrival auto-match); per-shipment cost lands on the SO at label time (⚠ not yet written to the SO).
 - **VB3-19** Tracking lookup panel: full carrier timeline; from shipping rows, client 360, Inbox threads, Job Lookup; inbound + outbound; "Copy status for client" one-liner reused by portal + templates (write once).
 - **Still awaiting MH** (carried): VB1-02 division inherit + RLS · VB2-07a role split · VB2-07b ref/serial written once at inspection · VB2-07c portal system actor + division. Keep ASSUMED.
+
+## Send invoice + mock payment link (VB4 edit-after-send mirror) — 2026-09-26 (MH brief)
+- **One pay link per SO, minted once, never changes** (`/pay/<token>`); the page behind it always renders the LIVE total / paid / balance. Editing the invoice after send (add/remove shipping, lines) needs **no resend** — the same link shows the new balance immediately; the SO stamps "Edited after send · total A → B · balance …· payment link updated (QBO re-push queued)". Orders stay editable through `fulfilled` (was draft/open only).
+- **Send invoice** is its own action (separate from Fulfil → QBO): queues an Outbox email carrying a **Pay invoice** button; each send is recorded (`invoiceSends[] {at, by, total, balanceDue, emailId}`) so RS shows what the client was told vs what is true now.
+- **Portal**: the RolliConnect invoice's Pay button opens the same hosted page (one payment surface, not two).
+- **Hosted page is a MOCK Intuit placeholder** — labelled as such, partial payments allowed, no card charged; production = QuickBooks Payments hosted invoice link; the seam is `getPayPage / payViaLink` + `payLinkToken`.
+- Full payment flips the SO badge Unpaid → Paid and the tail (ready to ship / ready for pickup) accordingly.

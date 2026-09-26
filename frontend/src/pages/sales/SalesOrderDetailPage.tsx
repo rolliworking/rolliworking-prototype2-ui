@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, CheckCircle2, CreditCard, Mail, MapPin, PackageCheck, RefreshCw, Save, Truck, Wrench } from 'lucide-react';
+import { ArrowLeft, Ban, CheckCircle2, CreditCard, ExternalLink, Link2, Mail, MapPin, PackageCheck, RefreshCw, Save, Send, Truck, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -52,7 +52,7 @@ export default function SalesOrderDetailPage() {
 
   if (o === undefined) return null;
   if (!isNew && !o) return <div className="text-ink-500">Sales order not found. <Link to="/sales" className="underline">Back</Link></div>;
-  const editable = isNew || (o && ['draft', 'open'].includes(o.status));
+  const editable = isNew || (o && ['draft', 'open', 'partial_fulfilled', 'fulfilled'].includes(o.status));
   const linesTotal = lines.reduce((t, l) => t + l.qty * l.rate, 0) + shippingAmount;
 
   return (
@@ -72,7 +72,8 @@ export default function SalesOrderDetailPage() {
       {o && (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="so-actions">
           {o.status === 'draft' && <Button variant="primary" data-testid="act-open-so" onClick={() => run(() => api.openSalesOrder(o.id), 'Opened · email queued')}>Open order</Button>}
-          {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.balanceDue > 0 && <Button variant="primary" data-testid="act-payment" onClick={() => setModal('payment')}><CreditCard size={13} /> Record payment</Button>}
+          {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <Button variant={o.invoiceSentAt ? 'secondary' : 'primary'} data-testid="act-send-invoice" onClick={() => run(() => api.sendInvoice(o.id), o.invoiceSentAt ? 'Invoice re-sent · same pay link · Outbox' : 'Invoice sent · pay link queued to Outbox')}><Send size={13} /> {o.invoiceSentAt ? 'Re-send invoice' : 'Send invoice'}</Button>}
+          {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.balanceDue > 0 && <Button data-testid="act-payment" onClick={() => setModal('payment')}><CreditCard size={13} /> Record payment</Button>}
           {['open', 'partial_fulfilled'].includes(o.status) && <span className="inline-flex items-center gap-1"><Button data-testid="act-fulfill" onClick={() => run(() => api.fulfillSalesOrder(o.id), 'Fulfilled · QBO queued (stub)')}><CheckCircle2 size={13} /> Fulfil → QBO</Button><Provisional note="Pack: without an invoice id, pickup may assume paid — simplest version: payment still gated" /></span>}
           {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <>
             <Button data-testid="act-push-pickup" disabled={o.channel === 'pickup'} onClick={() => run(() => api.setFulfillmentChannel(o.id, 'pickup'), 'Pushed to Pickup Station · code emailed')}><PackageCheck size={13} /> Push to Pickup</Button>
@@ -107,6 +108,17 @@ export default function SalesOrderDetailPage() {
             {!editing && o?.memo && <p className="border-t border-line px-4 py-2 text-xs text-ink-500">Memo: {o.memo}</p>}
           </Card>
           {o && <Card title="Payments" subtitle="Stub ledger — no processor; partial allowed" testId="so-payments-card"><MoneyStrip order={o} /><div className="mt-3"><PaymentsList order={o} /></div></Card>}
+          {o && o.status !== 'draft' && o.status !== 'cancelled' && <Card title="Payment link" subtitle="One link per order, minted once — the page behind it always shows the LIVE balance (edit-after-send safe)" testId="so-paylink-card">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Link2 size={12} className="text-ink-400" /><Link data-testid="so-pay-link" to={api.payLinkPath(o)} className="font-mono text-brand hover:underline">{api.payLinkPath(o)}</Link>
+              <Link data-testid="so-pay-link-open" to={api.payLinkPath(o)} className="inline-flex h-7 items-center gap-1 rounded-sm border border-line bg-surface px-2 text-[11px] font-medium text-ink hover:border-ink-300"><ExternalLink size={11} /> Open MOCK PAYMENT PAGE</Link>
+              <span data-testid="so-pay-link-live" className="ml-auto rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] text-ink-700">live · total {fmtMoneyCents(o.total)} · balance {fmtMoneyCents(o.balanceDue)}</span>
+            </div>
+            <ul data-testid="so-invoice-sends" className="mt-2 divide-y divide-line/60 text-xs">
+              {o.invoiceSends.map((sd, i) => <li key={sd.emailId} data-testid={`so-invoice-send-${i + 1}`} className="flex items-center gap-2 py-1"><Send size={11} className="text-ink-400" /><span className="text-ink">Send #{i + 1}</span><span className="text-ink-500">{fmtDate(sd.at)} {fmtTime(sd.at)} · {sd.by}</span><span className="ml-auto tabular text-ink-500">told: total {fmtMoneyCents(sd.total)} · balance {fmtMoneyCents(sd.balanceDue)}{sd.total !== o.total && <span className="ml-1 rounded-sm bg-amber-50 px-1 text-amber-800">now {fmtMoneyCents(o.total)}</span>}</span></li>)}
+              {!o.invoiceSends.length && <li className="py-1 text-ink-400">Not sent yet — “Send invoice” queues the email with a Pay button.</li>}
+            </ul>
+          </Card>}
         </div>
         {o && (
           <div className="space-y-4">

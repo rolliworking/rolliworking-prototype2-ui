@@ -104,8 +104,8 @@ export default function RcInvoicePage() {
         </div>
         {o.balanceDue > 0 && !done && (
           <div className="mt-5">
-            <RcButton data-testid="rc-pay-now" disabled={busy} onClick={() => run(() => api.portalPayBalance(client!.id, o.id))}><CreditCard size={16} /> Pay {rcMoney(o.balanceDue)} now</RcButton>
-            <p className="mt-2 text-xs text-rc-muted">Preview: this records a card payment in our system. No card is charged.</p>
+            <Link data-testid="rc-pay-now" to={api.payLinkPath(o)} className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-rc-ink px-6 text-[15px] font-medium text-rc-cream hover:opacity-90"><CreditCard size={16} /> Pay {rcMoney(o.balanceDue)} now</Link>
+            <p className="mt-2 text-xs text-rc-muted">Opens our secure payment page (MOCK — placeholder for Intuit; no card is charged). The same link we emailed you — it always shows your current balance.</p>
           </div>
         )}
         <RcError text={err} />

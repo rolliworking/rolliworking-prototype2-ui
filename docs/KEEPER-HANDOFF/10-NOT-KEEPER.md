@@ -61,6 +61,7 @@ Everything below exists in the prototype **only** to make behaviour visible. Eac
 | Mock Parcel Pro: random tracking numbers, formula cost, 10-state ZIP table, `labels.parcelpro.mock` URLs | `carriers/parcelpro.ts` | real adapter, same signatures |
 | Bench number = tech index modulo 3; single global stuck threshold | bulk assign, bench pad | station identity from the device; per-type threshold if ruled (Q82) |
 | `TECH-<short>` codes typed into a keyboard-wedge field | `/rw/bulk` | printed tech badges with the same payload — the format IS inheritable |
+| **MOCK PAYMENT PAGE** `/pay/:token` — fake hosted Intuit page, fake card block, partial payments recorded straight into the SO ledger | `pages/PayPage.tsx`, `payViaLink` | QuickBooks Payments hosted invoice link; webhook posts the payment to the SO |
 | Legacy `job.notes` still exported (`addJobNote`) though no screen writes it | `client.ts` | remove; messages are the notes |
 
 ## What IS inheritable (behaviour, not code)
