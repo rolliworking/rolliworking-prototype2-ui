@@ -131,6 +131,12 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Files: `components/rw/pad/{PadBits,PadJobs,PadParts,PadReview}.tsx`, client.ts Pad v2 section, fixtures parts.ts (pt-33..48, CALIBER_BY_REF, m3keEvents, PR-0050), reports.ts (rep-03..05).
 - Tested iteration_29 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q77–80.
 
+### Bench Pad `/rw/bench` + kiosk contract + goal history + Job Messages (2026-09-26)
+- Bench Pad: one kiosked iPad per bench — PIN lock (card + keypad, auto-submit), per-tech board: In progress (part-location chips) · Needs attention (stuck ≥4 working days / late) · Bands & splits (reunification state, band completed by whom/when) · Outsourced (vendor, days out) · Messages · Completed · Goals. No money, own numbers only.
+- Kiosk: idle re-lock (default 10 min → PIN pad → straight back), no external links, "reconnecting…" banner + per-device last-board cache (cold start works offline), sticky header/clock, long-press gear → supervisor PIN → bench name / idle timeout / simulate-offline (localStorage; AMBER: Keeper registers device identity server-side).
+- Goals: pace-line bar for the current month + 6 month tiles (goal vs actual, green check / red X equal weight, tap → by week + by component type). Rosa seeded hit 4 / missed 2 (17/18, 11/18).
+- Job Messages: threaded internal board replaces flat notes on RS job page, RW job page, Supervisor Pad detail, WM room, Bench Pad. `@Short` routes by tier — manager/concierge → hit-list pin (click → job at thread), bench → Messages section with unread badge + per-person read state; replies re-notify the thread. Seeded Rosa→@MM (photo)→MM reply @Vienna + ambient note. Job Story not built (message ledger ready for its Comms lane). Tested iteration_32 + 33 (all pass).
+
 ### Inbound Shipping stages + Track a package (2026-09-26)
 - `/shipping/inbound`: 4 stage tabs (Label Requests → Sent → In Transit → Delivered-unscanned), KPI strip, create-label sheet via mock Parcel Pro adapter (`api/carriers/parcelpro.ts`), resend / follow-up / void+reissue, simulate carrier scan, intake arrival auto-match by tracking#. Seeds sh-01..sh-10.
 - Track a package: global search SHIPMENTS group, `TrackingPanel` slide-over (status/ETA, carrier, insured, newest-first events, copyable client one-liner), `TrackButton` on Client 360 + Inbox thread header.
@@ -214,6 +220,8 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - P2: cross-division inventory rules unruled (amber)
 
 ### Upcoming
+- Job Story (VB3-13) read-view over all ledgers incl. the new message ledger (Comms lane); Job Lookup floating tool (VB3-12); View as client (VB3-14)
+- Stuck threshold per job type (currently single default 4 working days)
 - E18 part 2 (full parts workflow) once MH walks the pad on the iPad
 - amber items in DECISIONS (RGTime hardening, punch corrections, kiosk signature capture)
 - 03-OPEN-QUESTIONS.md verdicts (Q1–Q80) pending from MH
