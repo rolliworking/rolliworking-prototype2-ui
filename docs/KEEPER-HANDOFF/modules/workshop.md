@@ -21,3 +21,8 @@ Bench = both tiers; Supervisor, Parts knowledge = manager. Pull-next uses the se
 ## Behaviours discovered during build
 - "Blocked" on a bench row = review gaps or hold text, computed per row.
 - Parts assistant is the seed of the Companion panel (E10) and of the M3KE seam (`06-SEAMS.md`).
+
+## Post-E16 additions (2026-09-26)
+- The scripted parts assistant remains for the RS `/parts` chat; the **shop-floor path** for parts is now the Supervisor Pad three-tier composer → manager gate → client approval → allocate → pick (`rw-supervisor-pad.md`, `rw-picking.md`). Both write the same `PartsRequest` rows (`source: chat | wm | pad`).
+- `PartsRequest` gained `items[] {partId?, description, qty, price?, partNumber?, generic?}`, `reference`, `caliber`, `history[]`, `sentForApprovalAt`, `clientDecidedAt`, `allocatedAt`, `emailId`; statuses `pending_review`, `awaiting_client`, `declined` added to the enum.
+- **M3KE ledger** (`M3keEvent`): append-only `{kind: resolved|selected, description, reference, caliber?, partId, partNumber, price?, resolvedBy, ts, requestId?}` — manager billing work IS the labelling work (VB3-07).

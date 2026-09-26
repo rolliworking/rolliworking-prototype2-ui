@@ -26,3 +26,9 @@ No new persisted entities; `getRwFloorMap()` projection (`source/DATA-MODEL.md` 
 ## Behaviours discovered during build
 - Re-homing exposed that RS components hard-code RS paths → the link guard. In KEEPER, components receive a route base or RW has its own screens.
 - The RS Bench (RW-mini) shows the same inline "done" buttons because it is the same component (Q66).
+
+## Post-E16 additions (2026-09-26) — RW is now FOUR surfaces on one scan ledger (VB3-01)
+Desktop app (this spec), **Supervisor Pad** `/rw/pad` (`rw-supervisor-pad.md`), **Bench Pads** `/rw/bench` (`rw-bench-pad.md`), **station scanners** `/rw/station` + **Bulk Assign** `/rw/bulk` + **WM room** `/rw/wm` (`rw-bulk-assign.md`). Shop floor / work queue: `rw-shop-floor.md`. Picking: `rw-picking.md`.
+- Shell: `/rw/bench` renders **without** a signed-in user (its own PIN lock); `/rw/wm`, `/rw/pad`, `/rw/picking`, `/rw/bench` are full-screen (no RW nav header). RS-link rewrite now preserves the URL hash (`/jobs/:id#msg-…` → `/rw/jobs/:id#msg-…`).
+- Hide-money stays for the desktop app; the **Supervisor Pad shows prices** (manager tier, MH confirmed).
+- `⚠ DRIFT` Kiosk mode (Apple Business Manager + Single App Mode) is a device-management requirement, not code — the app-side behaviours are in `rw-bench-pad.md`.

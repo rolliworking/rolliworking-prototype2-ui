@@ -120,7 +120,7 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E10 | **Photo labels**: word pills (`LABEL_PILLS`: dial · hands · bracelet · condition) offered on inspection and evidence photos, **skippable**, stored per photo (`PhotoLabel` with provenance) and shown in a labels log; also stamped on the job timeline. | Cheap supervised labels at point of work | locked |
 | E10 | **Tier/division**: non-manager tiers see price/parts/ask but **no money totals** (lifetime value, avg price masked) — amber pending MH's hide-money ruling; routed questions and tasks stamped with the session division. All companion actions audit as type `companion`. | Least privilege until ruled | provisional (money) |
 
-**Modules touched:** auth-stations, dashboard-today
+**Modules touched:** companion-panel
 
 ## E14 — Comms hub (staff inbox) — 2026-09-25
 
@@ -134,7 +134,7 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E14 | **Auto-threading**: portal estimate approve/decline, parts approval, pickup-window confirmation and portal messages land as structured event messages (`event.kind`) in the client's anchored thread. Photo submission from the portal is seeded only (no portal upload exists). | Structured events, not chat | locked (photo submission provisional) |
 | E14 | Audit type `comms` for assign / snooze / wake / close / reopen / reply / note / simulated inbound. Kiosk and email inbound are fixtures — no ingestion exists. | Honesty | noted |
 
-**Modules touched:** auth-stations, dashboard-today
+**Modules touched:** comms-hub
 
 ## E15 — Portal-first client content (MH ruling, 2026-09-25)
 
@@ -146,7 +146,7 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E15 | All templates converted to **short notification bodies**: `intake_confirmation, estimate_sent, inspection_ready, job_in_progress, back_in_progress, evidence_available, invoice_ready, ready_for_pickup, shipped`, each with a single `▶ {{portal.link}}`. `sendEstimate` email body likewise (no line list). Composer preview shows the short form; `{{portal.link}}` resolves per anchor (report token → estimate page → watch page → home). | Ruling | locked |
 | E15 | Report component list & grade vocabulary are placeholders; portal decisions are not persisted to the RolliConnect replay log (reload resets). | UNKNOWN | provisional (amber) |
 
-**Modules touched:** auth-stations, dashboard-today
+**Modules touched:** comms-hub, rolliconnect, jobs
 
 ## E12 — RolliTime `/rt` timing bench — 2026-09-25 (NEW automation, no legacy precedent)
 
@@ -159,7 +159,7 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E12 | Tests are **append-only watch history** (multiple per job, newest first) — surfaced on `/rt/test/:jobId` and the job page "Timing tests" card; this is the future health-history dataset. Audit type `rollitime`. | Data asset | locked |
 | E12 | Unruled: exact Crit1/Crit2 definitions per caliber, per-position rate bounds, whether PASS should create an explicit `timing_passed` sub-status, Witschi file import. | UNKNOWN | provisional (amber) |
 
-**Modules touched:** auth-stations, dashboard-today
+**Modules touched:** rollitime
 
 ## E13 — RGTime `/rg` + public Kiosk `/kiosk` — 2026-09-25 (MH ruling on NFC)
 
@@ -176,7 +176,7 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E13 | **Match, don't duplicate** (improvement on legacy): normalised **email OR phone** match against existing clients → request links to the matched client with `matchState: possible` and the queue shows **"Possible existing client — Confirm link / Not the same — new client"**; staff decision audited. No match → a new client record is created (`type: retail`, kiosk-sourced). | Legacy silently created duplicates | locked |
 | E13 | Unruled: PWA offline/queued punches; punch **edits/corrections** by a manager (none built — punches are append-only); overtime/breaks rules; whether concierge tier may see the week grid; kiosk signature/ID capture; kiosk match when the kiosk name differs from the matched record (today: staff decides). | UNKNOWN | provisional (amber) |
 
-**Modules touched:** auth-stations, dashboard-today
+**Modules touched:** rgtime, kiosk-requests
 
 ## E11 — RolliWorking standalone `/rw` (workshop app draft) — 2026-09-26
 
@@ -194,7 +194,7 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E11 | **Floor map — legacy two-lane style** (`/rw/floor`), rendered so MH can compare against the nine-lane RS map: **head lane** (jobs whose workflow includes W, or has no workflow) Intake → Review → Movement bench; **band lane** (workflow includes B/P/PM) Intake → Review → Band bench → Polish (in-service polish-only); both converge into **Final assembly** (= `testing`); **Into safe** off-ramp = holds, awaiting approval, ready (in safe). Chips carry **part-colored dots** per department (W indigo · B amber · P teal · PM rose). Division-scoped to the station. A job with W and B appears in both lanes (parallel head/band work). | Legacy RW research (reference, not gospel) | provisional (amber) — **MH to rule: two-lane vs nine-lane for Keeper** |
 | E11 | Unruled: which lane model Keeper keeps; hide-money for bench tiers (default applied); whether concierge tier belongs in RW at all (today: allowed, QC/Supervisor hidden); whether RW needs its own station registry; offline/tablet install (PWA) for RW; whether the RW job page should expose Owner changes. | UNKNOWN | provisional (amber) |
 
-**Modules touched:** auth-stations, dashboard-today
+**Modules touched:** rolliworking
 
 ## Per-component completion, decoupled from invoicing — MH ruling (first board walk), 2026-09-26
 
@@ -211,36 +211,56 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 
 **Modules touched:** jobs, workshop, rolliworking, labels-reports-accounting
 
-## Client request notes — MH brief, 2026-09-26
+## E18 — RW deep build part 1: shop floor core — 2026-09-26 (legacy-RW research folded in; MH brief)
 
 | date | decision | rationale | status |
 |---|---|---|---|
-| 2026-09-26 | **Client requests** live on the job (`Job.clientRequests[]`): short items of what the client asked for, stamped who/when/station. Added from the RS job page, the `/rw` job page and the Supervisor Pad. Internal notes remain a separate concept and never render client-side. | Brief | locked |
-| 2026-09-26 | **Badge on cards**: `/rw/pad` and `/rw/wm` cards show amber "CLIENT REQUESTS (n)" with the open items listed on the card, never in a tab. | Brief | locked |
-| 2026-09-26 | **Scan pop-up**: every label scan in the workshop (Bulk Assign, Station Scanner, WM room, Pad) pops a modal with the open requests in large type. The scan registers regardless; the modal persists until "Understood", which logs `{by, at, via}` per request (audited `job`). Re-surfaces on every scan while any request is open. | Brief | locked |
-| 2026-09-26 | **QC enforcement**: in `testing` every request is a mandatory checklist item — Done, or N/A with a required reason (who/when logged). `qc_pass` is disabled/throws with a message naming the first unchecked request; Pad Advance-from-QC and `finishJob` share the gate. | Brief | locked |
-| 2026-09-26 | Unruled: portal visibility of requests; once-per-person ack vs every scan; N/A restricted to supervisor tier. | UNKNOWN | provisional (amber) |
+| E18 | **Physical parts = the job's components** (head = watch head 🔵 `#2563eb`, case 🟣 `#9333ea`, band = bracelet 🟢 `#16a34a`) extended with `station`, `partStatus` (not_started · in_progress · waiting · reunited · fulfilled), `custodyTech`, `history[]` (every move: at/by/from/to/status/via/note). One model serves the component-completion ruling and the floor dots. | One truth for "where is it" and "who gets credit" | locked |
+| E18 | **Shop Floor `/rw/floor`** replaces the E11 sketch: two lanes — head lane Pre-approval · Pre-queue · WM Bench 1–3 · Into safe · Safe (await band); band lane Pre-queue · Refinishing · Polish · Into safe · Safe (await head); both meet at Final assembly → Finished. Dots coloured **by part, never by status**; a three-way split shows three dots. Drag = move (status + station + history row); click = slide-over history. Header: counts per station, filter by tech and job type. Station names/positions to be corrected after MH's walk. | Brief | locked (layout provisional) |
+| E18 | **Dot placement precedence**: (1) saved station → (2) not started → Pre-approval (intake/review/awaiting approval) or Pre-queue (approved) → (3) status + department (in_service → bench/refinish; completed → the lane's safe; testing → Final assembly; ready/closed → Finished). | Brief | locked |
+| E18 | **Reunification**: head and case wait at Safe (await band); bracelet waits at Safe (await head); a part moved to Final assembly is `reunited`; when every part is at Final assembly the job auto-moves `in_service → testing`. **Finish gate (hard)**: Finished (job or part) requires every part waiting / reunited / fulfilled — otherwise a blocking message names the part still out and its station. Lane rule: a part cannot be dropped into the other lane's station. | Brief | locked |
+| E18 | **Bulk Assign `/rw/bulk`** (manager): scan `TECH-<short>` → active tech; each watch-label scan = custody transfer + assign job & matching part + `start_service` (if queued) + history row + "Work has started" courtesy email queued to the Outbox (undo withdraws it). No confirm buttons. **Band-only labels** (`BAND-…` or payload ending `|B`) create the bracelet component and tag `B` on the job's workflow. | Brief (replaces legacy mail-client behaviour) | locked |
+| E18 | **Work Queue `/rw/queue`**: dense table of open workshop jobs with per-part completion dots (solid done / hollow open), filters status · tech · overdue; a (simulated) client approval reply highlights the row with a "client replied" badge and threads the reply into Comms. | Brief | locked |
+| E18 | **Watchmaker Room `/rw/wm`** (full-screen, no chrome): my jobs as big cards with part locations; per-part "→ safe"; scan-to-safe / scan-to-refinishing with destination toggle; **Request part** (description + qty → pending PR, `source: wm`); PIN switch for the shared terminal. | Brief | locked |
+| E18 | **Station Scanner `/rw/station`**: pick a station (remembered); every label moves that part here (custody + history) — registered-mail model. | Brief | locked |
+| E18 | **Supervisor Pad `/rw/pad`** (manager, iPad-first: ≥44 px targets, no hover, portrait/landscape): job board cards (watch, type, tech, stage, part dots + locations) with **Advance** and **Send back** (reason: rework · waiting on part · failed QC · other + note; logged who/when/why). Stages: Queued (approved) → On the bench (in_service) → Final assembly / QC (testing) → Finished (ready). Advance into Final assembly enforces the finish gate; Send back from testing with "failed QC" logs rework on completed components (credit stands). **Parts composer** with live suggestions: matches part names AND aliases, scoped to the job's watch reference, most-recently-chosen part for that reference first; every tap is recorded (`recordPartPick`) so ranking learns; quantity stepper; free text allowed. **Approvals queue**: cards show on-hand before approval; 0 on hand → red OUT OF STOCK and Approve is replaced by **Order part** (→ on_order + parts hold); approve → "allocated" → Picking; Decline; On order; Received (+stock, releases the hold, creates a pick). **Photos** one tap away: intake + inspection grid, lightbox with tap-to-zoom. Persistent header: jobs in room · waiting on parts · waiting on approval · PIN switch · clock. | Brief — most design care | locked |
+| E18 | **Picking `/rw/picking`**: every approved part is a pick task (part, part #, storage location "Cabinet · Drawer · Bin", on hand vs qty, job/watch). Picked (tap or scan part #/bin) decrements on-hand and allocates; on-hand < qty → red alert with **Short — order** (PR → on_order) or **Found elsewhere** (updates the part's stored location). Summary strip: picks remaining · shorts flagged today. | Brief | locked |
+| E18 | `PartsRequestStatus` gains `on_order`, `received`; `Part` gains `location`; `stock` is the on-hand count. Photos are placeholder images (picsum) in a `jobPhotos` fixture keyed by job with slot + kind. | Prototype | locked (placeholder images ⚠ not Keeper) |
+| E18 | Unruled: station names/positions (walk pending); whether Bulk Assign may start service on a job still awaiting approval (today: only `approved` starts); WM bench assignment rule (today: watchmaker index mod 3); whether concierge tier belongs on the Picking screen; pick-scan matching (part # or location string). | UNKNOWN | provisional (amber) |
 
-**Modules touched:** jobs, rolliworking, workshop
+**Modules touched:** rw-shop-floor, rw-bulk-assign, rw-supervisor-pad, rw-picking
 
-## Inbox — Staff section, 2026-09-26
+## Bench Pad `/rw/bench` + kiosk contract + Job Messages — 2026-09-26 (MH briefs; VB3-02/03 rulings)
+- **Bench Pad is a first-class surface** (VB3-01): one kiosked iPad per watchmaker bench, tablet-native, never a responsive desktop view. Device = station ("Bench 3"), PIN = person. Own numbers only, no leaderboard, no money.
+- **Kiosk contract** (VB3-02): idle re-lock to the PIN pad (default 10 min, PIN → straight back to that tech's board); no external navigation; API unreachable → thin "reconnecting…" banner and the board keeps its last data (per-device last-board cache survives a cold start); header + clock always visible; settings gear only behind a long-press + supervisor PIN (bench name, idle timeout, stored per device).
+- **AMBER → KEEPER**: per-device settings live in localStorage in the prototype. In Keeper the bench/device identity is a **station record registered server-side** (MH note) so a wiped or replaced iPad re-adopts its bench identity instead of losing it; the idle timeout is a station attribute, not a browser setting.
+- **Needs attention** = stuck (no scan movement ≥ 4 working days — single default for now, per job type TBD) or late (past promise date). Both flags shown plainly; the card sits in In progress AND Needs attention.
+- **Goal history is honest**: past 6 months as tiles with goal vs actual and a hit/missed mark of equal weight; tap → by week + by component type. Current month = pace-line bar (where on-track would be today), no judgment language. Goal unit = components completed (head / band / case credits).
+- **Job Messages replace flat notes**: threaded, internal-only board on every job, every surface. `@Short` routes by tier — manager/concierge → Daily Hit List pin with job chip + preview (click → job at the thread; Done = handled); bench tier → Messages section on Bench Pad / WM room (unread badge, per-person read state). Replies re-notify the whole thread (author excluded) so conversations continue without re-@ing. Legacy notes render as unrouted root messages. Job Story (VB3-13) is NOT built yet — the message ledger is the Comms-lane source when it is.
 
-| date | decision | rationale | status |
-|---|---|---|---|
-| 2026-09-26 | Inbox sidebar lists every staff member with their open-assigned thread count; any staff member can open any colleague's inbox and **read and reply**; "Assigned to me" remains the personal shortcut. Assignment is not changed by replying from a colleague's inbox. | Brief | locked |
-| 2026-09-26 | Unruled: audit row on viewing a colleague's inbox; auto-reassign on reply. | UNKNOWN | provisional (amber) |
+**Modules touched:** rw-bench-pad, job-messages, dashboard-today
 
-**Modules touched:** comms-hub
+## VB3 — Verdict batch 3, MH rulings filed 2026-09-26 (daytime design session; registry IDs assigned by Cursor)
+All BUILT unless marked otherwise; rulings, not proposals. Where a default was Claude's and MH confirmed, it is a ruling.
+- **VB3-01** RW = FOUR surfaces on one scan ledger: desktop app, Supervisor Pad, Bench Pads (one iPad per bench), station scanners — pads are first-class tablet-native surfaces, never responsive desktop views.
+- **VB3-02** Kiosk mode for all floor iPads (ABM + MDM Single App Mode; Guided Access interim). App-side: idle re-lock to PIN (default 10 min), no external navigation, offline "reconnecting" banner keeping last data, per-device station identity ("Bench 3") behind supervisor-PIN long-press. A kiosked iPad IS a station (extends D-166). **Addendum**: Keeper registers the device identity server-side as a station record so a replaced iPad re-adopts it.
+- **VB3-03** Bench Pad contents: per-tech board — In Progress · Needs Attention (stuck = no scan movement in N working days, default 4, per-type TBD; late = past promise) · Bands & Splits · Outsourced · Completed + goals. Goals own-numbers-only, pace-line rendering, **history shows hit AND missed months plainly** ("if wm failed to reach their goal prior months I want it to show"). No money in /rw (standing).
+- **VB3-04** Supervisor capabilities: move jobs forward AND backward (backward needs reason rework / waiting on part / failed QC / other+note; logged); assign/reassign techs (logged as override; scan assignment stays primary); view inspection photos + notes; request parts.
+- **VB3-05** Three-tier parts query: scan → caliber-scoped parts; typed search scoped to reference; no match → GENERIC free text.
+- **VB3-06** Manager gate before client: every parts request passes a manager who prices and fills/corrects part# (resolving GENERIC) before the approval email is queued.
+- **VB3-07** M3KE: generic resolutions and caliber-level selections are append-only training data `{description, reference, caliber, part_number, price, resolved_by, ts}`; learned mappings rank first ("learned").
+- **VB3-08** Approve → Pick → Allocate: on-hand shown before approving; 0 = OUT OF STOCK → Order part; picking queue with location, confirm by tap or bin scan, decrements stock; short → "Short — order" / "Found elsewhere" (typing the real location UPDATES the stored location).
+- **VB3-09** (team request) Pad gains parts request HISTORY (+ past requests on this job in the composer) and iPad camera capture (Safari, no native app); client-visible slots reach the portal, staff-only never.
+- **VB3-10** Client request notes (portal-notes idea DEAD): amber badge on cards; modal on EVERY label scan at any station until "Understood" (logged, re-surfaces, fires even on rejected scans); mandatory Final-QC checklist (Done / N/A+reason) — QC disabled naming the unchecked item.
+- **VB3-11** Team-wide inbox visibility: Staff section, anyone opens anyone's inbox with read + reply + assign/close; "Assigned to me" is a filter. Amber: tier-scoping later (Q86).
+- **VB3-12** Job Lookup is a SEPARATE tool from global search: floating bottom-right button on every RS screen and the Pad, hotkey; name/email/est#/SO# → client cards with the full relationship → job Story in a side panel. **QUEUED — not built.**
+- **VB3-13** Job Story: unified chronological timeline over all ledgers, lane filters, elapsed-time gaps amber past threshold; READ-VIEW only — no new writes. **QUEUED — not built** (message ledger is the Comms-lane source).
+- **VB3-14** View as client: button on client 360 + Inbox thread → the client's /rc exactly as they see it, "VIEWING AS CLIENT" banner, staff-only data excluded. **QUEUED — not built.**
+- **VB3-15** Client-facing photo organisation: request → job, Arrival / Condition / Completed sections, grid + lightbox; staff-only slots never render. **QUEUED — not built.**
+- **VB3-16** Inbox Track button fallback: appears whenever the thread's CLIENT has any shipment; anchored estimate first, else client list newest on top.
+- **VB3-17** Parcel Pro likely provider, API-first; inbound board mirrors intake stages (Label Requests → Labels Sent (>30d red) → In Transit (ARRIVING TODAY) → Delivered-awaiting-scan (>4h red)); morning KPI strip.
+- **VB3-18** Carrier adapter seam: ALL carrier calls through `parcelpro.ts` — createLabel, voidLabel, getTracking, validateAddress; mocked now with production-real shapes; tracking numbers born attached to the est# (arrival auto-match); per-shipment cost lands on the SO at label time (⚠ not yet written to the SO).
+- **VB3-19** Tracking lookup panel: full carrier timeline; from shipping rows, client 360, Inbox threads, Job Lookup; inbound + outbound; "Copy status for client" one-liner reused by portal + templates (write once).
+- **Still awaiting MH** (carried): VB1-02 division inherit + RLS · VB2-07a role split · VB2-07b ref/serial written once at inspection · VB2-07c portal system actor + division. Keep ASSUMED.
 
-## Supervisor Pad v2 — MH brief + ruling, 2026-09-26
-
-| date | decision | rationale | status |
-|---|---|---|---|
-| 2026-09-26 | `/rw/pad` is scoped to ONE user — the watchmaker-room supervisor on an iPad — with its own tablet-native UI (Jobs · Parts · Review). | Brief | locked |
-| 2026-09-26 | **Sale prices are shown on the supervisor's pad** (Parts tab suggestions and request lines, Review tab). Overrides the `/rw` hide-money default for this screen only. | MH ruling | locked |
-| 2026-09-26 | Parts flow: scan → job/reference/caliber → automatic caliber query → reference-scoped description search (learned on top) → GENERIC free-text fallback → **Manager review**, never straight to the client. Manager fills price (required) + part#, then "Send for client approval" (Outbox). | Brief | locked |
-| 2026-09-26 | **M3KE capture**: every resolution of a generic description to a real part# (+price) and every supervisor selection is appended to one inspectable log (`m3keEvents`); learned mappings rank top for that reference / caliber and are tagged. | Brief (training-data plumbing) | locked |
-| 2026-09-26 | Tech reassignment from the pad is a **supervisor override** (audited); scan assignment via Bulk Assign remains the morning path. | Brief | locked |
-| 2026-09-26 | Unruled: portal action in the approval email; token similarity vs model; caliber as a watch attribute; whether bench (WM) requests also pass the manager gate. | UNKNOWN | provisional (amber) |
-
-**Modules touched:** rolliworking, workshop, comms-hub
+**Modules touched:** rw-shop-floor, rw-bulk-assign, rw-supervisor-pad, rw-bench-pad, rw-picking, client-requests, comms-hub, client-360, shipping-inbound, job-messages

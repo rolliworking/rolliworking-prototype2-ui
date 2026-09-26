@@ -46,3 +46,10 @@ Jobs board/detail/new/shop-time = manager tier in RS; the same job page content 
 - Inspection report to client (E15) is a separate versioned document with supersede chain; approving it approves the linked estimate and advances the job.
 - Timing tests (E12) are append-only watch history, surfaced on the job page.
 - `⚠ DRIFT`: `deleteJob` hard-deletes (and its shop time/tasks) — KEEPER: soft delete + audit.
+
+## Post-E16 additions (2026-09-26)
+- **Notes → Messages**: the Notes card is replaced by the threaded **Messages** board (`job-messages.md`); legacy notes render as unrouted roots; `addJobNote` is no longer called by any screen (`⚠ DRIFT`: still exported).
+- **Client requests card** (amber rule) + QC checklist in `testing` — `client-requests.md`.
+- **Components carry floor position**: `JobComponent.station / partStatus / custodyTech / history[]` (`rw-shop-floor.md`). Completing a component from the job page does not move the dot; moving the dot to Final assembly completes the component.
+- **Photos**: pad camera captures (`capturePadPhoto`) land in `job.photos` with `source: 'camera'`, slot and `clientVisible`; client-visible slots reach the portal photo sections.
+- Job page deep link `#msg-<id>` highlights a message.

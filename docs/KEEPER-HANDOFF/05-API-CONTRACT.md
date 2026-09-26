@@ -11,7 +11,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | side effects | callers |
 |---|---|---|---|---|
-| `getSessionDivision` | sync | `= (): Division => readStation()?.division ?? 'rolliworks';` | audit | components/companion/CompanionPanel.tsx, pages/InboxPage.tsx, pages/RequestsPage.tsx, pages/rs/PurchasingPage.tsx, pages/rt/RtShell.tsx, pages/rw/RwJobsPage.tsx, pages/rw/RwShell.tsx |
+| `getSessionDivision` | sync | `= (): Division => readStation()?.division ?? 'rolliworks';` | audit | components/companion/CompanionPanel.tsx, components/rw/RwBits.tsx, components/rw/bench/BenchLock.tsx, pages/InboxPage.tsx, pages/RequestsPage.tsx, pages/rs/PurchasingPage.tsx, pages/rt/RtShell.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwJobsPage.tsx, pages/rw/RwShell.tsx |
 | `getStation` | async | `(): Promise<Station \| null>` | audit, localStorage | auth/AuthContext.tsx |
 | `getStations` | async | `(): Promise<Station[]>` | audit, localStorage | pages/StationSetupPage.tsx |
 | `addStation` | async | `(name: string, division: Division = 'rolliworks'): Promise<Station>` | audit, localStorage | pages/StationSetupPage.tsx |
@@ -23,7 +23,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | side effects | callers |
 |---|---|---|---|---|
-| `getDivisionStaff` | sync | `= (div: Division): User[] =>` | audit, localStorage | components/jobs/ComponentBits.tsx, components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, components/today/StaffHitListModal.tsx, pages/InboxPage.tsx, pages/rt/RtShell.tsx, pages/rw/RwShell.tsx |
+| `getDivisionStaff` | sync | `= (div: Division): User[] =>` | audit, localStorage | components/jobs/ComponentBits.tsx, components/rw/RwBits.tsx, components/rw/bench/BenchLock.tsx, components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, components/today/StaffHitListModal.tsx, pages/InboxPage.tsx, pages/rt/RtShell.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwShell.tsx |
 | `getDivisionRoles` | sync | `= (div: Division): Role[] =>` | audit, localStorage | components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, pages/InboxPage.tsx |
 
 ## Audit log
@@ -118,7 +118,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | side effects | callers |
 |---|---|---|---|---|
-| `totalsFor as computeEstimateTotals` | const | `fixture re-export` | none (read) | — (internal / other client.ts functions only) |
+| `totalsFor as computeEstimateTotals` **[post-E16]** | const | `fixture re-export` | none (read) | — (internal / other client.ts functions only) |
 | `ESTIMATE_TAX_RATE_DISPLAY` | sync | `= TAX_RATE_UNAPPLIED;` | audit | — (internal / other client.ts functions only) |
 | `getServiceCatalog` | async | `(): Promise<CatalogService[]>` | none (read) | components/estimates/LineEditor.tsx |
 | `searchEstimates` | async | `(query: string, status?: EstimateStatus \| 'all'): Promise<EstimateWithRefs[]>` | none (read) | pages/estimates/EstimatesListPage.tsx |
@@ -152,9 +152,9 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `ensureComponents` | sync | `= (j: Job): JobComponent[] =>` | none (read) | — (internal / other client.ts functions only) |
 | `componentsDone` | sync | `= (j: Job) => ensureComponents(j).filter((c) => c.completedAt).length;` | none (read) | — (internal / other client.ts functions only) |
 | `componentsOutstanding` | sync | `= (j: Job): JobComponent[] => ensureComponents(j).filter((c) => !c.completedAt);` | none (read) | — (internal / other client.ts functions only) |
-| `awaitingComponents` | sync | `= (j: Job) => j.status === 'in_service' && !activeHold(j) && componentsDone(j) > 0 && componentsOutstanding(j).length > 0;` | none (read) | components/jobs/ComponentBits.tsx, components/jobs/JobBoard.tsx, pages/workshop/BenchPage.tsx |
+| `awaitingComponents` | sync | `= (j: Job) => j.status === 'in_service' && !activeHold(j) && componentsDone(j) > 0 && componentsOutstanding(j).length > 0;` | none (read) | components/jobs/ComponentBits.tsx, components/jobs/JobBoard.tsx, pages/rw/RwWmPage.tsx, pages/rw/RwWorkQueuePage.tsx, pages/workshop/BenchPage.tsx |
 | `canCompleteComponent` | sync | `= (j: Job) => j.status === 'in_service' && !activeHold(j);` | none (read) | components/jobs/ComponentBits.tsx |
-| `activeHold` | sync | `= (j: Job): JobHold \| undefined => j.holds.find((h) => !h.releasedAt);` | audit | components/jobs/JobBits.tsx, components/jobs/JobBoard.tsx, components/jobs/JobPanels.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwJobsPage.tsx, pages/workshop/BenchPage.tsx, pages/workshop/SupervisorPage.tsx |
+| `activeHold` | sync | `= (j: Job): JobHold \| undefined => j.holds.find((h) => !h.releasedAt);` | audit | components/jobs/JobBits.tsx, components/jobs/JobBoard.tsx, components/jobs/JobPanels.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwJobsPage.tsx, pages/rw/RwWmPage.tsx, pages/workshop/BenchPage.tsx, pages/workshop/SupervisorPage.tsx |
 | `legalJobActions` | sync | `(j: Job): JobAction[]` | audit, email → Outbox | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `canHold` | sync | `= (j: Job) => !activeHold(j) && j.simpleStatus === 'on_hand' && HOLDABLE.includes(j.status);` | audit | components/jobs/JobPanels.tsx |
 | `transitionJob` | async | `(id: string, actionKey: string, reason?: string): Promise<JobWithRefs>` | audit, email → Outbox, job status | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
@@ -422,7 +422,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `toleranceForWatch` | sync | `= (w: Watch): CaliberTolerance => fx.caliberTolerances.find((c) => c.refPrefixes.some((p) => w.reference.toUpperCase().startsWith(p.toUpperCase()))) ?? fx.GENERIC_TOLERANCE;` | audit, email → Outbox, job status | pages/rt/RtQueuePage.tsx, pages/rt/RtTestPage.tsx |
 | `evaluateTiming` | sync | `= (tol: CaliberTolerance, input: Pick<TimingInput, 'readings' \| 'powerReserve'>): TimingEvaluation &` | audit, email → Outbox, job status | pages/rt/RtTestPage.tsx |
 | `getTestingQueue` | async | `(): Promise<JobWithRefs[]>` | none (read) | pages/rt/RtQueuePage.tsx |
-| `findJobByLabel` | async | `(scan: string): Promise<JobWithRefs \| null>` | none (read) | pages/rt/RtQueuePage.tsx, pages/rw/RwEvidencePage.tsx |
+| `findJobByLabel` | async | `(scan: string): Promise<JobWithRefs \| null>` | none (read) | pages/rt/RtQueuePage.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwEvidencePage.tsx |
 | `getTimingTests` | async | `(filter:` | audit, email → Outbox | components/jobs/TimingCard.tsx, pages/rt/RtTestPage.tsx |
 | `recordTimingTest` | async | `(jobId: string, input: TimingInput): Promise<TimingTest>` | audit, email → Outbox, job status | pages/rt/RtTestPage.tsx |
 
@@ -457,6 +457,135 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | side effects | callers |
 |---|---|---|---|---|
-| `getRwFloorMap` | async | `(): Promise<RwFloorMap>` | none (read) | pages/rw/RwFloorPage.tsx |
+| `getRwFloorMap` | async | `(): Promise<RwFloorMap>` | none (read) | — (internal / other client.ts functions only) |
 
-_Total exports: 297._
+## E18 RW deep build — shop floor core (parts = components with station/status/custody/history)
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `RW_STATIONS` **[post-E16]** | const | `fixture re-export` | none (read) | components/rw/RwBits.tsx, components/rw/pad/PadJobs.tsx, pages/rw/RwFloorPage.tsx, pages/rw/RwStationScanPage.tsx, pages/rw/RwWmPage.tsx, pages/rw/RwWorkQueuePage.tsx |
+| `getShopFloor` **[post-E16]** | async | `(filter?:` | audit | pages/rw/RwFloorPage.tsx |
+| `movePart` **[post-E16]** | async | `(jobId: string, key: ComponentKey, to: RwStationKey, via: PartMove['via'] = 'drag'): Promise<FloorDot>` | job status | pages/rw/RwFloorPage.tsx, pages/rw/RwWmPage.tsx |
+| `markReunited` **[post-E16]** | async | `(jobId: string, key: ComponentKey): Promise<FloorDot>` | audit, job status | — (internal / other client.ts functions only) |
+| `finishGate` **[post-E16]** | sync | `= (j: Job): string[] => finishBlockers(j);` | audit, job status | — (internal / other client.ts functions only) |
+| `finishJob` **[post-E16]** | async | `(jobId: string): Promise<JobWithRefs>` | audit, job status | pages/rw/RwFloorPage.tsx |
+| `getPartHistory` **[post-E16]** | async | `(jobId: string, key: ComponentKey): Promise<PartHistoryView>` | audit, email → Outbox, job status | pages/rw/RwFloorPage.tsx |
+| `parseTechCode` **[post-E16]** | sync | `= (code: string): User \| undefined =>` | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `getScanSession` **[post-E16]** | sync | `= (): ScanSession => rw18.scanSession;` | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `scanTech` **[post-E16]** | async | `(code: string): Promise<ScanSession>` | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `scanLabelAssign` **[post-E16]** | async | `(label: string): Promise<ScanSession>` | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `undoOutbox` **[post-E16]** | async | `(id: string): Promise<void>` | audit, email → Outbox, comms thread | pages/rw/RwBulkAssignPage.tsx |
+| `getQueuedOutbox` **[post-E16]** | async | `(): Promise<OutboxEmail[]>` | email → Outbox, comms thread | pages/rw/RwBulkAssignPage.tsx |
+| `getWorkQueue` **[post-E16]** | async | `(): Promise<WorkQueueRow[]>` | comms thread | pages/rw/RwWorkQueuePage.tsx |
+| `simulateClientReply` **[post-E16]** | async | `(jobId?: string): Promise<string>` | comms thread | pages/rw/RwWorkQueuePage.tsx |
+| `clearClientReplied` **[post-E16]** | sync | `= (jobId: string) =>` | audit | — (internal / other client.ts functions only) |
+| `getWmRoom` **[post-E16]** | async | `(userId: string): Promise<` | audit | pages/rw/RwWmPage.tsx |
+| `sendPartByScan` **[post-E16]** | async | `(label: string, to: 'safe' \| 'refinish', key?: ComponentKey): Promise<FloorDot>` | audit | pages/rw/RwWmPage.tsx |
+| `requestPartSimple` **[post-E16]** | async | `(jobId: string, description: string, qty: number, source: PartsRequest['source'] = 'wm'): Promise<PartsRequestWithRefs>` | audit | pages/rw/RwWmPage.tsx |
+| `getStationMemory` **[post-E16]** | sync | `= () => rw18.stationMemory;` | job status | pages/rw/RwStationScanPage.tsx |
+| `stationScan` **[post-E16]** | async | `(station: RwStationKey, label: string): Promise<FloorDot>` | job status | pages/rw/RwStationScanPage.tsx |
+| `getPadBoard` **[post-E16]** | async | `(): Promise<PadCard[]>` | job status | pages/rw/RwPadPage.tsx |
+| `padAdvance` **[post-E16]** | async | `(jobId: string): Promise<JobWithRefs>` | job status | components/rw/pad/PadJobs.tsx |
+| `padSendBack` **[post-E16]** | async | `(jobId: string, reason: SendBackReason, note?: string): Promise<JobWithRefs>` | audit, job status | components/rw/pad/PadJobs.tsx |
+| `SEND_BACK_REASONS` **[post-E16]** | sync | `= SEND_BACK_LABEL;` | audit | components/rw/pad/PadJobs.tsx |
+| `partSuggestions` **[post-E16]** | sync | `= (jobId: string, q: string): PartSuggestion[] =>` | audit | — (internal / other client.ts functions only) |
+| `recordPartPick` **[post-E16]** | sync | `= (jobId: string, partId: string) =>` | audit | — (internal / other client.ts functions only) |
+| `submitPadPartsRequest` **[post-E16]** | async | `(jobId: string, items:` | audit | — (internal / other client.ts functions only) |
+| `getApprovalsQueue` **[post-E16]** | async | `(): Promise<(PartsRequestWithRefs &` | audit | — (internal / other client.ts functions only) |
+| `approvalAction` **[post-E16]** | async | `(requestId: string, action: 'approve' \| 'decline' \| 'on_order' \| 'received', note?: string): Promise<PartsRequestWithRefs>` | audit | components/rw/pad/PadReview.tsx |
+| `getPickingQueue` **[post-E16]** | async | `(): Promise<` | audit | pages/rw/RwPickingPage.tsx |
+| `pickAction` **[post-E16]** | async | `(taskId: string, action: 'picked' \| 'short' \| 'found', location?: string): Promise<PickTaskView>` | audit | pages/rw/RwPickingPage.tsx |
+| `getJobPhotoViews` **[post-E16]** | async | `(jobId: string): Promise<JobPhotoView[]>` | audit | components/rw/RwBits.tsx, components/rw/pad/PadJobs.tsx |
+| `PHOTO_SLOTS` **[post-E16]** | sync | `:` | none (read) | components/rw/pad/PadCamera.tsx |
+| `capturePadPhoto` **[post-E16]** | async | `(jobId: string, dataUrl: string, slotKey: string): Promise<JobWithRefs>` | audit | components/rw/pad/PadCamera.tsx |
+| `getRoomPartsHistory` **[post-E16]** | async | `(): Promise<(PartsRequestWithRefs &` | none (read) | components/rw/pad/PadHistory.tsx |
+| `getRoomSummary` **[post-E16]** | async | `(): Promise<RoomSummary>` | none (read) | pages/rw/RwPadPage.tsx |
+| `PART_LABELS` **[post-E16]** | sync | `= PART_LABEL;` | none (read) | pages/rw/RwWorkQueuePage.tsx |
+
+## Supervisor Pad v2 — Jobs (tech override + condition) · Parts (caliber query, reference search, M3KE) · Review (manager gate)
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `caliberOf` **[post-E16]** | sync | `= (ref: string) => fx.caliberForReference(ref);` | none (read) | components/rw/pad/PadJobs.tsx |
+| `getPadPartsContext` **[post-E16]** | async | `(label: string): Promise<PadPartsContext>` | none (read) | components/rw/pad/PadParts.tsx, pages/rw/RwPadPage.tsx |
+| `padSearchParts` **[post-E16]** | sync | `= (ref: string, caliber: string \| undefined, q: string): PadSuggestion[] =>` | none (read) | components/rw/pad/PadParts.tsx, components/rw/pad/PadReview.tsx |
+| `padRecordSelection` **[post-E16]** | sync | `= (ref: string, caliber: string \| undefined, part: Part, description: string) =>` | audit | components/rw/pad/PadParts.tsx |
+| `submitPadRequest` **[post-E16]** | async | `(jobId: string, items: PartsRequestItem[]): Promise<PartsRequestWithRefs>` | audit | components/rw/pad/PadParts.tsx |
+| `getPadRequests` **[post-E16]** | async | `(): Promise<PartsRequestWithRefs[]>` | audit | pages/rw/RwPadPage.tsx |
+| `getReviewQueue` **[post-E16]** | async | `(): Promise<` | audit | components/rw/pad/PadReview.tsx, pages/rw/RwPadPage.tsx |
+| `reviewItem` **[post-E16]** | async | `(requestId: string, index: number, patch:` | audit | components/rw/pad/PadReview.tsx |
+| `sendForClientApproval` **[post-E16]** | async | `(requestId: string): Promise<PartsRequestWithRefs>` | audit, email → Outbox, comms thread | components/rw/pad/PadReview.tsx |
+| `simulateClientPartsDecision` **[post-E16]** | async | `(requestId: string, decision: 'approve' \| 'decline'): Promise<PartsRequestWithRefs>` | audit, comms thread | components/rw/pad/PadReview.tsx |
+| `padAllocate` **[post-E16]** | async | `(requestId: string): Promise<PartsRequestWithRefs>` | audit | components/rw/pad/PadReview.tsx |
+| `partsOnHand` **[post-E16]** | sync | `= (partId: string) => store.parts.find((p) => p.id === partId)?.stock ?? 0;` | audit | components/rw/pad/PadReview.tsx |
+| `getM3keEvents` **[post-E16]** | async | `(): Promise<M3keEvent[]>` | audit | components/rw/pad/PadReview.tsx |
+| `getRoomTechs` **[post-E16]** | sync | `= (): User[] => getDivisionStaff(getSessionDivision()).filter((u) => u.roles.includes('watchmaker') \|\| u.roles.includes('manager') \|\| u.roles.includes('inspector'));` | audit | components/rw/pad/PadJobs.tsx |
+| `padSetTech` **[post-E16]** | async | `(jobId: string, shortName: string): Promise<JobWithRefs>` | audit | components/rw/pad/PadJobs.tsx |
+| `getPadCondition` **[post-E16]** | async | `(jobId: string): Promise<PadConditionView>` | audit | components/rw/pad/PadJobs.tsx |
+
+## Client request notes — what the client asked for. Badge on cards, pop-up on every scan, mandatory checklist at QC
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `openClientRequests` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => requestsOf(j).filter((r) => !r.check);` | audit | components/jobs/ClientRequests.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
+| `qcRequestGaps` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => (j.status === 'testing' ? openClientRequests(j) : []);` | audit, email → Outbox, job status | components/jobs/ClientRequests.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
+| `addClientRequest` **[post-E16]** | async | `(jobId: string, text: string): Promise<JobWithRefs>` | audit | components/jobs/ClientRequests.tsx |
+| `removeClientRequest` **[post-E16]** | async | `(jobId: string, reqId: string): Promise<JobWithRefs>` | audit | components/jobs/ClientRequests.tsx |
+| `clientRequestAlert` **[post-E16]** | sync | `= (jobId: string): ClientRequestAlert \| null =>` | audit | pages/rw/RwBulkAssignPage.tsx, pages/rw/RwPadPage.tsx, pages/rw/RwStationScanPage.tsx, pages/rw/RwWmPage.tsx |
+| `ackClientRequests` **[post-E16]** | async | `(jobId: string, via: string): Promise<void>` | audit | components/jobs/ClientRequests.tsx |
+| `checkClientRequest` **[post-E16]** | async | `(jobId: string, reqId: string, result: 'done' \| 'na', reason?: string): Promise<JobWithRefs>` | audit | components/jobs/ClientRequests.tsx |
+| `uncheckClientRequest` **[post-E16]** | async | `(jobId: string, reqId: string): Promise<JobWithRefs>` | audit | components/jobs/ClientRequests.tsx |
+
+## Inbox — staff section: anyone can open a colleague's inbox (read + reply); "Assigned to me" stays the shortcut
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `getStaffInboxRows` **[post-E16]** | async | `(): Promise<StaffInboxRow[]>` | audit | pages/InboxPage.tsx |
+| `getColleagueInbox` **[post-E16]** | async | `(shortName: string): Promise<ConversationWithRefs[]>` | audit | pages/InboxPage.tsx |
+
+## Inbound shipping (pre-arrival) + tracking lookup. Carrier calls go ONLY through src/api/carriers/parcelpro.ts
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `SHIP_STAGE_LABEL` **[post-E16]** | sync | `: Record<ShipStage, string>` | none (read) | components/shipping/ShippingBits.tsx |
+| `getInboundBoard` **[post-E16]** | async | `(): Promise<` | none (read) | pages/shipping/InboundShippingPage.tsx |
+| `getShipment` **[post-E16]** | async | `(id: string): Promise<ShipmentWithRefs \| null>` | audit | components/shipping/ShippingBits.tsx |
+| `getShipmentsForClient` **[post-E16]** | async | `(clientId: string): Promise<ShipmentWithRefs[]>` | audit | components/shipping/ShippingBits.tsx |
+| `getShipmentForEstimate` **[post-E16]** | async | `(estimateId: string): Promise<ShipmentWithRefs \| null>` | audit | components/shipping/ShippingBits.tsx |
+| `prepareLabel` **[post-E16]** | async | `(id: string): Promise<LabelPrep>` | audit | components/shipping/ShippingBits.tsx |
+| `createInboundLabel` **[post-E16]** | async | `(id: string, recipient: ShipAddress, declaredValue: number, carrier: ShipCarrierName): Promise<ShipmentWithRefs>` | audit, email → Outbox | components/shipping/ShippingBits.tsx |
+| `resendLabelEmail` **[post-E16]** | async | `(id: string): Promise<ShipmentWithRefs>` | audit | pages/shipping/InboundShippingPage.tsx |
+| `followUpLabel` **[post-E16]** | async | `(id: string): Promise<ShipmentWithRefs>` | audit | pages/shipping/InboundShippingPage.tsx |
+| `voidAndReissue` **[post-E16]** | async | `(id: string): Promise<ShipmentWithRefs>` | audit | pages/shipping/InboundShippingPage.tsx |
+| `simulateTrackingEvent` **[post-E16]** | async | `(id: string): Promise<ShipmentWithRefs>` | audit | components/shipping/ShippingBits.tsx, pages/shipping/InboundShippingPage.tsx |
+| `clientStatusLine` **[post-E16]** | sync | `= (s: ShipmentWithRefs): string =>` | none (read) | components/shipping/ShippingBits.tsx |
+
+## Job messages — threaded board ON the job (internal only). @mentions route by tier: manager/concierge → hit list pin; bench → Messages section
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `isManagerTier` **[post-E16]** | sync | `= (u: User) => u.accessTier === 'manager' \|\| u.roles.includes('concierge');` | none (read) | components/jobs/JobMessages.tsx, components/rw/bench/BenchLock.tsx |
+| `staffForMention` **[post-E16]** | sync | `= (): User[] => getDivisionStaff(getSessionDivision());` | none (read) | components/jobs/JobMessages.tsx |
+| `getJobThreads` **[post-E16]** | async | `(jobId: string): Promise<JobThread[]>` | audit | components/jobs/JobMessages.tsx |
+| `postJobMessage` **[post-E16]** | async | `(jobId: string, text: string, opts:` | audit | components/jobs/JobMessages.tsx |
+| `getMessageInbox` **[post-E16]** | async | `(userId: string): Promise<MessageInboxRow[]>` | audit, localStorage | pages/rw/RwWmPage.tsx |
+| `unreadMessageCount` **[post-E16]** | sync | `= (short: string) => inboxFor(short).filter((r) => r.unread).length;` | audit, localStorage | — (internal / other client.ts functions only) |
+| `markJobThreadRead` **[post-E16]** | async | `(rootId: string): Promise<void>` | audit, localStorage | components/rw/bench/BenchMessages.tsx |
+
+## Bench Pad — per-tech board, own numbers only, no money
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
+| `STUCK_WORKING_DAYS` **[post-E16]** | sync | `= 4;` | audit, localStorage | — (internal / other client.ts functions only) |
+| `getBenchSettings` **[post-E16]** | sync | `= (): BenchSettings => (` | audit, localStorage | pages/rw/RwBenchPage.tsx |
+| `verifySupervisorPin` **[post-E16]** | sync | `= (pin: string) => fx.users.some((u) => u.accessTier === 'manager' && u.pin === pin);` | audit, localStorage | components/rw/bench/BenchSettings.tsx |
+| `saveBenchSettings` **[post-E16]** | sync | `= (s: BenchSettings, supervisorPin: string): BenchSettings =>` | audit, localStorage | components/rw/bench/BenchSettings.tsx |
+| `setKioskOffline` **[post-E16]** | sync | `= (on: boolean) =>` | audit, localStorage | — (internal / other client.ts functions only) |
+| `benchPinIn` **[post-E16]** | async | `(userId: string, pin: string): Promise<User>` | audit, localStorage | components/rw/bench/BenchLock.tsx |
+| `cacheBenchBoard` **[post-E16]** | sync | `= (b: BenchBoard) => writeJson(`$` | localStorage | pages/rw/RwBenchPage.tsx |
+| `readCachedBenchBoard` **[post-E16]** | sync | `= (userId: string): (BenchBoard &` | none (read) | pages/rw/RwBenchPage.tsx |
+| `getBenchBoard` **[post-E16]** | async | `(userId: string): Promise<BenchBoard>` | none (read) | pages/rw/RwBenchPage.tsx |
+
+_Total exports: 389 · baseline at E16: 296 · **[post-E16] new: 93**._
+
+Post-E16 exports (diff list for coverage): `totalsFor as computeEstimateTotals`, `RW_STATIONS`, `getShopFloor`, `movePart`, `markReunited`, `finishGate`, `finishJob`, `getPartHistory`, `parseTechCode`, `getScanSession`, `scanTech`, `scanLabelAssign`, `undoOutbox`, `getQueuedOutbox`, `getWorkQueue`, `simulateClientReply`, `clearClientReplied`, `getWmRoom`, `sendPartByScan`, `requestPartSimple`, `getStationMemory`, `stationScan`, `getPadBoard`, `padAdvance`, `padSendBack`, `SEND_BACK_REASONS`, `partSuggestions`, `recordPartPick`, `submitPadPartsRequest`, `getApprovalsQueue`, `approvalAction`, `getPickingQueue`, `pickAction`, `getJobPhotoViews`, `PHOTO_SLOTS`, `capturePadPhoto`, `getRoomPartsHistory`, `getRoomSummary`, `PART_LABELS`, `caliberOf`, `getPadPartsContext`, `padSearchParts`, `padRecordSelection`, `submitPadRequest`, `getPadRequests`, `getReviewQueue`, `reviewItem`, `sendForClientApproval`, `simulateClientPartsDecision`, `padAllocate`, `partsOnHand`, `getM3keEvents`, `getRoomTechs`, `padSetTech`, `getPadCondition`, `openClientRequests`, `qcRequestGaps`, `addClientRequest`, `removeClientRequest`, `clientRequestAlert`, `ackClientRequests`, `checkClientRequest`, `uncheckClientRequest`, `getStaffInboxRows`, `getColleagueInbox`, `SHIP_STAGE_LABEL`, `getInboundBoard`, `getShipment`, `getShipmentsForClient`, `getShipmentForEstimate`, `prepareLabel`, `createInboundLabel`, `resendLabelEmail`, `followUpLabel`, `voidAndReissue`, `simulateTrackingEvent`, `clientStatusLine`, `isManagerTier`, `staffForMention`, `getJobThreads`, `postJobMessage`, `getMessageInbox`, `unreadMessageCount`, `markJobThreadRead`, `STUCK_WORKING_DAYS`, `getBenchSettings`, `verifySupervisorPin`, `saveBenchSettings`, `setKioskOffline`, `benchPinIn`, `cacheBenchBoard`, `readCachedBenchBoard`, `getBenchBoard`

@@ -8,6 +8,20 @@ A **seam** is a place where the prototype fakes an outside system behind a `clie
 - **Keep**: `confirmShipment({carrier, declaredValue, photos, bypassReason})` guards (address, photos ≥1, paid or bypass), custody close, "shipped" notification.
 - **Decide**: insurer, who pays return shipping, delivered state semantics.
 
+## 1b. Parcel Pro adapter — `src/api/carriers/parcelpro.ts` (post-E16, the named carrier seam)
+- **Prototype**: four functions with production-real shapes — `createLabel(CreateLabelInput) → {trackingNumber, labelUrl, cost, insuredValue}`, `voidLabel(trackingNumber) → {voided, trackingNumber}`, `getTracking(trackingNumber, events?) → {status, events, eta?}`, `validateAddress(ShipAddress) → {valid, cleaned, riskFlag?}` — all mocked (random tracking numbers, formula cost, ZIP from a 10-state table, `labels.parcelpro.mock` PDF URLs). `client.ts` calls **only** this module for carrier work (`createInboundLabel`, `voidAndReissue`, `prepareLabel`).
+- **Real**: Parcel Pro API (likely provider, MH direction VB3-17) — API-first: address validation before label purchase, insured value = declared value, label PDF/ZPL, void, tracking webhooks (replace "Simulate carrier scan"), cost per shipment posted to the SO. One file to implement; the shipment ledger (`04`) is unchanged.
+- **Keep**: tracking numbers born attached to the estimate (arrival auto-match), cleaned-address confirmation step, void + reissue as one action, `clientStatusLine` one-liner reused by portal/templates.
+- **Decide**: Parcel Pro vs the §1 provider for **outbound**; whether the same adapter serves both directions (intent: yes).
+
+## 9. Bench Pad kiosk (post-E16)
+- **Prototype**: idle re-lock, offline banner + last-board cache, per-device settings — all in the browser (`localStorage`, `setTimeout`).
+- **Real**: device management (Apple Business Manager + MDM, Single App Mode locked to `/rw/bench`), server-side station identity (ruling 2026-09-26), a service worker for offline last-known data, server-enforced idle policy per station. The app-side behaviours are the spec (`modules/rw-bench-pad.md`).
+
+## 10. Photo capture on pads (post-E16)
+- **Prototype**: `<input type=file capture=environment>` → `URL.createObjectURL` → stored as `dataUrl` on the job photo / message photo (lost on reload).
+- **Real**: direct-to-bucket upload keyed to watch + job + slot (`§7`), thumbnail generation, `clientVisible` flag decides portal exposure; message photos are internal-only blobs.
+
 ## 2. QuickBooks Online (accounting)
 - **Prototype**: hard-stop stub — `fulfillSalesOrder` assigns `QBO-STUB-…`, `qboStatus: queued`; queue table with fake sync states; CSV exports.
 - **Real**: OAuth2 app; on fulfil → create QBO Invoice (customer upsert by email/phone, items mapped from catalog codes, tax), on payment → Payment applied; on cancel → void; idempotency keys; error queue with retry and a manager "re-sync" action; nightly reconciliation report.

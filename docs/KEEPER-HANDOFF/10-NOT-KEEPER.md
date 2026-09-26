@@ -21,6 +21,9 @@ Everything below exists in the prototype **only** to make behaviour visible. Eac
 | **"Simulate NFC tap"** picker and `&sim=1` punches | `/rg` | physical tags + hardened endpoint (`06` §5) |
 | **"Simulate inbound"** message with token matching | `/inbox` | real inbound email/SMS webhooks (`06` §3) |
 | Magic link **shown on screen** at `/rc` (and report tokens in flashes) | RC login, report issue | emailed/SMSed single-use grants (D-E) |
+| **"Simulate client reply"** (work queue), **"Simulate carrier scan"** (inbound shipping), **"simulate client parts decision"** (pad Review) | `/rw/queue`, `/shipping/inbound`, `/rw/pad` | comms-hub derivation; Parcel Pro tracking webhooks (`06` §1b); portal approve/decline of the parts request (Q77) |
+| **"Simulate API unreachable"** toggle in Bench settings — flips a global flag that makes every mocked call reject | `/rw/bench` settings | real network failure handling (service worker / retry); the banner + last-data behaviour IS the spec, the toggle is not |
+| **Seeded routing at load** — fixture job messages create hit-list pins when the module loads | `/today` pins for MM and Vienna | pins are created only by the write path |
 | Scripted **parts assistant** (`partsAssistantReply`) and scripted **Companion** answers | parts chat, companion | real model over M3KE store with citations (`06` §6) |
 | "Print" that flips a status (labels, drop-off receipt) | labels, intake | ZPL print queue (`06` §4) |
 | Fabricated tracking numbers, labels, `QBO-STUB-…` ids, `pushed_stub / error_stub` states | ship station, accounting | carrier + QBO integrations (`06` §1–2) |
@@ -46,6 +49,19 @@ Everything below exists in the prototype **only** to make behaviour visible. Eac
 | Legacy `Message` store beside `ConvMessage` | RC messages | one message store (Q39) |
 | Kiosk-created clients with empty address | kiosk | address capture at first estimate/intake, or a "prospect" client state |
 | `RG_DIVISION_LABEL`, `KIOSK_BRANDS` label constants; brand wordmarks as styled text | kiosk, RG | brand assets + a divisions table with display names |
+
+## Post-E16 prototype scaffolding (do not inherit)
+| item | where | replaces with |
+|---|---|---|
+| Photos as **browser object URLs** (`URL.createObjectURL`) on job photos and message photos — vanish on reload | pad camera, message composer | blob storage keyed to watch + job + slot (`06` §7/§10) |
+| **picsum.photos** seed images for job/inspection/message photos | fixtures `rw.ts`, `bench.ts` | real captured photos |
+| `localStorage` **bench settings**, **last-board cache**, **offline flag** (`rollisuite.bench.*`, `rollisuite.kiosk.offline`) | `/rw/bench` | server-side station record + service worker (ruling 2026-09-26) |
+| **Goal history seeds** (`goalHistorySeeds`, `currentMonthBase`) and fixture **tech goals** | Bench Pad Goals | computed from the components ledger + `tech_goal` table |
+| `caliberOf` reference-prefix table | pad parts composer | real reference catalog (Q79) |
+| Mock Parcel Pro: random tracking numbers, formula cost, 10-state ZIP table, `labels.parcelpro.mock` URLs | `carriers/parcelpro.ts` | real adapter, same signatures |
+| Bench number = tech index modulo 3; single global stuck threshold | bulk assign, bench pad | station identity from the device; per-type threshold if ruled (Q82) |
+| `TECH-<short>` codes typed into a keyboard-wedge field | `/rw/bulk` | printed tech badges with the same payload — the format IS inheritable |
+| Legacy `job.notes` still exported (`addJobNote`) though no screen writes it | `client.ts` | remove; messages are the notes |
 
 ## What IS inheritable (behaviour, not code)
 State machines and guards (`source/STATE-MACHINES.md`), field lists and validations (module specs), the API contract shape (`05`), audit taxonomy (`08`), templates and portal-first rule (`07`), rulings (`02`), and the regression checklist (`09`).

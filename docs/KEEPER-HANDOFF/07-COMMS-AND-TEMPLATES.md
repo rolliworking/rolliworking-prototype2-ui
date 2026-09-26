@@ -38,3 +38,13 @@ Auto-thread rows are `in` for client actions (count as needs-reply — Q42) and 
 
 ## Internal notes and templates in the composer
 Internal notes (`direction: internal`, source `note`) never leave the shop. The composer only sends via a template; body edits are allowed after rendering; photos attach from the job.
+
+## Post-E16 client emails (all Outbox-only, portal-first unchanged)
+| trigger | function | subject / body gist | undo / follow-up |
+|---|---|---|---|
+| Bulk assign scan starts work | `scanLabelAssign` → `queueJobEmail` "Work has started" | "<Tech> has started work on your watch today… track it in RolliConnect" | **Undo** withdraws the Outbox row within 30 min (`undoOutbox`) |
+| Parts request sent for approval (after manager gate) | `sendForClientApproval` | priced lines + portal link (decision simulated in prototype, Q77) | — |
+| Inbound label created | `createInboundLabel` | label PDF link + tracking#, packing guidance | `resendLabelEmail` (same content), `followUpLabel` (nudge after aging), `voidAndReissue` (new label, new email) |
+| Shipment status for client | `clientStatusLine(shipment)` | one plain-English line ("…is on its way to us with UPS, last scanned in Louisville…") — copy button today; intended for the portal tracking page and the shipping-update template (Q85) | — |
+
+Never emailed / never portal: job **messages** (internal), client-request acknowledgments, M3KE events, bench goals.

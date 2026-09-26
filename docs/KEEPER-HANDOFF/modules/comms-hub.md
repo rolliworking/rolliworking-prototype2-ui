@@ -22,3 +22,8 @@ Both tiers may reply/assign/snooze/close (Q41 asks whether concierge should clos
 ## Behaviours discovered during build
 - The legacy `Message` store (portal messages) still exists beside `ConvMessage` (`⚠ DRIFT`, Q39) — portal reads `Message`; staff reads both through the thread-space.
 - Kiosk (E13) threads its check-in into General with the brand's division.
+
+## Post-E16 additions (2026-09-26)
+- **Staff section** in the Inbox sidebar: every division staff member with their open-assigned count (`getStaffInboxRows`); clicking opens that colleague's inbox (`getColleagueInbox(shortName)`) with full read + reply + assign/close. "Assigned to me" is a filter, not a wall (VB3-11). `⚠ DRIFT`: opening a colleague's inbox is not audited (`08` §39). Amber: tier-scoping if MH later restricts concierge.
+- **Track a package** button in the thread header (`TrackButton clientId estimateId`): appears whenever the thread's client has any shipment — anchored estimate first, else client shipments newest-first, `+N` badge, panel lists the rest (VB3-16; `shipping-inbound.md`).
+- Job Messages are **not** conversations: they never enter the Inbox or the portal; a mention routes to a hit-list pin or a bench Messages section (`job-messages.md`).

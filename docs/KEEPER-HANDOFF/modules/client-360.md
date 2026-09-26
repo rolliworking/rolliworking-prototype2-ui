@@ -29,3 +29,8 @@ Both tiers. `⚠ DRIFT`: clients and their records are not division-walled in RS
 - `closeRequest` audits with type `estimate` (`⚠ DRIFT` — should be its own type or `job`).
 - Requests queue moved to its own page `/requests` in E13; Client 360 keeps the per-client section.
 - Kiosk-created clients are real client rows (type retail) — the "possible existing client" flag prevents duplicates; staff Confirm/Split resolves it (`kiosk-requests.md`).
+
+## Post-E16 additions (2026-09-26)
+- **Track a package** button in the client header (`TrackButton clientId`) → tracking panel; several shipments → `+N` and an "Also for <client>" list (`shipping-inbound.md`).
+- Universal search gains a **SHIPMENTS** group (tracking number, estimate number) → opens the tracking panel.
+- Not built: **Job Lookup** floating tool (VB3-12) and **View as client** (VB3-14) — listed in `03-OPEN-QUESTIONS.md` as queued work, not amber.

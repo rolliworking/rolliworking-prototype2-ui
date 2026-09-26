@@ -131,6 +131,9 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Files: `components/rw/pad/{PadBits,PadJobs,PadParts,PadReview}.tsx`, client.ts Pad v2 section, fixtures parts.ts (pt-33..48, CALIBER_BY_REF, m3keEvents, PR-0050), reports.ts (rep-03..05).
 - Tested iteration_29 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q77–80.
 
+### KEEPER handoff refresh (2026-09-26)
+- `/app/docs/KEEPER-HANDOFF/` covers everything post-E16: 8 new module specs, [post-E16] API census (389 exports), audit families 26–39, Q81–Q89, data-model dispositions, Parcel Pro seam, route map, not-Keeper list. Regenerate with `python3 _gen.py` after code changes.
+
 ### Bench Pad `/rw/bench` + kiosk contract + goal history + Job Messages (2026-09-26)
 - Bench Pad: one kiosked iPad per bench — PIN lock (card + keypad, auto-submit), per-tech board: In progress (part-location chips) · Needs attention (stuck ≥4 working days / late) · Bands & splits (reunification state, band completed by whom/when) · Outsourced (vendor, days out) · Messages · Completed · Goals. No money, own numbers only.
 - Kiosk: idle re-lock (default 10 min → PIN pad → straight back), no external links, "reconnecting…" banner + per-device last-board cache (cold start works offline), sticky header/clock, long-press gear → supervisor PIN → bench name / idle timeout / simulate-offline (localStorage; AMBER: Keeper registers device identity server-side).

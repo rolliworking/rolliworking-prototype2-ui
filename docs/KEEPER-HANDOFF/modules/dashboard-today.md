@@ -32,3 +32,6 @@ Both tiers. Division wall on rows, tasks, pins and pickers (`getDivisionStaff/Ro
 - Hit list started as `/hit-list`; renamed `/today` (redirect kept).
 - "Replies" source added by E14 (Comms hub) — conversation rows appear on `/today`.
 - `⚠ DRIFT`: task/pin writes are not division-checked server-side (no server); the pickers prevent it in the UI only.
+
+## Post-E16 additions (2026-09-26)
+- **Pins from job messages**: an `@mention` of a manager/concierge in a job message creates a pin `{title: '@<author> on <job#>: "…"', jobId, messageId}`; it renders with a message icon and links to `/jobs/:id#msg-<id>`; **Done** = handled. Pins now carry an optional `messageId` (`job-messages.md`). `⚠ DRIFT`: created without an audit row.

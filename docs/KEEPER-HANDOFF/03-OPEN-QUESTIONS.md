@@ -1,6 +1,6 @@
 # 03 — OPEN QUESTIONS · MH VERDICT SHEET
 
-How to use: answer each line in the **Verdict** column (yes / no / other + one sentence). Numbers match `source/SESSION-LOG.md` (the running list, Q1–Q66). Columns: **Question** (plain language) · **Where it shows** (UI) · **Prototype does today** (the provisional choice) · **If yes / if no / other** (what changes in KEEPER). Items already ruled since being listed are marked **RULED** and kept for completeness.
+How to use: answer each line in the **Verdict** column (yes / no / other + one sentence). Numbers match `source/SESSION-LOG.md` (the running list, Q1–Q89; Q81–Q89 added in the post-E16 refresh with recommended defaults in bold). Columns: **Question** (plain language) · **Where it shows** (UI) · **Prototype does today** (the provisional choice) · **If yes / if no / other** (what changes in KEEPER). Items already ruled since being listed are marked **RULED** and kept for completeness.
 
 | # | Question | Where it shows | Prototype does today | If yes / if no / other | Verdict |
 |---|---|---|---|---|---|
@@ -76,6 +76,16 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | 78 | M3KE similarity: token overlap (prototype) vs model in KEEPER? | Parts search | token-based | — | |
 | 79 | Caliber as a watch attribute instead of reference-prefix table? | `CALIBER_BY_REF` | prefix table | yes → `Watch.caliber` | |
 | 80 | Manager review gate for WM-room bench requests too? | Review → Bench | direct approve path kept | yes → all requests via review | |
+
+| 81 | Do concierge-tier users of the Supervisor Pad see part prices, or only manager tier? | `/rw/pad` Review tab | prices shown to whoever passes `RwManagerOnly` (manager only today) | yes → pad ignores hide-money for concierge too; no → mask for non-managers. **Default: no (hide-money stands).** | |
+| 82 | Stuck threshold per job type (service / small job / warranty) or one number? | `/rw/bench` Needs attention | one default: no scan movement ≥ 4 working days | per type → `job_kind.stuck_days`; one → keep 4. **Default: 4 for all until data says otherwise.** | |
+| 83 | Picking decrements `Part.stock`; inventory tracks `StockLevel` per location — which is the truth? | `/rw/picking`, `/inventory` | two unreconciled numbers | KEEPER: `stock_level` per location is truth; `Part.stock` = sum. **Default: yes.** | |
+| 84 | Should `@manager` / `@concierge` (role) mentions in job messages fan out to every holder? | message composer | only users resolve; roles ignored | yes → one pin per holder; no → picker hides roles. **Default: yes, roles fan out.** | |
+| 85 | Portal tracking page + outbound return labels reuse the `clientStatusLine` one-liner? | `/rc` watch page (not built), ship station | line exists, only "copy for client" uses it | **Default: yes — write once, render in portal + shipping-update template.** | |
+| 86 | Colleague inbox (Staff section): any staff member, or manager tier only? | `/inbox` Staff section | anyone; read not audited | restrict → hide for concierge; open → audit the read (`08` §39). **Default: open + audited.** | |
+| 87 | Who sets a tech's monthly component goal, and where? | `/rw/bench` Goals | fixture `techGoals` | **Default: manager in Setup → Users (`tech_goal {tech, month, goal}`), unit = components.** | |
+| 88 | Are message read receipts visible to others (e.g. "Rosa read this")? | job Messages | `readBy[]` stored, not shown | **Default: no — private read state; KEEPER logs reads for accountability only.** | |
+| 89 | Bench identity registration: does a supervisor adopt a bench from the pad (PIN) or does IT register it server-side? | `/rw/bench` settings | localStorage per device | **Ruled 2026-09-26: station record server-side; replaced iPad re-adopts.** Open: who may adopt — default: manager PIN on the device. | |
 
 ## Amber items not numbered above (from DECISIONS "provisional")
 | item | where | prototype does | verdict |

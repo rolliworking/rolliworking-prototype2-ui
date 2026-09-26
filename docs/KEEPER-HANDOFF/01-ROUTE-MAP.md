@@ -39,10 +39,11 @@ Legend — **who**: `any` = both tiers (manager + concierge); `mgr` = manager ti
 | `/integrations`, `/help` | integration health tiles (all stub); help pages | mgr / any | — | sidebar | read |
 | `/actions/*` | quick-action redirects/placeholders (`ship`, `pickup` redirect; others placeholder) | any | — | top bar | — |
 | `/inspection-photos` | placeholder (not built) | mgr | — | sidebar | — |
+| `/shipping/inbound` **[post-E16]** | inbound shipping board: Label Requests → Labels Sent → In Transit → Delivered-unscanned; KPI strip; create/resend/void+reissue labels via the Parcel Pro adapter; tracking panel | mgr / concierge | session | sidebar "Inbound" | tab → row → action sheet (`modules/shipping-inbound.md`) |
 
-Global RS chrome: top search box (universal search), quick actions (Drop-off, Request, Estimate, Ship, Pickup), station badge with division, `+` quick-add (Alt+T), Companion panel button (Alt+M), user menu (Switch user → PIN). Route tiers are enforced by `TierGate` (shows a Restricted page) — **UI only** (`⚠ DRIFT`: no server tier check exists).
+Global RS chrome (post-E16): universal search also returns a **SHIPMENTS** group → tracking panel; Client 360 header and Inbox thread header carry the **Track** button; `/today` pins may come from job-message mentions (message icon → `/jobs/:id#msg-<id>`); every job page's Notes card is now **Messages**. Global RS chrome: top search box (universal search), quick actions (Drop-off, Request, Estimate, Ship, Pickup), station badge with division, `+` quick-add (Alt+T), Companion panel button (Alt+M), user menu (Switch user → PIN). Route tiers are enforced by `TierGate` (shows a Restricted page) — **UI only** (`⚠ DRIFT`: no server tier check exists).
 
-## B. RolliWorking `/rw` (bench app; sign-in inside the shell; dark, dense)
+## B. RolliWorking `/rw` (bench app; sign-in inside the shell; dark, dense) — post-E16: FOUR surfaces on one scan ledger (desktop · Supervisor Pad · Bench Pads · station scanners), see `modules/rolliworking.md`
 | route | purpose | who | division | flow |
 |---|---|---|---|---|
 | `/rw` | My Bench (same component as `/bench`) | any (bench roles centred) | session | act from rows; "<Component> done" inline |
@@ -53,6 +54,13 @@ Global RS chrome: top search box (universal search), quick actions (Drop-off, Re
 | `/rw/floor` | two-lane legacy floor (head / band → Final assembly; Into safe: awaiting components, holds, approval, ready) | any | session | read → chip → job |
 | `/rw/evidence` | evidence capture station: scan label → four QC slots | any | session (queue) | scan → slot → photo → save |
 | `/rw/today` | same as `/today` | any | session | — |
+| `/rw/queue` **[post-E16]** | work queue: one row per open job, oldest first, overdue + client-replied flags, per-part chips | any | session | row → `/rw/jobs/:id` (`modules/rw-shop-floor.md`) |
+| `/rw/bulk` **[post-E16]** | Bulk Assign: scan `TECH-<short>` then labels → custody + assign + start; courtesy email with 30-min Undo | mgr | session | scan tech → scan labels → undo (`modules/rw-bulk-assign.md`) |
+| `/rw/wm` **[post-E16]** | Watchmaker Room bench mode for the signed-in tech: cards, request part, → safe, send-by-scan, **Messages** block | any | session | PIN switch → act on own cards |
+| `/rw/station` **[post-E16]** | station scanner: pick station → scan labels; parts move like registered mail | any | session | station → scan |
+| `/rw/pad` **[post-E16]** | **Supervisor Pad** (iPad): Jobs / Parts / Review tabs, stage fwd/back with reasons, reassign, three-tier parts composer, M3KE, camera, parts history, job messages | mgr | session | scan → card / composer (`modules/rw-supervisor-pad.md`) |
+| `/rw/picking` **[post-E16]** | picking queue: location, on-hand vs to-pick, picked / short / found-elsewhere | any | session | tap or bin scan (`modules/rw-picking.md`) |
+| `/rw/bench` **[post-E16]** | **Bench Pad** (kiosked iPad per bench): PIN lock → per-tech board (in progress · attention · splits · outsourced · messages · completed · goals); idle re-lock; offline banner; long-press settings | any (own board) | station | card + PIN → board (`modules/rw-bench-pad.md`) — **renders without a signed-in shell user** |
 Boundary: any link to an RS path is rewritten (`/jobs/:id` → `/rw/jobs/:id`) or blocked with an inline notice. In KEEPER the boundary is authentication, not link handling.
 
 ## C. RolliConnect `/rc` (client portal; magic-link session; warm skin)
