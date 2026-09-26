@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-09-25  
+**Last updated**: 2026-09-26  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -50,7 +50,7 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 | E8 | RolliConnect (Client Portal) | ✅ Done |
 | E9–E10, E12, E14–E15 | RS modules, Companion, RolliTime, Comms, Portal-first | ✅ Done |
 | E13 | RGTime /rg + Kiosk /kiosk + /requests | ✅ Done |
-| E11 | (never briefed) | — |
+| E11 | RolliWorking standalone /rw + per-component completion ruling | ✅ Done |
 
 ---
 
@@ -120,6 +120,12 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Toast confirms: "Pinned to Vienna's list"
 - `QuickAddProvider` wraps AppShell
 
+### E11 — RolliWorking standalone /rw (2026-09-26) + per-component completion (MH ruling, first board walk)
+- `/rw` route-space: dark workshop shell, own sign-in (division cards, password/PIN, no camera), nav Bench · Jobs · Parts · QC (mgr) · Supervisor (mgr) · Floor · Evidence · My today; link guard rewrites `/jobs/:id` → `/rw/jobs/:id` and blocks other RS links (access boundary, prototype shares one origin/session); `MoneyContext` hides all amounts in /rw (amber default); `.rw-dark` CSS skin restyles re-homed E6 components. New: Jobs lookup, bench Job page, Parts, QC lane (evidence-gated Pass / Fail), Evidence capture, two-lane legacy floor (`getRwFloorMap`, amber vs 9-lane).
+- Components: `Job.components[]` head/band/case (W / B / P+PM), Mark complete (job detail RS+RW, inline bench buttons), manager Amend attribution, Awaiting components bin (RS board lane/filter/pill, RW floor Into-safe), reunification gate on Send to testing, auto-transition on last completion, Reports → Tech completions, Supervisor completions/month; QC-fail keeps credit + rework log (amber). Invoicing untouched.
+- Tested iteration_26: 100%
+- E16 (KEEPER handoff package at /app/docs/KEEPER-HANDOFF/) is PAUSED pending user go — it must cover /rw too.
+
 ### E13 — RGTime /rg + public Kiosk /kiosk (2026-09-25, MH ruling: NFC tap)
 - RGTime phone PWA (manifest /rg-manifest.webmanifest, start_url /rg): remembered per-device login (`rollisuite.rg.session`), status card, today's punches, Simulate-NFC-tap picker → real tag URL `/rg/clock?tag=<id>` one-button confirm (in/out toggles, division from tag, `simulated` flag), `/rg/manager` card+password manager-only week grid (Mon–Sun, totals, open-punch amber, prev/next, division toggle, day detail). Seeded tags: tag-fd-rw, tag-rs-counter; ~2 weeks punches.
 - Kiosk: idle → brand → services (Skip — Continue) → form → thanks (5 s reset); 30 s dim, 2 min abandon reset; creates ServiceRequest source kiosk + General-thread message + `kiosk` audit; email/phone match → `possible existing client`.
@@ -177,7 +183,8 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - P2: cross-division inventory rules unruled (amber)
 
 ### Upcoming
-- E11 brief from MH (never briefed); amber items in DECISIONS (RGTime hardening, punch corrections, kiosk signature capture)
+- **E16 — KEEPER handoff package** (12 files at /app/docs/KEEPER-HANDOFF/, spec in user message; paused until user says resume)
+- amber items in DECISIONS (RGTime hardening, punch corrections, kiosk signature capture)
 
 ---
 
