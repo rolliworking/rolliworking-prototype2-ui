@@ -19,6 +19,10 @@ export const watches: Watch[] = [
   { id: 'w-15', clientId: 'c-15', brand: 'Rolex', model: 'Sea-Dweller', reference: '126600', serial: 'R9B4S7E2', dial: 'Black', bracelet: 'Oyster', status: 'released', receivedAt: daysAgo(35) },
   // Client 360 seed — Naomi Castellanos' other two watches (multi-year history)
   { id: 'w-20', clientId: 'c-10', brand: 'Rolex', model: 'Datejust 31', reference: '278274', serial: '2R8M5K7Q', dial: 'Aubergine', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(19) },
+  // Robert Calloway — the multi-request demo client (R1 history · R2 never sent in · R3 in house · R4 new web request)
+  { id: 'w-40', clientId: 'c-30', brand: 'Rolex', model: 'Submariner Date', reference: '126610LN', serial: 'R7C2K9M4', dial: 'Black', bracelet: 'Oyster', status: 'released', receivedAt: daysAgo(380) },
+  { id: 'w-41', clientId: 'c-30', brand: 'Rolex', model: 'GMT-Master II', reference: '126710BLRO', serial: 'G4P8T1V6', dial: 'Black', bracelet: 'Jubilee', status: 'expected', receivedAt: daysAgo(182) },
+  { id: 'w-42', clientId: 'c-30', brand: 'Rolex', model: 'Datejust 41', reference: '126334', serial: 'D2W7N5Q3', dial: 'Blue', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(58) },
   { id: 'w-21', clientId: 'c-10', brand: 'Tudor', model: 'Black Bay Fifty-Eight Navy', reference: 'M79030B-0001', serial: 'W4T9L36N', dial: 'Blue', bracelet: 'Rivet', status: 'released', receivedAt: daysAgo(402) },
   // Expected — estimate exists, watch not yet received through Intake
   { id: 'w-16', clientId: 'c-18', brand: 'Rolex', model: 'Lady-Datejust', reference: '279174', serial: 'N4K8P2W7', dial: 'Silver', bracelet: 'Jubilee', status: 'expected', receivedAt: daysAgo(0) },

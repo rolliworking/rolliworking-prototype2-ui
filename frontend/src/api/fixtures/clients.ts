@@ -28,6 +28,7 @@ const rows: Row[] = [
   ['c-22', 'Mei-Ling', 'Tsai', 'meiling.tsai@example.com', '(408) 555-0122', 'San Jose', 'CA'],
   ['c-23', 'Julian', 'Ashworth', 'julian.ashworth@example.com', '(615) 555-0123', 'Nashville', 'TN'],
   ['c-24', 'Rebecca', 'Halloran', 'rebecca.halloran@example.com', '(401) 555-0124', 'Newport', 'RI'],
+  ['c-30', 'Robert', 'Calloway', 'robert.calloway@example.com', '(203) 555-0130', 'Greenwich', 'CT', undefined],
   ['c-25', 'Sebastian', 'Vidal', 'sebastian.vidal@example.com', '(786) 555-0125', 'Coral Gables', 'FL', 'Vidal Jewelers'],
 ];
 

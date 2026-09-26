@@ -6,6 +6,7 @@ import type { PortalDocument } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
+import { RcPhotoSections } from '@/rc/RcPhotoSections';
 
 const DocTile = ({ d }: { d: PortalDocument }) => {
   const [zoom, setZoom] = useState(false);
@@ -41,7 +42,6 @@ export default function RcWatchPage() {
   if (loading) return null;
   if (!pw) return <p className="text-rc-muted">We couldn’t find that watch on your account.</p>;
   const { watch: w } = pw;
-  const photos = pw.documents.filter((d) => d.dataUrl);
   const papers = pw.documents.filter((d) => !d.dataUrl);
 
   return (
@@ -59,10 +59,10 @@ export default function RcWatchPage() {
         </div>
       </div>
 
-      <RcCard eyebrow="Documents & photos" title={`${pw.documents.length} item${pw.documents.length === 1 ? '' : 's'}`} testId="rc-watch-documents">
-        {photos.length > 0 && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{photos.map((d) => <DocTile key={d.id} d={d} />)}</div>}
-        {papers.length > 0 && <div className={`grid gap-2 sm:grid-cols-2 ${photos.length ? 'mt-4' : ''}`}>{papers.map((d) => <DocTile key={d.id} d={d} />)}</div>}
-        {pw.documents.length === 0 && <p className="text-[15px] text-rc-muted">Photos and paperwork will appear here as your service progresses.</p>}
+      {pw.jobIds.map((jid) => <RcPhotoSections key={jid} clientId={client!.id} jobId={jid} />)}
+      <RcCard eyebrow="Documents" title={`${papers.length} item${papers.length === 1 ? '' : 's'}`} testId="rc-watch-documents">
+        {papers.length > 0 && <div className="grid gap-2 sm:grid-cols-2">{papers.map((d) => <DocTile key={d.id} d={d} />)}</div>}
+        {papers.length === 0 && <p className="text-[15px] text-rc-muted">Estimates and invoices will appear here as your service progresses.</p>}
       </RcCard>
 
       <RcCard eyebrow="Service history" title="What’s happened so far" testId="rc-watch-history">

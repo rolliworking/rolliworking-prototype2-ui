@@ -29,7 +29,7 @@ const EstimateRows = ({ e }: { e: EstimateWithRefs }) => {
         </Td>
         <Td className="text-ink-700">{watchLabel(e.watch)}</Td>
         <Td className="max-w-[220px] truncate text-ink-500" title={e.lines.map((l) => l.description).join(' · ')}>{e.lines[0]?.description}{e.lines.length > 1 && <span className="text-ink-400"> +{e.lines.length - 1}</span>}</Td>
-        <Td><StatusPill status={e.status} /></Td>
+        <Td><span className="inline-flex items-center gap-1"><StatusPill status={e.status} />{e.status === 'expired' && !e.jobId && <span data-testid={`estimate-aging-${e.id}`} className="rounded-sm bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700" title="Estimate sent, watch never received">watch never received · {Math.round((Date.now() - new Date(e.sentAt ?? e.createdAt).getTime()) / 86_400_000)}d</span>}</span></Td>
         <Td className="tabular text-right font-medium">{fmtMoneyCents(e.total)}</Td>
         <Td className="tabular whitespace-nowrap text-right text-ink-500">{when(e.createdAt)}</Td>
       </tr>

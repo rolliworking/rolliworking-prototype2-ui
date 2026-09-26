@@ -131,6 +131,9 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Files: `components/rw/pad/{PadBits,PadJobs,PadParts,PadReview}.tsx`, client.ts Pad v2 section, fixtures parts.ts (pt-33..48, CALIBER_BY_REF, m3keEvents, PR-0050), reports.ts (rep-03..05).
 - Tested iteration_29 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q77–80.
 
+### View as client + multi-request demo client (2026-09-26)
+- View-as-client (Client 360 + Inbox thread) with amber banner/exit, audited; portal home 'Your requests' cards (4 lifecycle states, watch identity on every card); client photo sections Arrival/Condition/Completed with lightbox, staff-only slots excluded; Robert Calloway (c-30) seeded across R1–R4; expired-estimate aging chip on Client 360.
+
 ### Send invoice + mock payment link (2026-09-26, VB4 edit-after-send mirror)
 - "Send invoice" queues an Outbox email with a Pay button → `/pay/<token>` MOCK Intuit hosted page (live total/paid/balance, partial payments). Same link on the portal invoice. Editing the SO after send (shipping/lines) updates the page instantly, no resend; SO page shows told-vs-now per send; full payment flips badge to Paid. Self-tested end to end.
 

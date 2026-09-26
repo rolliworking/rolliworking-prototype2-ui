@@ -49,6 +49,14 @@ export const recentPartChoices: { reference: string; partId: string; at: string 
 const img = (seed: string) => `https://picsum.photos/seed/${seed}/640/480`;
 const ph = (id: string, jobId: string, slot: string, kind: JobPhotoView['kind'], seed: string, d: number, by: string): JobPhotoView & { jobId: string } => ({ id, jobId, slot, kind, url: img(seed), at: daysAgo(d, 10), by });
 export const jobPhotos: (JobPhotoView & { jobId: string })[] = [
+  // Robert Calloway — R1 full set (arrival · condition · completed) + one staff-only; R3 arrival + condition only + one staff-only
+  ph('ph-r1-1', 'j-r1', 'Full watch', 'intake', 'rw-cal-sub-1', 375, 'Vienna'), ph('ph-r1-2', 'j-r1', 'Caseback', 'intake', 'rw-cal-sub-2', 375, 'Vienna'),
+  ph('ph-r1-3', 'j-r1', 'Dial', 'inspection', 'rw-cal-sub-3', 374, 'Walter'), ph('ph-r1-4', 'j-r1', 'Bracelet wear', 'inspection', 'rw-cal-sub-4', 374, 'Walter'), ph('ph-r1-5', 'j-r1', 'Movement', 'inspection', 'rw-cal-sub-5', 372, 'MM'),
+  ph('ph-r1-6', 'j-r1', 'Hidden serial', 'inspection', 'rw-cal-sub-6', 374, 'Walter'),
+  ph('ph-r1-7', 'j-r1', 'Dial — completed', 'completed', 'rw-cal-sub-7', 352, 'MM'), ph('ph-r1-8', 'j-r1', 'Caseback — completed', 'completed', 'rw-cal-sub-8', 352, 'MM'), ph('ph-r1-9', 'j-r1', 'Bracelet — refinished', 'completed', 'rw-cal-sub-9', 352, 'Walter'),
+  ph('ph-r3-1', 'j-r3', 'Full watch', 'intake', 'rw-cal-dj-1', 58, 'Vienna'), ph('ph-r3-2', 'j-r3', 'Bracelet', 'intake', 'rw-cal-dj-2', 58, 'Vienna'),
+  ph('ph-r3-3', 'j-r3', 'Crystal scratch', 'inspection', 'rw-cal-dj-3', 57, 'MH'), ph('ph-r3-4', 'j-r3', 'Caseback', 'inspection', 'rw-cal-dj-4', 57, 'MH'),
+  ph('ph-r3-5', 'j-r3', 'Parts grading', 'inspection', 'rw-cal-dj-5', 56, 'MM'),
   ph('ph-01', 'j-01', 'Intake — full watch', 'intake', 'rw-sub-1', 9, 'Vienna'),
   ph('ph-02', 'j-01', 'Dial', 'inspection', 'rw-sub-2', 8, 'MM'),
   ph('ph-03', 'j-01', 'Caseback', 'inspection', 'rw-sub-3', 8, 'MM'),

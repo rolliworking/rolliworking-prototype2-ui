@@ -14,10 +14,19 @@ export const conversations: Conversation[] = [
   // Eleanor — anchored to estimate e-02 · approval event mid-thread · open, last message outbound (no reply needed)
   { id: 'cv-04', clientId: 'c-02', subject: 'Daytona estimate E01042', anchor: { kind: 'estimate', id: 'e-02' }, status: 'open', assignedTo: { type: 'user', shortName: 'Walter' }, division: 'rolliworks', createdAt: daysAgo(9, 10), lastAt: daysAgo(1, 12), lastInboundAt: daysAgo(2, 15), lastOutboundAt: daysAgo(1, 12), tokenSeq: 2 },
   // Naomi — request rq-03 anchored, unassigned, needs reply (older)
+  // Robert Calloway — R4 web request needs first reply · R3 open thread answered · R1 closed history
+  { id: 'cv-r4', clientId: 'c-30', subject: 'Web request — Explorer II 226570 date jump', anchor: { kind: 'request', id: 'rq-r4' }, status: 'open', division: 'rolliworks', createdAt: hoursAgo(13), lastAt: hoursAgo(13), lastInboundAt: hoursAgo(13), tokenSeq: 0 },
+  { id: 'cv-r3', clientId: 'c-30', subject: 'Datejust 41 service — crystal question', anchor: { kind: 'job', id: 'j-r3' }, status: 'open', assignedTo: { type: 'user', shortName: 'MH' }, division: 'rolliworks', createdAt: daysAgo(6, 18), lastAt: daysAgo(5, 10), lastInboundAt: daysAgo(6, 18), lastOutboundAt: daysAgo(5, 10), tokenSeq: 1 },
+  { id: 'cv-r1', clientId: 'c-30', subject: 'Submariner Date — ready for collection', anchor: { kind: 'job', id: 'j-r1' }, status: 'closed', assignedTo: { type: 'user', shortName: 'Vienna' }, division: 'rolliworks', createdAt: daysAgo(351, 12), lastAt: daysAgo(349, 15), lastInboundAt: daysAgo(349, 15), lastOutboundAt: daysAgo(351, 12), tokenSeq: 1, closedAt: daysAgo(349, 16) },
   { id: 'cv-05', clientId: 'c-10', subject: 'Web request — Datejust bracelet', anchor: { kind: 'request', id: 'rq-03' }, status: 'open', division: 'rolliworks', createdAt: daysAgo(3, 9), lastAt: daysAgo(3, 9), lastInboundAt: daysAgo(3, 9), tokenSeq: 0 },
 ];
 
 export const convMessages: ConvMessage[] = [
+  msg('cm-r4', 'cv-r4', 'c-30', 'in', 'portal', 'Robert Calloway', 'Sent a request through the website about my Explorer II (226570) — the date jumps two days at midnight and the 24-hour hand is off. Happy to drop it off whenever suits.', hoursAgo(13), { readByStaff: false }),
+  msg('cm-r3a', 'cv-r3', 'c-30', 'in', 'portal', 'Robert Calloway', 'Quick one on the Datejust — is the new crystal the same domed profile as the original?', daysAgo(6, 18), { readByStaff: true }),
+  msg('cm-r3b', 'cv-r3', 'c-30', 'out', 'staff', 'MH', 'Yes — genuine flat sapphire with the cyclops, identical to what came off. It is on order from RSC; the movement service continues meanwhile so no time is lost.', daysAgo(5, 10), { token: 'RT-CVR3-1', station: 'Front Desk 1' }),
+  msg('cm-r1a', 'cv-r1', 'c-30', 'out', 'staff', 'Vienna', 'Robert — the Submariner has cleared QC and is ready for collection. Your pickup code is in the invoice email.', daysAgo(351, 12), { token: 'RT-CVR1-1', station: 'Front Desk 1' }),
+  msg('cm-r1b', 'cv-r1', 'c-30', 'in', 'email', 'Robert Calloway', 'Collected today — it looks brand new. Thank you all.', daysAgo(349, 15), { matchedToken: 'RT-CVR1-1', readByStaff: true }),
   msg('cm-01', 'cv-01', 'c-01', 'out', 'staff', 'Vienna', 'Hello Harrison,\n\nA watchmaker has opened the case on your Rolex Submariner. We’ll update you when it reaches final testing.\n\n— The RolliSuite team', daysAgo(6, 9), { token: 'RT-CV01-1', templateKey: 'job_in_progress', station: 'Front Desk 1', emailId: 'ob-01' }),
   msg('cm-02', 'cv-01', 'c-01', 'in', 'portal', 'Harrison Whitfield', 'Thanks — any chance it will be ready before the 20th? Traveling then.', daysAgo(4, 14), { readByStaff: true }),
   msg('cm-03', 'cv-01', 'c-01', 'out', 'staff', 'Vienna', 'We are aiming for the 18th; I will confirm once it clears QC.', daysAgo(2, 10), { token: 'RT-CV01-2', station: 'Front Desk 1' }),

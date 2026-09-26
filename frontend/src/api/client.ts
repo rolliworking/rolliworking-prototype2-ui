@@ -34,6 +34,10 @@ import type {
   FloorMap,
   FulfillmentChannel,
   PayPage,
+  PortalPhoto,
+  PortalPhotoSections,
+  PortalRequestCard,
+  PortalRequestState,
   Part,
   PartsKnowledgeEntry,
   PartsRequest,
@@ -2399,6 +2403,56 @@ export async function portalSignOut(): Promise<void> {
   return resolve(undefined);
 }
 
+// ---- View as client — staff opens the portal exactly as the client sees it (same read functions, so nothing staff-only can leak) ----
+export async function startViewAsClient(clientId: string, returnTo: string): Promise<string> {
+  const c = byId(fx.clients, clientId); const a = actor();
+  const session: PortalSession = { clientId, email: c.email, token: `view-as-${newId('va')}`, issuedAt: new Date().toISOString(), viewAs: { by: a.by, at: new Date().toISOString(), returnTo } };
+  writeJson(KEYS.portalSession, session);
+  appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Viewed RolliConnect as client ${c.firstName} ${c.lastName} (read-only impersonation)` });
+  return resolve('/rc/home');
+}
+export async function exitViewAsClient(): Promise<string> {
+  const s = portalSessionSync(); localStorage.removeItem(KEYS.portalSession);
+  if (s?.viewAs) { const c = byId(fx.clients, s.clientId); appendAudit({ type: 'comms', stationName: actor().station, userShortName: s.viewAs.by, detail: `Left client view for ${c.firstName} ${c.lastName}` }); }
+  return resolve(s?.viewAs?.returnTo ?? '/clients');
+}
+
+// ---- Portal "Your requests" overview + client-facing photo sections ----------------------------------------------------------------
+const STAFF_ONLY_PHOTO = /hidden serial|parts grading|workbench|^parts$|other/i;
+const photoRow = (id: string, url: string, label: string, at: string): PortalPhoto => ({ id, url, label, at });
+export const portalPhotoSections = (clientId: string, jobId: string): PortalPhotoSections => {
+  const j = requireOwner(clientId, store.jobs.find((x) => x.id === jobId), 'job');
+  const fixture = fx.jobPhotos.filter((p) => p.jobId === jobId && !STAFF_ONLY_PHOTO.test(p.slot));
+  const pkg = store.packages.find((p) => p.id === j.packageId);
+  const arrival = [...(pkg?.photos ?? []).map((p, i) => photoRow(`${pkg!.id}-${i}`, p.dataUrl, p.slot ?? 'Arrival', pkg!.arrivedAt)), ...fixture.filter((p) => p.kind === 'intake').map((p) => photoRow(p.id, p.url, p.slot, p.at))];
+  const condition = [...fixture.filter((p) => p.kind === 'inspection').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...j.photos.filter((p) => p.clientVisible !== false && !STAFF_ONLY_PHOTO.test(p.slot ?? '')).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Inspection', p.at))];
+  const completed = [...fixture.filter((p) => p.kind === 'completed').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...rs.evidence.filter((e) => e.jobId === jobId && e.slot !== 'hidden_serial' && e.slot !== 'parts_grading').map((e) => photoRow(e.id, e.photo.dataUrl, EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label, e.at))];
+  const byAt = (a: PortalPhoto, b: PortalPhoto) => a.at.localeCompare(b.at);
+  return { arrival: arrival.sort(byAt), condition: condition.sort(byAt), completed: completed.sort(byAt), jobNumber: j.number };
+};
+export async function portalGetPhotoSections(clientId: string, jobId: string): Promise<PortalPhotoSections> { return resolve(portalPhotoSections(clientId, jobId)); }
+const portalRequestCards = (clientId: string): PortalRequestCard[] => {
+  const cards: PortalRequestCard[] = []; const wname = (w?: Watch) => (w ? `${w.brand} ${w.model}` : 'Your watch'); const wref = (w?: Watch) => (w ? `Ref. ${w.reference}` : 'Reference to be confirmed');
+  const photos = (jobId: string) => { const s = portalPhotoSections(clientId, jobId); return s.arrival.length + s.condition.length + s.completed.length; };
+  store.jobs.filter((j) => j.clientId === clientId).forEach((j) => {
+    const w = store.watches.find((x) => x.id === j.watchId); const last = [...j.timeline].sort((a, b) => b.at.localeCompare(a.at))[0]; const so = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled'); const est = store.estimates.find((e) => e.id === j.estimateId);
+    if (j.status === 'closed' || (so && (so.status === 'picked_up' || so.status === 'shipped'))) cards.push({ id: `card-${j.id}`, state: 'history', stateLabel: so?.status === 'shipped' ? 'Shipped · complete' : 'Collected · complete', watchName: wname(w), reference: wref(w), title: `Service completed`, blurb: `${j.lines.map((l) => l.description).slice(0, 2).join(' · ')}${so ? ` · ${fmtMoney(so.total)} paid` : ''}`, lastUpdate: so?.pickedUpAt ?? so?.shipDate ?? last?.at ?? j.createdAt, lastUpdateLabel: so?.pickedUpAt ? 'Collected' : 'Closed', path: `/rc/watches/${j.watchId}`, photoCount: photos(j.id), estimateNumber: est?.number, jobNumber: j.number, amount: so?.total });
+    else cards.push({ id: `card-${j.id}`, state: 'in_progress', stateLabel: statusLabel(j.status), watchName: wname(w), reference: wref(w), title: j.status === 'ready_to_ship' ? 'Ready — awaiting hand-back' : j.status === 'testing' ? 'Final testing & QC' : 'In the workshop now', blurb: `${j.lines.map((l) => l.description).slice(0, 2).join(' · ')}${j.dueAt ? ` · expected ready around ${new Date(j.dueAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : ''}`, lastUpdate: last?.at ?? j.createdAt, lastUpdateLabel: 'Last update', path: `/rc/watches/${j.watchId}`, photoCount: photos(j.id), estimateNumber: est?.number, jobNumber: j.number, cta: so && so.balanceDue > 0 && so.status !== 'draft' ? { label: `Pay ${fmtMoney(so.balanceDue)}`, path: `/rc/invoices/${so.id}` } : undefined });
+  });
+  store.estimates.filter((e) => e.clientId === clientId && !e.jobId && (e.status === 'sent' || e.status === 'expired' || e.status === 'declined')).forEach((e) => {
+    const w = store.watches.find((x) => x.id === e.watchId);
+    if (e.status === 'sent') cards.push({ id: `card-${e.id}`, state: 'decision', stateLabel: 'Estimate — your decision', watchName: wname(w), reference: wref(w), title: `Estimate ${e.number} · ${fmtMoney(e.total)}`, blurb: `Valid until ${new Date(e.validUntil).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}. Approve or decline whenever you are ready.`, lastUpdate: e.sentAt ?? e.updatedAt, lastUpdateLabel: 'Sent', path: `/rc/estimates/${e.id}`, cta: { label: 'Review estimate', path: `/rc/estimates/${e.id}` }, photoCount: 0, estimateNumber: e.number, amount: e.total });
+    else cards.push({ id: `card-${e.id}`, state: 'stale_estimate', stateLabel: e.status === 'expired' ? 'Estimate expired · watch not received' : 'Estimate declined', watchName: wname(w), reference: wref(w), title: `Estimate ${e.number} · ${fmtMoney(e.total)}`, blurb: e.status === 'expired' ? `We quoted this ${Math.round((Date.now() - new Date(e.sentAt ?? e.updatedAt).getTime()) / 86_400_000)} days ago and never received the watch. The figure is still viewable; we will re-confirm it when it arrives.` : 'You declined this estimate. It stays here for your records.', lastUpdate: e.sentAt ?? e.updatedAt, lastUpdateLabel: 'Quoted', path: `/rc/estimates/${e.id}`, cta: e.status === 'expired' ? { label: 'Ready to send it in?', path: '/rc/messages' } : undefined, photoCount: 0, estimateNumber: e.number, amount: e.total });
+  });
+  store.requests.filter((r) => r.clientId === clientId && !r.estimateId && r.status !== 'closed').forEach((r) => {
+    const w = store.watches.find((x) => x.id === r.watchId); const m = /^([A-Z][\w-]+(?: [A-Z][\w-]+)* ?\d[\w-]*)/.exec(r.summary);
+    cards.push({ id: `card-${r.id}`, state: 'received', stateLabel: 'Request received', watchName: w ? wname(w) : m ? m[1].replace(/ ?\d[\w-]*$/, '') : 'New watch', reference: w ? wref(w) : m ? `Ref. ${m[1].split(' ').pop()}` : 'Reference to be confirmed', title: 'We’ve received your request', blurb: `${r.summary.slice(0, 120)}${r.summary.length > 120 ? '…' : ''} — a concierge will reply here within one business day.`, lastUpdate: r.createdAt, lastUpdateLabel: 'Received', path: '/rc/messages', photoCount: 0, requestNumber: r.number });
+  });
+  const order: Record<PortalRequestState, number> = { in_progress: 0, decision: 1, received: 2, stale_estimate: 3, history: 4 };
+  return cards.sort((a, b) => order[a.state] - order[b.state] || b.lastUpdate.localeCompare(a.lastUpdate));
+};
+export async function portalGetRequestCards(clientId: string): Promise<PortalRequestCard[]> { return resolve(portalRequestCards(clientId)); }
+
 export const PORTAL_STATUS: Record<PortalStatusKey, { label: string; blurb: string; active: boolean }> = {
   on_file: { label: 'On file', blurb: 'No work in progress on this watch.', active: false },
   expecting: { label: 'We’re expecting your watch', blurb: 'Your estimate is approved — we’ll confirm the moment it arrives.', active: true },
@@ -2485,7 +2539,7 @@ const portalWatchFor = (clientId: string, w: Watch): PortalWatch => {
   const invoice = sos.find((o) => o.status !== 'cancelled' && o.status !== 'draft' && (o.jobId === job?.id || !job));
   const status = portalStatusFor(w, job && job.status !== 'closed' ? job : invoice && (invoice.status === 'shipped' || invoice.status === 'picked_up') ? job : undefined, openEstimate, invoice && (invoice.jobId === job?.id) ? invoice : undefined);
   const issued = rp.reports.find((r) => r.watchId === w.id && r.clientId === clientId && r.status === 'issued');
-  return { watch: w, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
+  return { watch: w, jobIds: jobs.map((j) => j.id), status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
 };
 
 const needsYouFor = (clientId: string, watches: PortalWatch[]): NeedsYouItem[] => {

@@ -5,7 +5,7 @@ import type { NeedsYouKind, PortalWatch } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
-import { RcRequestsCard } from './RcRequestsCard';
+import { RcRequestCards } from '@/rc/RcRequestCards';
 
 const NY_ICON: Record<NeedsYouKind, LucideIcon> = { approve_estimate: FileCheck2, pay_balance: CreditCard, confirm_pickup: PackageCheck, shipping_info: MapPin, staff_reply: MessageCircle, review_inspection: ClipboardCheck };
 
@@ -36,8 +36,9 @@ const WatchRow = ({ pw }: { pw: PortalWatch }) => {
 
 export default function RcHomePage() {
   const { client } = useRcSession();
-  const { data, reload } = useAsync(() => api.portalGetHome(client!.id), [client!.id]);
-  if (!data) return null;
+  const { data } = useAsync(() => api.portalGetHome(client!.id), [client!.id]);
+  const { data: cards } = useAsync(() => api.portalGetRequestCards(client!.id), [client!.id]);
+  if (!data || !cards) return null;
   const active = data.watches.filter((w) => w.status.active);
   const rest = data.watches.filter((w) => !w.status.active);
 
@@ -45,7 +46,7 @@ export default function RcHomePage() {
     <div className="space-y-10" data-testid="rc-home-page">
       <div>
         <h1 className="font-serif text-4xl font-light tracking-tight sm:text-5xl">Hello, {data.client.firstName}.</h1>
-        <p className="mt-2 text-[15px] text-rc-muted">{active.length ? `${active.length} watch${active.length === 1 ? '' : 'es'} with us right now.` : 'Nothing in progress right now.'}</p>
+        <p className="mt-2 text-[15px] text-rc-muted" data-testid="rc-home-summary">{(() => { const n = cards.filter((c) => c.state === 'in_progress').length; const w = cards.filter((c) => c.state === 'received' || c.state === 'decision').length; return `${n ? `${n} watch${n === 1 ? '' : 'es'} in the workshop right now` : 'Nothing in the workshop right now'}${w ? ` · ${w} request${w === 1 ? '' : 's'} waiting on us` : ''}.`; })()}</p>
       </div>
 
       <RcCard eyebrow="Needs you" title={data.needsYou.length ? `${data.needsYou.length} thing${data.needsYou.length === 1 ? '' : 's'} waiting on you` : 'Nothing waiting on you'} testId="rc-needs-you">
@@ -72,10 +73,10 @@ export default function RcHomePage() {
         )}
       </RcCard>
 
-      <RcRequestsCard requests={data.requests} reload={reload} />
+      <RcRequestCards cards={cards} />
 
       <section className="space-y-4" data-testid="rc-watches">
-        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Your watches</div>
+        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Your watches on file</div>
         {active.map((pw) => <WatchRow key={pw.watch.id} pw={pw} />)}
         {rest.length > 0 && active.length > 0 && <div className="pt-4 text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Back with you</div>}
         {rest.map((pw) => <WatchRow key={pw.watch.id} pw={pw} />)}
