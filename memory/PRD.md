@@ -243,3 +243,6 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - Staff views (`/`) are dense + keyboard-friendly
 - Client views (`/rc`) are warm + customer-grade
 - No cross-division visibility (wall = division, not tier)
+
+### Docs publishing rule (2026-09-26)
+- `/app/frontend/docs/` is the PUBLISHED copy of `/app/docs/` (GitHub sync was not carrying `/app/docs`). Keep byte-identical: run `bash /app/docs/sync-to-frontend.sh` after any docs edit (`_gen.py` runs it automatically). Never edit `frontend/docs` directly.

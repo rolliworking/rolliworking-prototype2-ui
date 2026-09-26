@@ -1,0 +1,197 @@
+# SESSION-LOG — RolliSuite prototype
+
+One entry per build session: what was built · what was decided · what was tested · what remains stubbed. E1–E8 entries are condensed from the session reports in `git log`; E9 and the documentation pass are this fork's work.
+
+---
+
+## E1 — Shell, sign-in, dashboard
+- **Built**: standalone Vite + React 18 + TS app at `/app/frontend`; single data module `src/api/client.ts` over fixtures; tier-filtered sidebar (15 items, every one routes), global client search, dashboard (KPI cards, department P&L, hit list, recent activity), Estimates / Jobs / Hit List tables.
+- **Round 2**: badge sign-in replaced by staff card + password + webcam verification photo (graceful no-camera / denied); PIN fast-switch after first daily sign-in; device-bound station (mock pre-registered "Front Desk 1"), manager-gated rename / reset / "Name this station"; audit log with photo thumbnails.
+- **Decided**: visibility by access tier only; station = device; legacy monorepo untracked.
+- **Tested**: testing agent iteration_2 (13/13), iteration_3 (10/10 + regression).
+- **Stubbed**: all data in-memory; five quick actions → placeholders.
+
+## E2 — Intake four-stage flow
+- **Built**: `/intake` with stage tabs + live counts: Arrival (scan-first tracking, carrier auto-detect, signature, duplicate guard, walk-in → SUB#), Receive Package (estimate scan pre-fills, webcam + multi-file photos, content pills, mock receipt, confirmation email → Outbox), Work Order (bin), Receive Watch (pre-populated checklist with W/B/P/PM tags, expected components, ref/serial + NS, mandatory same-watch fork, workflow picker, live discrepancy list → received + 2 labels or discrepancy hold). Outbox and Label Queue pages.
+- **Decided**: workflow set at Receive Watch is the routing authority; discrepancy = hold with reasons, not rejection.
+- **Tested**: iteration_5 (one bug — receipt print wiped unsaved pills/photos — fixed).
+- **Stubbed**: emails never send; labels/receipts are flags; any tier can run all stages.
+
+## E3 — Estimates
+- **Built**: list / create / edit / revise / approve-decline / send / duplicate / delete at `/estimates`; 22-item catalog with dept tags, custom lines, amount→rate back-calc, drag reorder, 450 ms autosave, quote-context strip, print preview, Outbox send, revision snapshots.
+- **Decided**: pack wins (E+5-digit numbers, statuses, tax 8.25% "not applied", single optional watch, decline needs reason, reopen → draft, mark-as-sent sets no sentAt); staff `approved` status is provisional.
+- **Tested**: iteration_6 (all flows, zero console errors).
+- **Stubbed**: Create job / Convert flagged stubs (wired in E4/E5).
+
+## E4 — Jobs
+- **Built**: `/jobs` board (9 lanes incl. On hold) ↔ grouped list, search; `/jobs/:id` detail (watch card, dept-tagged lines, timeline, assignees, holds park/release, notes, photos, shop time, priority/due/condition edits); `/jobs/new`; Shop Time (on-hand only); E3 "Create job" + "Convert to intake" wired.
+- **Decided**: pack DB enum as a linear machine, buttons only; holds are an overlay; emails on request_approval / qc_pass / qc_fail (provisional); job number `E` + digits from its own sequence (provisional); invoice / SO convert are throwing stubs.
+- **Tested**: iteration_7.
+- **E4+ (docs + kind/owner/today/tasks)**: `Job.kind` + `JOB_KIND_CONFIG` (small_job/warranty owner → concierge; small_job skips customer approval, provisional); role-based `owner` ≠ plural `assignees`; `User.roles`; derived `/today`; tasks with user/role assignment; six handoff docs. Tested iteration_8.
+- **MH rulings**: inspection by kind (report only for service; photos for all) with `reviewGaps` gate; pinned manual hit list on top of the derived view with `#name` / `#role` syntax. Tested iteration_9/10. Password confusion (`michael1123`) resolved as a typo.
+
+## E5 — Money tail (invoicing, pickup, ship)
+- **Built**: Sales Orders as the invoicing vehicle (`/sales` list/detail/create, lines, stub payment ledger with partials, Fulfil → QBO hard-stop stub, push to Pickup/Ship, pickup code issue/consume, request-shipping-info, ship-to, admin marks, cancel); Pickup Station (code OR proxy + ID photo, hand-back photos, unpaid bypass, signature-free); Ship Station (mock label + tracking + coverage via `shippingProvider`, declared-value thousands rule, photos, unpaid block unless bypass); custody closes → job closed, watch released; tail pills on job cards; E3/E4 stubs wired (`invoiceJob`, `convertEstimateToSalesOrder`).
+- **Tested**: iteration_11 (10/10).
+- **Stubbed**: QBO, payments, carrier, email.
+
+## E6 — Workshop lenses + parts chat
+- **Built**: Bench (`/bench`: my jobs + next action/blocker, holds, parts requests, pull-next), Supervisor (`/supervisor`: unassigned, per-tech assign, parts approval queue, holds, QC queue), Floor Map (`/floor`, 9 lanes incl. Case cleaning); parts request → scripted assistant over 25-part catalog → attach → submit → approve/reject; approval learns part↔reference + aliases into Parts Knowledge (`/parts/knowledge`).
+- **Decided**: lenses add no statuses; pull-next rule; assistant is scripted, no AI; approval = labeling + auto parts hold.
+- **Tested**: iteration_12/13.
+- **Noted**: uploaded Contract v1 HTTP client saved at `docs/reference/contract-v1-client.ts` as the repoint target.
+
+## E7 — Client 360
+- **Built**: `resolveIdentifier` universal search (name/email/phone/estimate #/job #/SUB#/tracking/ref/serial/SO #/pickup code/request #) → grouped hits → `/clients/:id?hit=` with flash; `/clients` directory; `/clients/:id` Client 360 read model (watch groups with merged history, estimates + revisions, jobs, invoices/payments, requests, notes & tasks, derived custody, emails); `ServiceRequest` entity; Naomi Castellanos rich seed.
+- **Tested**: iteration_14 (100%).
+- **Stubbed / missing**: no request create or quote function.
+
+## E8 — RolliConnect (client portal)
+- **Built**: `/rc` separate route-space and shell; magic-link stub sign-in; home = Needs-you + watches with plain-language status (`PORTAL_STATUS`); estimate approve/decline (advances linked job), pay-now (full balance stub), pickup window (→ SO + concierge task), shipping-info form, documents + history per watch, message thread; staff `/inbox` with replies → Outbox; portal event replay (`rollisuite.rc.events`) + Setup reset; (4) client-side request close with reason picker, staff `closeRequest`.
+- **Tested**: iteration_15 (~98%, read-state fix re-verified), iteration_16/17 closing regression (100%).
+- **Reviewer notes (not failures)**: Pickup Station lets a wrong code reach the photo step; bare one-word parts queries need a ref; Floor Map chips dead-end concierge at Restricted `/jobs/:id`.
+
+## E9 — Division wall + global quick-add (MH rulings, dated 2026-09-24 in code/docs)
+- **Built**: `Division = rolliworks | rollishop` on Station, User (+`both`), Job, Task, PinnedItem; session inherits the station's division (`getSessionDivision`); RS Counter station; Walter → rollishop with 2 tasks + 2 pins; `getToday` filters jobs/tasks/pins/discrepancies by division; `getDivisionStaff/Roles` drive every assignee picker; Staff hit-list viewer (full-screen modal, prev/next through same-division staff, read-only pinned + derived); `@name` / `@role` accepted wherever `#` was; global quick-add (`＋` in top bar, `Alt+T`, `QuickAddProvider`/`useQuickAdd`) with division-scoped autocomplete, context attachment of the current job/client/estimate, confirmation toast. Sign-in polish: no-camera handled, show/hide password, whitespace trimmed, one-click prototype password fill.
+- **Decided**: the wall is the division, not the tier — no cross-division visibility even for managers; pins/tasks stamped with division at creation; `@` and `#` equivalent.
+- **Tested**: iteration_18 (14/14 scoping tests).
+- **Stubbed / not done**: no write is division-checked; packages/estimates/SOs/parts have no division; portal-created pickup task hard-codes rolliworks. Concierge Floor Map dead-end (P2) still open.
+
+## Documentation pass (this session) — for KEEPER
+- **Produced** from the code as it stands (E1–E9): `DATA-MODEL.md` (every entity/field, accommodation-set flags, drift), `STATE-MACHINES.md` (jobs pipeline with guards/side effects/per-kind skips, holds, SO, estimate, intake, parts, request, projections, tier enforcement summary), `API-SURFACE.md` (every export of `client.ts` with signature, return, side effects, stubs), `DESIGN-PRINCIPLES.md` (19 locked patterns with KEEPER enforcement column), `DECISIONS.md` (today's restated rulings + drift row), `SEED-DATA.md` (exact coverage and deliberate gaps), this log.
+- **Decided / restated**: job_kind lookup table seeded service/warranty/small_job (rehab/internal planned); job_kind ⊥ workflow; per-kind config for billing semantics, stage skips, default_owner_role; owner ≠ assignees; "PM" = precious metals only; derived `/today` + tasks table with role assignment; parts alias table (search_misses → resolution → scoped term→part_id) — schema decision, prototype only has flat `aliases[]`.
+- **Drift found (code is truth)**: counts (25 jobs / 11 packages / 24 estimates / 21 watches / 15 tasks / 6 pins / 8 SOs); station list; `invoiceJob` real; `addStation(name, division)`; watch statuses hand-set in seed lag their jobs; `closeRequest` audits as type `estimate`.
+- **Tested**: none required — no code changed. Build untouched.
+- **Scope note**: the brief said "through E4 + today's session"; the codebase already contains E5–E8 and E9, so all of it is documented — KEEPER should treat E5–E8 as in-scope contract, not future work.
+
+### Open questions / ambiguities for KEEPER's builder
+1. **Number sequences** — jobs (`E02011…`) and estimates (`E01041…`) share the `E` prefix but use separate counters. One shared sequence, or two with a prefix change? Collisions are possible today.
+2. **Division on money/intake records** — Package, Estimate, SalesOrder, PartsRequest, ServiceRequest, Message carry no division. Should they inherit from the job/station, and should RLS apply to them?
+3. **Division-checked writes** — nothing prevents a rollishop session from mutating a rolliworks job via URL. Intended?
+4. **`both`-division users** — MH inherits the station's division. Should `both` be a real value in `user.division` or a `user_division` join?
+5. **Discrepancy resolution** — there is no function to release a package from `discrepancy_hold`. What are the legal exits (re-inspect → received? return to client? escalate)?
+6. **ServiceRequest lifecycle** — no create or quote function; `quoted` is only set in seed. Who quotes (estimate creation trigger?) and what's the request number sequence?
+7. **`expired` estimates** — no code path sets it. Nightly job on `validUntil`, or drop the status?
+8. **Estimate `approved` (provisional)** and portal approval semantics: staff-recorded approval doesn't advance a linked job, portal approval does. Should they be symmetric?
+9. **`approve_direct` and small_job stage skip** — both still provisional. Confirm the real per-kind skip sets and whether `approve_direct` survives.
+10. **Tier gating** — the module enforces only six manager checks; route tiers are UI-only. Which actions need DB-level role checks (e.g. transitions, holds, owner change)?
+11. **Watch.status** — stored today, drifts in seed; recommend deriving. Confirm.
+12. **`Job.department`, `Estimate.department`** — legacy derived columns used only by dashboard P&L. Keep or compute?
+13. **Audit event identity** — prototype stores shortNames and station names, not ids, and caps at 60. KEEPER should use FKs; confirm retention.
+14. **Station for package stage stamps** — only arrival records a station; `custodyOf` hard-codes "Front Desk 1" for received/discrepancy rows. Add `processed_station`, `work_order_station`, `inspected_station`?
+15. **`closeRequest` audit type** — currently `estimate`; add a `request` audit type?
+16. **Portal pickup task** — created with `division: 'rolliworks'`, `createdBy: 'RolliConnect'`, `station: 'RolliConnect'`; should portal actions have a system actor row and inherit the job's division?
+17. **Magic link** — body claims 15-minute expiry; code enforces none and links are reusable. Confirm single-use + TTL.
+18. **`receiveWatch` overwrites `watch.reference/serial`** with the received values even on a discrepancy. Should the estimate's watch record be immutable and the received values live on the package?
+19. **`invoiceJob` on a closed job** is allowed (status ready_to_ship OR closed). Intended for late invoicing?
+20. **`convertEstimateToIntake` from a `converted` estimate** is allowed (re-uses the job). Confirm.
+21. **Pull-next does not start service** — only self-assigns; the tech then presses "Start service". Intended two-step?
+22. **Case-cleaning lane derivation** (in_service with P/PM-only workflow) is provisional; confirm or replace with an explicit stage.
+23. **Parts alias scope** — decision says "scoped term → part_id"; scope by reference, caliber, or global? Prototype has no scope.
+24. **Billing semantics per kind** — decided as a per-kind column but not defined. What are the values (e.g. `charge`, `warranty_no_charge`, `counter_sale`)?
+25. **Payments** — partial payments are provisional; portal pay is full-balance only. Confirm both for KEEPER.
+26. **Custody close at hand-back vs fulfil** — provisional (pack says release at fulfil). Confirm hand-back.
+27. **Date anomaly** — E9 rows are dated 2026-09-24 while the prototype environment reports June 2026. Treat E9 dates as labels, not timestamps.
+28. **Concierge access to `/jobs/:id`** — Floor Map links dead-end concierge users (Restricted). Read-only job view for concierge, or hide the chips?
+
+## E9b — Remaining RS modules + Service Evidence (2026-09-25)
+- **Polish**: pickup code verified before the photo step; parts assistant best-effort low-ranked suggestions + "add a reference to narrow"; Floor Map chips route concierge to Client 360.
+- **Built**: Purchasing (vendors, POs create/send-stub/cancel, receive-against-PO → audited stock receipts), Inventory (stock by location with LOW flags, movements, reasoned adjustments, cycle counts with variances, low-stock → Create PO shortcut), Labels (batch reprint by job/estimate/watch, ranges → Label Queue), Reports (funnel, throughput, aging, labor-only P&L; CSV; reconcile line), Accounting (invoice/payment registers, QBO queue with fake sync states, CSV export stub), Setup (Users & Roles, catalog editor, 6 message templates with merge fields, Locations/Printers stubs), Integrations tiles, Help quickstarts, **Service Evidence** four-slot capture at QC keyed to watch label + job with QC-pass gate, Client 360 Evidence section, portal documents.
+- **Decided**: see DECISIONS "E9". Cross-division inventory rules and per-kind evidence sets stay amber.
+- **Tested**: testing agent iteration_19 — 17/18 confirmed, the one wording mismatch (parts fallback phrase) fixed after the run; zero console errors.
+- **Stubbed**: PO send (Outbox), QBO sync states, CSV "export file", printers, integrations connect, template wiring into Outbox bodies.
+- **New open questions**: 29. Cross-division stock visibility / transfer rules? 30. Should `Part.stock` be dropped in favour of Σ StockLevel? 31. Evidence retention & who may delete/redo a slot (currently append-only, multiple items per slot allowed)? 32. Should templates drive the Outbox writers (merge-field rendering rules)? 33. `issue` movements — should job part fitting create them automatically (parts request approval → issue on hold release)?
+
+## E10 — Companion panel (2026-09-25)
+- **Built**: docked right panel (top-bar Bot button / Alt+M), context-aware, amber "scripted assistant"; Price Memory (model_references resolution, clarifying question, mined evidence, Verify → green check → ranks #1, stale > 12 mo → "re-verify pricing", knowledge-log rows); Client Brief (3 lines, citations to Client 360 hit keys, service-debt flag from promised-vs-delivered, stored corrections cited on later briefs); Ask-the-shop (6 cards, miss → route → manager task → answer → new card, task closed); Photo labels (word pills on inspection + evidence photos, skippable, provenance, labels log). Tier: non-manager sees no money totals (amber pending ruling).
+- **Tested**: iteration_20 (~90%) → fixed: model-only clarify path, duplicate React key, pill testid slug, debt days (~90). Retest below.
+- **Open questions**: 34. Hide-money ruling for bench/concierge tiers? 35. Should price verifications expire automatically or only flag? 36. Who may correct a brief (any staff today)? 37. Should routed questions honor division for who can answer? 38. Photo-label vocabulary ownership (lookup table editable in Setup?).
+
+## E14 — Comms hub (2026-09-25)
+- **Built**: conversation model (client folder, anchors, sources, reply tokens with visible matches), five inbox views with counts/unread/age, assign to user or role, snooze/wake/close/reopen, composer with template picker + merge-field preview + photos → Outbox, internal notes, simulate-inbound (mock token routing), reply indicators on job cards & estimate rows, Client 360 → thread-space link, `/today` `thread` rows, auto-threaded events from portal approve/decline, portal messages, parts approval, pickup window.
+- **Stubbed**: email/kiosk/photo ingestion (fixtures + simulate button); portal photo submission does not exist as a feature.
+- **Open questions**: 39. Should the legacy `Message` store be retired in favour of `ConvMessage` (portal reads it today)? 40. Token format/expiry and what happens on an unmatched inbound (new general thread?) 41. Can concierge tier close threads? 42. Should auto-thread events count as "needs reply"? (today yes for approvals/pickup — they are inbound)
+
+## E15 — Portal-first client content (2026-09-25)
+- **Built**: `/rc/report/:token` public inspection-report page (grades, photos, notes, approve/decline with reason, supersede forwarding); staff issue flow on the job page; templates converted to short notification + `{{portal.link}}` (+3 new keys); `sendEstimate` body shortened; Needs-you + watch card entry points; decisions auto-thread into Comms and flip job/estimate status. Principle recorded in DECISIONS.
+- **Open questions**: 43. Token TTL / revocation for report links? 44. Should staff be able to record a client's verbal decision on a report (`decidedVia: staff`)? 45. Component list & grade words — final vocabulary? 46. Persist portal report decisions in the RC replay log?
+
+## E12 — RolliTime `/rt` (2026-09-25)
+- **Built**: `/rt` shell + bench sign-in, testing queue with label scan, Witschi-style six-position test with caliber targets, live out-of-tolerance highlighting, AVG/Δ, lift angle, reserve, auto-eval suggestion, PASS (email + QC flag) / REJECT (reason → qc_fail + email), append-only watch history on `/rt` and the job page. Integrations tile updated.
+- **Open questions**: 47. Should PASS be an explicit sub-status/lane rather than a timeline flag? 48. Per-caliber Crit1/Crit2 exact definitions and per-position rate bounds? 49. Witschi file import format? 50. Should the client see timing results on the portal (evidence timing_sheet vs. RolliTime numbers)?
+
+## E13 — RGTime `/rg` + Kiosk `/kiosk` (2026-09-25)
+- **Built**: RGTime phone PWA (manifest + icon, remembered per-device login, "Forget phone"), `/rg` status card + today's punches + Simulate-NFC-tap picker, `/rg/clock?tag=<id>` one-button confirm (real tag URL structure), `/rg/manager` card+password manager week grid (prev/next, division toggle, day detail, open-punch amber); public kiosk (idle → brand → services → form → thanks, 30 s dim, 2 min abandon reset, 5 s thank-you reset) creating `source: kiosk` requests with email/phone client matching; new staff **`/requests`** queue page with Confirm link / Not the same actions; `kiosk` + `rgtime` audit types; Client 360 kiosk icon.
+- **Mocked**: NFC (picker), PWA install prompt (manifest only — no service worker / offline), staff identity (shared users fixture; Keeper: RGTime owns it, D-026).
+- **Open questions**: 51. Tag hardening — NTAG 424 rotating codes vs geolocation check vs both (recorded in DECISIONS)? 52. Manager punch corrections / missed clock-out handling? 53. Offline punches on the PWA (queue + sync)? 54. Kiosk: signature / ID / photo capture as in the legacy kiosk drop-off? 55. Should a kiosk check-in also create a `walk_in` package/drop-off when the client has the watch with them? 56. Concierge access to the RGTime week grid?
+
+## E11 — RolliWorking standalone `/rw` (2026-09-26)
+- **Built**: `/rw` route-space with dark workshop shell + nav (Bench · Jobs · Parts · QC · Supervisor · Floor · Evidence · My today), own sign-in (division staff, password/PIN, no camera), link guard enforcing the access boundary (jobs rewritten to `/rw/jobs/:id`, other RS links blocked with a notice), `MoneyContext` hide-money (no amounts anywhere in RW), Jobs lookup (scope banner, `searchJobs`, division-filtered), bench Job page (actions, lines-no-money, inspection, notes, evidence, timing, photos, parts, shop time, timeline, assignees, holds), Parts (my requests + start from my job + chat assistant + shop-wide), QC lane (evidence completeness, Pass gated / Fail with reason), Evidence capture (label scan or pick from testing queue), two-lane legacy floor (`getRwFloorMap`) with part-colored dots and Into-safe off-ramp. Bench / Supervisor / Today re-homed as-is. RS ↔ RW round-trip verified.
+- **Amber**: two-lane vs nine-lane floor (MH to rule), hide-money default, concierge presence in RW, job-page omissions.
+- **Open questions**: 57. Which floor model does Keeper keep — legacy two-lane (head/band → Final assembly, Into safe) or RS nine-lane? 58. Hide-money for bench tiers — confirm the default? 59. Should concierge tier be able to enter RW at all? 60. Does RW need its own station registry / device binding, or does the shared station model hold? 61. RW as an installable tablet PWA (like RGTime)? 62. Should the RW job page allow Owner changes and pin-to-hit-list?
+
+## Ruling: per-component completion (2026-09-26, during E11)
+- **Built**: `Job.components[]` (head / band / case from W / B / P+PM), Components card on RS job detail and `/rw` job page (Mark complete, manager Amend attribution, rework log), inline "… done" buttons on the `/rw` bench row, **Awaiting components** bin (RS Jobs board lane + filter + status pill, `/rw` floor Into-safe), reunification gate on "Send to testing / QC", auto-transition on last completion, Reports → **Tech completions** (tech × month × dept), Supervisor board completions-this-month per tech. Invoicing untouched.
+- **Amber**: QC-fail keeps credit + rework log (MH to confirm); P/PM as one "Case" component; un-complete not offered.
+- **Open questions**: 63. QC-fail after completion — credit stands + rework log? 64. Separate P and PM components? 65. Should amending attribution be limited to the same month? 66. The RS Bench (RW-mini) is the same component as the `/rw` bench, so it shows the inline done buttons too — should the RW-mini hide them (front-desk stations marking bench work done)?
+
+## Ruling (MH, 2026-09-26): QC-fail after component completion — **credit stands**
+- Q63 closed. Completion is never revoked by a QC fail; rework is logged per completed component (`rework[]`). UI note updated (no longer amber). DECISIONS row flipped to locked.
+
+## E16 — KEEPER handoff package (2026-09-26)
+- **Produced** `/app/docs/KEEPER-HANDOFF/`: `00-INDEX` (purpose, reading order, vocabulary, ground rules) · `01-ROUTE-MAP` (all six route-spaces incl. `/rw`) · `modules/` (17 specs: auth-stations, dashboard-today, intake, estimates, jobs, sales, workshop, client-360, rolliconnect, comms-hub, companion-panel, purchasing-inventory, labels-reports-accounting, setup-integrations-help, rolliworking, rollitime, rgtime, kiosk-requests) · `02-DECISIONS-CONSOLIDATED` (as recorded, tagged by module) · `03-OPEN-QUESTIONS` (verdict sheet Q1–Q66 + unnumbered ambers) · `04-DATA-MODEL-VS-KEEPER` (every entity: prototype shape → KEEPER shape → migration, dispositions D-A…D-E, D-026) · `05-API-CONTRACT` (297 exports, generated) · `06-SEAMS` · `07-COMMS-AND-TEMPLATES` · `08-AUDIT-TAXONOMY` (25 types, generated) · `09-TEST-INVENTORY` (iterations 1–26, generated) · `10-NOT-KEEPER` · `source/` (verbatim copies of the working docs) · `_gen.py` (regenerates 02/05/08/09 from code).
+- **Method**: code as truth; drift flagged inline as `⚠ DRIFT` (division wall reads-only, UI-only tiers, `closeRequest` audit type, legacy Message store, hard-coded email bodies, magic-link TTL, hard deletes, inline photos, intake/sales/supervisor lists not walled, `consume` movements never written).
+- **Reminder**: this package is mined by the KEEPER build pipeline from the repo — **Save to GitHub** after this session.
+
+## E18 — RW deep build part 1: shop floor core (2026-09-26)
+- **Built** under `/rw`: Shop Floor (two-lane, part-coloured dots, drag, history slide-over, finish gate, counts, filters), Bulk Assign (TECH/label scans, band-only labels → bracelet component + B dept, outbox queue with undo), Work Queue (part dots, filters, simulated client reply), Watchmaker Room `/rw/wm` (full-screen cards, scan to safe/refinish, Request part, PIN switch), Station Scanner, **Supervisor Pad** `/rw/pad` (Advance / Send back with reasons, live-suggestion parts composer with learning recency, approvals with on-hand + OUT OF STOCK → Order part, photos grid + lightbox, persistent header with clock), Picking `/rw/picking` (pick cards, scan, short/found-elsewhere, summary strip). Seeds: 4 new room jobs (3-way split, finish-blocked bracelet, all-at-safes), Rosa (watchmaker), 7 new parts (32 total, locations, 2 at zero, spring bar short mid-pick), 6 pending + 4 approved PRs, 10 photos, recency memory.
+- **Model**: components extended with station/partStatus/custodyTech/history; `PickTask`; `PartsRequest.items/source`; `on_order`/`received`.
+- **Open questions**: 67. Station names/positions after the walk? 68. Bulk Assign on awaiting-approval jobs? 69. Bench assignment rule for watchmakers? 70. Picking access for concierge tier? 71. Keep RGTime-style PWA install for the Pad?
+- Next: MH walks Shop Floor → Bulk Assign → Work Queue → WM room → Pad on the iPad; Save to GitHub; reactions → part 2 (full parts workflow).
+
+## Inbox tweak — Staff section (2026-09-26)
+- **Built**: `/inbox` sidebar "Staff" section below Closed — one row per staff member (MH, Walter, Vienna, MM) with the count of their **open assigned** threads (user or role assignment, session division). Click → `?staff=<short>`: same list filtered to threads assigned to them, amber header "Vienna’s inbox · n open assigned · read & reply", "← Back to my inbox" (→ Assigned to me). Full thread actions (reply / assign / snooze / close) work inside a colleague's inbox. "Assigned to me" unchanged. Client: `getStaffInboxRows`, `getColleagueInbox`.
+- **Open questions**: 72. Should opening a colleague's inbox be audited (today: no)? 73. Should replies sent from a colleague's inbox auto-reassign the thread to the sender (today: no — assignment untouched)?
+
+## Client request notes (MH brief, 2026-09-26) — replaces the earlier "Note to client" idea (not built)
+- **Built**: `Job.clientRequests[]` — short items recording what the client asked for (`{text, by, at, station, acks[], check?}`). Added from the RS job page ("Client requests" amber card directly under Watch, far from internal Notes), the `/rw` job page, and the Supervisor Pad ("Client request" button per card). Removable while unchecked; checked-off items stay on the record.
+  1. **Cards**: `/rw/pad` and `/rw/wm` cards carry an amber **CLIENT REQUESTS (n)** badge with the open requests listed on the card. Badge also on RS / RW job headers.
+  2. **Scan pop-up**: every label scan (Bulk Assign, Station Scanner, WM room scan, new Pad scan field which also jumps to the card) pops a modal with the requests in large type; the scan already registered; "Understood" logs `{by, at, via}` on each open request and is audited. Re-surfaces on every scan while requests remain open. Bulk Assign pops it even when the scan is rejected (e.g. job on hold).
+  3. **QC enforcement**: in `testing`, each request is a mandatory checklist item — **Done** or **N/A + required reason** (who/when logged, undo available). `qc_pass` (RS job page, RW job page, RW QC queue) is disabled with a message naming the unchecked request; `transitionJob('qc_pass')`, `finishJob` and Pad Advance-from-QC throw the same message.
+- **Seed**: j-30 E02031 (split, in progress) "Photograph movement before casing"; j-04 E02014 "Relume hands + new crystal gasket"; j-16 E02026 (in testing) one Done by MM + one open → disabled-QC state visible on the walk.
+- **Tested**: iteration_28 — all flows pass (Inbox staff, job page add/remove, QC checklist Done/N/A/undo, Pad badge/scan/advance-block, Bulk/Station/WM pop-ups, RW QC queue).
+- **Open questions**: 74. Should client requests also render on the client's `/rc` job card (today: staff/workshop only)? 75. Does "Understood" need to be per-person-per-job once (today: every scan)? 76. Should N/A check-offs require supervisor tier?
+
+## Supervisor Pad v2 — `/rw/pad` rebuilt for one user (the watchmaker-room supervisor, iPad) (2026-09-26)
+- **Shell**: tablet-native (large title, bottom tab bar Jobs · Parts · Review · Picking, bottom sheets, 44px+ targets, both orientations); persistent header = room counts, global scan field, clock, PIN switch. Nothing from the desktop shell. MH ruling: **sale prices ARE shown on the supervisor's pad** (Parts tab suggestions + lines; Review tab). `/rw` hide-money stays elsewhere.
+- **Jobs**: stage stepper + Advance / Send back (reason sheet, logged); **tech chip → tech picker sheet** = supervisor override (`padSetTech`: replaces the working tech, moves head custody, history row + audit; reflected on `/rw/wm` immediately; Bulk Assign stays the morning path); client-request badge + QC checklist on cards; card tap → **detail sheet**: photo grid + zoom lightbox AND read-only condition report (`getPadCondition`: latest non-superseded report grades/notes per component, falls back to the multiple-choice inspection). Seeds: approved reports on E02016 / E02031 / E02014.
+- **Parts (centerpiece)**: scan → `getPadPartsContext` resolves job, reference, **caliber** (`CALIBER_BY_REF` prefix table, `caliberOf`) → header chips; **caliber query** offers the caliber's parts automatically (learned selections first); **reference-scoped description search** (`padSearchParts`: learned mappings for this reference/caliber on top with a violet *learned* tag → model-specific parts fitting the reference → caliber parts); **GENERIC fallback** (free text, no part#) always offered; tapping a suggestion records a `selected` M3KE event; multi-line with qty stepper and sale prices; **Submit → manager review** (`pending_review`). Supervisor sees each request's stage (pending review → awaiting client → approved / declined → allocated).
+- **Review (manager tier)**: per line **price (required)** + **part number** (`reviewItem`; resolving a GENERIC line to a catalog part# = **M3KE capture**: `{description, reference, caliber, partNumber, price, resolvedBy, ts}` appended to `m3keEvents`, violet toast "M3KE learned: '…' → 25-16610"); **Send for client approval** (`sendForClientApproval`: Outbox email with lines + total, thread event, `awaiting_client`); simulated client approve / decline; **Allocate → Picking** (`padAllocate`, OUT OF STOCK → Order part); bench (WM) requests keep approve / decline / on order / received. **M3KE log** sheet shows the append-only fixture.
+- **Model**: `PartsRequestStatus` + `pending_review | awaiting_client | declined`; `PartsRequestItem {partId?, partNumber?, description, qty, price?, generic?}`; `PartsRequest.reference/caliber/sentForApprovalAt/sentBy/clientDecidedAt/allocatedAt/emailId`; `M3keEvent`; new pad request ids = the PR number (`pr-0054`).
+- **Seed**: cal. 3135 movement set (pt-33…41 + existing), model parts across 16610 / 126710 / 114060 (pt-42…48), pt-02 renumbered **25-16610**, pre-learned "bezel insert black" → 315-24280, GENERIC **PR-0050** in review on E02016 ("crystal ring for 16610").
+- **Tested**: iteration_29 — all flows pass (the two notes were a tester-side extra line and opaque ids — ids now use the PR number).
+- **Open questions**: 77. Does the client-approval email carry the portal approve/decline action (today: link to `/rc`, decision simulated on the pad)? 78. Should M3KE similarity be token-based as now, or a real model in KEEPER? 79. Caliber table: derive from a watch `caliber` field in KEEPER rather than reference prefix? 80. Should the manager review gate apply to WM-room bench requests too (today: bench requests keep the direct approve path)?
+
+## Inbound Shipping · Track a package — Inbox fix (2026-09-26, MH ruling)
+- **Ruling**: the Track button appears whenever the thread's client has ANY shipment. Order: anchored estimate's live shipment first; else the client's shipments newest-first. Several → one button with a `+N` badge; the panel opens on the primary and lists the rest under "Also for <client>" (tap to switch).
+- **Code**: `TrackButton` / `TrackingPanel(others, onSelect)` in `components/shipping/ShippingBits.tsx`; seed `sh-10` (Eleanor's bracelet parcel, `arrived`) gives c-02 two shipments; excluded from the inbound board.
+- **Pad**: fixture id collision `pr-04` (E18 seed) renamed `pr-14 / PR-0054`, `pr-10` renumbered `PR-0055` (PR-0050 stays the Pad v2 generic line); pad `Sheet` closes on Escape.
+- **Tested**: iteration_31 — Inbox / Client 360 / Inbound counts, Pad Parts History (filters, detail, past-on-job), iPad camera capture (slot sheet, attach, shoot another, shared job photos) — all pass.
+
+## Bench Pad · kiosk addendum · goal history · Job Messages (2026-09-26)
+- **Built**: `/rw/bench` (BenchLock keypad, per-tech board: In progress · Needs attention · Bands & splits · Outsourced · Messages · Completed · Goals), kiosk behaviours (idle re-lock, offline banner + cached last board, sticky header/clock, long-press gear → supervisor PIN → bench name / idle / simulate-offline), goal history tiles (Rosa seeded hit 4 / missed 2: 17/18 near-miss, 11/18 real miss), Job Messages (`components/jobs/JobMessages.tsx`, `getJobThreads/postJobMessage/getMessageInbox/markJobThreadRead`) on RS job page, RW job page, Supervisor Pad detail, WM room, Bench Pad.
+- **Seeds**: `fixtures/bench.ts` — techGoals, goalHistorySeeds, currentMonthBase, jobMessages (Rosa → @MM w/ photo → MM reply @Vienna; ambient note on E02007). Rosa added as 2nd assignee on E02016 so the Outsourced section is walkable.
+- **Tested**: iteration_32 (all flows pass; fixed offline cold-start unlock, @ button picker, section-unique testids) → iteration_33 retest.
+
+## KEEPER HANDOFF REFRESH (2026-09-26, documentation session)
+- Package `/app/docs/KEEPER-HANDOFF/` updated in place to cover everything since E16: 8 new module specs (rw-shop-floor, rw-bulk-assign [+ station scanner + WM room], rw-supervisor-pad, rw-bench-pad, rw-picking, job-messages, client-requests, shipping-inbound [+ Parcel Pro adapter]); post-E16 sections appended to jobs, comms-hub, client-360, rolliworking, workshop, dashboard-today.
+- `_gen.py` now tags every export not in `_baseline_e16.txt` as **[post-E16]** (389 exports, 296 baseline, 93 new), fixes module tagging in 02, adds audit families 26–39 to 08, and reads the newer test-report shape (iterations 27–33 in 09).
+- 03 Q81–Q89 added with recommended defaults; 04 post-E16 entity dispositions; 06 §1b Parcel Pro seam + §9 kiosk + §10 pad photos; 07 post-E16 emails; 10 post-E16 scaffolding list; 01 new routes; 00 index refresh. DECISIONS gained the VB3 verdict batch (VB3-01…19) so 02 carries it.
+
+## Send invoice + mock payment page (2026-09-26)
+- `sendInvoice`, `getPayPage`, `payViaLink`, `payLinkPath/Url`; SO gains `payLinkToken`, `invoiceSentAt`, `invoiceSends[]`; Outbox emails carry `payLink` (rendered as a Pay button in the preview). Public route `/pay/:token` (`pages/PayPage.tsx`), Payment-link card on the SO page, portal Pay button → same page.
+- Demo walk (all same tab — the mock store is per tab): SO-26-0102 → Send invoice → Outbox → Pay invoice → pay $200 → Return → Edit, shipping 45 → Open MOCK PAYMENT PAGE → $525 / balance $325 → Full balance → Pay → Return → badge **Paid**. Self-tested end to end (RS + portal).
+
+## View as client + Robert Calloway demo (2026-09-26)
+- Built `startViewAsClient/exitViewAsClient` (portal session with `viewAs`), `portalGetRequestCards`, `portalPhotoSections/portalGetPhotoSections`; UI `ViewAsClientButton`, `RcRequestCards`, `RcPhotoSections`, amber banner in `RcShell`; RC home now leads with "Your requests"; RC watch page shows photo sections per job. Client 360 estimates get the never-received aging chip.
+- Seeded Robert (c-30) across clients / watches / estimates / jobs / salesOrders / requests / portal messages / comms threads / rw photos (incl. staff-only decoys to prove exclusion).
