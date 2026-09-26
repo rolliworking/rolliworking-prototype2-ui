@@ -126,6 +126,12 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Tested iteration_26: 100%
 - QC-fail credit ruling (2026-09-26): credit stands (locked).
 
+### E18 — RW deep build part 1: shop floor core (2026-09-26)
+- Under `/rw`: Shop Floor (two-lane, part-coloured dots blue/purple/green, drag, history slide-over, finish gate, counts, tech/type filters), Bulk Assign (TECH-xx + label scans, band-only labels → bracelet component + B dept, outbox queue with undo), Work Queue (part dots, filters, simulate client reply), Watchmaker Room `/rw/wm` (fullscreen, scan to safe/refinish, Request part, PIN switch), Station Scanner, **Supervisor Pad** `/rw/pad` (iPad-first: Advance/Send back w/ reasons, live-suggestion parts composer with learning recency, approvals w/ on-hand + OUT OF STOCK → Order part, photos grid + lightbox, header w/ clock), Picking `/rw/picking`.
+- Model: components extended (station, partStatus, custodyTech, history), PickTask, PartsRequest on_order/received + items/source, Part.location. Seeds: j-30..j-33, Rosa (rosa/rosa123), 32 parts, 10 PRs, 10 photos.
+- Tested iteration_27: 100% app-level pass. Docs: DECISIONS E18, SESSION-LOG (Q67–71), API-SURFACE §23; KEEPER-HANDOFF/source refreshed (module spec rolliworking.md should be extended in the next docs pass — TODO).
+- Next: MH walks the screens on the iPad → reactions → E18 part 2 (full parts workflow).
+
 ### E16 — KEEPER handoff package (2026-09-26)
 - `/app/docs/KEEPER-HANDOFF/`: 00-INDEX, 01-ROUTE-MAP, modules/ (17), 02-DECISIONS-CONSOLIDATED, 03-OPEN-QUESTIONS (verdict sheet), 04-DATA-MODEL-VS-KEEPER, 05-API-CONTRACT (generated), 06-SEAMS, 07-COMMS-AND-TEMPLATES, 08-AUDIT-TAXONOMY (generated), 09-TEST-INVENTORY (generated), 10-NOT-KEEPER, source/ copies, `_gen.py`. Re-run `python3 docs/KEEPER-HANDOFF/_gen.py` after any code change and re-copy `source/`.
 - Next: MH answers 03-OPEN-QUESTIONS line by line; keep module specs in sync with rulings.
