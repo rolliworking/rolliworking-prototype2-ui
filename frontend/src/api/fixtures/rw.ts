@@ -1,4 +1,4 @@
-import type { ComponentKey, JobPhotoView, PartStatus, PickTask, RwStation, RwStationKey } from '../types';
+import type { ClientRequest, ComponentKey, JobPhotoView, PartStatus, PickTask, RwStation, RwStationKey } from '../types';
 import { daysAgo } from './time';
 
 export const RW_STATIONS: RwStation[] = [
@@ -62,3 +62,14 @@ export const jobPhotos: (JobPhotoView & { jobId: string })[] = [
 ];
 
 export const OUTBOX_UNDO_WINDOW_MIN = 30;
+
+// Client request notes (seed): two room jobs with open requests; one QC job with one checked + one still open
+const cr = (id: string, text: string, d: number, by: string, extra?: Partial<ClientRequest>): ClientRequest => ({ id, text, at: daysAgo(d, 11), by, station: 'Front Desk 1', acks: [], ...extra });
+export const clientRequestSeeds: Record<string, ClientRequest[]> = {
+  'j-30': [cr('cr-01', 'Photograph movement before casing', 4, 'Vienna')],
+  'j-04': [cr('cr-02', 'Relume hands + new crystal gasket', 20, 'MH')],
+  'j-16': [
+    cr('cr-03', 'Return original hands in a bag — client keeps them', 11, 'Vienna', { acks: [{ at: daysAgo(3, 9), by: 'MM', via: 'bulk_assign' }], check: { at: daysAgo(1, 15), by: 'MM', result: 'done' } }),
+    cr('cr-04', 'Call before shipping — client wants to collect in person', 11, 'Vienna', { acks: [{ at: daysAgo(3, 9), by: 'MM', via: 'bulk_assign' }] }),
+  ],
+};

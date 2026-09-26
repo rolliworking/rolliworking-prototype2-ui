@@ -284,7 +284,15 @@ export interface Job {
   photos: JobPhoto[];
   inspection?: InspectionReport;
   components?: JobComponent[];
+  clientRequests?: ClientRequest[];
 }
+
+// Client request notes — what the client asked for; surfaced on pad/wm cards, popped on every label scan, enforced at QC
+export interface ClientRequestAck { at: string; by: string; via: string }
+export interface ClientRequestCheck { at: string; by: string; result: 'done' | 'na'; reason?: string }
+export interface ClientRequest extends Stamp { id: string; text: string; acks: ClientRequestAck[]; check?: ClientRequestCheck }
+export interface ClientRequestAlert { jobId: string; jobNumber: string; watchLabel: string; requests: ClientRequest[] }
+export interface StaffInboxRow { user: User; openAssigned: number }
 
 // MH ruling (first board walk): per-component completion, decoupled from invoicing
 export type ComponentKey = 'head' | 'band' | 'case';

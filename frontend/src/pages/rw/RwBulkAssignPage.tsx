@@ -2,18 +2,19 @@ import { Mail, Undo2, UserCheck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { OutboxEmail, ScanSession } from '@/api/client';
+import type { ClientRequestAlert, OutboxEmail, ScanSession } from '@/api/client';
+import { ClientRequestModal } from '@/components/jobs/ClientRequests';
 import { ScanInput } from '@/components/rw/RwBits';
 import { fmtTime } from '@/lib/format';
 
 // Morning handout: scan TECH-<short> once, then watch labels — each label = custody + assign + start service
 export default function RwBulkAssignPage() {
-  const [s, setS] = useState<ScanSession>(api.getScanSession()); const [outbox, setOutbox] = useState<OutboxEmail[]>([]); const [flash, setFlash] = useState<string | null>(null);
+  const [s, setS] = useState<ScanSession>(api.getScanSession()); const [outbox, setOutbox] = useState<OutboxEmail[]>([]); const [flash, setFlash] = useState<string | null>(null); const [alert, setAlert] = useState<ClientRequestAlert | null>(null);
   const load = useCallback(() => api.getQueuedOutbox().then(setOutbox), []);
   useEffect(() => { void load(); }, [load]);
   const scan = async (code: string) => {
     if (api.parseTechCode(code)) { setS({ ...(await api.scanTech(code)) }); setFlash(`Active tech: ${api.parseTechCode(code)!.shortName}`); return; }
-    const next = await api.scanLabelAssign(code); setS({ ...next }); setFlash(`${next.rows[0].jobNumber} → ${next.tech!.shortName} · ${next.rows[0].part} · started`); await load();
+    const next = await api.scanLabelAssign(code); setS({ ...next }); setFlash(`${next.rows[0].jobNumber} → ${next.tech!.shortName} · ${next.rows[0].part} · started`); setAlert(api.clientRequestAlert(next.rows[0].jobId)); await load();
   };
   const techs = api.getDivisionStaff(api.getSessionDivision());
   return <div data-testid="rw-bulk-page" className="space-y-3">
@@ -31,5 +32,6 @@ export default function RwBulkAssignPage() {
       <aside data-testid="bulk-outbox" className="rounded-md border border-white/10 bg-[#1f2630]"><div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-xs font-semibold text-slate-200"><Mail size={13} /> Courtesy emails queued (Outbox — nothing sends) <span className="ml-auto font-mono text-slate-400">{outbox.length}</span></div>
         <ul className="divide-y divide-white/5 text-xs">{outbox.map((e) => <li key={e.id} data-testid={`bulk-outbox-${e.id}`} className="flex items-start gap-2 px-3 py-2"><div className="flex-1"><div className="text-slate-100">{e.subject}</div><div className="text-slate-500">to {e.toName} · {fmtTime(e.createdAt)} · {e.createdBy}</div></div><button data-testid={`bulk-undo-${e.id}`} onClick={async () => { await api.undoOutbox(e.id); setS({ ...api.getScanSession() }); await load(); }} className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/10"><Undo2 size={10} /> Undo</button></li>)}{!outbox.length && <li className="px-3 py-6 text-center text-slate-500">Outbox empty.</li>}</ul></aside>
     </div>
+    {alert && <ClientRequestModal alert={alert} via="bulk_assign" onClose={() => setAlert(null)} />}
   </div>;
 }

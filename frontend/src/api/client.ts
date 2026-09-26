@@ -140,7 +140,7 @@ const store = {
   labels: fx.labels.map((l) => ({ ...l })),
   watches: fx.watches.map((w) => ({ ...w })),
   estimates: fx.estimates.map((e): Estimate => ({ ...e, lines: e.lines.map((l) => ({ ...l })), revisions: e.revisions.map((r): EstimateRevision => ({ ...r, lines: r.lines.map((l) => ({ ...l })) })), jobId: fx.jobs.find((j) => j.estimateId === e.id)?.id })),
-  jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined })),
+  jobs: fx.jobs.map((j): Job => ({ ...j, lines: j.lines.map((l) => ({ ...l })), timeline: [...j.timeline], holds: j.holds.map((h) => ({ ...h })), notes: [...j.notes], photos: [...j.photos], workflow: [...j.workflow], assignees: [...j.assignees], inspection: j.inspection ? { ...j.inspection, answers: { ...j.inspection.answers } } : undefined, clientRequests: (fx.clientRequestSeeds[j.id] ?? []).map((r) => ({ ...r, acks: [...r.acks], check: r.check ? { ...r.check } : undefined })) })),
   shopTime: fx.shopTime.map((t) => ({ ...t })),
   requests: fx.requests.map((r): ServiceRequest => ({ ...r })),
   messages: fx.messages.map((m): Message => ({ ...m })),
@@ -1112,7 +1112,7 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
   if (action.needsReason && !reason?.trim()) throw new Error('A reason is required for this step');
   const gaps = reviewGaps(j);
   if (gaps.length) throw new Error(gaps.join(' · '));
-  if (action.key === 'qc_pass') { const ev = evidenceGaps(j); if (ev.length) throw new Error(`Evidence missing at QC: ${ev.map((k) => EVIDENCE_SLOTS.find((x) => x.key === k)!.label).join(', ')}`); }
+  if (action.key === 'qc_pass') { const ev = evidenceGaps(j); if (ev.length) throw new Error(`Evidence missing at QC: ${ev.map((k) => EVIDENCE_SLOTS.find((x) => x.key === k)!.label).join(', ')}`); const cr = qcRequestGaps(j); if (cr.length) throw new Error(`QC blocked — client request not checked off: “${cr[0].text}”${cr.length > 1 ? ` (+${cr.length - 1} more)` : ''}`); }
   if (action.key === 'to_testing') {
     const comps = ensureComponents(j); const out = componentsOutstanding(j);
     if (comps.length === 1 && out.length === 1) { const a = actor(); const c = out[0]; c.completedAt = new Date().toISOString(); c.completedBy = a.by; c.completedStation = a.station; jobStamp(j, `Component complete · ${c.label} · by ${a.by} (implicit single component)`); }
@@ -3385,6 +3385,7 @@ const finishBlockers = (j: Job) => ensureParts(j).filter((c) => !['waiting', 're
 export const finishGate = (j: Job): string[] => finishBlockers(j);
 export async function finishJob(jobId: string): Promise<JobWithRefs> {
   const j = getJobRow(jobId); const out = finishBlockers(j); if (out.length) throw new Error(`Finish gate — ${j.number} cannot be marked Finished: ${out.join('; ')}`);
+  if (j.status === 'testing') { const cr = qcRequestGaps(j); if (cr.length) throw new Error(`QC blocked — client request not checked off: “${cr[0].text}”${cr.length > 1 ? ` (+${cr.length - 1} more)` : ''}`); }
   ensureParts(j).forEach((c) => recordMove(j, c, 'finished', 'fulfilled', 'pad'));
   if (j.status === 'testing') pushTransition(j, 'qc_pass', 'ready_to_ship', 'Finished on the shop floor');
   return resolve(jobRefs(j));
@@ -3518,5 +3519,47 @@ export async function pickAction(taskId: string, action: 'picked' | 'short' | 'f
 export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => p), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.fileName || `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by }))]); }
 export async function getRoomSummary(): Promise<RoomSummary> { const room = roomJobs(); return resolve({ jobsInRoom: room.filter((j) => STAGE_ORDER.includes(j.status)).length, waitingOnParts: room.filter((j) => activeHold(j)?.type === 'parts' || store.partsRequests.some((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order'))).length, waitingOnApproval: room.filter((j) => j.status === 'awaiting_customer_approval').length, picksRemaining: rw18.picks.filter((t) => t.status === 'open').length, shortsToday: rw18.picks.filter((t) => t.status === 'short').length }); }
 export const PART_LABELS = PART_LABEL;
+
+// ---- Client request notes — what the client asked for. Badge on cards, pop-up on every scan, mandatory checklist at QC ----
+import type { ClientRequest, ClientRequestAlert, StaffInboxRow } from './types';
+const requestsOf = (j: Job): ClientRequest[] => (j.clientRequests ??= []);
+export const openClientRequests = (j: Job): ClientRequest[] => requestsOf(j).filter((r) => !r.check);
+export const qcRequestGaps = (j: Job): ClientRequest[] => (j.status === 'testing' ? openClientRequests(j) : []);
+export async function addClientRequest(jobId: string, text: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); if (!text.trim()) throw new Error('Write what the client asked for'); const a = actor();
+  requestsOf(j).unshift({ id: newId('cr'), text: text.trim(), at: new Date().toISOString(), by: a.by, station: a.station, acks: [] });
+  jobStamp(j, `Client request added · ${text.trim().slice(0, 60)}`); return resolve(jobRefs(j));
+}
+export async function removeClientRequest(jobId: string, reqId: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); const r = requestsOf(j).find((x) => x.id === reqId); if (!r) throw new Error('Request not found'); if (r.check) throw new Error('Checked-off requests stay on the record');
+  j.clientRequests = requestsOf(j).filter((x) => x.id !== reqId); jobStamp(j, `Client request removed · ${r.text.slice(0, 60)}`); return resolve(jobRefs(j));
+}
+// Sync: called by every scan surface after the scan registers. Null when nothing is open.
+export const clientRequestAlert = (jobId: string): ClientRequestAlert | null => {
+  const j = getJobRow(jobId); const open = openClientRequests(j); if (!open.length) return null; const w = byId(store.watches, j.watchId);
+  return { jobId: j.id, jobNumber: j.number, watchLabel: `${w.brand} ${w.model} · ${w.reference}`, requests: open };
+};
+export async function ackClientRequests(jobId: string, via: string): Promise<void> {
+  const j = getJobRow(jobId); const a = actor(); const open = openClientRequests(j); const at = new Date().toISOString();
+  open.forEach((r) => r.acks.push({ at, by: a.by, via })); if (open.length) jobStamp(j, `Client requests seen · ${open.length} · ${a.by} (${via})`);
+  return resolve(undefined);
+}
+export async function checkClientRequest(jobId: string, reqId: string, result: 'done' | 'na', reason?: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); const r = requestsOf(j).find((x) => x.id === reqId); if (!r) throw new Error('Request not found'); if (r.check) throw new Error('Already checked off');
+  if (result === 'na' && !reason?.trim()) throw new Error('N/A needs a reason'); const a = actor();
+  r.check = { at: new Date().toISOString(), by: a.by, result, reason: reason?.trim() || undefined };
+  jobStamp(j, `Client request ${result === 'done' ? 'done' : 'N/A'} · ${r.text.slice(0, 50)}${reason ? ` · ${reason.trim()}` : ''} · ${a.by}`); return resolve(jobRefs(j));
+}
+export async function uncheckClientRequest(jobId: string, reqId: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); const r = requestsOf(j).find((x) => x.id === reqId); if (!r?.check) throw new Error('Nothing to undo'); r.check = undefined; jobStamp(j, `Client request reopened · ${r.text.slice(0, 50)}`); return resolve(jobRefs(j));
+}
+
+// ---- Inbox — staff section: anyone can open a colleague's inbox (read + reply); "Assigned to me" stays the shortcut ----
+const openAssignedTo = (u: User) => { wakeSnoozed(); const div = getSessionDivision(); return cx.conversations.filter((c) => c.division === div && c.status !== 'closed' && c.assignedTo && assigneeMatches(c.assignedTo, u)); };
+export async function getStaffInboxRows(): Promise<StaffInboxRow[]> { return resolve(fx.users.filter((u) => u.shortName !== 'Rosa').map((u) => ({ user: u, openAssigned: openAssignedTo(u).length }))); }
+export async function getColleagueInbox(shortName: string): Promise<ConversationWithRefs[]> {
+  const u = fx.users.find((x) => x.shortName === shortName); if (!u) throw new Error(`No staff member ${shortName}`);
+  return resolve(openAssignedTo(u).map(convRefs).sort((a, b) => Number(b.needsReply) - Number(a.needsReply) || b.lastAt.localeCompare(a.lastAt)));
+}
 
 replayRcEvents();

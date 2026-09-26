@@ -2,7 +2,8 @@ import { Hammer, Lock, Package, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { FloorDot, JobWithRefs } from '@/api/client';
+import type { ClientRequestAlert, FloorDot, JobWithRefs } from '@/api/client';
+import { ClientRequestList, ClientRequestModal } from '@/components/jobs/ClientRequests';
 import { useAuth } from '@/auth/AuthContext';
 import { KindPill } from '@/components/jobs/JobBits';
 import { Clock, PartLocations, PinSwitch, ScanInput } from '@/components/rw/RwBits';
@@ -18,7 +19,7 @@ const RequestPart = ({ job, onDone }: { job: JobWithRefs; onDone: (m: string) =>
 
 // Full-screen bench mode for the signed-in tech (shared terminal → PIN switch)
 export default function RwWmPage() {
-  const { user } = useAuth(); const [cards, setCards] = useState<Card[]>([]); const [flash, setFlash] = useState<string | null>(null); const [mode, setMode] = useState<'safe' | 'refinish'>('safe');
+  const { user } = useAuth(); const [cards, setCards] = useState<Card[]>([]); const [flash, setFlash] = useState<string | null>(null); const [mode, setMode] = useState<'safe' | 'refinish'>('safe'); const [alert, setAlert] = useState<ClientRequestAlert | null>(null);
   const load = useCallback(() => (user ? api.getWmRoom(user.id).then((r) => setCards(r.cards)) : Promise.resolve()), [user]);
   useEffect(() => { void load(); }, [load]);
   const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3500); };
@@ -30,13 +31,15 @@ export default function RwWmPage() {
         {cards.map(({ job: j, parts }) => <article key={j.id} data-testid={`wm-card-${j.id}`} className="rounded-2xl border border-white/10 bg-[#1f2630] p-4">
           <div className="flex flex-wrap items-center gap-3"><Link to={`/rw/jobs/${j.id}`} className="font-mono text-2xl font-semibold text-white hover:underline">{j.number}</Link><span className="text-lg text-slate-200">{j.watch.brand} {j.watch.model}</span><span className="font-mono text-sm text-slate-500">{j.watch.reference} · {j.watch.serial}</span><KindPill kind={j.kind} /><StatusPill status={api.awaitingComponents(j) ? 'awaiting_components' : j.status} />{api.activeHold(j) && <span className="rounded-full bg-rose-950/60 px-2 py-0.5 text-xs text-rose-300">on hold · {api.activeHold(j)!.type}</span>}</div>
           <div className="mt-3"><PartLocations parts={parts} /></div>
+          <div className="mt-3"><ClientRequestList job={j} testId={`wm-client-requests-${j.id}`} /></div>
           <div className="mt-3 flex flex-wrap items-center gap-2"><RequestPart job={j} onDone={say} />{parts.filter((p) => p.station !== 'finished').map((p) => <button key={p.key} data-testid={`wm-to-safe-${j.id}-${p.key}`} onClick={async () => { try { await api.movePart(j.id, p.key, p.key === 'band' ? 'into_safe_band' : 'into_safe_head', 'wm'); say(`${j.number} · ${p.label} → Into safe`); await load(); } catch (x) { say(x instanceof Error ? x.message : 'Failed'); } }} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm text-slate-200 hover:bg-white/10"><Lock size={14} /> {p.label} → safe</button>)}</div>
         </article>)}
         {!cards.length && <p className="py-10 text-center text-slate-500">Nothing assigned to {user?.shortName}. Ask the supervisor or use Bulk Assign.</p>}
       </div>
       <aside className="space-y-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4"><div className="text-sm font-semibold text-white">Send a part by scan</div><p className="text-xs text-slate-400">Pick the destination, then scan the watch label — same pattern as the station scanner.</p>
         <div className="grid grid-cols-2 gap-2">{(['safe', 'refinish'] as const).map((m) => <button key={m} data-testid={`wm-mode-${m}`} onClick={() => setMode(m)} className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-sm ${mode === m ? 'border-amber-400 bg-amber-400/15 text-white' : 'border-white/15 text-slate-300'}`}>{m === 'safe' ? <Lock size={14} /> : <Sparkles size={14} />} {m === 'safe' ? 'Into safe' : 'Refinishing'}</button>)}</div>
-        <ScanInput big testId="wm-scan" placeholder="Scan watch label…" onScan={async (code) => { const d = await api.sendPartByScan(code, mode); say(`${d.jobNumber} · ${d.label} → ${api.RW_STATIONS.find((s) => s.key === d.station)!.label}`); await load(); }} /></aside>
+        <ScanInput big testId="wm-scan" placeholder="Scan watch label…" onScan={async (code) => { const d = await api.sendPartByScan(code, mode); say(`${d.jobNumber} · ${d.label} → ${api.RW_STATIONS.find((s) => s.key === d.station)!.label}`); setAlert(api.clientRequestAlert(d.jobId)); await load(); }} /></aside>
     </div>
+    {alert && <ClientRequestModal alert={alert} via="wm_scan" onClose={() => setAlert(null)} />}
   </div>;
 }

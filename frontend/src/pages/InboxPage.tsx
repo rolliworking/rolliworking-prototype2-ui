@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { Assignee, Role, ConvMessage, ConversationWithRefs, InboxView, PackagePhoto, RenderedTemplate, TemplateKey, ThreadView } from '@/api/client';
+import type { Assignee, Role, ConvMessage, ConversationWithRefs, InboxView, PackagePhoto, RenderedTemplate, StaffInboxRow, TemplateKey, ThreadView } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { PhotoCapture } from '@/components/intake/ReceiveBits';
@@ -16,11 +16,11 @@ const age = (h: number) => (h < 1 ? 'just now' : h < 24 ? `${h}h` : `${Math.roun
 export default function InboxPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
-  const view = (params.get('view') as InboxView) || 'needs_reply'; const clientId = params.get('client') ?? undefined; const threadId = params.get('thread') ?? undefined;
-  const [rows, setRows] = useState<ConversationWithRefs[]>([]); const [counts, setCounts] = useState<Record<InboxView, number> | null>(null); const [thread, setThread] = useState<ThreadView | null>(null);
+  const view = (params.get('view') as InboxView) || 'needs_reply'; const clientId = params.get('client') ?? undefined; const threadId = params.get('thread') ?? undefined; const staffName = params.get('staff') ?? undefined;
+  const [rows, setRows] = useState<ConversationWithRefs[]>([]); const [counts, setCounts] = useState<Record<InboxView, number> | null>(null); const [thread, setThread] = useState<ThreadView | null>(null); const [staffRows, setStaffRows] = useState<StaffInboxRow[]>([]);
   const [error, setError] = useState<string | null>(null); const [msg, setMsg] = useState<string | null>(null);
-  const reload = async () => { setRows(clientId ? await api.getClientFolder(clientId) : await api.getInbox(view, user?.id)); setCounts(await api.getInboxCounts(user?.id)); if (threadId) { setThread(await api.getThread(threadId)); await api.markConversationRead(threadId); } else setThread(null); };
-  useEffect(() => { reload().catch((e) => setError(e.message)); }, [view, clientId, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const reload = async () => { setRows(clientId ? await api.getClientFolder(clientId) : staffName ? await api.getColleagueInbox(staffName) : await api.getInbox(view, user?.id)); setCounts(await api.getInboxCounts(user?.id)); setStaffRows(await api.getStaffInboxRows()); if (threadId) { setThread(await api.getThread(threadId)); await api.markConversationRead(threadId); } else setThread(null); };
+  useEffect(() => { reload().catch((e) => setError(e.message)); }, [view, clientId, threadId, staffName]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = async (f: () => Promise<unknown>, ok?: string) => { try { setError(null); await f(); await reload(); if (ok) { setMsg(ok); setTimeout(() => setMsg(null), 2500); } } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } };
   const go = (patch: Record<string, string | undefined>) => { const p = new URLSearchParams(params); Object.entries(patch).forEach(([k, v]) => (v ? p.set(k, v) : p.delete(k))); setParams(p); };
   return (
@@ -28,10 +28,14 @@ export default function InboxPage() {
       <Head title="Inbox — comms hub" sub={<>One thread-space per client · every send queues to the Outbox · reply-token routing shown on inbound <Provisional note="Email/kiosk/photo inbound are mocked; tokens are matched by a simulate button" /></>} />
       <Flash error={error} msg={msg} />
       <div className="grid min-h-0 flex-1 grid-cols-[170px_360px_1fr] gap-3">
-        <nav data-testid="inbox-views" className="space-y-0.5">{VIEWS.map((v) => <button key={v.key} data-testid={`inbox-view-${v.key}`} onClick={() => go({ view: v.key, client: undefined, thread: undefined })} className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs ${view === v.key && !clientId ? 'bg-ink text-white' : 'text-ink-600 hover:bg-canvas'}`}><span>{v.label}</span><span data-testid={`inbox-count-${v.key}`} className={`rounded-full px-1.5 text-[10px] ${view === v.key && !clientId ? 'bg-white/20' : 'bg-canvas'}`}>{counts?.[v.key] ?? '·'}</span></button>)}
+        <nav data-testid="inbox-views" className="space-y-0.5">{VIEWS.map((v) => <button key={v.key} data-testid={`inbox-view-${v.key}`} onClick={() => go({ view: v.key, client: undefined, thread: undefined, staff: undefined })} className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs ${view === v.key && !clientId && !staffName ? 'bg-ink text-white' : 'text-ink-600 hover:bg-canvas'}`}><span>{v.label}</span><span data-testid={`inbox-count-${v.key}`} className={`rounded-full px-1.5 text-[10px] ${view === v.key && !clientId && !staffName ? 'bg-white/20' : 'bg-canvas'}`}>{counts?.[v.key] ?? '·'}</span></button>)}
+          <div data-testid="inbox-staff-section" className="mt-3 border-t border-line pt-2"><div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Staff</div>
+            {staffRows.map((r) => <button key={r.user.id} data-testid={`inbox-staff-${r.user.shortName.toLowerCase()}`} onClick={() => go({ staff: r.user.shortName, client: undefined, thread: undefined })} className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs ${staffName === r.user.shortName ? 'bg-ink text-white' : 'text-ink-600 hover:bg-canvas'}`}><span>{r.user.shortName}{r.user.id === user?.id && <span className={`ml-1 text-[10px] ${staffName === r.user.shortName ? 'text-white/60' : 'text-ink-400'}`}>(me)</span>}</span><span data-testid={`inbox-staff-count-${r.user.shortName.toLowerCase()}`} className={`rounded-full px-1.5 text-[10px] ${staffName === r.user.shortName ? 'bg-white/20' : 'bg-canvas'}`}>{r.openAssigned}</span></button>)}</div>
           {clientId && <div data-testid="inbox-folder-chip" className="mt-2 rounded-md border border-line px-2 py-1.5 text-[11px] text-ink-600">Folder: <b>{rows[0]?.client ? `${rows[0].client.firstName} ${rows[0].client.lastName}` : clientId}</b><button data-testid="inbox-folder-exit" onClick={() => go({ client: undefined, thread: undefined })} className="ml-1 text-brand hover:underline">× all</button></div>}
         </nav>
-        <ul data-testid="inbox-list" className="min-h-0 space-y-1 overflow-y-auto pr-1">
+        <div className="flex min-h-0 flex-col gap-1">
+          {staffName && <div data-testid="inbox-staff-header" className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs"><span className="font-semibold text-ink">{staffName === user?.shortName ? 'My inbox' : `${staffName}’s inbox`} <span className="font-normal text-ink-500">· {rows.length} open assigned · read &amp; reply</span></span><button data-testid="inbox-back-to-mine" onClick={() => go({ staff: undefined, view: 'mine', client: undefined, thread: undefined })} className="font-medium text-brand hover:underline">← Back to my inbox</button></div>}
+        <ul data-testid="inbox-list" className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
           {rows.map((r) => <li key={r.id}><button data-testid={`thread-row-${r.id}`} onClick={() => go({ thread: r.id })} className={`w-full rounded-md border p-2 text-left text-xs transition-colors ${threadId === r.id ? 'border-ink bg-canvas' : 'border-line hover:bg-canvas/60'}`}>
             <div className="flex items-center justify-between gap-2"><span className="font-medium text-ink">{r.client.firstName} {r.client.lastName}{r.unread > 0 && <span data-testid={`thread-unread-${r.id}`} className="ml-1.5 rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">{r.unread}</span>}</span><span className="text-[10px] text-ink-400">{r.needsReply ? <span data-testid={`thread-age-${r.id}`} className="font-semibold text-rose-700">waiting {age(r.ageHours)}</span> : r.status === 'snoozed' ? `snoozed → ${fmtDate(r.snoozedUntil!)}` : r.status}</span></div>
             <div className="truncate text-ink-700">{r.subject}</div>
@@ -39,6 +43,7 @@ export default function InboxPage() {
           </button></li>)}
           {!rows.length && <li className="px-2 py-6 text-center text-xs text-ink-400">Nothing here</li>}
         </ul>
+        </div>
         <section className="min-h-0 overflow-y-auto">{thread ? <Thread t={thread} run={run} onFolder={() => go({ client: thread.conversation.clientId, thread: thread.conversation.id })} /> : <div data-testid="thread-empty" className="grid h-full place-items-center text-xs text-ink-400">Select a thread</div>}</section>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
 import { TimingCard } from '@/components/jobs/TimingCard';
 import { ComponentsPanel } from '@/components/jobs/ComponentBits';
+import { ClientRequestBadge, ClientRequestsPanel } from '@/components/jobs/ClientRequests';
 import { PartsRequestModal, PartsRequestPill } from '@/components/parts/PartsChat';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -29,14 +30,15 @@ export default function RwJobPage() {
   const run = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); await load(); if (msg) say(msg); } catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); } };
   if (job === undefined) return null;
   if (!job) return <div className="text-slate-400">Job not found. <Link to="/rw/jobs" className="underline">Back to lookup</Link></div>;
-  const j = job; const actions = api.legalJobActions(j); const gaps = api.reviewGaps(j);
+  const j = job; const actions = api.legalJobActions(j); const gaps = api.reviewGaps(j); const crGaps = api.qcRequestGaps(j);
+  const blocked = (a: JobAction) => (a.key === 'qc_pass' && crGaps.length ? `QC blocked — client request not checked off: “${crGaps[0].text}”` : gaps.join(' · '));
   const act = (a: JobAction) => (a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client notified' : ''}`));
   return <div data-testid="rw-job-page" className="space-y-3">
     <div className="flex items-center justify-between text-xs"><Link to="/rw/jobs" className="inline-flex items-center gap-1 text-slate-400 hover:text-white"><ArrowLeft size={12} /> Jobs</Link><span className="text-slate-500">Created {fmtDate(j.createdAt)} by {j.createdBy}{j.intakeDate && ` · on hand since ${fmtDate(j.intakeDate)}`}</span></div>
     <div className="flex items-start justify-between gap-4">
-      <div><div className="flex flex-wrap items-center gap-2"><h1 data-testid="rw-job-number" className="font-mono text-xl font-semibold text-white">{j.number}</h1><StatusWithHold job={j} /><KindPill kind={j.kind} /><PriorityPill priority={j.priority} /><WorkflowBadges workflow={j.workflow} /></div><div className="mt-0.5 text-xs text-slate-400">{fullName(j.client)} · owner {j.owner ?? '—'} · assignees {j.assignees.join(', ') || 'none'}</div></div>
+      <div><div className="flex flex-wrap items-center gap-2"><h1 data-testid="rw-job-number" className="font-mono text-xl font-semibold text-white">{j.number}</h1><StatusWithHold job={j} /><KindPill kind={j.kind} /><PriorityPill priority={j.priority} /><WorkflowBadges workflow={j.workflow} /><ClientRequestBadge n={api.openClientRequests(j).length} testId="rw-job-client-requests-badge" /></div><div className="mt-0.5 text-xs text-slate-400">{fullName(j.client)} · owner {j.owner ?? '—'} · assignees {j.assignees.join(', ') || 'none'}</div></div>
       <div data-testid="rw-job-actions" className="flex flex-wrap items-center justify-end gap-1.5">
-        {actions.map((a) => <span key={a.key} className="inline-flex items-center gap-1"><Button data-testid={`rw-act-${a.key}`} disabled={gaps.length > 0} title={gaps.join(' · ') || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-400/40 !text-rose-300' : undefined} onClick={() => act(a)}>{a.label}</Button>{a.provisional && <Provisional note={a.provisional} />}</span>)}
+        {actions.map((a) => <span key={a.key} className="inline-flex items-center gap-1"><Button data-testid={`rw-act-${a.key}`} disabled={!!blocked(a)} title={blocked(a) || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-400/40 !text-rose-300' : undefined} onClick={() => act(a)}>{a.label}</Button>{a.provisional && <Provisional note={a.provisional} />}</span>)}
         {j.status !== 'closed' && <Button data-testid="rw-act-parts-request" onClick={async () => { try { setOpenPr(await api.openPartsRequest(j.id)); } catch (er) { setError(er instanceof Error ? er.message : 'Failed'); } }}><Wrench size={13} /> Parts request</Button>}
       </div>
     </div>
@@ -47,6 +49,7 @@ export default function RwJobPage() {
     <div className="grid grid-cols-[1fr_360px] gap-3">
       <div className="space-y-3">
         <Card title="Watch" testId="rw-job-watch"><div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]"><span className="inline-flex items-center gap-1.5 text-ink"><WatchIcon size={13} className="text-ink-400" /> {j.watch.brand} {j.watch.model}</span><span className="font-mono text-xs text-ink-500">Ref {j.watch.reference} · Serial {j.watch.serial}</span><StatusPill status={j.watch.status} /></div></Card>
+        <Card title="Client requests" subtitle="What the client asked for · pops on every scan · mandatory at QC" testId="rw-job-client-requests" className="border-l-[3px] border-amber-400"><ClientRequestsPanel job={j} run={run} /></Card>
         <Card title="Work lines" subtitle="Department tags route the floor · amounts hidden on the bench" testId="rw-job-lines" bodyClassName="p-0"><LinesTable job={j} /></Card>
         <Card title="Components" subtitle="Mark your component done — credit lands now; the job moves on when the last one is in" testId="rw-job-components"><ComponentsPanel job={j} run={run} /></Card>
         <Card title="Inspection" testId="rw-job-inspection"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>

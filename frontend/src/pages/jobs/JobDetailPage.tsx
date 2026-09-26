@@ -12,6 +12,7 @@ import { EvidencePanel } from '@/components/jobs/EvidencePanel';
 import { InspectionReportPanel } from '@/components/jobs/InspectionReportPanel';
 import { TimingCard } from '@/components/jobs/TimingCard';
 import { ComponentsPanel } from '@/components/jobs/ComponentBits';
+import { ClientRequestBadge, ClientRequestsPanel } from '@/components/jobs/ClientRequests';
 import { PinModal } from '@/components/today/PinBits';
 import { TailPill } from '@/components/sales/SalesBits';
 import type { PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
@@ -49,6 +50,8 @@ export default function JobDetailPage() {
   const j = job;
   const actions = api.legalJobActions(j);
   const gaps = api.reviewGaps(j);
+  const crGaps = api.qcRequestGaps(j);
+  const blocked = (a: JobAction) => (a.key === 'qc_pass' && crGaps.length ? `QC blocked — client request not checked off: “${crGaps[0].text}”` : gaps.join(' · '));
 
   const act = (a: JobAction) => (a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client email queued' : ''}`));
 
@@ -70,13 +73,14 @@ export default function JobDetailPage() {
             <StatusPill status={j.simpleStatus} testId="job-simple-status" />
             <OwnerBadge owner={j.owner} testId="job-owner" />
             <TailPill stage={api.tailStage(j)} testId="job-tail" />
+            <ClientRequestBadge n={api.openClientRequests(j).length} testId="job-client-requests-badge" />
           </div>
           <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> · {j.client.email} · {j.client.phone}</div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="job-actions">
           {actions.map((a) => (
             <span key={a.key} className="inline-flex items-center gap-1">
-              <Button data-testid={`act-${a.key}`} disabled={gaps.length > 0} title={gaps.join(' · ') || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-200 !text-rose-700 hover:!bg-rose-50' : undefined} onClick={() => act(a)}>{a.label}</Button>
+              <Button data-testid={`act-${a.key}`} disabled={!!blocked(a)} title={blocked(a) || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-200 !text-rose-700 hover:!bg-rose-50' : undefined} onClick={() => act(a)}>{a.label}</Button>
               {a.provisional && <Provisional note={a.provisional} />}
               {a.notifies && <Provisional note="Pack is silent on which transitions notify the client — emailing here is provisional" />}
             </span>
@@ -108,6 +112,7 @@ export default function JobDetailPage() {
               </span>
             </div>
           </Card>
+          <Card title="Client requests" subtitle="What the client asked for · badge on bench cards · pops on every label scan · mandatory checklist at QC" testId="job-client-requests-card" className="border-l-[3px] border-amber-400 bg-amber-50/40"><ClientRequestsPanel job={j} run={run} /></Card>
           <Card title="Line items" subtitle="Carried from the estimate · department tags route the shop floor" testId="job-lines-card" bodyClassName="p-0"><LinesTable job={j} /></Card>
           <Card title="Components" subtitle="Per-component completion — head / band / case — decoupled from invoicing (MH ruling)" testId="job-components-card"><ComponentsPanel job={j} run={run} /></Card>
           <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
