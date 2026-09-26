@@ -3777,10 +3777,15 @@ export const saveBenchSettings = (s: BenchSettings, supervisorPin: string): Benc
   return getBenchSettings();
 };
 export const setKioskOffline = (on: boolean) => { if (on) localStorage.setItem(KIOSK_OFFLINE, '1'); else localStorage.removeItem(KIOSK_OFFLINE); };
+// PIN-in never needs the network (kiosk contract: an unreachable API must not lock a tech out of last-known data)
 export async function benchPinIn(userId: string, pin: string): Promise<User> {
   const u = byId(fx.users, userId); if (u.pin !== pin) { appendAudit({ type: 'sign_in_failed', stationName: getBenchSettings().benchName, userShortName: u.shortName, method: 'pin_switch', detail: 'Bench pad · incorrect PIN' }); throw new Error('Incorrect PIN'); }
-  localStorage.setItem(KEYS.currentUser, u.id); appendAudit({ type: 'sign_in', stationName: getBenchSettings().benchName, userShortName: u.shortName, userDisplayName: u.displayName, method: 'pin_switch', detail: 'Bench pad · PIN in' }); return resolve(u);
+  localStorage.setItem(KEYS.currentUser, u.id); appendAudit({ type: 'sign_in', stationName: getBenchSettings().benchName, userShortName: u.shortName, userDisplayName: u.displayName, method: 'pin_switch', detail: 'Bench pad · PIN in' }); return u;
 }
+// Last-known board per tech, per device — what the pad shows under the "reconnecting…" banner after a cold start
+const BENCH_CACHE = 'rollisuite.bench.lastBoard';
+export const cacheBenchBoard = (b: BenchBoard) => writeJson(`${BENCH_CACHE}.${b.user.id}`, { ...b, cachedAt: new Date().toISOString() });
+export const readCachedBenchBoard = (userId: string): (BenchBoard & { cachedAt: string }) | null => readJson<(BenchBoard & { cachedAt: string }) | null>(`${BENCH_CACHE}.${userId}`, null);
 const workingDaysBetween = (from: string, to = new Date()) => { let n = 0; const d = new Date(from); d.setHours(0, 0, 0, 0); const end = new Date(to); end.setHours(0, 0, 0, 0); while (d < end) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n++; } return n; };
 const lastMovementAt = (j: Job) => [...ensureParts(j).flatMap((c) => (c.history ?? []).map((h) => h.at)), ...j.timeline.map((t) => t.at), j.createdAt].sort().reverse()[0];
 const MONTH_LABEL = (key: string) => new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1).toLocaleString('en-US', { month: 'short' });

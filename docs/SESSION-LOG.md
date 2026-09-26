@@ -177,3 +177,8 @@ One entry per build session: what was built · what was decided · what was test
 - **Code**: `TrackButton` / `TrackingPanel(others, onSelect)` in `components/shipping/ShippingBits.tsx`; seed `sh-10` (Eleanor's bracelet parcel, `arrived`) gives c-02 two shipments; excluded from the inbound board.
 - **Pad**: fixture id collision `pr-04` (E18 seed) renamed `pr-14 / PR-0054`, `pr-10` renumbered `PR-0055` (PR-0050 stays the Pad v2 generic line); pad `Sheet` closes on Escape.
 - **Tested**: iteration_31 — Inbox / Client 360 / Inbound counts, Pad Parts History (filters, detail, past-on-job), iPad camera capture (slot sheet, attach, shoot another, shared job photos) — all pass.
+
+## Bench Pad · kiosk addendum · goal history · Job Messages (2026-09-26)
+- **Built**: `/rw/bench` (BenchLock keypad, per-tech board: In progress · Needs attention · Bands & splits · Outsourced · Messages · Completed · Goals), kiosk behaviours (idle re-lock, offline banner + cached last board, sticky header/clock, long-press gear → supervisor PIN → bench name / idle / simulate-offline), goal history tiles (Rosa seeded hit 4 / missed 2: 17/18 near-miss, 11/18 real miss), Job Messages (`components/jobs/JobMessages.tsx`, `getJobThreads/postJobMessage/getMessageInbox/markJobThreadRead`) on RS job page, RW job page, Supervisor Pad detail, WM room, Bench Pad.
+- **Seeds**: `fixtures/bench.ts` — techGoals, goalHistorySeeds, currentMonthBase, jobMessages (Rosa → @MM w/ photo → MM reply @Vienna; ambient note on E02007). Rosa added as 2nd assignee on E02016 so the Outsourced section is walkable.
+- **Tested**: iteration_32 (all flows pass; fixed offline cold-start unlock, @ button picker, section-unique testids) → iteration_33 retest.
