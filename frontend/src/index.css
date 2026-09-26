@@ -88,6 +88,16 @@ body {
 .rw-dark input, .rw-dark select, .rw-dark textarea { background-color: #0f131a; color: #f1f5f9; border-color: rgba(255, 255, 255, 0.12); }
 .rw-dark .text-brand { color: #fbbf24; }
 .rw-dark .bg-brand-50 { background-color: rgba(251, 191, 36, 0.12); }
+.rw-dark .bg-amber-100, .rw-dark .bg-amber-100\/70 { background-color: rgba(120, 53, 15, 0.45); }
+.rw-dark .text-amber-900 { color: #fcd34d; }
+.rw-dark .text-rose-600 { color: #fda4af; }
+.rw-dark .bg-canvas\/50 { background-color: rgba(255, 255, 255, 0.04); }
+
+/* Bench Pad kiosk — always-on comfort: no pure white, muted contrast, no text selection on a touch board */
+.bench-kiosk { background: #0b0f14; color: #d8dee7; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.bench-kiosk input, .bench-kiosk textarea { -webkit-user-select: text; user-select: text; }
+@keyframes bench-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.bench-pulse { animation: bench-pulse 1.6s ease-in-out infinite; }
 .rw-dark .text-moss-700, .rw-dark .text-moss { color: #6ee7b7; }
 .rw-dark .border-moss-100 { border-color: rgba(110, 231, 183, 0.35); }
 .rw-dark .text-amber-800, .rw-dark .text-amber-900 { color: #fcd34d; }

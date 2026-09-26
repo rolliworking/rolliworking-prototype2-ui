@@ -1,4 +1,4 @@
-import { Pin, PinOff } from 'lucide-react';
+import { MessageSquare, Pin, PinOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Assignee, Division, PinnedItem, Role } from '@/api/client';
@@ -18,7 +18,7 @@ export const PinnedList = ({ items, onDismiss, dense }: { items: PinnedItem[]; o
         <Pin size={13} className="shrink-0 text-amber-700" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] text-ink">
-            {p.jobId ? <Link to={`/jobs/${p.jobId}`} className="hover:underline">{p.title}</Link>
+            {p.jobId ? <Link to={`/jobs/${p.jobId}${p.messageId ? `#msg-${p.messageId}` : ''}`} className="hover:underline">{p.messageId && <MessageSquare size={11} className="mr-1 inline text-amber-700" />}{p.title}</Link>
             : p.clientId ? <Link to={`/clients/${p.clientId}`} className="hover:underline">{p.title}</Link>
             : p.estimateId ? <Link to={`/estimates/${p.estimateId}`} className="hover:underline">{p.title}</Link>
             : p.title}

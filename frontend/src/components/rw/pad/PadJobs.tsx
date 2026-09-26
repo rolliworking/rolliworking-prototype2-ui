@@ -1,6 +1,7 @@
-import { ArrowLeft, ArrowRight, Camera, ChevronRight, ClipboardList, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, ChevronRight, ClipboardList, UserRound, MessageSquare } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
+import { MessagesPanel } from '@/components/jobs/JobMessages';
 import type { JobPhotoView, PadCard, PadConditionView, SendBackReason } from '@/api/client';
 import { ClientRequestBadge, ClientRequestList, QcRequestChecklist } from '@/components/jobs/ClientRequests';
 import { PartDot, PartLocations } from '@/components/rw/RwBits';
@@ -46,6 +47,7 @@ const DetailSheet = ({ card, onClose, say }: { card: PadCard; onClose: () => voi
           {cond.notes && <p className="mt-3 rounded-2xl bg-white/5 px-4 py-3 text-base text-slate-200">{cond.notes}</p>}</>}
       </section>
     </div>
+    <section data-testid="pad-detail-messages" className="mt-6"><h3 className="mb-2 inline-flex items-center gap-2 text-lg font-semibold text-white"><MessageSquare size={18} /> Messages <span className="text-sm font-normal text-slate-500">threaded · @ to route · internal only</span></h3><MessagesPanel job={card.job} dark /></section>
     {open && <div data-testid="rw-lightbox" className="fixed inset-0 z-[70] flex flex-col bg-black" onClick={() => setOpen(null)}><div className="flex items-center justify-between px-5 py-3 text-sm text-white"><span>{open.slot} · {open.kind} · {open.by} · {fmtDate(open.at)} {fmtTime(open.at)}</span><span className="text-slate-400">tap image to zoom · tap outside to close</span></div><div className="flex flex-1 items-center justify-center overflow-auto p-4"><img src={open.url} alt={open.slot} onClick={(e) => { e.stopPropagation(); setZoom((z) => !z); }} className={`rounded-lg transition-transform duration-200 ${zoom ? 'scale-[1.8] cursor-zoom-out' : 'max-h-full cursor-zoom-in'}`} /></div></div>}
   </Sheet>;
 };

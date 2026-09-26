@@ -4,7 +4,8 @@ import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs, PartsRequestWithRefs } from '@/api/client';
 import { HoldModal, KindPill, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
-import { AssignmentPanel, HoldPanel, JobTasksPanel, LinesTable, NotesPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
+import { MessagesPanel } from '@/components/jobs/JobMessages';
+import { AssignmentPanel, HoldPanel, JobTasksPanel, LinesTable, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
@@ -53,7 +54,7 @@ export default function RwJobPage() {
         <Card title="Work lines" subtitle="Department tags route the floor · amounts hidden on the bench" testId="rw-job-lines" bodyClassName="p-0"><LinesTable job={j} /></Card>
         <Card title="Components" subtitle="Mark your component done — credit lands now; the job moves on when the last one is in" testId="rw-job-components"><ComponentsPanel job={j} run={run} /></Card>
         <Card title="Inspection" testId="rw-job-inspection"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
-        <Card title="Notes" testId="rw-job-notes"><NotesPanel job={j} run={run} /></Card>
+        <Card title="Messages" subtitle="Threaded · @mention to route" testId="rw-job-notes"><MessagesPanel job={j} dark onChanged={() => void run(async () => (await api.getJob(j.id))!, '')} /></Card>
         <Card title="Service evidence" subtitle="Four QC slots · scan the watch label" testId="rw-job-evidence"><EvidencePanel job={j} run={run} /></Card>
         <TimingCard jobId={j.id} watchId={j.watchId} status={j.status} />
         <Card title="Photos" testId="rw-job-photos"><PhotosPanel job={j} run={run} /></Card>

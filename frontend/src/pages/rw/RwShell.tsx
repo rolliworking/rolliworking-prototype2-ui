@@ -20,6 +20,7 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
   { key: 'qc', label: 'QC', path: '/rw/qc', tiers: ['manager'] },
   { key: 'supervisor', label: 'Supervisor', path: '/rw/supervisor', tiers: ['manager'] },
   { key: 'pad', label: 'Pad', path: '/rw/pad', tiers: ['manager'] },
+  { key: 'bench-pad', label: 'Bench Pad', path: '/rw/bench', tiers: ['manager', 'concierge'] },
   { key: 'picking', label: 'Picking', path: '/rw/picking', tiers: ['manager', 'concierge'] },
   { key: 'evidence', label: 'Evidence', path: '/rw/evidence', tiers: ['manager', 'concierge'] },
   { key: 'today', label: 'My today', path: '/rw/today', tiers: ['manager', 'concierge'] },
@@ -30,7 +31,7 @@ const JOB_LINK = /^\/jobs\/([^/?#]+)$/;
 export default function RwShell() {
   const { user, station, signOut } = useAuth(); const nav = useNavigate(); const { pathname } = useLocation();
   const [blocked, setBlocked] = useState<string | null>(null);
-  const fullscreen = user && /^\/rw\/(wm|pad|picking)/.test(pathname);
+  const bench = pathname.startsWith('/rw/bench'); const fullscreen = bench || (user && /^\/rw\/(wm|pad|picking)/.test(pathname));
   useEffect(() => { document.title = 'RolliWorking'; return () => { document.title = 'RolliSuite — Prototype'; }; }, []);
   useEffect(() => { setBlocked(null); }, [pathname]);
   // Access boundary: RS links inside re-homed components are rewritten (jobs) or blocked (everything else)
@@ -39,7 +40,7 @@ export default function RwShell() {
     const url = new URL(a.href, window.location.origin); if (url.origin !== window.location.origin) return;
     const p = url.pathname; if (p.startsWith('/rw')) return;
     e.preventDefault(); e.stopPropagation();
-    const m = JOB_LINK.exec(p); if (m) { nav(`/rw/jobs/${m[1]}`); return; }
+    const m = JOB_LINK.exec(p); if (m) { nav(`/rw/jobs/${m[1]}${url.hash}`); return; }
     setBlocked(p);
   };
   return (
@@ -52,7 +53,7 @@ export default function RwShell() {
         </header>}
         {blocked && <div data-testid="rw-blocked" className="flex items-center gap-2 border-b border-rose-900/50 bg-rose-950/60 px-4 py-1.5 text-xs text-rose-200"><ShieldOff size={12} /> <span className="font-mono">{blocked}</span> is a RolliSuite screen — not reachable from RolliWorking (access boundary). Use a front-desk station.<button onClick={() => setBlocked(null)} className="ml-auto text-rose-300 hover:text-white">dismiss</button></div>}
         <main className={`rw-dark min-h-0 flex-1 overflow-y-auto ${fullscreen ? '' : 'p-4'}`}>
-          {user ? <Outlet /> : <RwSignIn />}
+          {user || bench ? <Outlet /> : <RwSignIn />}
         </main>
       </div>
     </MoneyContext.Provider>

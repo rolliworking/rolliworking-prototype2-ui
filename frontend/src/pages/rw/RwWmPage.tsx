@@ -1,8 +1,9 @@
-import { Hammer, Lock, Package, Sparkles } from 'lucide-react';
+import { Hammer, Lock, MessageSquare, Package, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { ClientRequestAlert, FloorDot, JobWithRefs } from '@/api/client';
+import type { ClientRequestAlert, FloorDot, JobWithRefs, MessageInboxRow } from '@/api/client';
+import { BenchMessagesSection, BenchThreadSheet } from '@/components/rw/bench/BenchMessages';
 import { ClientRequestList, ClientRequestModal } from '@/components/jobs/ClientRequests';
 import { useAuth } from '@/auth/AuthContext';
 import { KindPill } from '@/components/jobs/JobBits';
@@ -19,12 +20,13 @@ const RequestPart = ({ job, onDone }: { job: JobWithRefs; onDone: (m: string) =>
 
 // Full-screen bench mode for the signed-in tech (shared terminal → PIN switch)
 export default function RwWmPage() {
-  const { user } = useAuth(); const [cards, setCards] = useState<Card[]>([]); const [flash, setFlash] = useState<string | null>(null); const [mode, setMode] = useState<'safe' | 'refinish'>('safe'); const [alert, setAlert] = useState<ClientRequestAlert | null>(null);
-  const load = useCallback(() => (user ? api.getWmRoom(user.id).then((r) => setCards(r.cards)) : Promise.resolve()), [user]);
+  const { user } = useAuth(); const [cards, setCards] = useState<Card[]>([]); const [flash, setFlash] = useState<string | null>(null); const [mode, setMode] = useState<'safe' | 'refinish'>('safe'); const [alert, setAlert] = useState<ClientRequestAlert | null>(null); const [inbox, setInbox] = useState<MessageInboxRow[]>([]); const [thread, setThread] = useState<{ job: JobWithRefs; rootId?: string } | null>(null);
+  const load = useCallback(() => (user ? Promise.all([api.getWmRoom(user.id).then((r) => setCards(r.cards)), api.getMessageInbox(user.id).then(setInbox)]).then(() => undefined) : Promise.resolve()), [user]);
+  const unread = inbox.filter((r) => r.unread).length;
   useEffect(() => { void load(); }, [load]);
   const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3500); };
   return <div data-testid="rw-wm-page" className="flex h-full flex-col">
-    <header className="flex items-center gap-4 border-b border-white/10 bg-[#0f131a] px-5 py-3"><Hammer size={22} className="text-amber-400" /><div><div className="text-xl font-semibold text-white">{user?.displayName.split(' — ')[0]}’s bench</div><div className="text-xs text-slate-400">{cards.length} job{cards.length === 1 ? '' : 's'} assigned · Watchmaker Room</div></div><div className="ml-auto flex items-center gap-4"><Clock /><PinSwitch big /><Link to="/rw" className="text-xs text-slate-400 hover:text-white">exit bench mode</Link></div></header>
+    <header className="flex items-center gap-4 border-b border-white/10 bg-[#0f131a] px-5 py-3"><Hammer size={22} className="text-amber-400" /><div><div className="text-xl font-semibold text-white">{user?.displayName.split(' — ')[0]}’s bench</div><div className="text-xs text-slate-400">{cards.length} job{cards.length === 1 ? '' : 's'} assigned · Watchmaker Room</div></div><div className="ml-auto flex items-center gap-4">{unread > 0 && <span data-testid="wm-unread" className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-2.5 py-1 text-xs font-bold text-[#161b22]"><MessageSquare size={12} /> {unread} unread</span>}<Clock /><PinSwitch big /><Link to="/rw" className="text-xs text-slate-400 hover:text-white">exit bench mode</Link></div></header>
     <div className="grid flex-1 grid-cols-[1fr_340px] gap-4 overflow-hidden p-4">
       <div className="space-y-3 overflow-y-auto pr-1">
         {flash && <p data-testid="wm-flash" className="rounded-xl bg-emerald-950/60 px-4 py-2 text-sm text-emerald-300">{flash}</p>}
@@ -32,14 +34,16 @@ export default function RwWmPage() {
           <div className="flex flex-wrap items-center gap-3"><Link to={`/rw/jobs/${j.id}`} className="font-mono text-2xl font-semibold text-white hover:underline">{j.number}</Link><span className="text-lg text-slate-200">{j.watch.brand} {j.watch.model}</span><span className="font-mono text-sm text-slate-500">{j.watch.reference} · {j.watch.serial}</span><KindPill kind={j.kind} /><StatusPill status={api.awaitingComponents(j) ? 'awaiting_components' : j.status} />{api.activeHold(j) && <span className="rounded-full bg-rose-950/60 px-2 py-0.5 text-xs text-rose-300">on hold · {api.activeHold(j)!.type}</span>}</div>
           <div className="mt-3"><PartLocations parts={parts} /></div>
           <div className="mt-3"><ClientRequestList job={j} testId={`wm-client-requests-${j.id}`} /></div>
-          <div className="mt-3 flex flex-wrap items-center gap-2"><RequestPart job={j} onDone={say} />{parts.filter((p) => p.station !== 'finished').map((p) => <button key={p.key} data-testid={`wm-to-safe-${j.id}-${p.key}`} onClick={async () => { try { await api.movePart(j.id, p.key, p.key === 'band' ? 'into_safe_band' : 'into_safe_head', 'wm'); say(`${j.number} · ${p.label} → Into safe`); await load(); } catch (x) { say(x instanceof Error ? x.message : 'Failed'); } }} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm text-slate-200 hover:bg-white/10"><Lock size={14} /> {p.label} → safe</button>)}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-2"><RequestPart job={j} onDone={say} /><button data-testid={`wm-msg-${j.id}`} onClick={() => setThread({ job: j })} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/15 px-4 text-sm text-slate-200 hover:bg-white/10"><MessageSquare size={16} /> Message</button>{parts.filter((p) => p.station !== 'finished').map((p) => <button key={p.key} data-testid={`wm-to-safe-${j.id}-${p.key}`} onClick={async () => { try { await api.movePart(j.id, p.key, p.key === 'band' ? 'into_safe_band' : 'into_safe_head', 'wm'); say(`${j.number} · ${p.label} → Into safe`); await load(); } catch (x) { say(x instanceof Error ? x.message : 'Failed'); } }} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm text-slate-200 hover:bg-white/10"><Lock size={14} /> {p.label} → safe</button>)}</div>
         </article>)}
         {!cards.length && <p className="py-10 text-center text-slate-500">Nothing assigned to {user?.shortName}. Ask the supervisor or use Bulk Assign.</p>}
       </div>
       <aside className="space-y-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4"><div className="text-sm font-semibold text-white">Send a part by scan</div><p className="text-xs text-slate-400">Pick the destination, then scan the watch label — same pattern as the station scanner.</p>
         <div className="grid grid-cols-2 gap-2">{(['safe', 'refinish'] as const).map((m) => <button key={m} data-testid={`wm-mode-${m}`} onClick={() => setMode(m)} className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-sm ${mode === m ? 'border-amber-400 bg-amber-400/15 text-white' : 'border-white/15 text-slate-300'}`}>{m === 'safe' ? <Lock size={14} /> : <Sparkles size={14} />} {m === 'safe' ? 'Into safe' : 'Refinishing'}</button>)}</div>
-        <ScanInput big testId="wm-scan" placeholder="Scan watch label…" onScan={async (code) => { const d = await api.sendPartByScan(code, mode); say(`${d.jobNumber} · ${d.label} → ${api.RW_STATIONS.find((s) => s.key === d.station)!.label}`); setAlert(api.clientRequestAlert(d.jobId)); await load(); }} /></aside>
+        <ScanInput big testId="wm-scan" placeholder="Scan watch label…" onScan={async (code) => { const d = await api.sendPartByScan(code, mode); say(`${d.jobNumber} · ${d.label} → ${api.RW_STATIONS.find((s) => s.key === d.station)!.label}`); setAlert(api.clientRequestAlert(d.jobId)); await load(); }} />
+        <div data-testid="wm-messages" className="border-t border-white/10 pt-3"><div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white"><MessageSquare size={14} className="text-amber-400" /> Messages {unread > 0 && <span className="rounded-full bg-amber-400 px-1.5 font-mono text-[10px] text-[#161b22]">{unread}</span>}</div><BenchMessagesSection rows={inbox} onOpen={(r) => setThread({ job: r.job, rootId: r.thread.root.id })} /></div></aside>
     </div>
     {alert && <ClientRequestModal alert={alert} via="wm_scan" onClose={() => setAlert(null)} />}
+    {thread && <BenchThreadSheet job={thread.job} rootId={thread.rootId} onClose={() => setThread(null)} onChanged={() => void load()} />}
   </div>;
 }

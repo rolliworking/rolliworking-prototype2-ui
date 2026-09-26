@@ -22,6 +22,7 @@ import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
 import RwWmPage from '@/pages/rw/RwWmPage';
 import RwStationScanPage from '@/pages/rw/RwStationScanPage';
 import RwPadPage from '@/pages/rw/RwPadPage';
+import RwBenchPage from '@/pages/rw/RwBenchPage';
 import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
@@ -118,6 +119,7 @@ export default function App() {
             <Route path="wm" element={<RwWmPage />} />
             <Route path="station" element={<RwStationScanPage />} />
             <Route path="pad" element={<RwManagerOnly label="Supervisor Pad"><RwPadPage /></RwManagerOnly>} />
+            <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
             <Route path="today" element={<TodayPage />} />

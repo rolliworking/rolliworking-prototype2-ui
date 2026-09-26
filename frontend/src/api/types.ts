@@ -342,6 +342,7 @@ export interface PinnedItem {
   taskId?: string;
   clientId?: string;
   estimateId?: string;
+  messageId?: string;
   createdAt: string;
   station: string;
   dismissedAt?: string;
@@ -1008,3 +1009,18 @@ export type SendBackReason = 'rework' | 'waiting_on_part' | 'failed_qc' | 'other
 export interface PadCard { job: JobWithRefs; stage: JobStatus; stageLabel: string; canAdvance: boolean; canSendBack: boolean; parts: FloorDot[]; photos: number; pendingParts: number }
 export interface RoomSummary { jobsInRoom: number; waitingOnParts: number; waitingOnApproval: number; picksRemaining: number; shortsToday: number }
 export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection'; at: string; by: string }
+
+// ---- Job messages — threaded, internal-only board ON the job; @mentions route by tier (hit list vs bench Messages) ----
+export interface JobMessage extends Stamp { id: string; jobId: string; parentId?: string; text: string; mentions: string[]; notify: string[]; photo?: PackagePhoto; readBy: string[] }
+export interface JobThread { root: JobMessage; replies: JobMessage[]; participants: string[] }
+export interface MessageInboxRow { thread: JobThread; latest: JobMessage; job: JobWithRefs; unread: boolean }
+
+// ---- Bench Pad `/rw/bench` — one kiosked iPad per watchmaker bench (device = station, PIN = person) ----
+export interface BenchJobRow { job: JobWithRefs; parts: FloorDot[]; idleDays: number; late: boolean; stuck: boolean }
+export type SplitState = 'split' | 'waiting_band' | 'waiting_head' | 'reunited';
+export interface BenchSplitRow { job: JobWithRefs; parts: FloorDot[]; state: SplitState; bandDoneBy?: string; bandDoneAt?: string }
+export interface BenchOutsourceRow { job: JobWithRefs; vendor: string; reason: string; daysOut: number }
+export interface GoalMonth { key: string; label: string; goal: number; actual: number; hit: boolean; byWeek: { label: string; count: number }[]; byType: Record<ComponentKey, number> }
+export interface BenchGoals { current: GoalMonth; paceTarget: number; dayOfMonth: number; daysInMonth: number; history: GoalMonth[] }
+export interface BenchBoard { user: User; inProgress: BenchJobRow[]; attention: BenchJobRow[]; splits: BenchSplitRow[]; outsourced: BenchOutsourceRow[]; completed: { job: JobWithRefs; part: FloorDot; at: string }[]; goals: BenchGoals; messages: MessageInboxRow[]; unread: number; stuckDays: number }
+export interface BenchSettings { benchName: string; idleMinutes: number; simulateOffline: boolean }

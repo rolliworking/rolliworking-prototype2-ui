@@ -113,8 +113,10 @@ const KEYS = {
 };
 const AUDIT_CAP = 60;
 
+const KIOSK_OFFLINE = 'rollisuite.kiosk.offline';
+// Kiosk "simulate offline" makes every call fail the way an unreachable API would — screens keep their last data and show the reconnecting banner
 const resolve = <T>(value: T): Promise<T> =>
-  new Promise((r) => setTimeout(() => r(value), LATENCY_MS));
+  new Promise((r, rej) => setTimeout(() => (localStorage.getItem(KIOSK_OFFLINE) === '1' ? rej(new Error('NETWORK_UNREACHABLE')) : r(value)), LATENCY_MS));
 
 const readJson = <T>(key: string, fallback: T): T => {
   const raw = localStorage.getItem(key);
@@ -144,6 +146,7 @@ const store = {
   shopTime: fx.shopTime.map((t) => ({ ...t })),
   requests: fx.requests.map((r): ServiceRequest => ({ ...r })),
   messages: fx.messages.map((m): Message => ({ ...m })),
+  jobMessages: fx.jobMessages.map((m) => ({ ...m, mentions: [...m.mentions], notify: [...m.notify], readBy: [...m.readBy] })),
   magicLinks: readJson<MagicLink[]>('rollisuite.rc.magicLinks', []),
   counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107, pr: 44 },
 };
@@ -3724,5 +3727,98 @@ export const clientStatusLine = (s: ShipmentWithRefs): string => {
   if (s.stage === 'arrived') return `Your watch arrived safely and has been checked in at our workshop.`;
   return `${who} is ${s.direction === 'inbound' ? 'on its way to us' : 'on its way to you'} with ${s.carrier}${last ? `, last scanned in ${last.location} ${when(last.at)}` : ''}${eta}.`;
 };
+
+// ---- Job messages — threaded board ON the job (internal only). @mentions route by tier: manager/concierge → hit list pin; bench → Messages section ----
+import type { BenchBoard, BenchGoals, BenchJobRow, BenchOutsourceRow, BenchSettings, BenchSplitRow, GoalMonth, JobMessage, JobNote, JobThread, MessageInboxRow, SplitState } from './types';
+const MENTION_ANY = /@(\w+)/g;
+const userByTag = (tag: string) => fx.users.find((u) => u.shortName.toLowerCase() === tag.toLowerCase() || u.firstName.toLowerCase() === tag.toLowerCase());
+export const isManagerTier = (u: User) => u.accessTier === 'manager' || u.roles.includes('concierge');
+export const staffForMention = (): User[] => getDivisionStaff(getSessionDivision());
+const legacyNoteAsMessage = (j: Job, n: JobNote): JobMessage => ({ id: n.id, jobId: j.id, text: n.text, mentions: [], notify: [], readBy: [], at: n.at, by: n.by, station: n.station });
+const messagesOf = (j: Job): JobMessage[] => [...store.jobMessages.filter((m) => m.jobId === j.id), ...j.notes.map((n) => legacyNoteAsMessage(j, n))];
+const threadOf = (j: Job, rootId: string): JobThread => { const all = messagesOf(j); const root = all.find((m) => m.id === rootId)!; const replies = all.filter((m) => m.parentId === rootId).sort((a, b) => a.at.localeCompare(b.at)); return { root, replies, participants: [...new Set([root.by, ...root.mentions, ...replies.flatMap((r) => [r.by, ...r.mentions])])] }; };
+export async function getJobThreads(jobId: string): Promise<JobThread[]> { const j = getJobRow(jobId); const roots = messagesOf(j).filter((m) => !m.parentId).sort((a, b) => b.at.localeCompare(a.at)); return resolve(roots.map((r) => threadOf(j, r.id))); }
+const routeMessage = (j: Job, m: JobMessage) => {
+  m.notify.forEach((n) => { const u = fx.users.find((x) => x.shortName === n); if (!u || !isManagerTier(u)) return;
+    store.pinned.unshift({ id: newId('pin'), title: `@${m.by} on ${j.number}: “${m.text.slice(0, 70)}${m.text.length > 70 ? '…' : ''}”`, assignedTo: { type: 'user', shortName: u.shortName }, createdBy: m.by, division: j.division, jobId: j.id, messageId: m.id, createdAt: m.at, station: m.station }); });
+};
+export async function postJobMessage(jobId: string, text: string, opts: { parentId?: string; photoUrl?: string } = {}): Promise<JobThread> {
+  if (!text.trim()) throw new Error('Write a message'); const j = getJobRow(jobId); const a = actor();
+  const mentions = [...new Set([...text.matchAll(MENTION_ANY)].map((x) => userByTag(x[1])?.shortName).filter((x): x is string => !!x && x !== a.by))];
+  let rootId: string | undefined; const notify = new Set(mentions);
+  if (opts.parentId) { const parent = messagesOf(j).find((m) => m.id === opts.parentId); if (!parent) throw new Error('Thread not found'); rootId = parent.parentId ?? parent.id; const t = threadOf(j, rootId); t.participants.forEach((p) => notify.add(p)); }
+  notify.delete(a.by);
+  const m: JobMessage = { id: newId('jm'), jobId: j.id, parentId: rootId, text: text.trim(), mentions, notify: [...notify], readBy: [a.by], at: new Date().toISOString(), by: a.by, station: a.station, photo: opts.photoUrl ? { id: newId('jmp'), source: 'camera', dataUrl: opts.photoUrl, slot: 'workbench', clientVisible: false } : undefined };
+  store.jobMessages.push(m); routeMessage(j, m);
+  jobStamp(j, `${rootId ? 'Reply' : 'Message'} by ${a.by}${m.notify.length ? ` → ${m.notify.map((n) => `@${n}`).join(' ')}` : ''} · ${m.text.slice(0, 50)}`);
+  return resolve(threadOf(j, rootId ?? m.id));
+}
+const inboxFor = (short: string): MessageInboxRow[] => {
+  const mine = store.jobMessages.filter((m) => m.notify.includes(short)); const byRoot = new Map<string, JobMessage[]>();
+  mine.forEach((m) => { const k = m.parentId ?? m.id; byRoot.set(k, [...(byRoot.get(k) ?? []), m]); });
+  return [...byRoot.entries()].map(([rootId, ms]) => { const j = getJobRow(ms[0].jobId); const latest = [...ms].sort((a, b) => b.at.localeCompare(a.at))[0]; return { thread: threadOf(j, rootId), latest, job: jobRefs(j), unread: ms.some((m) => !m.readBy.includes(short)) }; }).sort((a, b) => Number(b.unread) - Number(a.unread) || b.latest.at.localeCompare(a.latest.at));
+};
+export async function getMessageInbox(userId: string): Promise<MessageInboxRow[]> { return resolve(inboxFor(byId(fx.users, userId).shortName)); }
+export const unreadMessageCount = (short: string) => inboxFor(short).filter((r) => r.unread).length;
+export async function markJobThreadRead(rootId: string): Promise<void> { const me = actor().by; store.jobMessages.filter((m) => m.id === rootId || m.parentId === rootId).forEach((m) => { if (!m.readBy.includes(me)) m.readBy.push(me); }); return resolve(undefined); }
+// Seeded threads route on load — same path a live post takes
+fx.jobMessages.forEach((m) => routeMessage(byId(store.jobs, m.jobId), m));
+
+// ---- Bench Pad — per-tech board, own numbers only, no money -------------------------------------------------------------------------
+const BENCH_KEY = 'rollisuite.bench.settings';
+export const STUCK_WORKING_DAYS = 4;
+export const getBenchSettings = (): BenchSettings => ({ benchName: 'Bench 3', idleMinutes: 10, simulateOffline: localStorage.getItem(KIOSK_OFFLINE) === '1', ...readJson<Partial<BenchSettings>>(BENCH_KEY, {}) });
+export const verifySupervisorPin = (pin: string) => fx.users.some((u) => u.accessTier === 'manager' && u.pin === pin);
+export const saveBenchSettings = (s: BenchSettings, supervisorPin: string): BenchSettings => {
+  if (!verifySupervisorPin(supervisorPin)) throw new Error('Supervisor PIN not recognised');
+  if (s.idleMinutes < 1 || s.idleMinutes > 120) throw new Error('Idle timeout must be 1–120 minutes'); if (!s.benchName.trim()) throw new Error('Bench needs a name');
+  writeJson(BENCH_KEY, { benchName: s.benchName.trim(), idleMinutes: s.idleMinutes }); if (s.simulateOffline) localStorage.setItem(KIOSK_OFFLINE, '1'); else localStorage.removeItem(KIOSK_OFFLINE);
+  appendAudit({ type: 'kiosk', stationName: s.benchName.trim(), userShortName: actor().user?.shortName, detail: `Bench settings saved · idle ${s.idleMinutes} min · ${s.simulateOffline ? 'offline simulation ON' : 'online'}` });
+  return getBenchSettings();
+};
+export const setKioskOffline = (on: boolean) => { if (on) localStorage.setItem(KIOSK_OFFLINE, '1'); else localStorage.removeItem(KIOSK_OFFLINE); };
+export async function benchPinIn(userId: string, pin: string): Promise<User> {
+  const u = byId(fx.users, userId); if (u.pin !== pin) { appendAudit({ type: 'sign_in_failed', stationName: getBenchSettings().benchName, userShortName: u.shortName, method: 'pin_switch', detail: 'Bench pad · incorrect PIN' }); throw new Error('Incorrect PIN'); }
+  localStorage.setItem(KEYS.currentUser, u.id); appendAudit({ type: 'sign_in', stationName: getBenchSettings().benchName, userShortName: u.shortName, userDisplayName: u.displayName, method: 'pin_switch', detail: 'Bench pad · PIN in' }); return resolve(u);
+}
+const workingDaysBetween = (from: string, to = new Date()) => { let n = 0; const d = new Date(from); d.setHours(0, 0, 0, 0); const end = new Date(to); end.setHours(0, 0, 0, 0); while (d < end) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n++; } return n; };
+const lastMovementAt = (j: Job) => [...ensureParts(j).flatMap((c) => (c.history ?? []).map((h) => h.at)), ...j.timeline.map((t) => t.at), j.createdAt].sort().reverse()[0];
+const MONTH_LABEL = (key: string) => new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1).toLocaleString('en-US', { month: 'short' });
+const weeksOf = (year: number, month: number) => Math.ceil(new Date(year, month + 1, 0).getDate() / 7);
+const goalMonth = (tech: string, monthsAgo: number): GoalMonth => {
+  const now = new Date(); const d = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; const goal = fx.techGoals[tech] ?? 18;
+  const seed = (fx.goalHistorySeeds[tech] ?? []).find((s) => s.monthsAgo === monthsAgo); const wk = weeksOf(d.getFullYear(), d.getMonth());
+  if (!seed) return { key, label: MONTH_LABEL(key), goal, actual: 0, hit: false, byWeek: Array.from({ length: wk }, (_, i) => ({ label: `Wk ${i + 1}`, count: 0 })), byType: { head: 0, case: 0, band: 0 } };
+  const shape = seed.weekShape.slice(0, wk); while (shape.length < wk) shape.push(0); const raw = shape.map((f) => Math.floor(f * seed.actual)); let rem = seed.actual - raw.reduce((a, b) => a + b, 0); for (let i = raw.length - 1; rem > 0 && i >= 0; i--, rem--) raw[i] += 1;
+  return { key, label: MONTH_LABEL(key), goal, actual: seed.actual, hit: seed.actual >= goal, byWeek: raw.map((c, i) => ({ label: `Wk ${i + 1}`, count: c })), byType: { ...seed.byType } };
+};
+const benchGoals = (tech: string): BenchGoals => {
+  const now = new Date(); const m = monthKey(now.toISOString()); const goal = fx.techGoals[tech] ?? 18; const base = fx.currentMonthBase[tech] ?? { actual: 0, byType: { head: 0, case: 0, band: 0 } };
+  const live = store.jobs.flatMap((j) => ensureComponents(j).filter((c) => c.completedBy === tech && c.completedAt && monthKey(c.completedAt) === m));
+  const wk = weeksOf(now.getFullYear(), now.getMonth()); const byWeek = Array.from({ length: wk }, (_, i) => ({ label: `Wk ${i + 1}`, count: 0 })); const curWk = Math.min(wk, Math.ceil(now.getDate() / 7));
+  for (let i = 0; i < base.actual; i++) byWeek[i % curWk].count += 1; live.forEach((c) => { byWeek[Math.min(wk, Math.ceil(new Date(c.completedAt!).getDate() / 7)) - 1].count += 1; });
+  const byType: Record<ComponentKey, number> = { ...base.byType }; live.forEach((c) => { byType[c.key] += 1; });
+  const actual = base.actual + live.length; const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return { current: { key: m, label: MONTH_LABEL(m), goal, actual, hit: actual >= goal, byWeek, byType }, paceTarget: Math.round((goal * now.getDate()) / daysInMonth), dayOfMonth: now.getDate(), daysInMonth, history: [6, 5, 4, 3, 2, 1].map((n) => goalMonth(tech, n)) };
+};
+const splitState = (dots: FloorDot[]): SplitState => {
+  const st = (k: ComponentKey) => dots.find((d) => d.key === k)?.station; const head = st('head'); const band = st('band');
+  if (dots.every((d) => d.station === 'final_assembly' || d.station === 'finished')) return 'reunited';
+  if (head && head.startsWith('safe_await_band')) return 'waiting_band'; if (band && band.startsWith('safe_await_head')) return 'waiting_head'; return 'split';
+};
+export async function getBenchBoard(userId: string): Promise<BenchBoard> {
+  const u = byId(fx.users, userId); const me = u.shortName; const now = new Date().toISOString();
+  const mine = roomJobs().filter((j) => j.status !== 'ready_to_ship' && (j.assignees.includes(me) || ensureParts(j).some((c) => c.custodyTech === me)));
+  const row = (j: Job): BenchJobRow => { const idle = workingDaysBetween(lastMovementAt(j)); return { job: jobRefs(j), parts: ensureParts(j).map((c) => dotOf(j, c)), idleDays: idle, late: !!j.dueAt && j.dueAt < now, stuck: j.status === 'in_service' && !activeHold(j) && idle >= STUCK_WORKING_DAYS }; };
+  const rows = mine.map(row);
+  const inProgress = rows.filter((r) => (r.job.status === 'in_service' || r.job.status === 'approved') && !activeHold(r.job));
+  const attention = rows.filter((r) => r.late || r.stuck);
+  const splits: BenchSplitRow[] = mine.filter((j) => ensureParts(j).length > 1 && j.status !== 'approved').map((j) => { const parts = ensureParts(j).map((c) => dotOf(j, c)); const band = ensureParts(j).find((c) => c.key === 'band'); const bandWait = band?.history?.filter((h) => h.status === 'waiting' || h.status === 'reunited').slice(-1)[0]; return { job: jobRefs(j), parts, state: splitState(parts), bandDoneBy: band?.completedBy ?? bandWait?.by, bandDoneAt: band?.completedAt ?? bandWait?.at }; });
+  const outsourced: BenchOutsourceRow[] = mine.map((j) => ({ j, h: activeHold(j) })).filter((x) => x.h?.type === 'outsource').map(({ j, h }) => ({ job: jobRefs(j), vendor: /\(([^)]+)\)/.exec(h!.reason)?.[1] ?? h!.reason.split(/—|-/)[0].trim(), reason: h!.reason, daysOut: Math.floor((Date.now() - new Date(h!.placedAt).getTime()) / 86_400_000) }));
+  const month = monthKey(now);
+  const completed = store.jobs.flatMap((j) => ensureComponents(j).filter((c) => c.completedBy === me && c.completedAt && monthKey(c.completedAt) === month).map((c) => ({ job: jobRefs(j), part: dotOf(j, c), at: c.completedAt! }))).sort((a, b) => b.at.localeCompare(a.at));
+  const messages = inboxFor(me);
+  return resolve({ user: u, inProgress, attention, splits, outsourced, completed, goals: benchGoals(me), messages, unread: messages.filter((r) => r.unread).length, stuckDays: STUCK_WORKING_DAYS });
+}
 
 replayRcEvents();

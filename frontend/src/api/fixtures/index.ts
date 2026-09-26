@@ -22,3 +22,4 @@ export { KIOSK_SERVICES, KIOSK_BRANDS } from './kiosk';
 export { componentSeeds } from './components';
 export { RW_STATIONS, partSeeds, pickTasks, recentPartChoices, jobPhotos, OUTBOX_UNDO_WINDOW_MIN, clientRequestSeeds } from './rw';
 export { shipments } from './shipping';
+export { techGoals, goalHistorySeeds, currentMonthBase, jobMessages } from './bench';

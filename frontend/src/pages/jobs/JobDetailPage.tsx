@@ -5,7 +5,8 @@ import * as api from '@/api/client';
 import type { JobAction, JobWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { HoldModal, KindPill, OwnerBadge, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
-import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, NotesPanel, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
+import { MessagesPanel } from '@/components/jobs/JobMessages';
+import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
@@ -116,7 +117,7 @@ export default function JobDetailPage() {
           <Card title="Line items" subtitle="Carried from the estimate · department tags route the shop floor" testId="job-lines-card" bodyClassName="p-0"><LinesTable job={j} /></Card>
           <Card title="Components" subtitle="Per-component completion — head / band / case — decoupled from invoicing (MH ruling)" testId="job-components-card"><ComponentsPanel job={j} run={run} /></Card>
           <Card title="Inspection" subtitle={api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'Multiple-choice report · completed during review' : 'Report step skipped for this kind · photos still required'} testId="job-inspection-card"><InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} /></Card>
-          <Card title="Notes" subtitle="Freeform, stamped who / when / station" testId="job-notes-card"><NotesPanel job={j} run={run} /></Card>
+          <Card title="Messages" subtitle="Threaded, internal only · @mention routes to a hit list (managers) or the bench Messages section · replies re-notify the thread" testId="job-notes-card"><MessagesPanel job={j} onChanged={() => void run(async () => (await api.getJob(j.id))!, '')} /></Card>
           <Card title="Inspection report to client" subtitle="Portal-first · short notification + link · approve/decline on the portal page" testId="job-report-card"><InspectionReportPanel job={j} run={run} /></Card>
           <TimingCard jobId={j.id} watchId={j.watchId} status={j.status} />
           <Card title="Service evidence" subtitle="Four QC slots · filed by scanning the watch label · keyed to watch AND job" testId="job-evidence-card"><EvidencePanel job={j} run={run} /></Card>
