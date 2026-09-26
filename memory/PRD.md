@@ -124,7 +124,11 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - `/rw` route-space: dark workshop shell, own sign-in (division cards, password/PIN, no camera), nav Bench · Jobs · Parts · QC (mgr) · Supervisor (mgr) · Floor · Evidence · My today; link guard rewrites `/jobs/:id` → `/rw/jobs/:id` and blocks other RS links (access boundary, prototype shares one origin/session); `MoneyContext` hides all amounts in /rw (amber default); `.rw-dark` CSS skin restyles re-homed E6 components. New: Jobs lookup, bench Job page, Parts, QC lane (evidence-gated Pass / Fail), Evidence capture, two-lane legacy floor (`getRwFloorMap`, amber vs 9-lane).
 - Components: `Job.components[]` head/band/case (W / B / P+PM), Mark complete (job detail RS+RW, inline bench buttons), manager Amend attribution, Awaiting components bin (RS board lane/filter/pill, RW floor Into-safe), reunification gate on Send to testing, auto-transition on last completion, Reports → Tech completions, Supervisor completions/month; QC-fail keeps credit + rework log (amber). Invoicing untouched.
 - Tested iteration_26: 100%
-- E16 (KEEPER handoff package at /app/docs/KEEPER-HANDOFF/) is PAUSED pending user go — it must cover /rw too.
+- QC-fail credit ruling (2026-09-26): credit stands (locked).
+
+### E16 — KEEPER handoff package (2026-09-26)
+- `/app/docs/KEEPER-HANDOFF/`: 00-INDEX, 01-ROUTE-MAP, modules/ (17), 02-DECISIONS-CONSOLIDATED, 03-OPEN-QUESTIONS (verdict sheet), 04-DATA-MODEL-VS-KEEPER, 05-API-CONTRACT (generated), 06-SEAMS, 07-COMMS-AND-TEMPLATES, 08-AUDIT-TAXONOMY (generated), 09-TEST-INVENTORY (generated), 10-NOT-KEEPER, source/ copies, `_gen.py`. Re-run `python3 docs/KEEPER-HANDOFF/_gen.py` after any code change and re-copy `source/`.
+- Next: MH answers 03-OPEN-QUESTIONS line by line; keep module specs in sync with rulings.
 
 ### E13 — RGTime /rg + public Kiosk /kiosk (2026-09-25, MH ruling: NFC tap)
 - RGTime phone PWA (manifest /rg-manifest.webmanifest, start_url /rg): remembered per-device login (`rollisuite.rg.session`), status card, today's punches, Simulate-NFC-tap picker → real tag URL `/rg/clock?tag=<id>` one-button confirm (in/out toggles, division from tag, `simulated` flag), `/rg/manager` card+password manager-only week grid (Mon–Sun, totals, open-punch amber, prev/next, division toggle, day detail). Seeded tags: tag-fd-rw, tag-rs-counter; ~2 weeks punches.
@@ -183,7 +187,6 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - P2: cross-division inventory rules unruled (amber)
 
 ### Upcoming
-- **E16 — KEEPER handoff package** (12 files at /app/docs/KEEPER-HANDOFF/, spec in user message; paused until user says resume)
 - amber items in DECISIONS (RGTime hardening, punch corrections, kiosk signature capture)
 
 ---

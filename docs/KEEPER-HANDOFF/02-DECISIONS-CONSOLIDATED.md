@@ -1,3 +1,7 @@
+# 02 — DECISIONS CONSOLIDATED (every MH ruling, as recorded)
+
+Source: `/app/docs/DECISIONS.md`, reproduced **as recorded** (rows were written at ruling time; the original chat text is not in the repo). Order is chronological by session; each block is tagged with the modules it touches. Status column: **locked** = build it exactly; **provisional (amber)** = MH has not ruled — see `03-OPEN-QUESTIONS.md`.
+
 # DECISIONS — dated log
 
 Format: date · decision · one-line rationale · status (locked / provisional).
@@ -71,6 +75,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | 2026-09-24 E9 (MH) | **@mention syntax** accepted everywhere `#` is parsed — `@name`, `@role`, `#name`, `#role` are equivalent. `MENTION` regex replaces `HASHTAG`. | MH ruling; backward-compatible | locked |
 | 2026-09-24 E9 (MH) | **Global quick-add** (`＋` button in top bar, `Alt+T` shortcut): one-line overlay from any screen. `@name`/`@role` routes to that person/role's today; unprefixed text pins to self. Autocomplete dropdown shows same-division staff + roles only. Context-aware: if opened while on `/jobs/:id`, `/clients/:id`, or `/estimates/:id`, that record is attached as a tappable link on the pin. Toast confirms pinned destination. Implemented as `QuickAddProvider` wrapping `AppShell`; `useQuickAdd()` hook opens it from anywhere. | MH ruling | locked |
 
+**Modules touched:** cross-cutting
+
 ## Documentation pass (for KEEPER) — decisions restated / confirmed today
 
 | date | decision | rationale | status |
@@ -83,6 +89,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | Docs pass | **`/today` hit lists are derived** (owner actions, bench work, holds, discrepancies, tasks to me/my roles) **plus a `tasks` table with user-or-role assignment** and a pinned manual layer on top. Division-scoped. | 80% computed, 20% explicit; nothing curated by hand | locked |
 | Docs pass | **Parts alias table**: KEEPER normalizes the prototype's `Part.aliases[]` into `part_alias(term, part_id, scope, source_request_id)` fed by a **search-miss → resolution** loop: a query that finds nothing is recorded as a miss; when a supervisor approves a request the requester's terms resolve to a `part_id`, scoped (by reference / caliber / global). Prototype today: aliases are flat strings on `Part`, learned only on approval, plus `PartsKnowledgeEntry` log; **no search_misses record exists** — drift to close in KEEPER. | Make the labeling loop first-class and queryable | locked (schema) / ◐ (prototype) |
 | Docs pass | **Where code and an earlier doc disagree, code is truth**; drift is noted in each doc's "Drift" section rather than silently fixed. Known: counts (25 jobs, 11 packages, 24 estimates, 21 watches, 15 tasks, 6 pins, 8 SOs); stations are Front Desk 1–2 · Inspection Bench · Watchmaker Room · Shipping · RS Counter (E9 row above says "Front Desk 1–5" — wrong); `invoiceJob` is real (E5), not a stub. | Honesty for the rebuild | noted |
+
+**Modules touched:** all
 
 ## E9 (remaining RS modules + evidence) — 2026-09-25
 
@@ -99,6 +107,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E9 (MH 2026-09-24) | **Service Evidence at QC**: four slots `hidden_serial · timing_sheet (before left / after right) · pressure_test (structured depth "50M/164ft") · parts_grading (grade tags B · Ø/REPL · D/REPL)`; each item keys to **watch AND job**, filed only after scanning/entering the watch label (job #, ref or serial — validated). `EVIDENCE_REQUIRED` per kind: service = all four (**QC pass gate**); small_job = hidden_serial; warranty = hidden_serial + timing_sheet — reduced sets **provisional**. Client 360 gains an Evidence section grouped by service date; portal documents include evidence photos. | MH spec | locked (per-kind sets provisional) |
 | E9 polish | Pickup Station validates the code **before** the photo step; parts assistant returns low-ranked best-effort suggestions with "add a reference to narrow" for bare words; Floor Map chips route concierge to Client 360 (`?hit=job-…`) instead of a Restricted job page. | Regression notes | locked |
 
+**Modules touched:** purchasing-inventory, labels-reports-accounting, setup-integrations-help, jobs (evidence)
+
 ## E10 — Companion panel (M3KE front door) — 2026-09-25
 
 | date | decision | rationale | status |
@@ -109,6 +119,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E10 | **Ask the shop**: freeform → seeded knowledge cards (tag + word scoring, threshold 3). Miss → "route to MH/MM" creates a **manager-role task** + `RoutedQuestion`; a manager answering it from the panel **creates a new card**, links `sourceTaskId`, and closes the task. | Every unanswered question becomes documentation | locked |
 | E10 | **Photo labels**: word pills (`LABEL_PILLS`: dial · hands · bracelet · condition) offered on inspection and evidence photos, **skippable**, stored per photo (`PhotoLabel` with provenance) and shown in a labels log; also stamped on the job timeline. | Cheap supervised labels at point of work | locked |
 | E10 | **Tier/division**: non-manager tiers see price/parts/ask but **no money totals** (lifetime value, avg price masked) — amber pending MH's hide-money ruling; routed questions and tasks stamped with the session division. All companion actions audit as type `companion`. | Least privilege until ruled | provisional (money) |
+
+**Modules touched:** auth-stations, dashboard-today
 
 ## E14 — Comms hub (staff inbox) — 2026-09-25
 
@@ -122,6 +134,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E14 | **Auto-threading**: portal estimate approve/decline, parts approval, pickup-window confirmation and portal messages land as structured event messages (`event.kind`) in the client's anchored thread. Photo submission from the portal is seeded only (no portal upload exists). | Structured events, not chat | locked (photo submission provisional) |
 | E14 | Audit type `comms` for assign / snooze / wake / close / reopen / reply / note / simulated inbound. Kiosk and email inbound are fixtures — no ingestion exists. | Honesty | noted |
 
+**Modules touched:** auth-stations, dashboard-today
+
 ## E15 — Portal-first client content (MH ruling, 2026-09-25)
 
 | date | decision | rationale | status |
@@ -131,6 +145,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E15 | **Staff issue flow** (job page → "Issue inspection report to client"): requires inspection photos; supersedes the previous issued report; moves an `in_review` job to `awaiting_customer_approval` (transition stamped, email flagged as queued); queues the short `inspection_ready` notification to Outbox; posts a system message in the client's Comms thread. **Portal decision** approves/declines the job (`approve` / `back_to_review` with the client's reason) and the linked sent estimate, auto-threads as an approval event, audits `portal`. | Full loop: staff → Outbox → portal → decision → staff status | locked |
 | E15 | All templates converted to **short notification bodies**: `intake_confirmation, estimate_sent, inspection_ready, job_in_progress, back_in_progress, evidence_available, invoice_ready, ready_for_pickup, shipped`, each with a single `▶ {{portal.link}}`. `sendEstimate` email body likewise (no line list). Composer preview shows the short form; `{{portal.link}}` resolves per anchor (report token → estimate page → watch page → home). | Ruling | locked |
 | E15 | Report component list & grade vocabulary are placeholders; portal decisions are not persisted to the RolliConnect replay log (reload resets). | UNKNOWN | provisional (amber) |
+
+**Modules touched:** auth-stations, dashboard-today
 
 ## E12 — RolliTime `/rt` timing bench — 2026-09-25 (NEW automation, no legacy precedent)
 
@@ -142,6 +158,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E12 | **PASS** → test saved (append-only, keyed to job AND watch), job stamped "to QC queue" (**status stays `testing`** — the supervisor's QC queue already is `testing`; the timing pass is a flag on the timeline), "Testing complete" short email → Outbox with portal link. **REJECT** → reason required → `transitionJob(qc_fail)` (back to `in_service` under its assignees, "back to in progress" email) + rejection logged. | Reuse the existing QC-fail transition rather than a new status | locked (QC-queue handoff provisional) |
 | E12 | Tests are **append-only watch history** (multiple per job, newest first) — surfaced on `/rt/test/:jobId` and the job page "Timing tests" card; this is the future health-history dataset. Audit type `rollitime`. | Data asset | locked |
 | E12 | Unruled: exact Crit1/Crit2 definitions per caliber, per-position rate bounds, whether PASS should create an explicit `timing_passed` sub-status, Witschi file import. | UNKNOWN | provisional (amber) |
+
+**Modules touched:** auth-stations, dashboard-today
 
 ## E13 — RGTime `/rg` + public Kiosk `/kiosk` — 2026-09-25 (MH ruling on NFC)
 
@@ -157,6 +175,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E13 | **Submission creates a `ServiceRequest`** `source: kiosk`, `division` from the brand pick, `station: Kiosk`, `createdBy: Kiosk`, `kiosk{…}` details; lands in the **staff `/requests` queue** (new page, division-scoped) and threads a `kiosk`-source message into the client's General conversation. Audit type `kiosk`. | Requests are the "ask before an estimate" — that is what a walk-in is | locked |
 | E13 | **Match, don't duplicate** (improvement on legacy): normalised **email OR phone** match against existing clients → request links to the matched client with `matchState: possible` and the queue shows **"Possible existing client — Confirm link / Not the same — new client"**; staff decision audited. No match → a new client record is created (`type: retail`, kiosk-sourced). | Legacy silently created duplicates | locked |
 | E13 | Unruled: PWA offline/queued punches; punch **edits/corrections** by a manager (none built — punches are append-only); overtime/breaks rules; whether concierge tier may see the week grid; kiosk signature/ID capture; kiosk match when the kiosk name differs from the matched record (today: staff decides). | UNKNOWN | provisional (amber) |
+
+**Modules touched:** auth-stations, dashboard-today
 
 ## E11 — RolliWorking standalone `/rw` (workshop app draft) — 2026-09-26
 
@@ -174,6 +194,8 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | E11 | **Floor map — legacy two-lane style** (`/rw/floor`), rendered so MH can compare against the nine-lane RS map: **head lane** (jobs whose workflow includes W, or has no workflow) Intake → Review → Movement bench; **band lane** (workflow includes B/P/PM) Intake → Review → Band bench → Polish (in-service polish-only); both converge into **Final assembly** (= `testing`); **Into safe** off-ramp = holds, awaiting approval, ready (in safe). Chips carry **part-colored dots** per department (W indigo · B amber · P teal · PM rose). Division-scoped to the station. A job with W and B appears in both lanes (parallel head/band work). | Legacy RW research (reference, not gospel) | provisional (amber) — **MH to rule: two-lane vs nine-lane for Keeper** |
 | E11 | Unruled: which lane model Keeper keeps; hide-money for bench tiers (default applied); whether concierge tier belongs in RW at all (today: allowed, QC/Supervisor hidden); whether RW needs its own station registry; offline/tablet install (PWA) for RW; whether the RW job page should expose Owner changes. | UNKNOWN | provisional (amber) |
 
+**Modules touched:** auth-stations, dashboard-today
+
 ## Per-component completion, decoupled from invoicing — MH ruling (first board walk), 2026-09-26
 
 | date | decision | rationale | status |
@@ -186,3 +208,5 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | 2026-09-26 | **Invoicing untouched** — the sales order still waits for the whole job (`ready_to_ship` / `closed`); only credit moves earlier. | Ruling | locked |
 | 2026-09-26 | **QC-fail after completion: credit stands** (MH ruling 2026-09-26). Completion is not revoked; the rework is logged separately on each completed component (`rework[] {at, reason, by}`, shown as "rework ×n"). | Ruling | locked |
 | 2026-09-26 | Unruled: whether P and PM should be separate components (today both = Case); whether a component can be un-completed (today: amend attribution only); whether an amended attribution moves the month credit (today: yes, the row carries one `completedBy`); whether completions on rollishop jobs count in the same report (today: yes, all divisions). | UNKNOWN | provisional (amber) |
+
+**Modules touched:** jobs, workshop, rolliworking, labels-reports-accounting

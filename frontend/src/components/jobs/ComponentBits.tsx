@@ -3,7 +3,6 @@ import { useState } from 'react';
 import * as api from '@/api/client';
 import type { JobComponent, JobWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { fmtDate, fmtTime } from '@/lib/format';
 
@@ -32,7 +31,7 @@ const Amend = ({ job, c, run }: { job: JobWithRefs; c: JobComponent; run: Run })
 export const ComponentsPanel = ({ job, run }: { job: JobWithRefs; run: Run }) => {
   const { user } = useAuth(); const done = job.components.filter((c) => c.completedAt).length;
   return <div data-testid="components-panel" className="space-y-2 text-xs">
-    <div className="flex items-center gap-2 text-ink-500"><span data-testid="components-progress" className="font-mono font-semibold text-ink">{done}/{job.components.length}</span> complete · credit lands in the month each component completes, regardless of invoicing{api.awaitingComponents(job) && <span data-testid="components-awaiting" className="rounded-sm bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-inset ring-amber-200">Awaiting components</span>}<Provisional note="QC-fail after completion: completion stands, rework logged separately — MH to confirm" /></div>
+    <div className="flex items-center gap-2 text-ink-500"><span data-testid="components-progress" className="font-mono font-semibold text-ink">{done}/{job.components.length}</span> complete · credit lands in the month each component completes, regardless of invoicing{api.awaitingComponents(job) && <span data-testid="components-awaiting" className="rounded-sm bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-inset ring-amber-200">Awaiting components</span>}<span className="text-[10px] text-ink-400" title="MH ruling 2026-09-26: QC-fail after completion keeps the credit; rework is logged separately">· QC-fail keeps credit (ruled)</span></div>
     <ul className="divide-y divide-line/70 rounded-md border border-line">{job.components.map((c) => <li key={c.key} data-testid={`component-row-${c.key}`} className="flex flex-wrap items-center gap-2 px-3 py-2">
       <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${c.completedAt ? 'bg-moss text-white' : 'border border-dashed border-ink-300 text-ink-300'}`}>{c.completedAt ? <Check size={11} /> : null}</span>
       <span className="font-medium text-ink">{c.label}</span><span className="font-mono text-[10px] text-ink-400">{c.depts.join(' · ') || 'single-track'}</span>
