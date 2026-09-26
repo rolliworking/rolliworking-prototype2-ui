@@ -131,6 +131,16 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Files: `components/rw/pad/{PadBits,PadJobs,PadParts,PadReview}.tsx`, client.ts Pad v2 section, fixtures parts.ts (pt-33..48, CALIBER_BY_REF, m3keEvents, PR-0050), reports.ts (rep-03..05).
 - Tested iteration_29 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q77–80.
 
+### Inbound Shipping stages + Track a package (2026-09-26)
+- `/shipping/inbound`: 4 stage tabs (Label Requests → Sent → In Transit → Delivered-unscanned), KPI strip, create-label sheet via mock Parcel Pro adapter (`api/carriers/parcelpro.ts`), resend / follow-up / void+reissue, simulate carrier scan, intake arrival auto-match by tracking#. Seeds sh-01..sh-10.
+- Track a package: global search SHIPMENTS group, `TrackingPanel` slide-over (status/ETA, carrier, insured, newest-first events, copyable client one-liner), `TrackButton` on Client 360 + Inbox thread header.
+- MH ruling (Inbox fix): button appears whenever the client has ANY shipment — anchored estimate's live shipment first, else client shipments newest-first; several → one button + `+N` badge, panel lists the rest ("Also for <client>", tap to switch). Tested iteration_30 + iteration_31.
+
+### Supervisor Pad additions (2026-09-26)
+- Parts tab segment **History**: every past request in the room, search by part name/number/PR#, status + job filters, detail sheet with "Who touched it"; composer shows "Past requests on this job".
+- iPad camera: `<input type=file accept=image/* capture=environment>` on every job card / detail → slot sheet (client-visible vs internal) → attach / attach & shoot another → writes to the shared job photos (RS + RW job pages). Local object URLs only (prototype — no upload).
+- Pad `Sheet` closes on Escape; fixture id collision pr-04 → pr-14 fixed. Tested iteration_31 (all pass).
+
 ### Inbox Staff section + Client request notes (2026-09-26)
 - Inbox: "Staff" sidebar section (MH/Walter/Vienna/MM + open-assigned counts) → colleague inbox view (`?staff=`), header "X’s inbox", "Back to my inbox", read + reply. `getStaffInboxRows`, `getColleagueInbox`.
 - Client requests: `Job.clientRequests[]`; amber card on RS + RW job pages (far from internal Notes); Pad per-card "Client request" add; CLIENT REQUESTS (n) badge + list on pad/wm cards; scan pop-up with "Understood" ack (Bulk/Station/WM/Pad scan) logging who/when; mandatory QC checklist (Done / N/A+reason / undo) gating qc_pass, finishJob, Pad Advance. Seeds j-30, j-04, j-16. `components/jobs/ClientRequests.tsx`.
@@ -204,7 +214,9 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - P2: cross-division inventory rules unruled (amber)
 
 ### Upcoming
+- E18 part 2 (full parts workflow) once MH walks the pad on the iPad
 - amber items in DECISIONS (RGTime hardening, punch corrections, kiosk signature capture)
+- 03-OPEN-QUESTIONS.md verdicts (Q1–Q80) pending from MH
 
 ---
 

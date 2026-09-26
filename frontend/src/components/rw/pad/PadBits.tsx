@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { fmtMoney } from '@/lib/format';
 
 // Tablet-native primitives for the Supervisor Pad — iOS feel: 44px+ targets, sheets, large titles. Nothing from the desktop shell.
@@ -14,15 +14,16 @@ export const Chip = ({ children, tone = 'neutral', testId, onClick }: { children
 };
 
 // Bottom sheet — slides up, dims the board, closes on scrim tap or X. Comfortable in both orientations.
-export const Sheet = ({ title, sub, onClose, children, testId, wide }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; testId: string; wide?: boolean }) => (
-  <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 sm:items-center sm:p-6" onClick={onClose}>
+export const Sheet = ({ title, sub, onClose, children, testId, wide }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; testId: string; wide?: boolean }) => {
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
+  return <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 sm:items-center sm:p-6" onClick={onClose}>
     <div data-testid={testId} onClick={(e) => e.stopPropagation()} className={`flex max-h-[92vh] w-full flex-col rounded-t-[28px] border border-white/10 bg-[#161b22] text-slate-100 shadow-2xl sm:rounded-[28px] ${wide ? 'sm:max-w-5xl' : 'sm:max-w-2xl'} animate-rise`}>
       <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-white/20 sm:hidden" />
       <div className="flex items-start justify-between gap-3 px-6 pb-3 pt-4"><div><h2 className="text-2xl font-bold tracking-tight text-white">{title}</h2>{sub && <div className="mt-0.5 text-sm text-slate-400">{sub}</div>}</div><button data-testid={`${testId}-close`} onClick={onClose} aria-label="Close" className="min-h-[44px] min-w-[44px] rounded-full bg-white/10 p-2 text-slate-200"><X size={22} className="mx-auto" /></button></div>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8">{children}</div>
     </div>
-  </div>
-);
+  </div>;
+};
 
 export const Price = ({ value, testId }: { value?: number; testId?: string }) => <span data-testid={testId} className={`font-mono text-base ${value === undefined ? 'text-slate-500' : 'text-white'}`}>{value === undefined ? 'no price' : fmtMoney(value)}</span>;
 

@@ -171,3 +171,9 @@ One entry per build session: what was built · what was decided · what was test
 - **Seed**: cal. 3135 movement set (pt-33…41 + existing), model parts across 16610 / 126710 / 114060 (pt-42…48), pt-02 renumbered **25-16610**, pre-learned "bezel insert black" → 315-24280, GENERIC **PR-0050** in review on E02016 ("crystal ring for 16610").
 - **Tested**: iteration_29 — all flows pass (the two notes were a tester-side extra line and opaque ids — ids now use the PR number).
 - **Open questions**: 77. Does the client-approval email carry the portal approve/decline action (today: link to `/rc`, decision simulated on the pad)? 78. Should M3KE similarity be token-based as now, or a real model in KEEPER? 79. Caliber table: derive from a watch `caliber` field in KEEPER rather than reference prefix? 80. Should the manager review gate apply to WM-room bench requests too (today: bench requests keep the direct approve path)?
+
+## Inbound Shipping · Track a package — Inbox fix (2026-09-26, MH ruling)
+- **Ruling**: the Track button appears whenever the thread's client has ANY shipment. Order: anchored estimate's live shipment first; else the client's shipments newest-first. Several → one button with a `+N` badge; the panel opens on the primary and lists the rest under "Also for <client>" (tap to switch).
+- **Code**: `TrackButton` / `TrackingPanel(others, onSelect)` in `components/shipping/ShippingBits.tsx`; seed `sh-10` (Eleanor's bracelet parcel, `arrived`) gives c-02 two shipments; excluded from the inbound board.
+- **Pad**: fixture id collision `pr-04` (E18 seed) renamed `pr-14 / PR-0054`, `pr-10` renumbered `PR-0055` (PR-0050 stays the Pad v2 generic line); pad `Sheet` closes on Escape.
+- **Tested**: iteration_31 — Inbox / Client 360 / Inbound counts, Pad Parts History (filters, detail, past-on-job), iPad camera capture (slot sheet, attach, shoot another, shared job photos) — all pass.
