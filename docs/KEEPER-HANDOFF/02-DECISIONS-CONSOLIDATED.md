@@ -231,3 +231,16 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | 2026-09-26 | Unruled: audit row on viewing a colleague's inbox; auto-reassign on reply. | UNKNOWN | provisional (amber) |
 
 **Modules touched:** comms-hub
+
+## Supervisor Pad v2 — MH brief + ruling, 2026-09-26
+
+| date | decision | rationale | status |
+|---|---|---|---|
+| 2026-09-26 | `/rw/pad` is scoped to ONE user — the watchmaker-room supervisor on an iPad — with its own tablet-native UI (Jobs · Parts · Review). | Brief | locked |
+| 2026-09-26 | **Sale prices are shown on the supervisor's pad** (Parts tab suggestions and request lines, Review tab). Overrides the `/rw` hide-money default for this screen only. | MH ruling | locked |
+| 2026-09-26 | Parts flow: scan → job/reference/caliber → automatic caliber query → reference-scoped description search (learned on top) → GENERIC free-text fallback → **Manager review**, never straight to the client. Manager fills price (required) + part#, then "Send for client approval" (Outbox). | Brief | locked |
+| 2026-09-26 | **M3KE capture**: every resolution of a generic description to a real part# (+price) and every supervisor selection is appended to one inspectable log (`m3keEvents`); learned mappings rank top for that reference / caliber and are tagged. | Brief (training-data plumbing) | locked |
+| 2026-09-26 | Tech reassignment from the pad is a **supervisor override** (audited); scan assignment via Bulk Assign remains the morning path. | Brief | locked |
+| 2026-09-26 | Unruled: portal action in the approval email; token similarity vs model; caliber as a watch attribute; whether bench (WM) requests also pass the manager gate. | UNKNOWN | provisional (amber) |
+
+**Modules touched:** rolliworking, workshop, comms-hub

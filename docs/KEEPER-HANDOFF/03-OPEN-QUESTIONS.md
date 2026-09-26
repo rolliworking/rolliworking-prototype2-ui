@@ -72,6 +72,10 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | 74 | Show client requests on the client's `/rc` job card? | `/rc` | staff/workshop only | yes → render list on portal card | |
 | 75 | "Understood" once per person per job, or every scan? | scan pop-up | every scan while open | once → skip if actor already acked | |
 | 76 | Restrict N/A check-off at QC to supervisor tier? | QC checklist | any signed-in user | yes → tier gate | |
+| 77 | Parts approval email — portal approve/decline action? | Review → Send | link to `/rc`; decision simulated on pad | yes → portal parts approval page | |
+| 78 | M3KE similarity: token overlap (prototype) vs model in KEEPER? | Parts search | token-based | — | |
+| 79 | Caliber as a watch attribute instead of reference-prefix table? | `CALIBER_BY_REF` | prefix table | yes → `Watch.caliber` | |
+| 80 | Manager review gate for WM-room bench requests too? | Review → Bench | direct approve path kept | yes → all requests via review | |
 
 ## Amber items not numbered above (from DECISIONS "provisional")
 | item | where | prototype does | verdict |

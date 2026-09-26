@@ -126,6 +126,11 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Tested iteration_26: 100%
 - QC-fail credit ruling (2026-09-26): credit stands (locked).
 
+### Supervisor Pad v2 (2026-09-26) — MH ruling: sale prices shown on the pad
+- `/rw/pad` rebuilt tablet-native: Jobs (stepper, Advance/Send back, tech picker = supervisor override, detail sheet photos + condition report), Parts (scan → ref/caliber → caliber query → reference-scoped search with learned tag → GENERIC fallback → manager review, prices shown), Review (manager: price + part# per line, M3KE capture toast, Send for client approval → Outbox, simulated client decision, Allocate → Picking, bench WM approvals, M3KE log sheet).
+- Files: `components/rw/pad/{PadBits,PadJobs,PadParts,PadReview}.tsx`, client.ts Pad v2 section, fixtures parts.ts (pt-33..48, CALIBER_BY_REF, m3keEvents, PR-0050), reports.ts (rep-03..05).
+- Tested iteration_29 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q77–80.
+
 ### Inbox Staff section + Client request notes (2026-09-26)
 - Inbox: "Staff" sidebar section (MH/Walter/Vienna/MM + open-assigned counts) → colleague inbox view (`?staff=`), header "X’s inbox", "Back to my inbox", read + reply. `getStaffInboxRows`, `getColleagueInbox`.
 - Client requests: `Job.clientRequests[]`; amber card on RS + RW job pages (far from internal Notes); Pad per-card "Client request" add; CLIENT REQUESTS (n) badge + list on pad/wm cards; scan pop-up with "Understood" ack (Bulk/Station/WM/Pad scan) logging who/when; mandatory QC checklist (Done / N/A+reason / undo) gating qc_pass, finishJob, Pad Advance. Seeds j-30, j-04, j-16. `components/jobs/ClientRequests.tsx`.
