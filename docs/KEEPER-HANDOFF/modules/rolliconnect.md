@@ -30,3 +30,9 @@ Warm, customer-grade skin (cream paper, serif headings) — deliberately differe
 - Approving an estimate on the portal also advances a linked job waiting on the customer; approving an inspection report approves its estimate.
 - Client-side request close was added after staff close; portal can only close `new` requests.
 - Decline on the report page had an error path fixed in iteration 23 (reason now lands on the job timeline).
+
+## Post-E16 additions (2026-09-26) — View as client · Your requests · client photo sections
+- **View as client** (VB3-14): `startViewAsClient(clientId, returnTo)` writes a portal session with `viewAs {by, at, returnTo}`; the shell shows the amber "VIEWING AS CLIENT — name" banner + "Exit to staff view" (`exitViewAsClient` → returns to the staff page). Same portal read functions as the client → staff-only data cannot leak by construction. Both start and exit are audited (`comms`). `⚠ DRIFT`: the prototype does not block client *actions* while viewing (approve / pay / message) — Keeper must make view-as strictly read-only (Q90).
+- **Your requests** (`portalGetRequestCards`): one card per request across the lifecycle — in progress → decision → received → stale estimate → history; watch identity + reference on every card; stale (expired) estimate keeps its figure viewable with a "Ready to send it in?" CTA into Messages.
+- **Photo sections** (VB3-15, `portalPhotoSections`): Arrival (package + intake) / Condition (inspection, client-visible slots) / Completed (finish photos + service evidence minus hidden serial / parts grading); grid + lightbox; staff-only slots excluded at the data layer (`STAFF_ONLY_PHOTO`).
+- Seed client **Robert Calloway (c-30)** = the multi-request walk (R1 history · R2 expired/never received · R3 in service · R4 new web request); Client 360 flags never-received expired estimates with a red aging chip.

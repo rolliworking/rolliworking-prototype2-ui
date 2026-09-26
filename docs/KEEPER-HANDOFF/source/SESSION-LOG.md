@@ -191,3 +191,7 @@ One entry per build session: what was built · what was decided · what was test
 ## Send invoice + mock payment page (2026-09-26)
 - `sendInvoice`, `getPayPage`, `payViaLink`, `payLinkPath/Url`; SO gains `payLinkToken`, `invoiceSentAt`, `invoiceSends[]`; Outbox emails carry `payLink` (rendered as a Pay button in the preview). Public route `/pay/:token` (`pages/PayPage.tsx`), Payment-link card on the SO page, portal Pay button → same page.
 - Demo walk (all same tab — the mock store is per tab): SO-26-0102 → Send invoice → Outbox → Pay invoice → pay $200 → Return → Edit, shipping 45 → Open MOCK PAYMENT PAGE → $525 / balance $325 → Full balance → Pay → Return → badge **Paid**. Self-tested end to end (RS + portal).
+
+## View as client + Robert Calloway demo (2026-09-26)
+- Built `startViewAsClient/exitViewAsClient` (portal session with `viewAs`), `portalGetRequestCards`, `portalPhotoSections/portalGetPhotoSections`; UI `ViewAsClientButton`, `RcRequestCards`, `RcPhotoSections`, amber banner in `RcShell`; RC home now leads with "Your requests"; RC watch page shows photo sections per job. Client 360 estimates get the never-received aging chip.
+- Seeded Robert (c-30) across clients / watches / estimates / jobs / salesOrders / requests / portal messages / comms threads / rw photos (incl. staff-only decoys to prove exclusion).

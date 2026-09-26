@@ -410,3 +410,8 @@ _Confirmation retest of iteration_32 fixes on /rw/bench plus the previously-skip
 
 _Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
 - LOW (optional polish): Append the 'saved HH:MM' timestamp to bench-offline-banner text so it matches the spec 'reconnecting… showing last data · saved HH:MM' (currently only 'reconnecting… showing last data' is displayed).
+
+## Iteration 34
+
+_Ran full frontend E2E for RolliSuite View-as-Client block (T1–T8) via Playwright against the public preview URL as Vienna (staff) and robert.calloway@example.com (portal magic link). All acceptance criteria for T1–T7 pass; T8 verified for Robert (magic-link auto-login, no banner, 4 cards) — Camille cross-client isolation was set up but full assertion was cut mid-run (see context note). Zero staff-only leak strings found on /rc/home, /rc/watches/w-42, /rc/messages while viewing-as._
+

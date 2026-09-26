@@ -1,6 +1,6 @@
 # 03 — OPEN QUESTIONS · MH VERDICT SHEET
 
-How to use: answer each line in the **Verdict** column (yes / no / other + one sentence). Numbers match `source/SESSION-LOG.md` (the running list, Q1–Q89; Q81–Q89 added in the post-E16 refresh with recommended defaults in bold). Columns: **Question** (plain language) · **Where it shows** (UI) · **Prototype does today** (the provisional choice) · **If yes / if no / other** (what changes in KEEPER). Items already ruled since being listed are marked **RULED** and kept for completeness.
+How to use: answer each line in the **Verdict** column (yes / no / other + one sentence). Numbers match `source/SESSION-LOG.md` (the running list, Q1–Q90; Q81–Q90 added in the post-E16 refresh with recommended defaults in bold). Columns: **Question** (plain language) · **Where it shows** (UI) · **Prototype does today** (the provisional choice) · **If yes / if no / other** (what changes in KEEPER). Items already ruled since being listed are marked **RULED** and kept for completeness.
 
 | # | Question | Where it shows | Prototype does today | If yes / if no / other | Verdict |
 |---|---|---|---|---|---|
@@ -86,6 +86,8 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | 87 | Who sets a tech's monthly component goal, and where? | `/rw/bench` Goals | fixture `techGoals` | **Default: manager in Setup → Users (`tech_goal {tech, month, goal}`), unit = components.** | |
 | 88 | Are message read receipts visible to others (e.g. "Rosa read this")? | job Messages | `readBy[]` stored, not shown | **Default: no — private read state; KEEPER logs reads for accountability only.** | |
 | 89 | Bench identity registration: does a supervisor adopt a bench from the pad (PIN) or does IT register it server-side? | `/rw/bench` settings | localStorage per device | **Ruled 2026-09-26: station record server-side; replaced iPad re-adopts.** Open: who may adopt — default: manager PIN on the device. | |
+
+| 90 | View as client — strictly read-only in Keeper (block approve / pay / message while impersonating), or allow staff to act on the client's behalf with an audit row? | `/rc` view-as banner | actions not blocked | **Default: read-only; acting on behalf is a separate, audited staff action on the RS side.** | |
 
 ## Amber items not numbered above (from DECISIONS "provisional")
 | item | where | prototype does | verdict |

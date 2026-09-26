@@ -273,3 +273,12 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Full payment flips the SO badge Unpaid → Paid and the tail (ready to ship / ready for pickup) accordingly.
 
 **Modules touched:** cross-cutting
+
+## View as client + multi-request client demo (Robert Calloway) — 2026-09-26 (MH brief; VB3-14/15 built)
+- **View as client**: button on Client 360 and every Inbox thread header → opens `/rc` as that client using the SAME portal read functions (so nothing staff-only can leak by construction): no internal notes, no job messages, no hidden-serial / parts-grading photos, no costs/margins. Persistent amber banner "VIEWING AS CLIENT — name", "Exit to staff view" returns to where staff came from. Impersonation is audited (start + exit). Read-only in spirit — the prototype does not yet block client actions while viewing (amber: Keeper must make view-as strictly read-only, Q90).
+- **Portal "Your requests"**: one card per request across the lifecycle; order = in progress → decision → received → stale estimate → history (compact list). Every card carries watch identity + reference (+ estimate/request number). Stale estimate shows its state plainly ("Estimate expired · watch not received") with a gentle "Ready to send it in?" CTA into Messages.
+- **Client-facing photos**: per job, three labelled sections in timeline order — Arrival (intake) / Condition (inspection) / Completed (finish) — grid + tap-to-zoom lightbox, each photo labelled and dated. Staff-only slots (hidden serial, parts grading, workbench, parts, other) are excluded at the data layer (`portalPhotoSections`).
+- **Staff side**: expired estimates with no watch received carry a red aging chip on Client 360 ("watch never received · Nd").
+- Seed: c-30 Robert Calloway — R1 E00871/E01871/SO-25-0031 (closed, paid, picked up, full photo set), R2 E00990 (expired, GMT never sent in), R3 E02040/E02041 (Datejust 41 in service, arrival + condition photos, open thread), R4 RQ-26-0052 (web, new, Inbox Needs reply).
+
+**Modules touched:** rw-shop-floor, rw-bulk-assign, rw-supervisor-pad, rw-bench-pad, rw-picking, client-requests, comms-hub, client-360, shipping-inbound, job-messages
