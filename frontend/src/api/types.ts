@@ -420,9 +420,11 @@ export type Bin = 'inspection' | 'concierge';
 
 export interface PackagePhoto {
   id: string;
-  source: 'webcam' | 'upload';
+  source: 'webcam' | 'upload' | 'camera';
   dataUrl: string;
   fileName?: string;
+  slot?: string;
+  clientVisible?: boolean;
 }
 
 export interface Package {
@@ -642,7 +644,7 @@ export interface PartsRequest {
   items?: PartsRequestItem[];
   source?: 'chat' | 'wm' | 'pad';
   decisionNote?: string;
-  reference?: string; caliber?: string;
+  reference?: string; caliber?: string; history?: { at: string; by: string; station: string; action: string }[];
   sentForApprovalAt?: string; sentBy?: string; clientDecidedAt?: string; allocatedAt?: string; emailId?: string;
 }
 

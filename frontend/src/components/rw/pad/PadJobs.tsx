@@ -5,6 +5,7 @@ import type { JobPhotoView, PadCard, PadConditionView, SendBackReason } from '@/
 import { ClientRequestBadge, ClientRequestList, QcRequestChecklist } from '@/components/jobs/ClientRequests';
 import { PartDot, PartLocations } from '@/components/rw/RwBits';
 import { Big, Chip, Sheet } from './PadBits';
+import { CameraCapture } from './PadCamera';
 import { fmtDate, fmtTime } from '@/lib/format';
 
 type Say = (m: string, tone?: 'ok' | 'learn' | 'err') => void;
@@ -31,13 +32,13 @@ const TechSheet = ({ card, onClose, onDone }: { card: PadCard; onClose: () => vo
 };
 
 // Detail sheet — photo set (grid + zoom) AND the condition report, read-only. The supervisor never leaves the pad.
-const DetailSheet = ({ card, onClose }: { card: PadCard; onClose: () => void }) => {
+const DetailSheet = ({ card, onClose, say }: { card: PadCard; onClose: () => void; say: Say }) => {
   const [photos, setPhotos] = useState<JobPhotoView[]>([]); const [cond, setCond] = useState<PadConditionView | null>(null); const [open, setOpen] = useState<JobPhotoView | null>(null); const [zoom, setZoom] = useState(false);
-  useEffect(() => { api.getJobPhotoViews(card.job.id).then(setPhotos); api.getPadCondition(card.job.id).then(setCond); }, [card.job.id]);
+  const [tick, setTick] = useState(0); useEffect(() => { api.getJobPhotoViews(card.job.id).then(setPhotos); api.getPadCondition(card.job.id).then(setCond); }, [card.job.id, tick]);
   return <Sheet wide testId="pad-detail-sheet" title={<span className="font-mono">{card.job.number}</span>} sub={<>{card.job.watch.brand} {card.job.watch.model} · <span className="font-mono">{card.job.watch.reference}</span> · {card.stageLabel} · {card.job.assignees.join(', ') || 'unassigned'}</>} onClose={onClose}>
     <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-      <section><h3 className="mb-2 inline-flex items-center gap-2 text-lg font-semibold text-white"><Camera size={18} /> Photos <span className="font-mono text-slate-400">{photos.length}</span></h3>
-        <div data-testid="pad-detail-photos" className="grid grid-cols-2 gap-3 sm:grid-cols-3">{photos.map((p) => <button key={p.id} data-testid={`pad-photo-${p.id}`} onClick={() => { setOpen(p); setZoom(false); }} className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-white/5"><img src={p.url} alt={p.slot} className="h-full w-full object-cover" /><span className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1.5 text-left text-sm"><span className={`mr-1.5 rounded-sm px-1 text-[10px] uppercase ${p.kind === 'intake' ? 'bg-sky-500/80' : 'bg-amber-500/80 text-black'}`}>{p.kind}</span>{p.slot}</span></button>)}{!photos.length && <p className="col-span-full py-8 text-center text-slate-500">No photos on this job yet.</p>}</div></section>
+      <section><div className="mb-2 flex items-center justify-between"><h3 className="inline-flex items-center gap-2 text-lg font-semibold text-white"><Camera size={18} /> Photos <span className="font-mono text-slate-400">{photos.length}</span></h3><CameraCapture jobId={card.job.id} jobNumber={card.job.number} onDone={(m) => { say(m); setTick((t) => t + 1); }} /></div>
+        <div data-testid="pad-detail-photos" className="grid grid-cols-2 gap-3 sm:grid-cols-3">{photos.map((p) => <button key={p.id} data-testid={`pad-photo-${p.id}`} onClick={() => { setOpen(p); setZoom(false); }} className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-white/5"><img src={p.url} alt={p.slot} className="h-full w-full object-cover" /><span className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1.5 text-left text-sm"><span className={`mr-1.5 rounded-sm px-1 text-[10px] uppercase ${p.kind === 'intake' ? 'bg-sky-500/80' : 'bg-amber-500/80 text-black'}`}>{p.kind}</span>{p.slot}</span></button>)}{!photos.length && <p data-testid="pad-detail-nophotos" className="col-span-full py-8 text-center text-slate-500">No photos on this job yet — tap Camera to take the first.</p>}</div></section>
       <section data-testid="pad-detail-condition"><h3 className="mb-2 inline-flex items-center gap-2 text-lg font-semibold text-white"><ClipboardList size={18} /> Condition on arrival</h3>
         {cond?.source === 'none' && <p className="text-slate-500">No inspection recorded yet.{cond.notes && <> Intake note: {cond.notes}</>}</p>}
         {cond && cond.source !== 'none' && <><p className="mb-2 text-sm text-slate-400">{cond.source === 'report' ? 'Condition report' : 'Inspection form'} · {cond.issuedBy} · {cond.issuedAt && fmtDate(cond.issuedAt)}</p>
@@ -63,11 +64,11 @@ export const PadJobs = ({ cards, hit, say, reload }: { cards: PadCard[]; hit: st
       <div className="flex items-center gap-2">{c.parts.map((p) => <PartDot key={p.key} k={p.key} size={16} hollow={p.partStatus === 'not_started' || p.partStatus === 'in_progress'} title={`${p.label} · ${api.RW_STATIONS.find((s) => s.key === p.station)?.label}`} />)}<span className="text-xs text-slate-500">{c.photos} photos</span></div>
       <PartLocations parts={c.parts} />
       {c.stage === 'testing' && (c.job.clientRequests?.length ?? 0) > 0 ? <div data-testid={`pad-qc-checklist-${c.job.id}`} className="rounded-2xl border border-amber-400/50 bg-amber-400/10 p-3"><div className="mb-2 text-xs font-bold uppercase tracking-wide text-amber-300">Final QC · client requests checklist</div><QcRequestChecklist job={c.job} run={async (f, m) => { await run(f, m); reload(); }} dark /></div> : <ClientRequestList job={c.job} testId={`pad-client-requests-${c.job.id}`} />}
-      <div className="mt-auto grid grid-cols-2 gap-2"><Big testId={`pad-advance-${c.job.id}`} tone="primary" disabled={!c.canAdvance} onClick={() => run(() => api.padAdvance(c.job.id), `${c.job.number} advanced`)}>Advance <ArrowRight size={18} /></Big><Big testId={`pad-sendback-${c.job.id}`} disabled={!c.canSendBack} onClick={() => setSendBack(c)}><ArrowLeft size={18} /> Send back</Big></div>
+      <div className="mt-auto grid grid-cols-[1fr_1fr_auto] gap-2"><Big testId={`pad-advance-${c.job.id}`} tone="primary" disabled={!c.canAdvance} onClick={() => run(() => api.padAdvance(c.job.id), `${c.job.number} advanced`)}>Advance <ArrowRight size={18} /></Big><Big testId={`pad-sendback-${c.job.id}`} disabled={!c.canSendBack} onClick={() => setSendBack(c)}><ArrowLeft size={18} /> Send back</Big><CameraCapture compact jobId={c.job.id} jobNumber={c.job.number} onDone={(m) => { say(m); reload(); }} /></div>
     </article>; })}
     {!cards.length && <p className="col-span-full py-16 text-center text-lg text-slate-500">No jobs in the room.</p>}
     {sendBack && <SendBackSheet card={sendBack} onClose={() => setSendBack(null)} onDone={say} />}
     {tech && <TechSheet card={tech} onClose={() => setTech(null)} onDone={say} />}
-    {detail && <DetailSheet card={detail} onClose={() => setDetail(null)} />}
+    {detail && <DetailSheet card={detail} onClose={() => { setDetail(null); reload(); }} say={say} />}
   </div>;
 };

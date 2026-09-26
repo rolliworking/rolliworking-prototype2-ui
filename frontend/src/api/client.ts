@@ -132,7 +132,7 @@ const store = {
   tasks: fx.tasks.map((t) => ({ ...t })),
   pinned: fx.pinned.map((p) => ({ ...p })),
   parts: fx.parts.map((p): Part => ({ ...p, compatibleRefs: [...p.compatibleRefs], aliases: [...p.aliases] })),
-  partsRequests: fx.partsRequests.map((r): PartsRequest => ({ ...r, chat: [...r.chat], searchTerms: [...r.searchTerms] })),
+  partsRequests: fx.partsRequests.map((r): PartsRequest => ({ ...r, chat: [...r.chat], searchTerms: [...r.searchTerms], history: [...(r.history ?? [])], items: r.items?.map((i) => ({ ...i })) })),
   partsKnowledge: fx.partsKnowledge.map((k): PartsKnowledgeEntry => ({ ...k })),
   salesOrders: fx.salesOrders.map((o): SalesOrder => ({ ...o, lines: o.lines.map((l) => ({ ...l })), payments: [...o.payments] })),
   packages: fx.packages.map((p) => ({ ...p, contents: [...p.contents], photos: [...p.photos] })),
@@ -1989,7 +1989,7 @@ const prRefs = (r: PartsRequest): PartsRequestWithRefs => {
   return { ...r, job, part: r.partId ? store.parts.find((p) => p.id === r.partId) ?? null : null, client: byId(fx.clients, job.clientId), watch: byId(store.watches, job.watchId) };
 };
 const partsStamp = (r: PartsRequest, detail: string) => {
-  const a = actor();
+  const a = actor(); (r.history ??= []).push({ at: new Date().toISOString(), by: a.by, station: a.station, action: detail });
   appendAudit({ type: 'parts', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${r.number} · ${detail}` });
 };
 
@@ -2405,7 +2405,7 @@ const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefin
 
 const portalDocs = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalDocument[] => {
   const docs: PortalDocument[] = [];
-  jobs.forEach((j) => j.photos.forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
+  jobs.forEach((j) => j.photos.filter((p) => p.clientVisible !== false).forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
   jobs.forEach((j) => rs.evidence.filter((e) => e.jobId === j.id).forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'photo', title: `Service evidence · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label}${e.depthRating ? ` · ${e.depthRating}` : ''}${e.grades ? ` · ${e.grades.join(', ')}` : ''} · ${j.number}`, at: e.at, dataUrl: e.photo.dataUrl })));
   store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => p.photos.forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
   ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
@@ -3519,7 +3519,19 @@ export async function pickAction(taskId: string, action: 'picked' | 'short' | 'f
   else { if (!location?.trim()) throw new Error('Type the actual location'); if (part) part.location = location.trim(); t.location = location.trim(); t.status = 'open'; t.note = 'found elsewhere'; appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, detail: `${part?.name ?? 'part'} relocated → ${location.trim()}` }); }
   return resolve(pickView(t));
 }
-export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => p), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.fileName || `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by }))]); }
+export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => p), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by }))]); }
+// Pad camera — photo binds to the open job (job ↔ watch identity), stamped who / when / slot. Client sees only client-visible slots.
+export const PHOTO_SLOTS: { key: string; label: string; clientVisible: boolean }[] = [{ key: 'workbench', label: 'Workbench', clientVisible: false }, { key: 'movement', label: 'Movement', clientVisible: true }, { key: 'dial', label: 'Dial', clientVisible: true }, { key: 'caseback', label: 'Caseback', clientVisible: true }, { key: 'bracelet', label: 'Bracelet', clientVisible: true }, { key: 'parts', label: 'Parts', clientVisible: false }, { key: 'other', label: 'Other', clientVisible: false }];
+export async function capturePadPhoto(jobId: string, dataUrl: string, slotKey: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); const slot = PHOTO_SLOTS.find((s) => s.key === slotKey); if (!slot) throw new Error('Pick a slot'); const a = actor();
+  j.photos.unshift({ id: newId('ph'), source: 'camera', dataUrl, fileName: `${slot.label}.jpg`, slot: slot.label, clientVisible: slot.clientVisible, at: new Date().toISOString(), by: a.by, station: a.station });
+  jobStamp(j, `Photo captured on the pad · ${slot.label}${slot.clientVisible ? ' · client-visible' : ''}`); return resolve(jobRefs(j));
+}
+// Pad parts history — every request on room jobs, newest first, with a derived stage label
+export async function getRoomPartsHistory(): Promise<(PartsRequestWithRefs & { stageLabel: string })[]> {
+  const ids = new Set(store.jobs.filter((j) => j.division === getSessionDivision()).map((j) => j.id));
+  return resolve(store.partsRequests.filter((r) => ids.has(r.jobId)).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)).map((r) => { const picks = rw18.picks.filter((p) => p.prId === r.id); const picked = picks.length > 0 && picks.every((p) => p.status === 'picked'); return { ...prRefs(r), stageLabel: picked || (r.status === 'received' && r.allocatedAt) ? 'picked' : r.status === 'pending' ? 'pending review' : r.status === 'rejected' ? 'declined' : r.status.replace('_', ' ') }; }));
+}
 export async function getRoomSummary(): Promise<RoomSummary> { const room = roomJobs(); return resolve({ jobsInRoom: room.filter((j) => STAGE_ORDER.includes(j.status)).length, waitingOnParts: room.filter((j) => activeHold(j)?.type === 'parts' || store.partsRequests.some((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order'))).length, waitingOnApproval: room.filter((j) => j.status === 'awaiting_customer_approval').length, picksRemaining: rw18.picks.filter((t) => t.status === 'open').length, shortsToday: rw18.picks.filter((t) => t.status === 'short').length }); }
 export const PART_LABELS = PART_LABEL;
 

@@ -10,10 +10,11 @@ export const AgeChip = ({ days, testId, green = 7, red = 30 }: { days: number; t
 );
 
 // Slide-over the concierge reads top to bottom to a caller: status + ETA large, direction, label details, timeline newest-first, copyable one-liner
-export const TrackingPanel = ({ id, onClose }: { id: string; onClose: () => void }) => {
+export const TrackingPanel = ({ id, others = [], onSelect, onClose }: { id: string; others?: ShipmentWithRefs[]; onSelect?: (id: string) => void; onClose: () => void }) => {
   const [s, setS] = useState<ShipmentWithRefs | null>(null); const [copied, setCopied] = useState(false); const [msg, setMsg] = useState<string | null>(null);
   const load = () => api.getShipment(id).then(setS); useEffect(() => { void load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!s) return null;
+  const rest = others.filter((o) => o.id !== s.id);
   const line = api.clientStatusLine(s); const status = s.lastEvent?.status ?? api.SHIP_STAGE_LABEL[s.stage];
   const copy = async () => { try { await navigator.clipboard.writeText(line); } catch { /* clipboard blocked in some contexts */ } setCopied(true); setTimeout(() => setCopied(false), 2000); };
   return <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onClick={onClose}><aside data-testid="tracking-panel" onClick={(e) => e.stopPropagation()} className="flex h-full w-[460px] flex-col overflow-y-auto bg-surface shadow-pop animate-rise">
@@ -26,15 +27,25 @@ export const TrackingPanel = ({ id, onClose }: { id: string; onClose: () => void
       <div><div className="mb-1.5 font-semibold text-ink">Travel timeline · newest first</div><ol data-testid="tracking-events" className="space-y-2">{[...s.events].reverse().map((e, i) => <li key={i} data-testid={`tracking-event-${i}`} className="flex gap-2"><MapPin size={12} className="mt-0.5 shrink-0 text-ink-400" /><div><div className="font-medium text-ink">{e.status}</div><div className="text-ink-500">{e.location}{e.note && ` · ${e.note}`}</div><div className="text-[10px] text-ink-400">{fmtDate(e.at)} {fmtTime(e.at)}</div></div></li>)}{!s.events.length && <li className="text-ink-400">No carrier scans yet.</li>}</ol></div>
       {s.stage !== 'delivered_unscanned' && s.stage !== 'arrived' && s.trackingNumber && <Button size="sm" data-testid="tracking-simulate" onClick={() => api.simulateTrackingEvent(s.id).then(() => { setMsg('Tracking event added'); void load(); }).catch((e) => setMsg(e.message))}>Simulate next carrier scan</Button>}{msg && <span className="ml-2 text-ink-500">{msg}</span>}
       <div><div className="mb-1 font-semibold text-ink">Our stamps</div><ul className="space-y-0.5 text-[11px] text-ink-500">{[...s.stamps].reverse().map((st, i) => <li key={i}>{fmtDate(st.at)} {fmtTime(st.at)} · <b className="text-ink-700">{st.by}</b> · {st.station} · {st.action}</li>)}</ul></div>
+      {rest.length > 0 && <div data-testid="tracking-others" className="border-t border-line pt-3"><div className="mb-1.5 font-semibold text-ink">Also for {s.client.firstName} · {rest.length} more</div><ul className="space-y-1">{rest.map((o) => <li key={o.id}><button data-testid={`tracking-other-${o.id}`} onClick={() => onSelect?.(o.id)} className="flex w-full items-center gap-2 rounded-sm border border-line bg-canvas/50 px-2 py-1.5 text-left hover:bg-canvas">{o.direction === 'inbound' ? <ArrowDownToLine size={11} className="text-sky-700" /> : <ArrowUpFromLine size={11} className="text-violet-700" />}<span className="font-mono text-ink">{o.estimate.number}</span><span className="text-ink-600">{o.lastEvent?.status ?? api.SHIP_STAGE_LABEL[o.stage]}</span><span className="ml-auto text-[10px] text-ink-400">{fmtDate(o.requestedAt)}</span></button></li>)}</ul></div>}
     </div></aside></div>;
 };
 
-// "Track package" affordance for Client 360 / Inbox — renders only when the client has a shipment
+// "Track package" affordance for Client 360 / Inbox — one button; anchored estimate's shipment first, else the client's shipments (most recent on top, rest listed in the panel)
 export const TrackButton = ({ clientId, estimateId, testId = 'track-package' }: { clientId?: string; estimateId?: string; testId?: string }) => {
   const [rows, setRows] = useState<ShipmentWithRefs[]>([]); const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { if (estimateId) api.getShipmentForEstimate(estimateId).then((s) => setRows(s ? [s] : [])); else if (clientId) api.getShipmentsForClient(clientId).then(setRows); }, [clientId, estimateId]);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const [hit, mine] = await Promise.all([estimateId ? api.getShipmentForEstimate(estimateId) : Promise.resolve(null), clientId ? api.getShipmentsForClient(clientId) : Promise.resolve([] as ShipmentWithRefs[])]);
+      const list = hit ? [hit, ...mine.filter((m) => m.id !== hit.id)] : mine;
+      if (live) setRows(list);
+    })();
+    return () => { live = false; };
+  }, [clientId, estimateId]);
   if (!rows.length) return null;
-  return <>{rows.slice(0, 2).map((s) => <button key={s.id} data-testid={`${testId}-${s.id}`} onClick={() => setOpen(s.id)} className="inline-flex items-center gap-1 rounded-sm border border-line bg-surface px-2 py-0.5 text-[11px] text-ink hover:bg-canvas">{s.direction === 'inbound' ? <ArrowDownToLine size={11} /> : <ArrowUpFromLine size={11} />} Track {s.estimate.number} · {api.SHIP_STAGE_LABEL[s.stage]}</button>)}{open && <TrackingPanel id={open} onClose={() => setOpen(null)} />}</>;
+  const s = rows[0];
+  return <><button data-testid={`${testId}-${s.id}`} onClick={() => setOpen(s.id)} className="inline-flex items-center gap-1 rounded-sm border border-line bg-surface px-2 py-0.5 text-[11px] text-ink hover:bg-canvas">{s.direction === 'inbound' ? <ArrowDownToLine size={11} /> : <ArrowUpFromLine size={11} />} Track {s.estimate.number} · {api.SHIP_STAGE_LABEL[s.stage]}{rows.length > 1 && <span data-testid={`${testId}-more`} className="ml-1 rounded-full bg-canvas px-1.5 text-[10px] text-ink-500">+{rows.length - 1}</span>}</button>{open && <TrackingPanel id={open} others={rows} onSelect={setOpen} onClose={() => setOpen(null)} />}</>;
 };
 
 // Create-label sheet: prefilled from the client record + estimate, (mock) address validation shown before the label is created
