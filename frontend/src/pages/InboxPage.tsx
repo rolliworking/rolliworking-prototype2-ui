@@ -7,6 +7,7 @@ import { Provisional } from '@/components/estimates/EstimateBits';
 import { PhotoCapture } from '@/components/intake/ReceiveBits';
 import { field, Flash, Head } from '@/components/rs/RsBits';
 import { TrackButton } from '@/components/shipping/ShippingBits';
+import { TemplateSourceBadge } from '@/components/comms/TemplateEdit';
 import { ViewAsClientButton } from '@/components/clients/ViewAsClientButton';
 import { Button } from '@/components/ui/Button';
 import { fmtDate, fmtTime } from '@/lib/format';
@@ -78,9 +79,23 @@ function Thread({ t, run, onFolder }: { t: ThreadView; run: (f: () => Promise<un
       {preview && <div data-testid="composer-preview" className="mt-2 rounded border border-line bg-canvas/60 p-2 text-[11px]"><div className="font-semibold text-ink">Preview · {preview.subject}</div><pre className="mt-1 whitespace-pre-wrap font-sans text-ink-700">{preview.body}</pre>{preview.missing.length > 0 && <div data-testid="composer-missing" className="mt-1 text-amber-800">Unfilled: {preview.missing.join(' ')}</div>}</div>}
       <input data-testid="composer-subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={`Re: ${c.subject}`} className={`${field} mt-2 block w-full`} />
       <textarea data-testid="composer-text" rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write to the client…" className={`${field} mt-1 block w-full`} />
-      <div className="mt-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2">{photos.length > 0 && <span data-testid="composer-photos" className="text-[11px] text-ink-500">{photos.length} photo{photos.length === 1 ? '' : 's'} attached</span>}<details className="text-[11px]"><summary className="cursor-pointer text-brand">Attach photos</summary><div className="mt-1"><PhotoCapture onAdd={(p) => setPhotos([...photos, ...p])} /></div></details></div><Button variant="primary" data-testid="composer-send" onClick={() => run(async () => { await api.replyInThread(c.id, { text, subject, templateKey: tpl || undefined, photos }); setText(''); setPhotos([]); setPreview(null); setTpl(''); }, 'Queued to Outbox · thread updated')}>Queue to Outbox</Button></div>
+      <div className="mt-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2">{photos.length > 0 && <span data-testid="composer-photos" className="text-[11px] text-ink-500">{photos.length} photo{photos.length === 1 ? '' : 's'} attached</span>}<details className="text-[11px]"><summary className="cursor-pointer text-brand">Attach photos</summary><div className="mt-1"><PhotoCapture onAdd={(p) => setPhotos([...photos, ...p])} /></div></details></div>{tpl && preview && <InboxTemplateTools tkey={tpl} preview={preview} text={text} subject={subject} conversationId={c.id} onReload={async (shopDefault) => { const r = await api.renderTemplate(c.id, tpl, shopDefault); setPreview(r); setText(r.body); setSubject(r.subject); }} />}<Button variant="primary" data-testid="composer-send" onClick={() => run(async () => { await api.replyInThread(c.id, { text, subject, templateKey: tpl || undefined, photos }); setText(''); setPhotos([]); setPreview(null); setTpl(''); }, 'Queued to Outbox · thread updated')}>Queue to Outbox</Button></div>
       <div className="mt-3 flex items-center gap-2 border-t border-line pt-2"><input data-testid="note-text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note — never sent, audited" className={`${field} flex-1 bg-yellow-50/50`} /><Button size="sm" data-testid="note-save" onClick={() => run(async () => { await api.addThreadNote(c.id, note); setNote(''); }, 'Note added')}>Add note</Button></div>
       <div className="mt-2 flex items-center gap-2 text-[11px]"><Provisional note="Mock: emulates a client email reply routed back by the last outbound reply token" /><input data-testid="simulate-text" value={sim} onChange={(e) => setSim(e.target.value)} placeholder="simulate client reply…" className={`${field} flex-1`} /><Button size="sm" data-testid="simulate-inbound" onClick={() => run(async () => { await api.simulateInboundReply(c.id, sim); setSim(''); }, 'Inbound matched by token')}>Simulate inbound</Button></div>
     </div>
   </div>;
 }
+
+// Point-of-use template tools in the reply composer: the textarea IS the inline editor ("just this send" = edit and queue); save it as my template or flip to the shop default
+const InboxTemplateTools = ({ tkey, preview, text, subject, conversationId, onReload }: { tkey: TemplateKey; preview: RenderedTemplate; text: string; subject: string; conversationId: string; onReload: (shopDefault?: boolean) => Promise<void> }) => {
+  const [note, setNote] = useState<string | null>(null);
+  const edited = text !== preview.body || subject !== preview.subject; const mode = edited ? 'one_off' : preview.source;
+  const saveMine = async () => { const vals = await api.mergeValuesForConversation(conversationId); const p = await api.savePersonalTemplate(tkey, api.unrenderTemplate(subject, vals), api.unrenderTemplate(text, vals)); setNote(`Saved as ${p.owner}’s template`); await onReload(); };
+  return <span className="flex flex-wrap items-center gap-1.5">
+    <TemplateSourceBadge mode={mode} owner={preview.owner} testId="composer-tpl-source" />
+    {edited && <button type="button" data-testid="composer-tpl-save-mine" onClick={() => void saveMine()} className="rounded-sm border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 hover:bg-amber-100">Save as my template</button>}
+    {!edited && preview.source === 'personal' && <button type="button" data-testid="composer-tpl-use-shop" onClick={() => void onReload(true)} className="text-[11px] text-ink-500 hover:text-ink">Use shop default</button>}
+    {!edited && preview.source === 'shop' && api.personalTemplateFor(tkey) && <button type="button" data-testid="composer-tpl-use-mine" onClick={() => void onReload(false)} className="text-[11px] text-amber-800 hover:underline">Use my template</button>}
+    {note && <span data-testid="composer-tpl-note" className="text-[11px] text-emerald-700">{note}</span>}
+  </span>;
+};

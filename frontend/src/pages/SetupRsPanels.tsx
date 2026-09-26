@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as api from '@/api/client';
-import type { AccessTier, CatalogService, DeptCode, Division, LineType, MessageTemplate, Role, User } from '@/api/client';
+import type { AccessTier, CatalogService, DeptCode, Division, LineType, MessageTemplate, PersonalTemplate, Role, User } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { field, Flash, useLoad } from '@/components/rs/RsBits';
 import { Button } from '@/components/ui/Button';
@@ -14,7 +14,7 @@ type UserForm = { id?: string; firstName: string; shortName: string; dutyLabel: 
 const blankUser: UserForm = { firstName: '', shortName: '', dutyLabel: '', accessTier: 'concierge', roles: ['concierge'], division: 'rolliworks', password: '', pin: '1234' };
 
 export function SetupRsPanels() {
-  const { data, error, msg, run } = useLoad(async () => ({ users: await api.getUsers(), catalog: await api.getCatalogAdmin(), templates: await api.getTemplates(), locations: await api.getLocations() }));
+  const { data, error, msg, run } = useLoad(async () => ({ users: await api.getUsers(), catalog: await api.getCatalogAdmin(), templates: await api.getTemplates(), variants: await api.getAllPersonalTemplates(), locations: await api.getLocations() }));
   const [uf, setUf] = useState<UserForm | null>(null);
   const [cf, setCf] = useState<{ id?: string; name: string; dept: DeptCode; rate: number; type: LineType } | null>(null);
   const [tf, setTf] = useState<MessageTemplate | null>(null);
@@ -32,7 +32,7 @@ export function SetupRsPanels() {
       </tbody></Table>
     </Card>
     <Card title="Message templates" subtitle={<span className="inline-flex items-center gap-1.5">Six client emails · merge fields shown as {'{{field}}'} <Provisional note="Templates are edited here but Outbox bodies still come from code — wiring pending" /></span>} bodyClassName="p-0" testId="setup-templates-card">
-      <ul className="divide-y divide-line/70">{data.templates.map((t: MessageTemplate) => <li key={t.key} data-testid={`template-${t.key}`} className="flex items-start justify-between gap-3 px-4 py-2 text-xs"><div className="min-w-0"><div className="font-medium text-ink">{t.name} <span className="text-ink-400">· {t.subject}</span></div><div className="mt-0.5 flex flex-wrap gap-1">{t.mergeFields.map((f) => <span key={f} className="rounded bg-canvas px-1 font-mono text-[10px] text-ink-500">{f}</span>)}</div><div className="text-[11px] text-ink-400">updated {fmtDate(t.at)} by {t.updatedBy}</div></div><Button size="sm" variant="ghost" data-testid={`template-edit-${t.key}`} onClick={() => setTf(t)}>Edit</Button></li>)}</ul>
+      <ul className="divide-y divide-line/70">{data.templates.map((t: MessageTemplate) => <li key={t.key} data-testid={`template-${t.key}`} className="flex items-start justify-between gap-3 px-4 py-2 text-xs"><div className="min-w-0"><div className="font-medium text-ink">{t.name} <span className="text-ink-400">· {t.subject}</span></div><div className="mt-0.5 flex flex-wrap gap-1">{t.mergeFields.map((f) => <span key={f} className="rounded bg-canvas px-1 font-mono text-[10px] text-ink-500">{f}</span>)}</div><TemplateVariants rows={data.variants.filter((v: PersonalTemplate) => v.key === t.key)} tkey={t.key} /><div className="text-[11px] text-ink-400">updated {fmtDate(t.at)} by {t.updatedBy}</div></div><Button size="sm" variant="ghost" data-testid={`template-edit-${t.key}`} onClick={() => setTf(t)}>Edit</Button></li>)}</ul>
     </Card>
     <div className="grid grid-cols-2 gap-4">
       <Card title="Locations" subtitle="Stock locations · division-stamped" bodyClassName="p-0" testId="setup-locations-card"><ul className="divide-y divide-line/70">{data.locations.map((l) => <li key={l.id} className="flex justify-between px-4 py-2 text-xs"><span>{l.name}</span><span className="capitalize text-ink-500">{l.kind} · {l.division}</span></li>)}</ul><p className="px-4 py-2 text-[11px] text-ink-400">Add / edit locations <Provisional note="stub — not built" /></p></Card>
@@ -63,3 +63,10 @@ export function SetupRsPanels() {
     </Modal>}
   </>;
 }
+
+// Read-only for managers: who has a personal version of this template (shop default stays the home; system sends never use variants)
+const TemplateVariants = ({ rows, tkey }: { rows: PersonalTemplate[]; tkey: string }) => (
+  <details data-testid={`template-variants-${tkey}`} className="mt-1 text-[11px]"><summary className={`cursor-pointer ${rows.length ? 'text-amber-800' : 'text-ink-400'}`}>Variants ({rows.length}){rows.length ? ' · personal versions, read-only here' : ''}</summary>
+    {rows.length > 0 && <ul className="mt-1 space-y-1">{rows.map((v) => <li key={v.owner} data-testid={`template-variant-${tkey}-${v.owner}`} className="rounded-sm border border-amber-200 bg-amber-50/60 p-2"><div className="font-medium text-amber-900">{v.owner}’s version <span className="font-normal text-ink-400">· {fmtDate(v.updatedAt)}</span></div><div className="text-ink-700">{v.subject}</div><pre className="mt-1 whitespace-pre-wrap font-sans text-[11px] text-ink-500">{v.body}</pre></li>)}</ul>}
+  </details>
+);

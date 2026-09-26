@@ -964,7 +964,9 @@ export interface ConvMessage {
 export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
 export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string }
 export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
-export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[] }
+export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[]; source: 'shop' | 'personal'; owner?: string }
+// A staff member's own version of a shop template — used automatically for THEIR point-of-use sends; system/automated sends always use the shop default
+export interface PersonalTemplate { key: TemplateKey; owner: string; subject: string; body: string; updatedAt: string }
 
 // ---- E15 Portal-first inspection report (MH 2026-09-25) --------------------------------------------
 export type ComponentGrade = 'good' | 'fair' | 'worn' | 'replace';

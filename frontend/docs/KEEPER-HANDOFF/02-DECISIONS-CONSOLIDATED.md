@@ -282,3 +282,11 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Seed: c-30 Robert Calloway — R1 E00871/E01871/SO-25-0031 (closed, paid, picked up, full photo set), R2 E00990 (expired, GMT never sent in), R3 E02040/E02041 (Datejust 41 in service, arrival + condition photos, open thread), R4 RQ-26-0052 (web, new, Inbox Needs reply).
 
 **Modules touched:** rw-shop-floor, rw-bulk-assign, rw-supervisor-pad, rw-bench-pad, rw-picking, client-requests, comms-hub, client-360, shipping-inbound, job-messages
+
+## Personal templates — point-of-use editing (2026-09-26, MH brief)
+- Wherever a templated message is about to go out, **Edit** sits next to Send. Inline edit → **Just this send** (one-off, template untouched, badged "edited for this send") or **Save as my template** (becomes that user's personal version, used automatically for their future sends of that template, badged "<Name>'s template"). Saving de-renders the edited text back to merge fields so the personal version works for the next client.
+- Resolution for a **staff** send: actor's personal variant → shop default; the sender can flip to "Use shop default" / "Use my template" per send, or remove their version. **Automated/system sends always use the shop default** (`renderTemplateFor` never consults variants).
+- **Setup → Templates** stays the home of shop defaults; managers see a read-only **Variants (n)** list per template (owner, date, subject, body). Saving a personal version is audited (`comms`).
+- Built at: estimate Send modal (`estimate_sent`) and the Inbox reply composer (all template keys; the textarea is the inline editor). Seed: Vienna's personal `estimate_sent`. `⚠ DRIFT`: shipping-label / follow-up / invoice emails still hard-code bodies (Q32) — point-of-use Edit lands there once they go through the template renderer.
+
+**Modules touched:** cross-cutting

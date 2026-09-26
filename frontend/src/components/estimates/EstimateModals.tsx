@@ -1,6 +1,8 @@
 import { Mail, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
+import type { RenderedTemplate } from '@/api/client';
+import { TemplateEdit, type DraftMessage } from '@/components/comms/TemplateEdit';
 import type { EstimateRevision, EstimateWithRefs, QuoteContext } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { LineEditor } from './LineEditor';
@@ -17,13 +19,15 @@ export const SendModal = ({ estimate: e, onClose, onSent }: { estimate: Estimate
   const [ctx, setCtx] = useState<QuoteContext | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [tpl, setTpl] = useState<(RenderedTemplate & { vals: Record<string, string> }) | null>(null); const [draft, setDraft] = useState<DraftMessage | null>(null);
+  const loadTpl = async (shopDefault = false) => { const r = await api.renderTemplateForEstimate(e.id, shopDefault); setTpl(r); setDraft({ subject: r.subject, body: r.body, mode: r.source, owner: r.owner }); };
   useEffect(() => {
-    api.getQuoteContext(e.clientId, e.watchId, e.id).then(setCtx);
-  }, [e]);
+    api.getQuoteContext(e.clientId, e.watchId, e.id).then(setCtx); void loadTpl();
+  }, [e]); // eslint-disable-line react-hooks/exhaustive-deps
   const send = async () => {
     setBusy(true);
     try {
-      await api.sendEstimate(e.id);
+      await api.sendEstimate(e.id, draft && draft.mode !== 'shop' ? { subject: draft.subject, body: draft.body, source: draft.mode, owner: draft.owner } : undefined);
       onSent();
     } catch (er) {
       setErr(er instanceof Error ? er.message : 'Send failed');
@@ -39,12 +43,14 @@ export const SendModal = ({ estimate: e, onClose, onSent }: { estimate: Estimate
       </div>
       <div className="space-y-4 p-5">
         {ctx && <QuoteContextStrip clientEstimates={ctx.clientEstimates} watchEstimates={ctx.watchEstimates} clientName={fullName(e.client)} />}
+        {tpl && draft && <TemplateEdit tkey="estimate_sent" rendered={tpl} vals={tpl.vals} draft={draft} onDraft={setDraft} onReload={loadTpl} />}
         <div className="rounded-md border border-line bg-canvas/50 p-4 text-[13px]" data-testid="send-preview">
-          <div className="mb-2 grid grid-cols-[70px_1fr] gap-y-0.5 text-xs"><span className="text-ink-400">To</span><span>{fullName(e.client)} &lt;{e.client.email}&gt;</span><span className="text-ink-400">Subject</span><span className="font-medium">{again ? 'Updated estimate' : 'Your estimate'} {e.number}{e.watch ? ` — ${e.watch.brand} ${e.watch.model}` : ''}</span></div>
+          <div className="mb-2 grid grid-cols-[70px_1fr] gap-y-0.5 text-xs"><span className="text-ink-400">To</span><span>{fullName(e.client)} &lt;{e.client.email}&gt;</span><span className="text-ink-400">Subject</span><span className="font-medium" data-testid="send-preview-subject">{draft?.mode !== 'shop' && draft ? draft.subject : `${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`}</span></div>
+          {draft && draft.mode !== 'shop' ? <pre data-testid="send-preview-body" className="whitespace-pre-wrap font-sans text-[13px] leading-5">{draft.body}</pre> : <>
           <p>Hello {e.client.firstName},</p>
           <ul className="my-2 space-y-0.5">{e.lines.map((l) => <li key={l.id} className="flex justify-between"><span>• {l.description} × {l.qty}</span><span className="tabular">{fmtMoneyCents(l.qty * l.unitPrice)}</span></li>)}</ul>
           <p className="font-semibold">Total {fmtMoneyCents(e.total)} · valid until {fmtDate(e.validUntil)}</p>
-          <p className="mt-2 text-ink-500">{e.messageNotes}</p>
+          <p className="mt-2 text-ink-500">{e.messageNotes}</p></>}
         </div>
         {err && <p className="text-xs font-medium text-rose-700">{err}</p>}
         <div className="flex items-center justify-between">

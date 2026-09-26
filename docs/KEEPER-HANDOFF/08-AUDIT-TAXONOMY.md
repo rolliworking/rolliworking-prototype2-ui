@@ -44,7 +44,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `labels` | (stamp helper — see below) | All only |
 | `accounting` | (stamp helper — see below) | All only |
 | `companion` | `a` | All only |
-| `comms` | `a`, `c`, `session` | All only |
+| `comms` | `a`, `c`, `i`, `session` | All only |
 | `rollitime` | `a` | All only |
 | `rgtime` | `rgAudit` | RGTime |
 | `kiosk` | `c`, `kioskAudit`, `saveBenchSettings` | Kiosk |

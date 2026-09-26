@@ -34,6 +34,7 @@ import type {
   FloorMap,
   FulfillmentChannel,
   PayPage,
+  PersonalTemplate,
   PortalPhoto,
   PortalPhotoSections,
   PortalRequestCard,
@@ -915,7 +916,7 @@ export async function markEstimateSent(id: string): Promise<EstimateWithRefs> {
   return resolve(withRefs(e));
 }
 
-export async function sendEstimate(id: string): Promise<{ estimate: EstimateWithRefs; email: OutboxEmail }> {
+export async function sendEstimate(id: string, override?: { subject: string; body: string; source: 'shop' | 'personal' | 'one_off'; owner?: string }): Promise<{ estimate: EstimateWithRefs; email: OutboxEmail }> {
   const e = getEst(id);
   if (e.status !== 'draft' && e.status !== 'sent') throw new Error('Only draft or sent estimates can be sent');
   if (e.lines.length === 0) throw new Error('Add at least one line before sending');
@@ -927,15 +928,15 @@ export async function sendEstimate(id: string): Promise<{ estimate: EstimateWith
     id: `ob-${Date.now().toString(36)}`,
     to: c.email, toName: `${c.firstName} ${c.lastName}`,
     relatedRef: `${e.number} rev ${e.revision}`, status: 'pending',
-    subject: `${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`,
-    body: `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. Review and approve it here:\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/estimates/${e.id}\n\n— The RolliSuite team`,
+    subject: override?.subject ?? `${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`,
+    body: override?.body ?? `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. Review and approve it here:\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/estimates/${e.id}\n\n— The RolliSuite team`,
     createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
   };
   store.outbox.unshift(email);
   e.status = 'sent';
   e.sentAt = new Date().toISOString();
   e.updatedAt = e.sentAt;
-  estStamp(e, `${again ? 'Sent again' : 'Sent'} · rev ${e.revision} · email queued to Outbox`);
+  estStamp(e, `${again ? 'Sent again' : 'Sent'} · rev ${e.revision} · email queued to Outbox${override ? ` · ${override.source === 'personal' ? `${override.owner}'s template` : override.source === 'one_off' ? 'edited for this send' : 'shop template'}` : ''}`);
   return resolve({ estimate: withRefs(e), email });
 }
 
@@ -2755,6 +2756,8 @@ const rs = {
   movements: fx.stockMovements.map((m): StockMovement => ({ ...m })),
   counts: fx.cycleCounts.map((c): CycleCount => ({ ...c, lines: c.lines.map((l) => ({ ...l })) })),
   templates: fx.templates.map((t): MessageTemplate => ({ ...t, mergeFields: [...t.mergeFields] })),
+  // Seed: Vienna's personal estimate email (warmer opener, mentions the watch) so both paths — shop default vs personal — are visible
+  personalTemplates: [{ key: 'estimate_sent', owner: 'Vienna', subject: 'Your estimate {{estimate.number}} — {{watch.brand}} {{watch.model}}', body: 'Dear {{client.first_name}},\n\nIt was a pleasure looking after your {{watch.brand}} {{watch.model}}. Your estimate {{estimate.number}} is ready — you can review and approve it here, or call me directly with any questions:\n\n{{portal.link}}\n\nWarm regards,\nVienna · Concierge', updatedAt: new Date(Date.now() - 12 * 86_400_000).toISOString() }] as PersonalTemplate[],
   evidence: fx.evidence.map((e): EvidenceItem => ({ ...e })),
   catalog: fx.catalog.map((c) => ({ ...c, retired: false as boolean })),
   counters: { po: 25, cc: 3, ev: 12 },
@@ -3155,11 +3158,31 @@ const mergeValues = (c: { clientId: string; anchor?: ConversationAnchor }): Reco
   const link = rep ? `${origin}/rc/report/${rep.token}` : c.anchor?.kind === 'estimate' && est ? `${origin}/rc/estimates/${est.id}` : watch ? `${origin}/rc/watches/${watch.id}` : `${origin}/rc/home`;
   return { '{{portal.link}}': link, '{{client.first_name}}': client.firstName, '{{watch.brand}}': watch?.brand ?? '', '{{watch.model}}': watch?.model ?? '', '{{estimate.number}}': est?.number ?? '', '{{job.number}}': job?.number ?? '', '{{sub.number}}': pkg?.subNumber ?? '', '{{so.number}}': so?.number ?? '', '{{pickup.code}}': so?.pickupCode ?? '', '{{tracking}}': so?.tracking ?? '', '{{balance_due}}': so ? fmtMoney(so.balanceDue) : '', '{{shop.name}}': 'RolliSuite' };
 };
-export async function renderTemplate(conversationId: string, key: TemplateKey): Promise<RenderedTemplate> {
-  const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); const vals = mergeValues(convOf(conversationId)); const missing: string[] = [];
-  const fill = (s: string) => s.replace(/\{\{[a-z_.]+\}\}/g, (f) => { const v = vals[f]; if (!v) missing.push(f); return v || f; });
-  return resolve({ key, subject: fill(t.subject), body: fill(t.body), missing: uniq(missing) });
+// ---- Personal templates (point-of-use editing). Resolution order for a STAFF send: actor's personal variant → shop default. System sends: shop default only. ----
+export const personalTemplateFor = (key: TemplateKey, owner = actor().by): PersonalTemplate | undefined => rs.personalTemplates.find((p) => p.key === key && p.owner === owner);
+const templateSource = (key: TemplateKey, shopDefault = false): { subject: string; body: string; source: 'shop' | 'personal'; owner?: string } => {
+  const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template');
+  const p = shopDefault ? undefined : personalTemplateFor(key); return p ? { subject: p.subject, body: p.body, source: 'personal', owner: p.owner } : { subject: t.subject, body: t.body, source: 'shop' };
+};
+export async function getPersonalTemplates(): Promise<PersonalTemplate[]> { return resolve(rs.personalTemplates.filter((p) => p.owner === actor().by).map((p) => ({ ...p }))); }
+export async function getAllPersonalTemplates(): Promise<PersonalTemplate[]> { return resolve(rs.personalTemplates.map((p) => ({ ...p }))); }
+export async function getTemplateVariants(key: TemplateKey): Promise<PersonalTemplate[]> { return resolve(rs.personalTemplates.filter((p) => p.key === key).map((p) => ({ ...p }))); }
+export async function savePersonalTemplate(key: TemplateKey, subject: string, body: string): Promise<PersonalTemplate> {
+  if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required'); const a = actor(); const row: PersonalTemplate = { key, owner: a.by, subject: subject.trim(), body: body.trim(), updatedAt: new Date().toISOString() };
+  const i = rs.personalTemplates.findIndex((p) => p.key === key && p.owner === a.by); if (i >= 0) rs.personalTemplates[i] = row; else rs.personalTemplates.push(row);
+  appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Saved personal template · ${key} (${a.by}'s version)` }); return resolve({ ...row });
 }
+export async function deletePersonalTemplate(key: TemplateKey): Promise<void> { const a = actor(); rs.personalTemplates = rs.personalTemplates.filter((p) => !(p.key === key && p.owner === a.by)); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Removed personal template · ${key}` }); return resolve(undefined); }
+// Turn an edited, already-merged text back into template text so "Save as my template" keeps merge fields live for the next client
+export const unrenderTemplate = (text: string, vals: Record<string, string>) => Object.entries(vals).filter(([, v]) => v && v.length > 2).sort((a, b) => b[1].length - a[1].length).reduce((t, [f, v]) => t.split(v).join(f), text);
+const renderWith = (key: TemplateKey, ctx: { clientId: string; anchor?: ConversationAnchor }, shopDefault = false): RenderedTemplate => {
+  const src = templateSource(key, shopDefault); const vals = mergeValues(ctx); const missing: string[] = [];
+  const fill = (s: string) => s.replace(/\{\{[a-z_.]+\}\}/g, (f) => { const v = vals[f]; if (!v) missing.push(f); return v || f; });
+  return { key, subject: fill(src.subject), body: fill(src.body), missing: uniq(missing), source: src.source, owner: src.owner };
+};
+export async function renderTemplate(conversationId: string, key: TemplateKey, shopDefault = false): Promise<RenderedTemplate> { return resolve(renderWith(key, convOf(conversationId), shopDefault)); }
+export async function renderTemplateForEstimate(estimateId: string, shopDefault = false): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...renderWith('estimate_sent', ctx, shopDefault), vals: mergeValues(ctx) }); }
+export async function mergeValuesForConversation(conversationId: string): Promise<Record<string, string>> { return resolve(mergeValues(convOf(conversationId))); }
 export async function replyInThread(id: string, input: { text: string; subject?: string; templateKey?: TemplateKey; photos?: PackagePhoto[] }): Promise<ConvMessage> {
   const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId);
   const token = `RT-${c.id.replace(/[^a-z0-9]/gi, '').toUpperCase()}-${++c.tokenSeq}`;

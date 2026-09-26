@@ -20,3 +20,6 @@ Guides, keyboard shortcuts (Alt+T quick-add, Alt+M companion), support text. Sta
 ## Behaviours discovered during build
 - Audit filters for Kiosk and RGTime were added in E13 after testing flagged their absence.
 - The audit log is capped at 60 rows in `localStorage` — display convenience only; KEEPER keeps everything.
+
+## Post-E16 addition (2026-09-26) — Personal templates
+- Setup → Templates keeps the shop defaults; each template row shows a read-only **Variants (n)** list (owner, date, subject, body) of staff personal versions. Point-of-use **Edit** next to Send (estimate Send modal, Inbox composer) offers *Just this send* or *Save as my template*; personal versions are used automatically for that user's sends, never for system sends. Data: `PersonalTemplate {key, owner, subject, body, updatedAt}` (KEEPER: `template_variant` table keyed `(template_key, staff_id)`; audited on save/remove).

@@ -131,6 +131,9 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Files: `components/rw/pad/{PadBits,PadJobs,PadParts,PadReview}.tsx`, client.ts Pad v2 section, fixtures parts.ts (pt-33..48, CALIBER_BY_REF, m3keEvents, PR-0050), reports.ts (rep-03..05).
 - Tested iteration_29 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q77–80.
 
+### Personal templates — point-of-use editing (2026-09-26)
+- Edit next to Send (estimate Send modal, Inbox composer): Just this send / Save as my template (de-rendered to merge fields, badged with the user's name, auto-used for their future sends); shop default remains in Setup → Templates with a read-only Variants (n) list; system sends use shop default. Seed: Vienna's estimate_sent variant. Self-tested.
+
 ### View as client + multi-request demo client (2026-09-26)
 - View-as-client (Client 360 + Inbox thread) with amber banner/exit, audited; portal home 'Your requests' cards (4 lifecycle states, watch identity on every card); client photo sections Arrival/Condition/Completed with lightbox, staff-only slots excluded; Robert Calloway (c-30) seeded across R1–R4; expired-estimate aging chip on Client 360.
 

@@ -195,3 +195,7 @@ One entry per build session: what was built · what was decided · what was test
 ## View as client + Robert Calloway demo (2026-09-26)
 - Built `startViewAsClient/exitViewAsClient` (portal session with `viewAs`), `portalGetRequestCards`, `portalPhotoSections/portalGetPhotoSections`; UI `ViewAsClientButton`, `RcRequestCards`, `RcPhotoSections`, amber banner in `RcShell`; RC home now leads with "Your requests"; RC watch page shows photo sections per job. Client 360 estimates get the never-received aging chip.
 - Seeded Robert (c-30) across clients / watches / estimates / jobs / salesOrders / requests / portal messages / comms threads / rw photos (incl. staff-only decoys to prove exclusion).
+
+## Personal templates (2026-09-26)
+- `PersonalTemplate {key, owner, subject, body, updatedAt}` in `rs.personalTemplates` (seed: Vienna · estimate_sent). `personalTemplateFor`, `getPersonalTemplates`, `getAllPersonalTemplates`, `getTemplateVariants`, `savePersonalTemplate`, `deletePersonalTemplate`, `unrenderTemplate`, `renderTemplate(conv, key, shopDefault?)` (now returns `source/owner`), `renderTemplateForEstimate`, `mergeValuesForConversation`; `sendEstimate(id, override?)` stamps which version went out.
+- UI: `components/comms/TemplateEdit.tsx` (Edit → Just this send / Save as my template; Use shop default / Use my template / Remove my version) in the estimate Send modal; `InboxTemplateTools` in the reply composer; Setup → Templates "Variants (n)" read-only list. Self-tested end to end as Vienna and MM.
