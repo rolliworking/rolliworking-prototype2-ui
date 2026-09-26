@@ -1,4 +1,4 @@
-import type { ChatMessage, Part, PartsKnowledgeEntry, PartsRequest } from '../types';
+import type { ChatMessage, M3keEvent, Part, PartsKnowledgeEntry, PartsRequest } from '../types';
 import { daysAgo } from './time';
 
 const P = (id: string, partNumber: string, name: string, category: string, compatibleRefs: string[], calibers: string[], aliases: string[], price: number, stock: number): Part => ({ id, partNumber, name, category, compatibleRefs, calibers, aliases, price, stock });
@@ -6,7 +6,7 @@ const P = (id: string, partNumber: string, name: string, category: string, compa
 // Seeded catalog — fake part numbers modelled on Rolex/Tudor conventions. Aliases are the "labels" the approval loop grows.
 export const parts: Part[] = [
   P('pt-01', '25-295-C1', 'Crystal, sapphire with cyclops', 'crystal', ['16613', '16610', '16618', '16600'], [], ['crystal', 'glass', 'sapphire', 'cyclops'], 290, 4),
-  P('pt-02', '29-5220-0', 'Crystal retaining ring (bezel ring)', 'crystal', ['16613', '16610', '16618', '16800'], [], ['crystal ring', 'retaining ring', 'bezel ring'], 140, 2),
+  P('pt-02', '25-16610', 'Crystal ring (retaining), Submariner 16610/16613', 'crystal', ['16613', '16610', '16618', '16800'], [], ['retaining ring', 'bezel ring'], 140, 2),
   P('pt-03', '24-7030-0', 'Winding crown, Triplock 7mm', 'crown', ['16613', '16610', '16600', '116610'], [], ['crown', 'triplock', 'winding crown'], 210, 3),
   P('pt-04', '24-7030-T', 'Crown tube, Triplock', 'crown', ['16613', '16610', '116610', '116613'], [], ['tube', 'crown tube', 'case tube'], 95, 5),
   P('pt-05', '3135-330', 'Mainspring, cal. 3135', 'movement', ['16610', '16613', '16200', '16234'], ['3135'], ['mainspring', 'spring', 'barrel spring'], 85, 6),
@@ -37,6 +37,39 @@ export const parts: Part[] = [
   P('pt-30', '72610-CL', 'Oysterlock clasp, Glidelock (126610)', 'bracelet', ['126610', '126619'], [], ['glidelock', 'clasp', 'sub clasp'], 520, 1),
   P('pt-31', '3135-710', 'Balance complete, cal. 3135', 'movement', ['16610', '16613', '16200'], ['3135'], ['balance', 'balance complete', 'balance wheel'], 780, 1),
   P('pt-32', 'MT5402-330', 'Mainspring, Tudor MT5402', 'movement', ['79030', 'M79030N'], ['MT5402'], ['mainspring', 'spring', 'bb58 spring'], 70, 3),
+  // Pad v2 — cal. 3135 movement set (caliber query) + model-specific parts across 16610 / 126710 / 114060
+  P('pt-33', '3135-410', 'Reversing wheel set, cal. 3135', 'movement', [], ['3135'], ['reversing wheels', 'reversers'], 190, 3),
+  P('pt-34', '3135-420', 'Crown wheel, cal. 3135', 'movement', [], ['3135'], ['crown wheel'], 110, 2),
+  P('pt-35', '3135-430', 'Setting lever spring, cal. 3135', 'movement', [], ['3135'], ['setting lever spring', 'yoke spring'], 45, 5),
+  P('pt-36', '3135-440', 'Date jumper, cal. 3135', 'movement', [], ['3135'], ['date jumper', 'date click'], 60, 4),
+  P('pt-37', '3135-450', 'Escape wheel, cal. 3135', 'movement', [], ['3135'], ['escape wheel'], 240, 1),
+  P('pt-38', '3135-460', 'Pallet fork, cal. 3135', 'movement', [], ['3135'], ['pallet fork', 'pallets', 'anchor'], 210, 2),
+  P('pt-39', '3135-470', 'Rotor axle, cal. 3135', 'movement', [], ['3135'], ['rotor axle', 'oscillating weight axle'], 130, 3),
+  P('pt-40', '3135-480', 'Hairspring, Parachrom cal. 3135', 'movement', [], ['3135'], ['hairspring', 'parachrom', 'balance spring'], 560, 1),
+  P('pt-41', '3135-370', 'Reduction wheel, cal. 3135', 'movement', [], ['3135'], ['reduction wheel'], 95, 2),
+  P('pt-42', '315-114060', 'Bezel insert, Cerachrom black (Submariner 114060)', 'bezel', ['114060', '14060'], [], ['ceramic insert', 'black insert', 'bezel insert'], 720, 1),
+  P('pt-43', '25-114060', 'Crystal, sapphire flat no cyclops (114060 / 14060)', 'crystal', ['114060', '14060'], [], ['crystal', 'flat crystal', 'no-date crystal'], 310, 2),
+  P('pt-44', '24-114060', 'Winding crown, Triplock (114060)', 'crown', ['114060', '14060'], [], ['crown', 'triplock'], 230, 2),
+  P('pt-45', '410-114060', 'Hand set, Chromalight (114060)', 'dial', ['114060', '14060'], ['3130'], ['hands', 'hand set', 'chromalight hands'], 360, 1),
+  P('pt-46', '29-16610-CB', 'Case back, Submariner 16610', 'case', ['16610', '16613'], [], ['case back', 'caseback', 'back'], 480, 1),
+  P('pt-47', '24-126710-CR', 'Winding crown, Triplock (GMT 126710)', 'crown', ['126710', '126711', '126719'], [], ['crown', 'gmt crown', 'triplock'], 260, 2),
+  P('pt-48', '25-126710', 'Crystal, sapphire with cyclops (GMT 126710)', 'crystal', ['126710', '126711'], [], ['crystal', 'gmt crystal', 'cyclops'], 340, 2),
+];
+
+// Reference → caliber (prefix match; longest prefix wins)
+export const CALIBER_BY_REF: [string, string][] = [
+  ['16610', '3135'], ['16613', '3135'], ['16618', '3135'], ['16600', '3135'], ['116610', '3135'], ['116613', '3135'], ['16200', '3135'], ['16234', '3135'],
+  ['126610', '3235'], ['126334', '3235'], ['126600', '3235'], ['126234', '3235'], ['126622', '3235'], ['126000', '3230'], ['124300', '3230'], ['124270', '3230'],
+  ['114060', '3130'], ['14060', '3130'], ['116500', '4130'], ['116520', '4130'], ['126500', '4131'], ['228238', '3255'], ['228206', '3255'],
+  ['126710', '3285'], ['126711', '3285'], ['126719', '3285'], ['278274', '2236'], ['279174', '2236'], ['279171', '2236'], ['179174', '2235'],
+  ['M79030', 'MT5402'], ['M79830', 'MT5652'], ['M25600', 'MT5612'], ['M79360', 'MT5813'], ['M79540', 'MT5602'], ['M79230', 'MT5602'],
+];
+export const caliberForReference = (ref: string): string | undefined => { const r = ref.toUpperCase(); return CALIBER_BY_REF.filter(([p]) => r.startsWith(p)).sort((a, b) => b[0].length - a[0].length)[0]?.[1]; };
+
+// M3KE — append-only learning log. One pre-learned mapping so the "learned" tag is visible on the first walk.
+export const m3keEvents: M3keEvent[] = [
+  { id: 'm3-01', kind: 'resolved', description: 'bezel insert black', reference: '16610', caliber: '3135', partId: 'pt-17', partNumber: '315-24280', price: 260, resolvedBy: 'MH', ts: daysAgo(9, 15), requestId: 'pr-04' },
+  { id: 'm3-02', kind: 'selected', description: 'mainspring', reference: '16610', caliber: '3135', partId: 'pt-05', partNumber: '3135-330', price: 85, resolvedBy: 'MM', ts: daysAgo(5, 10) },
 ];
 const LOCATIONS: Record<string, string> = { 'pt-01': 'Cabinet A · Drawer 1 · Bin 1', 'pt-02': 'Cabinet A · Drawer 1 · Bin 2', 'pt-03': 'Cabinet A · Drawer 2 · Bin 1', 'pt-04': 'Cabinet A · Drawer 2 · Bin 2', 'pt-05': 'Cabinet A · Drawer 6 · Bin 1', 'pt-06': 'Cabinet A · Drawer 7 · Bin 1', 'pt-07': 'Cabinet A · Drawer 6 · Bin 2', 'pt-08': 'Cabinet A · Drawer 7 · Bin 2', 'pt-09': 'Cabinet A · Drawer 8 · Bin 1', 'pt-10': 'Cabinet B · Drawer 2 · Bin 3', 'pt-11': 'Cabinet A · Drawer 3 · Bin 2', 'pt-12': 'Cabinet A · Drawer 3 · Bin 3', 'pt-13': 'Cabinet C · Drawer 2 · Bin 1', 'pt-14': 'Cabinet C · Drawer 2 · Bin 4', 'pt-15': 'Cabinet C · Drawer 1 · Bin 2', 'pt-16': 'Cabinet C · Drawer 1 · Bin 9', 'pt-17': 'Cabinet B · Drawer 12 · Bin 4', 'pt-18': 'Cabinet B · Drawer 12 · Bin 5', 'pt-19': 'Cabinet B · Drawer 9 · Bin 1', 'pt-20': 'Cabinet A · Drawer 6 · Bin 4', 'pt-21': 'Cabinet A · Drawer 6 · Bin 5', 'pt-22': 'Cabinet A · Drawer 9 · Bin 1', 'pt-23': 'Cabinet A · Drawer 3 · Bin 4', 'pt-24': 'Cabinet A · Drawer 2 · Bin 3', 'pt-25': 'Safe 2 · Shelf 1', 'pt-26': 'Cabinet B · Drawer 13 · Bin 1', 'pt-27': 'Cabinet B · Drawer 13 · Bin 2', 'pt-28': 'Cabinet B · Drawer 9 · Bin 3', 'pt-29': 'Cabinet C · Drawer 3 · Bin 1', 'pt-30': 'Cabinet C · Drawer 2 · Bin 6', 'pt-31': 'Cabinet A · Drawer 8 · Bin 3', 'pt-32': 'Cabinet A · Drawer 6 · Bin 6' };
 parts.forEach((p) => { p.location = LOCATIONS[p.id]; });
@@ -53,6 +86,9 @@ export const partsRequests: PartsRequest[] = [
     chat: [msg('cm-7', 'user', 'hairspring for the lady datejust', 0, 9), msg('cm-8', 'assistant', 'I need a reference or caliber to be sure — the job watch is ref 279171 (cal. 2236). Try “syloxi 2236”.', 0, 9), msg('cm-9', 'user', 'syloxi 2236', 0, 9), msg('cm-10', 'assistant', 'Found 1 match for cal. 2236.', 0, 9, [{ partId: 'pt-22', reason: 'caliber 2236 · hairspring' }])] },
   { id: 'pr-04', number: 'PR-0044', jobId: 'j-03', status: 'rejected', partId: 'pt-17', qty: 1, searchTerms: ['black insert 16613'], requestedBy: 'Walter', requestedAt: daysAgo(3, 14), station: 'Bench 2', decidedBy: 'MM', decidedAt: daysAgo(3, 15), decisionNote: 'Wrong colour — 16613 takes the blue insert; client asked for original spec',
     chat: [msg('cm-11', 'user', 'black insert 16613', 3, 14), msg('cm-12', 'assistant', 'Found 2 matches for ref 16613.', 3, 14, [{ partId: 'pt-17', reason: 'ref 16613 · bezel insert (black)' }, { partId: 'pt-18', reason: 'ref 16613 · bezel insert (blue)' }])] },
+  // Pad v2 — GENERIC request sitting in Manager review (16610 · cal. 3135)
+  { id: 'pr-20', number: 'PR-0050', jobId: 'j-06', status: 'pending_review', qty: 1, note: 'crystal ring for 16610', searchTerms: ['crystal ring for 16610'], requestedBy: 'MM', requestedAt: daysAgo(0, 7), station: 'Watchmaker Room', source: 'pad', reference: '16610', caliber: '3135',
+    items: [{ description: 'crystal ring for 16610', qty: 1, generic: true }, { partId: 'pt-11', partNumber: '29-210-64', description: 'Case back gasket, 40mm Oyster', qty: 1, price: 18 }], chat: [] },
   // E18 — approvals queue (pending) + approved picks
   { id: 'pr-04', number: 'PR-0044', jobId: 'j-30', status: 'pending', partId: 'pt-26', qty: 1, note: 'Insert chipped at 12', searchTerms: ['black/blue gmt insert'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', source: 'wm', chat: [] },
   { id: 'pr-05', number: 'PR-0045', jobId: 'j-06', status: 'pending', partId: 'pt-27', qty: 1, searchTerms: ['pepsi insert'], requestedBy: 'MM', requestedAt: daysAgo(0, 8), station: 'Bench 1', source: 'wm', chat: [] },

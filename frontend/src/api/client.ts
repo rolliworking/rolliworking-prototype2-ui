@@ -3520,6 +3520,102 @@ export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> {
 export async function getRoomSummary(): Promise<RoomSummary> { const room = roomJobs(); return resolve({ jobsInRoom: room.filter((j) => STAGE_ORDER.includes(j.status)).length, waitingOnParts: room.filter((j) => activeHold(j)?.type === 'parts' || store.partsRequests.some((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order'))).length, waitingOnApproval: room.filter((j) => j.status === 'awaiting_customer_approval').length, picksRemaining: rw18.picks.filter((t) => t.status === 'open').length, shortsToday: rw18.picks.filter((t) => t.status === 'short').length }); }
 export const PART_LABELS = PART_LABEL;
 
+// ---- Supervisor Pad v2 — Jobs (tech override + condition) · Parts (caliber query, reference search, M3KE) · Review (manager gate) ----
+import type { M3keEvent, PadConditionView, PadPartsContext, PadSuggestion, PartsRequestItem } from './types';
+const m3ke = { events: fx.m3keEvents.map((e): M3keEvent => ({ ...e })) };
+const STOP_M3 = new Set(['for', 'the', 'a', 'an', 'of', 'and', 'to', 'on', 'with', 'new', 'part', 'please']);
+const toks = (s: string) => s.toLowerCase().replace(/[^a-z0-9/]+/g, ' ').split(/\s+/).filter((t) => t && !STOP_M3.has(t));
+const refKey6 = (r: string) => r.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 6);
+const similarDesc = (a: string, b: string) => { const ta = toks(a), tb = toks(b); if (!ta.length || !tb.length) return false; const shared = ta.filter((t) => tb.includes(t) && t.length >= 3 && !/^\d{5,}$/.test(t)); return shared.length >= Math.min(2, ta.length, tb.length) || a.toLowerCase().includes(b.toLowerCase()) || b.toLowerCase().includes(a.toLowerCase()); };
+const learnedEvents = (ref: string, caliber?: string) => m3ke.events.filter((e) => refKey6(e.reference) === refKey6(ref) || (!!caliber && e.caliber === caliber));
+export const caliberOf = (ref: string) => fx.caliberForReference(ref);
+export async function getPadPartsContext(label: string): Promise<PadPartsContext> {
+  const j = await findJobByLabel(label.replace(/^BAND-/i, '')); if (!j) throw new Error(`No job matches label ${label}`);
+  const ref = j.watch.reference; const caliber = fx.caliberForReference(ref); const learned = learnedEvents(ref, caliber);
+  const weight = (p: Part) => learned.filter((e) => e.partId === p.id).length;
+  const caliberParts: PadSuggestion[] = caliber ? store.parts.filter((p) => p.calibers.includes(caliber)).map((p): PadSuggestion => ({ part: p, learned: weight(p) > 0, source: 'caliber', hint: weight(p) > 0 ? `learned · chosen ${weight(p)}× for ${caliber}` : `cal. ${caliber}` })).sort((a, b) => weight(b.part) - weight(a.part) || a.part.name.localeCompare(b.part.name)) : [];
+  return resolve({ job: j, reference: ref, caliber, caliberParts });
+}
+// Description search scoped to the reference (model-specific), learned mappings for this reference on top, caliber parts as a tail
+export const padSearchParts = (ref: string, caliber: string | undefined, q: string): PadSuggestion[] => {
+  const needle = q.trim().toLowerCase(); if (!needle) return []; const qt = toks(needle);
+  const hit = (p: Part) => { const hay = `${p.name} ${p.partNumber} ${p.aliases.join(' ')}`.toLowerCase(); return (qt.length > 0 && qt.every((t) => hay.includes(t))) || p.aliases.some((a) => needle.includes(a.toLowerCase())); };
+  const out: PadSuggestion[] = []; const push = (s: PadSuggestion) => { if (!out.some((o) => o.part.id === s.part.id)) out.push(s); };
+  learnedEvents(ref, caliber).filter((e) => similarDesc(e.description, needle)).sort((a, b) => b.ts.localeCompare(a.ts)).forEach((e) => { const p = store.parts.find((x) => x.id === e.partId); if (p) push({ part: p, learned: true, source: 'learned', hint: `learned · “${e.description}”${e.kind === 'resolved' ? ` → ${e.partNumber}` : ''}` }); });
+  store.parts.filter((p) => p.compatibleRefs.some((r) => refKey6(r) === refKey6(ref)) && hit(p)).forEach((p) => push({ part: p, learned: false, source: 'ref', hint: `fits ${ref}` }));
+  if (caliber) store.parts.filter((p) => p.calibers.includes(caliber) && hit(p)).forEach((p) => push({ part: p, learned: false, source: 'caliber', hint: `cal. ${caliber}` }));
+  return out.slice(0, 10);
+};
+export const padRecordSelection = (ref: string, caliber: string | undefined, part: Part, description: string) => { m3ke.events.push({ id: newId('m3'), kind: 'selected', description: description.trim() || part.name, reference: ref, caliber, partId: part.id, partNumber: part.partNumber, price: part.price, resolvedBy: actor().by, ts: new Date().toISOString() }); };
+export async function submitPadRequest(jobId: string, items: PartsRequestItem[]): Promise<PartsRequestWithRefs> {
+  if (!items.length) throw new Error('Add at least one line'); const j = getJobRow(jobId); const w = byId(store.watches, j.watchId); const a = actor();
+  const lines: PartsRequestItem[] = items.map((i) => { const p = i.partId ? store.parts.find((x) => x.id === i.partId) : undefined; return { partId: p?.id, partNumber: p?.partNumber, description: i.description.trim(), qty: Math.max(1, i.qty), price: p?.price, generic: !p }; });
+  const r: PartsRequest = { id: newId('pr'), number: nextPrNumber(), jobId: j.id, status: 'pending_review', partId: lines[0].partId, qty: lines[0].qty, note: lines.find((l) => l.generic)?.description, items: lines, searchTerms: lines.map((l) => l.description), chat: [], requestedBy: a.by, requestedAt: new Date().toISOString(), station: a.station, source: 'pad', reference: w.reference, caliber: fx.caliberForReference(w.reference) };
+  store.partsRequests.unshift(r); partsStamp(r, `pad request → manager review · ${lines.map((l) => `${l.description} ×${l.qty}${l.generic ? ' (GENERIC)' : ''}`).join(', ')}`); jobStamp(j, `Parts request ${r.number} (pad) · ${lines.length} line(s) → review`);
+  return resolve(prRefs(r));
+}
+export async function getPadRequests(): Promise<PartsRequestWithRefs[]> { return resolve(store.partsRequests.filter((r) => r.source === 'pad').sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)).map(prRefs)); }
+export async function getReviewQueue(): Promise<{ review: PartsRequestWithRefs[]; awaitingClient: PartsRequestWithRefs[]; toAllocate: PartsRequestWithRefs[]; bench: (PartsRequestWithRefs & { onHand: number })[] }> {
+  const rows = [...store.partsRequests].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+  return resolve({ review: rows.filter((r) => r.status === 'pending_review').map(prRefs), awaitingClient: rows.filter((r) => r.status === 'awaiting_client').map(prRefs), toAllocate: rows.filter((r) => r.status === 'approved' && r.source === 'pad' && !r.allocatedAt).map(prRefs), bench: (await getApprovalsQueue()).filter((r) => r.source !== 'pad') });
+}
+const managerOnly = () => { const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Manager tier only'); return a; };
+export async function reviewItem(requestId: string, index: number, patch: { price?: number; partNumber?: string }): Promise<{ request: PartsRequestWithRefs; learned?: M3keEvent }> {
+  const a = managerOnly(); const r = byId(store.partsRequests, requestId); if (r.status !== 'pending_review') throw new Error('Only requests in review can be edited'); const it = r.items?.[index]; if (!it) throw new Error('No such line');
+  let learned: M3keEvent | undefined;
+  if (patch.price !== undefined) { if (!(patch.price >= 0)) throw new Error('Price must be a number'); it.price = patch.price; }
+  if (patch.partNumber !== undefined) {
+    const pn = patch.partNumber.trim(); it.partNumber = pn || undefined; const p = pn ? store.parts.find((x) => x.partNumber.toLowerCase() === pn.toLowerCase()) : undefined;
+    it.partId = p?.id; if (p && it.price === undefined) it.price = p.price;
+    if (p && it.generic) { it.generic = false; learned = { id: newId('m3'), kind: 'resolved', description: it.description, reference: r.reference ?? '', caliber: r.caliber, partId: p.id, partNumber: p.partNumber, price: it.price, resolvedBy: a.by, ts: new Date().toISOString(), requestId: r.id }; m3ke.events.push(learned); partsStamp(r, `M3KE learned · “${it.description}” → ${p.partNumber} (${r.reference})`); }
+    else if (pn && !p) it.generic = true;
+  }
+  if (index === 0) { r.partId = it.partId; r.qty = it.qty; }
+  return resolve({ request: prRefs(r), learned });
+}
+export async function sendForClientApproval(requestId: string): Promise<PartsRequestWithRefs> {
+  const a = managerOnly(); const r = byId(store.partsRequests, requestId); if (r.status !== 'pending_review') throw new Error('Not in review');
+  const bad = (r.items ?? []).filter((i) => i.price === undefined || !(i.price >= 0)); if (bad.length) throw new Error(`Price required on every line — missing: ${bad.map((b) => b.description).join(', ')}`);
+  const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0);
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  store.outbox.unshift(email); r.emailId = email.id; r.status = 'awaiting_client'; r.sentForApprovalAt = email.createdAt; r.sentBy = a.by;
+  threadEvent(j.clientId, { kind: 'job', id: j.id }, 'parts', a.by, `Parts approval sent · ${r.number} · ${(r.items ?? []).length} line(s) · $${total.toFixed(2)}`);
+  partsStamp(r, `sent for client approval · $${total.toFixed(2)} · email queued`); jobStamp(j, `${r.number} sent for client approval`);
+  return resolve(prRefs(r));
+}
+export async function simulateClientPartsDecision(requestId: string, decision: 'approve' | 'decline'): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId); if (r.status !== 'awaiting_client') throw new Error('Not awaiting the client'); const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId);
+  r.status = decision === 'approve' ? 'approved' : 'declined'; r.clientDecidedAt = new Date().toISOString(); r.decidedBy = `${c.firstName} (client)`; r.decidedAt = r.clientDecidedAt;
+  threadEvent(j.clientId, { kind: 'job', id: j.id }, 'approval', c.firstName, `${decision === 'approve' ? 'Approved' : 'Declined'} parts ${r.number} (simulated client reply)`, { kind: decision === 'approve' ? 'parts_approved' : 'parts_rejected', refId: r.id, label: decision === 'approve' ? 'parts approved' : 'parts declined' });
+  partsStamp(r, `client ${decision}d (simulated)`); return resolve(prRefs(r));
+}
+export async function padAllocate(requestId: string): Promise<PartsRequestWithRefs> {
+  const a = managerOnly(); const r = byId(store.partsRequests, requestId); if (r.status !== 'approved' || r.allocatedAt) throw new Error('Only client-approved, unallocated requests allocate');
+  const lines = (r.items ?? []).filter((i) => i.partId); if (!lines.length) throw new Error('No catalog part on this request — resolve part numbers first');
+  const short = lines.map((i) => ({ i, p: byId(store.parts, i.partId!) })).filter(({ i, p }) => p.stock < i.qty); if (short.length) throw new Error(`OUT OF STOCK — ${short.map(({ p }) => p.name).join(', ')} · use Order part`);
+  lines.forEach((i) => { const p = byId(store.parts, i.partId!); rw18.picks.unshift({ id: newId('pk'), prId: r.id, partId: p.id, jobId: r.jobId, qty: i.qty, status: 'open', location: p.location ?? 'Unassigned', createdAt: new Date().toISOString() }); });
+  r.allocatedAt = new Date().toISOString(); partsStamp(r, `allocated by ${a.by} · ${lines.length} pick(s) → picking queue`); return resolve(prRefs(r));
+}
+export const partsOnHand = (partId: string) => store.parts.find((p) => p.id === partId)?.stock ?? 0;
+export async function getM3keEvents(): Promise<M3keEvent[]> { return resolve([...m3ke.events].sort((a, b) => b.ts.localeCompare(a.ts))); }
+// Jobs tab — supervisor override of the working tech (Bulk Assign stays the morning path)
+export const getRoomTechs = (): User[] => getDivisionStaff(getSessionDivision()).filter((u) => u.roles.includes('watchmaker') || u.roles.includes('manager') || u.roles.includes('inspector'));
+export async function padSetTech(jobId: string, shortName: string): Promise<JobWithRefs> {
+  const a = managerOnly(); const j = getJobRow(jobId); const u = fx.users.find((x) => x.shortName === shortName); if (!u) throw new Error('Pick someone from the staff list');
+  const head = ensureParts(j).find((c) => c.key === 'head'); const prev = head?.custodyTech ?? j.assignees.find((s) => fx.users.find((x) => x.shortName === s)?.roles.includes('watchmaker')) ?? j.assignees[0];
+  j.assignees = [shortName, ...j.assignees.filter((s) => s !== shortName && s !== prev)];
+  if (head) { head.custodyTech = shortName; head.history!.push({ at: new Date().toISOString(), by: a.by, to: head.station, status: head.partStatus ?? 'in_progress', via: 'pad', note: `custody → ${shortName} (supervisor override${prev ? `, was ${prev}` : ''})` }); }
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} · tech reassigned ${prev ?? '—'} → ${shortName} · supervisor override (pad)` });
+  return resolve(jobRefs(j));
+}
+// Detail sheet — condition report grades + notes per component (read-only); falls back to the multiple-choice inspection
+export async function getPadCondition(jobId: string): Promise<PadConditionView> {
+  const j = getJobRow(jobId); const rep = rp.reports.filter((r) => r.jobId === jobId && r.status !== 'superseded').sort((a, b) => b.version - a.version)[0];
+  if (rep) return resolve({ source: 'report', issuedBy: rep.issuedBy, issuedAt: rep.issuedAt, notes: rep.notes, rows: rep.grades.map((g) => ({ component: g.component, grade: g.grade, note: g.note })) });
+  if (j.inspection) return resolve({ source: 'inspection', issuedBy: j.inspection.by, issuedAt: j.inspection.at, notes: j.conditionNotes, rows: INSPECTION_QUESTIONS.map((q) => ({ component: q.label, grade: j.inspection!.answers[q.key] ?? '—' })) });
+  return resolve({ source: 'none', notes: j.conditionNotes, rows: [] });
+}
+
 // ---- Client request notes — what the client asked for. Badge on cards, pop-up on every scan, mandatory checklist at QC ----
 import type { ClientRequest, ClientRequestAlert, StaffInboxRow } from './types';
 const requestsOf = (j: Job): ClientRequest[] => (j.clientRequests ??= []);

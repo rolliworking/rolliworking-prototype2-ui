@@ -13,7 +13,7 @@ import { fmtDate, fmtTime, fullName } from '@/lib/format';
 
 const field = 'h-8 rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:outline-none';
 
-export const PartsRequestPill = ({ status }: { status: string }) => <StatusPill status={status === 'pending' ? 'awaiting_customer_approval' : status === 'approved' ? 'approved' : status === 'rejected' ? 'declined' : 'draft'} />;
+export const PartsRequestPill = ({ status }: { status: string }) => <StatusPill status={status === 'pending' || status === 'awaiting_client' ? 'awaiting_customer_approval' : status === 'pending_review' ? 'in_review' : status === 'approved' ? 'approved' : status === 'rejected' || status === 'declined' ? 'declined' : 'draft'} />;
 
 // Chat-style lookup with the SCRIPTED assistant + attach → submit; supervisors decide inline
 export const PartsChat = ({ request: r0, onChange }: { request: PartsRequestWithRefs; onChange: (r: PartsRequestWithRefs) => void }) => {

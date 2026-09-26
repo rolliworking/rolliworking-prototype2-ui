@@ -612,7 +612,9 @@ export interface Part {
   location?: string;
 }
 
-export type PartsRequestStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'on_order' | 'received';
+export type PartsRequestStatus = 'draft' | 'pending' | 'pending_review' | 'awaiting_client' | 'approved' | 'declined' | 'rejected' | 'on_order' | 'received';
+// Pad v2 line item — price + part# filled by the manager at review; generic = free-typed, no part# yet
+export interface PartsRequestItem { partId?: string; description: string; qty: number; price?: number; partNumber?: string; generic?: boolean }
 
 export interface ChatMessage {
   id: string;
@@ -637,10 +639,18 @@ export interface PartsRequest {
   station: string;
   decidedBy?: string;
   decidedAt?: string;
-  items?: { partId?: string; description: string; qty: number }[];
+  items?: PartsRequestItem[];
   source?: 'chat' | 'wm' | 'pad';
   decisionNote?: string;
+  reference?: string; caliber?: string;
+  sentForApprovalAt?: string; sentBy?: string; clientDecidedAt?: string; allocatedAt?: string; emailId?: string;
 }
+
+// M3KE capture — append-only training-data plumbing (manager resolutions + supervisor selections)
+export interface M3keEvent { id: string; kind: 'resolved' | 'selected'; description: string; reference: string; caliber?: string; partId: string; partNumber: string; price?: number; resolvedBy: string; ts: string; requestId?: string }
+export interface PadSuggestion { part: Part; learned: boolean; source: 'learned' | 'ref' | 'caliber'; hint?: string }
+export interface PadPartsContext { job: JobWithRefs; reference: string; caliber?: string; caliberParts: PadSuggestion[] }
+export interface PadConditionView { source: 'report' | 'inspection' | 'none'; issuedBy?: string; issuedAt?: string; notes?: string; rows: { component: string; grade: string; note?: string }[] }
 
 export interface PartsKnowledgeEntry extends Stamp {
   id: string;
