@@ -67,6 +67,11 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | 64 | Separate P and PM components (today both = Case)? | Components | one Case component | yes → four components | |
 | 65 | Limit attribution amendments to the same month? | Components → Amend | any time; report follows current `completedBy` | yes → lock after month close | |
 | 66 | Hide inline "done" buttons on the RS Bench (RW-mini)? | `/bench` | same component as `/rw` → buttons shown | yes → prop to hide in RS | |
+| 72 | Audit a staff member opening a colleague's inbox? | `/inbox?staff=` | no audit row | yes → `comms` audit type | |
+| 73 | Replying from a colleague's inbox — reassign the thread to the sender? | `/inbox?staff=` | assignment untouched | yes → auto-assign | |
+| 74 | Show client requests on the client's `/rc` job card? | `/rc` | staff/workshop only | yes → render list on portal card | |
+| 75 | "Understood" once per person per job, or every scan? | scan pop-up | every scan while open | once → skip if actor already acked | |
+| 76 | Restrict N/A check-off at QC to supervisor tier? | QC checklist | any signed-in user | yes → tier gate | |
 
 ## Amber items not numbered above (from DECISIONS "provisional")
 | item | where | prototype does | verdict |

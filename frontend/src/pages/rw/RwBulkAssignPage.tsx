@@ -14,7 +14,9 @@ export default function RwBulkAssignPage() {
   useEffect(() => { void load(); }, [load]);
   const scan = async (code: string) => {
     if (api.parseTechCode(code)) { setS({ ...(await api.scanTech(code)) }); setFlash(`Active tech: ${api.parseTechCode(code)!.shortName}`); return; }
-    const next = await api.scanLabelAssign(code); setS({ ...next }); setFlash(`${next.rows[0].jobNumber} → ${next.tech!.shortName} · ${next.rows[0].part} · started`); setAlert(api.clientRequestAlert(next.rows[0].jobId)); await load();
+    const j = await api.findJobByLabel(code.replace(/^BAND-/i, ''));
+    try { const next = await api.scanLabelAssign(code); setS({ ...next }); setFlash(`${next.rows[0].jobNumber} → ${next.tech!.shortName} · ${next.rows[0].part} · started`); await load(); }
+    finally { if (j) setAlert(api.clientRequestAlert(j.id)); }
   };
   const techs = api.getDivisionStaff(api.getSessionDivision());
   return <div data-testid="rw-bulk-page" className="space-y-3">

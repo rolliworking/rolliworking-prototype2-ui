@@ -210,3 +210,24 @@ Format: date · decision · one-line rationale · status (locked / provisional).
 | 2026-09-26 | Unruled: whether P and PM should be separate components (today both = Case); whether a component can be un-completed (today: amend attribution only); whether an amended attribution moves the month credit (today: yes, the row carries one `completedBy`); whether completions on rollishop jobs count in the same report (today: yes, all divisions). | UNKNOWN | provisional (amber) |
 
 **Modules touched:** jobs, workshop, rolliworking, labels-reports-accounting
+
+## Client request notes — MH brief, 2026-09-26
+
+| date | decision | rationale | status |
+|---|---|---|---|
+| 2026-09-26 | **Client requests** live on the job (`Job.clientRequests[]`): short items of what the client asked for, stamped who/when/station. Added from the RS job page, the `/rw` job page and the Supervisor Pad. Internal notes remain a separate concept and never render client-side. | Brief | locked |
+| 2026-09-26 | **Badge on cards**: `/rw/pad` and `/rw/wm` cards show amber "CLIENT REQUESTS (n)" with the open items listed on the card, never in a tab. | Brief | locked |
+| 2026-09-26 | **Scan pop-up**: every label scan in the workshop (Bulk Assign, Station Scanner, WM room, Pad) pops a modal with the open requests in large type. The scan registers regardless; the modal persists until "Understood", which logs `{by, at, via}` per request (audited `job`). Re-surfaces on every scan while any request is open. | Brief | locked |
+| 2026-09-26 | **QC enforcement**: in `testing` every request is a mandatory checklist item — Done, or N/A with a required reason (who/when logged). `qc_pass` is disabled/throws with a message naming the first unchecked request; Pad Advance-from-QC and `finishJob` share the gate. | Brief | locked |
+| 2026-09-26 | Unruled: portal visibility of requests; once-per-person ack vs every scan; N/A restricted to supervisor tier. | UNKNOWN | provisional (amber) |
+
+**Modules touched:** jobs, rolliworking, workshop
+
+## Inbox — Staff section, 2026-09-26
+
+| date | decision | rationale | status |
+|---|---|---|---|
+| 2026-09-26 | Inbox sidebar lists every staff member with their open-assigned thread count; any staff member can open any colleague's inbox and **read and reply**; "Assigned to me" remains the personal shortcut. Assignment is not changed by replying from a colleague's inbox. | Brief | locked |
+| 2026-09-26 | Unruled: audit row on viewing a colleague's inbox; auto-reassign on reply. | UNKNOWN | provisional (amber) |
+
+**Modules touched:** comms-hub

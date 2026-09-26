@@ -126,6 +126,12 @@ ALL data access must go through ONE module at `src/api/client.ts` that exports t
 - Tested iteration_26: 100%
 - QC-fail credit ruling (2026-09-26): credit stands (locked).
 
+### Inbox Staff section + Client request notes (2026-09-26)
+- Inbox: "Staff" sidebar section (MH/Walter/Vienna/MM + open-assigned counts) → colleague inbox view (`?staff=`), header "X’s inbox", "Back to my inbox", read + reply. `getStaffInboxRows`, `getColleagueInbox`.
+- Client requests: `Job.clientRequests[]`; amber card on RS + RW job pages (far from internal Notes); Pad per-card "Client request" add; CLIENT REQUESTS (n) badge + list on pad/wm cards; scan pop-up with "Understood" ack (Bulk/Station/WM/Pad scan) logging who/when; mandatory QC checklist (Done / N/A+reason / undo) gating qc_pass, finishJob, Pad Advance. Seeds j-30, j-04, j-16. `components/jobs/ClientRequests.tsx`.
+- Tested iteration_28 (all pass). Docs: SESSION-LOG, DECISIONS, OPEN-QUESTIONS Q72–76.
+- NOT built (superseded by MH): the earlier "Note to client" portal-visible notes idea.
+
 ### E18 — RW deep build part 1: shop floor core (2026-09-26)
 - Under `/rw`: Shop Floor (two-lane, part-coloured dots blue/purple/green, drag, history slide-over, finish gate, counts, tech/type filters), Bulk Assign (TECH-xx + label scans, band-only labels → bracelet component + B dept, outbox queue with undo), Work Queue (part dots, filters, simulate client reply), Watchmaker Room `/rw/wm` (fullscreen, scan to safe/refinish, Request part, PIN switch), Station Scanner, **Supervisor Pad** `/rw/pad` (iPad-first: Advance/Send back w/ reasons, live-suggestion parts composer with learning recency, approvals w/ on-hand + OUT OF STOCK → Order part, photos grid + lightbox, header w/ clock), Picking `/rw/picking`.
 - Model: components extended (station, partStatus, custodyTech, history), PickTask, PartsRequest on_order/received + items/source, Part.location. Seeds: j-30..j-33, Rosa (rosa/rosa123), 32 parts, 10 PRs, 10 photos.
