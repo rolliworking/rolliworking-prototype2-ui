@@ -3330,4 +3330,193 @@ export async function getRwFloorMap(): Promise<RwFloorMap> {
   });
 }
 
+// ---- E18 RW deep build — shop floor core (parts = components with station/status/custody/history) --------------------
+import type { FloorDot, JobPhotoView, PadCard, PartHistoryView, PartMove, PartStatus, PartSuggestion, PickTask, PickTaskView, RoomSummary, RwStation, RwStationKey, ScanSession, SendBackReason, WorkQueueRow } from './types';
+export { RW_STATIONS } from './fixtures';
+const rw18 = { picks: fx.pickTasks.map((p): PickTask => ({ ...p })), recent: fx.recentPartChoices.map((r) => ({ ...r })), replied: new Set<string>(), scanSession: { rows: [] } as ScanSession, stationMemory: null as RwStationKey | null };
+const PART_LABEL: Record<ComponentKey, string> = { head: 'Watch head', case: 'Case', band: 'Bracelet' };
+const PRE = new Set<JobStatus>(['intake', 'in_review', 'awaiting_customer_approval']);
+const stationOf = (k: RwStationKey): RwStation => fx.RW_STATIONS.find((s) => s.key === k)!;
+const laneOfPart = (key: ComponentKey): 'head' | 'band' => (key === 'band' ? 'band' : 'head');
+// Dot placement precedence: (1) saved station, (2) not started → pre-approval / pre-queue by job status, (3) status + department
+const derivePlacement = (j: Job, c: JobComponent): { station: RwStationKey; status: PartStatus } => {
+  if (c.station) return { station: c.station, status: c.partStatus ?? 'in_progress' };
+  const lane = laneOfPart(c.key);
+  if (PRE.has(j.status)) return { station: 'pre_approval', status: 'not_started' };
+  if (j.status === 'approved') return { station: lane === 'band' ? 'band_pre_queue' : 'pre_queue', status: 'not_started' };
+  if (j.status === 'ready_to_ship' || j.status === 'closed') return { station: 'finished', status: 'fulfilled' };
+  if (j.status === 'testing') return { station: 'final_assembly', status: 'reunited' };
+  if (c.completedAt) return { station: lane === 'band' ? 'safe_await_head' : 'safe_await_band', status: 'waiting' };
+  return { station: lane === 'band' ? 'refinish' : 'wm_bench_1', status: 'in_progress' };
+};
+const ensureParts = (j: Job): JobComponent[] => {
+  const comps = ensureComponents(j);
+  comps.forEach((c) => {
+    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: 'seeded position' }); } }
+  });
+  return comps;
+};
+const dotOf = (j: Job, c: JobComponent): FloorDot => { const p = derivePlacement(j, c); const w = byId(store.watches, j.watchId); return { jobId: j.id, jobNumber: j.number, key: c.key, label: PART_LABEL[c.key], station: p.station, partStatus: p.status, tech: c.custodyTech ?? c.completedBy, kind: j.kind, priority: j.priority, watchLabel: `${w.brand} ${w.model}` }; };
+const roomJobs = () => store.jobs.filter((j) => j.division === getSessionDivision() && j.status !== 'closed');
+export async function getShopFloor(filter?: { tech?: string; kind?: JobKind }): Promise<ShopFloorT> {
+  const dots = roomJobs().flatMap((j) => ensureParts(j).map((c) => dotOf(j, c))).filter((d) => (!filter?.tech || d.tech === filter.tech) && (!filter?.kind || d.kind === filter.kind));
+  const counts = Object.fromEntries(fx.RW_STATIONS.map((s) => [s.key, dots.filter((d) => d.station === s.key).length])) as Record<RwStationKey, number>;
+  return resolve({ stations: fx.RW_STATIONS, dots, counts, techs: [...new Set(roomJobs().flatMap((j) => ensureParts(j).map((c) => c.custodyTech ?? '')).filter(Boolean))].sort() });
+}
+type ShopFloorT = import('./types').ShopFloor;
+const statusForStation = (s: RwStationKey, prev: PartStatus): PartStatus => (s === 'finished' ? 'fulfilled' : s === 'final_assembly' ? 'reunited' : s.startsWith('safe_') || s.startsWith('into_safe') ? 'waiting' : s === 'pre_approval' || s.endsWith('pre_queue') ? 'not_started' : prev === 'fulfilled' ? 'fulfilled' : 'in_progress');
+const partOf = (jobId: string, key: ComponentKey) => { const j = getJobRow(jobId); const c = ensureParts(j).find((x) => x.key === key); if (!c) throw new Error(`${PART_LABEL[key]} is not a part of ${j.number}`); return { j, c }; };
+const recordMove = (j: Job, c: JobComponent, to: RwStationKey | undefined, status: PartStatus, via: PartMove['via'], note?: string, tech?: string) => {
+  const a = actor(); const from = derivePlacement(j, c).station;
+  c.history!.push({ at: new Date().toISOString(), by: tech ?? a.by, from, to, status, via, note });
+  if (to) c.station = to; c.partStatus = status; if (tech) c.custodyTech = tech;
+  jobStamp(j, `${PART_LABEL[c.key]} → ${to ? stationOf(to).label : status} (${via})${note ? ` · ${note}` : ''}`);
+};
+export async function movePart(jobId: string, key: ComponentKey, to: RwStationKey, via: PartMove['via'] = 'drag'): Promise<FloorDot> {
+  const { j, c } = partOf(jobId, key); const lane = stationOf(to).lane;
+  if (lane !== 'shared' && lane !== laneOfPart(key)) throw new Error(`${PART_LABEL[key]} belongs in the ${laneOfPart(key)} lane — ${stationOf(to).label} is a ${lane}-lane station`);
+  if (to === 'finished') { const out = finishBlockers(j); if (out.length) throw new Error(`Cannot finish ${j.number}: ${out.join(', ')}`); }
+  recordMove(j, c, to, statusForStation(to, c.partStatus ?? 'in_progress'), via);
+  if (to === 'final_assembly' && ensureParts(j).every((x) => derivePlacement(j, x).station === 'final_assembly') && j.status === 'in_service' && !activeHold(j)) { ensureParts(j).forEach((x) => { if (!x.completedAt) { x.completedAt = new Date().toISOString(); x.completedBy = x.custodyTech ?? actor().by; x.completedStation = actor().station; } }); pushTransition(j, 'to_testing', 'testing', 'All parts reunited at Final assembly'); }
+  return resolve(dotOf(j, c));
+}
+export async function markReunited(jobId: string, key: ComponentKey): Promise<FloorDot> { return movePart(jobId, key, 'final_assembly', 'pad'); }
+const finishBlockers = (j: Job) => ensureParts(j).filter((c) => !['waiting', 'reunited', 'fulfilled'].includes(derivePlacement(j, c).status)).map((c) => `${PART_LABEL[c.key]} is still out at ${stationOf(derivePlacement(j, c).station).label}`);
+export const finishGate = (j: Job): string[] => finishBlockers(j);
+export async function finishJob(jobId: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); const out = finishBlockers(j); if (out.length) throw new Error(`Finish gate — ${j.number} cannot be marked Finished: ${out.join('; ')}`);
+  ensureParts(j).forEach((c) => recordMove(j, c, 'finished', 'fulfilled', 'pad'));
+  if (j.status === 'testing') pushTransition(j, 'qc_pass', 'ready_to_ship', 'Finished on the shop floor');
+  return resolve(jobRefs(j));
+}
+export async function getPartHistory(jobId: string, key: ComponentKey): Promise<PartHistoryView> { const { j, c } = partOf(jobId, key); return resolve({ job: jobRefs(j), part: { ...c }, moves: [...(c.history ?? [])].reverse() }); }
+
+// -- Bulk assign (scan-driven): TECH-<short> then watch labels
+export const parseTechCode = (code: string): User | undefined => { const m = /^TECH-(.+)$/i.exec(code.trim()); return m ? fx.users.find((u) => u.shortName.toLowerCase() === m[1].toLowerCase()) : undefined; };
+export const getScanSession = (): ScanSession => rw18.scanSession;
+export async function scanTech(code: string): Promise<ScanSession> { const u = parseTechCode(code); if (!u) throw new Error(`Not a tech code: ${code}`); rw18.scanSession = { tech: u, rows: [] }; appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Bulk assign · active tech ${u.shortName}` }); return resolve(rw18.scanSession); }
+export async function scanLabelAssign(label: string): Promise<ScanSession> {
+  const s = rw18.scanSession; if (!s.tech) throw new Error('Scan a TECH code first');
+  const bandOnly = /\|B$|^BAND-/i.test(label.trim()); const clean = label.trim().replace(/^BAND-/i, '');
+  const j = await findJobByLabel(clean); if (!j) throw new Error(`No job matches label ${label}`);
+  const row = getJobRow(j.id); if (activeHold(row)) throw new Error(`${row.number} is on hold — release it first`);
+  if (bandOnly && !row.workflow.includes('B')) { row.workflow.push('B'); row.components = undefined; ensureParts(row); jobStamp(row, 'Band-only label — bracelet component created, band department tagged'); }
+  const comps = ensureParts(row); const isWm = s.tech.roles.includes('watchmaker'); const target = bandOnly ? comps.find((c) => c.key === 'band')! : comps.find((c) => isWm ? c.key === 'head' : c.key !== 'head') ?? comps[0];
+  if (!row.assignees.includes(s.tech.shortName)) row.assignees.push(s.tech.shortName);
+  if (row.status === 'approved') pushTransition(row, 'start_service', 'in_service', `Bulk assign · ${s.tech.shortName}`);
+  const to: RwStationKey = target.key === 'band' ? 'refinish' : isWm ? (['wm_bench_1', 'wm_bench_2', 'wm_bench_3'] as RwStationKey[])[fx.users.filter((u) => u.roles.includes('watchmaker')).findIndex((u) => u.id === s.tech!.id) % 3] : 'refinish';
+  recordMove(row, target, to, 'in_progress', 'bulk_assign', `custody → ${s.tech.shortName}`, s.tech.shortName);
+  const email = queueJobEmail(row, 'Work has started', `${s.tech.displayName.split(' — ')[0]} has started work on your watch today. We'll be in touch as it progresses — track it any time in RolliConnect.`);
+  const w = byId(store.watches, row.watchId);
+  s.rows.unshift({ at: new Date().toISOString(), jobNumber: row.number, jobId: row.id, watchLabel: `${w.brand} ${w.model} · ${w.reference}`, part: PART_LABEL[target.key], outboxId: email.id });
+  return resolve(s);
+}
+export async function undoOutbox(id: string): Promise<void> { const i = store.outbox.findIndex((e) => e.id === id); if (i >= 0) { store.outbox.splice(i, 1); appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Outbox item ${id} withdrawn (undo)` }); } rw18.scanSession.rows.forEach((r) => { if (r.outboxId === id) r.outboxId = undefined; }); return resolve(undefined); }
+export async function getQueuedOutbox(): Promise<OutboxEmail[]> { return resolve(store.outbox.filter((e) => e.status === 'pending').slice(0, 12)); }
+
+// -- Work queue
+export async function getWorkQueue(): Promise<WorkQueueRow[]> {
+  return resolve(roomJobs().filter((j) => j.status !== 'ready_to_ship').sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), overdue: !!j.dueAt && j.dueAt < new Date().toISOString(), clientReplied: rw18.replied.has(j.id), parts: ensureParts(j).map((c) => ({ key: c.key, done: ['waiting', 'reunited', 'fulfilled'].includes(derivePlacement(j, c).status) || !!c.completedAt, station: derivePlacement(j, c).station })) })));
+}
+export async function simulateClientReply(jobId?: string): Promise<string> {
+  const j = jobId ? getJobRow(jobId) : roomJobs().find((x) => x.status === 'awaiting_customer_approval') ?? roomJobs()[0];
+  rw18.replied.add(j.id); const c = ensureConversation(j.clientId, `Job ${j.number}`, { kind: 'job', id: j.id }, j.division);
+  pushConv(c, { direction: 'in', source: 'portal', by: `${byId(fx.clients, j.clientId).firstName}`, text: 'Approved — please go ahead. (simulated client reply)', at: new Date().toISOString() });
+  return resolve(j.id);
+}
+export const clearClientReplied = (jobId: string) => { rw18.replied.delete(jobId); };
+
+// -- Watchmaker room
+export async function getWmRoom(userId: string): Promise<{ user: User; cards: { job: JobWithRefs; parts: FloorDot[] }[] }> { const u = byId(fx.users, userId); return resolve({ user: u, cards: roomJobs().filter((j) => j.assignees.includes(u.shortName) && j.status !== 'ready_to_ship').map((j) => ({ job: jobRefs(j), parts: ensureParts(j).map((c) => dotOf(j, c)) })) }); }
+export async function sendPartByScan(label: string, to: 'safe' | 'refinish', key?: ComponentKey): Promise<FloorDot> {
+  const j = await findJobByLabel(label); if (!j) throw new Error(`No job matches label ${label}`); const comps = ensureParts(getJobRow(j.id)); const c = (key && comps.find((x) => x.key === key)) ?? comps.find((x) => x.key === 'head') ?? comps[0];
+  const dest: RwStationKey = to === 'refinish' ? 'refinish' : laneOfPart(c.key) === 'band' ? 'into_safe_band' : 'into_safe_head';
+  if (to === 'refinish' && c.key === 'head') { const alt = comps.find((x) => x.key !== 'head'); if (!alt) throw new Error('Refinishing takes case or bracelet — this job has only a watch head'); return movePart(j.id, alt.key, 'refinish', 'scan'); }
+  return movePart(j.id, c.key, dest, 'scan');
+}
+export async function requestPartSimple(jobId: string, description: string, qty: number, source: PartsRequest['source'] = 'wm'): Promise<PartsRequestWithRefs> {
+  if (!description.trim()) throw new Error('Describe the part'); if (qty < 1) throw new Error('Quantity must be at least 1');
+  const j = getJobRow(jobId); const a = actor(); const match = store.parts.find((p) => p.name.toLowerCase() === description.trim().toLowerCase() || p.partNumber.toLowerCase() === description.trim().toLowerCase());
+  const r: PartsRequest = { id: newId('pr'), number: nextPrNumber(), jobId: j.id, status: 'pending', partId: match?.id, qty, note: match ? undefined : description.trim(), items: [{ partId: match?.id, description: description.trim(), qty }], searchTerms: [description.trim()], chat: [], requestedBy: a.by, requestedAt: new Date().toISOString(), station: a.station, source };
+  store.partsRequests.unshift(r); partsStamp(r, `requested from ${source} · ${description.trim()} ×${qty}`); jobStamp(j, `Parts request ${r.number} · ${description.trim()} ×${qty}`);
+  return resolve(prRefs(r));
+}
+const nextPrNumber = () => `PR-${String(Math.max(...store.partsRequests.map((r) => Number(r.number.split('-')[1]) || 0)) + 1).padStart(4, '0')}`;
+
+// -- Station scanner (parts move like registered mail)
+export const getStationMemory = () => rw18.stationMemory;
+export async function stationScan(station: RwStationKey, label: string): Promise<FloorDot> {
+  rw18.stationMemory = station; const j = await findJobByLabel(label.replace(/^BAND-/i, '')); if (!j) throw new Error(`No job matches label ${label}`);
+  const comps = ensureParts(getJobRow(j.id)); const lane = stationOf(station).lane; const c = comps.find((x) => lane === 'shared' ? true : laneOfPart(x.key) === lane && (lane === 'band' || x.key === 'head')) ?? comps.find((x) => lane === 'head' && x.key === 'case') ?? comps[0];
+  return movePart(j.id, c.key, station, 'station');
+}
+
+// -- Supervisor pad
+const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'ready_to_ship'];
+const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', ready_to_ship: 'Finished' };
+export async function getPadBoard(): Promise<PadCard[]> {
+  return resolve(roomJobs().filter((j) => STAGE_ORDER.includes(j.status)).sort((a, b) => STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status) || a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), stage: j.status, stageLabel: STAGE_LABEL[j.status], canAdvance: j.status !== 'ready_to_ship' && !activeHold(j), canSendBack: j.status !== 'approved' && !activeHold(j), parts: ensureParts(j).map((c) => dotOf(j, c)), photos: fx.jobPhotos.filter((p) => p.jobId === j.id).length + j.photos.length, pendingParts: store.partsRequests.filter((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order')).length })));
+}
+export async function padAdvance(jobId: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); if (activeHold(j)) throw new Error('On hold — release first');
+  if (j.status === 'approved') { pushTransition(j, 'start_service', 'in_service', 'Pad · advance'); ensureParts(j).forEach((c) => { if (!c.station) recordMove(j, c, laneOfPart(c.key) === 'band' ? 'refinish' : 'wm_bench_1', 'in_progress', 'pad'); }); }
+  else if (j.status === 'in_service') { const out = finishBlockers(j); if (out.length) throw new Error(`Cannot advance ${j.number} to Final assembly: ${out.join('; ')}`); ensureParts(j).forEach((c) => recordMove(j, c, 'final_assembly', 'reunited', 'pad')); ensureParts(j).forEach((c) => { if (!c.completedAt) { c.completedAt = new Date().toISOString(); c.completedBy = c.custodyTech ?? actor().by; c.completedStation = actor().station; } }); pushTransition(j, 'to_testing', 'testing', 'Pad · advance (reunified)'); }
+  else if (j.status === 'testing') { return finishJob(jobId); }
+  else throw new Error('Already finished');
+  return resolve(jobRefs(j));
+}
+const SEND_BACK_LABEL: Record<SendBackReason, string> = { rework: 'Rework', waiting_on_part: 'Waiting on part', failed_qc: 'Failed QC', other: 'Other' };
+export async function padSendBack(jobId: string, reason: SendBackReason, note?: string): Promise<JobWithRefs> {
+  const j = getJobRow(jobId); if (activeHold(j)) throw new Error('On hold — release first'); if (reason === 'other' && !note?.trim()) throw new Error('Add a note for "Other"');
+  const why = `${SEND_BACK_LABEL[reason]}${note?.trim() ? ` — ${note.trim()}` : ''}`;
+  if (j.status === 'ready_to_ship') { pushTransition(j, 'pad_send_back', 'testing', `Pad · send back · ${why}`); ensureParts(j).forEach((c) => recordMove(j, c, 'final_assembly', 'reunited', 'pad', why)); }
+  else if (j.status === 'testing') { pushTransition(j, reason === 'failed_qc' ? 'qc_fail' : 'pad_send_back', 'in_service', `Pad · send back · ${why}`); if (reason === 'failed_qc') ensureParts(j).filter((c) => c.completedAt).forEach((c) => c.rework.push({ at: new Date().toISOString(), reason: why, by: actor().by })); ensureParts(j).forEach((c) => recordMove(j, c, laneOfPart(c.key) === 'band' ? 'refinish' : 'wm_bench_1', 'in_progress', 'pad', why)); }
+  else if (j.status === 'in_service') { pushTransition(j, 'pad_send_back', 'approved', `Pad · send back · ${why}`); ensureParts(j).forEach((c) => recordMove(j, c, laneOfPart(c.key) === 'band' ? 'band_pre_queue' : 'pre_queue', 'not_started', 'pad', why)); }
+  else throw new Error('Already at the first stage');
+  appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, userDisplayName: actor().user?.displayName, detail: `${j.number} · sent back by pad · ${why}` });
+  return resolve(jobRefs(j));
+}
+export const SEND_BACK_REASONS = SEND_BACK_LABEL;
+// Live suggestions: names + aliases, scoped to the job's watch reference, most-recently-chosen for that reference first
+export const partSuggestions = (jobId: string, q: string): PartSuggestion[] => {
+  const j = getJobRow(jobId); const ref = byId(store.watches, j.watchId).reference; const needle = q.trim().toLowerCase(); if (!needle) return [];
+  const refKey = (r: string) => r.replace(/[^0-9A-Z]/gi, '').slice(0, 6);
+  const recent = rw18.recent.filter((r) => refKey(r.reference) === refKey(ref)).sort((a, b) => b.at.localeCompare(a.at));
+  return store.parts.map((p): PartSuggestion | null => {
+    const inRef = p.compatibleRefs.some((r) => refKey(r) === refKey(ref)); const nameHit = p.name.toLowerCase().includes(needle) || p.partNumber.toLowerCase().includes(needle); const aliasHit = p.aliases.some((a) => a.toLowerCase().includes(needle) || needle.includes(a.toLowerCase()));
+    if (!nameHit && !aliasHit) return null; const ri = recent.findIndex((r) => r.partId === p.id);
+    return { part: p, score: (ri >= 0 ? 1000 - ri : 0) + (inRef ? 100 : 0) + (nameHit ? 10 : 0) + (aliasHit ? 8 : 0), reason: ri >= 0 ? 'recent' : inRef ? 'ref' : nameHit ? 'name' : 'alias' };
+  }).filter((x): x is PartSuggestion => !!x).sort((a, b) => b.score - a.score).slice(0, 8);
+};
+export const recordPartPick = (jobId: string, partId: string) => { const j = getJobRow(jobId); const ref = byId(store.watches, j.watchId).reference; rw18.recent = [{ reference: ref, partId, at: new Date().toISOString() }, ...rw18.recent.filter((r) => !(r.reference === ref && r.partId === partId))]; };
+export async function submitPadPartsRequest(jobId: string, items: { partId?: string; description: string; qty: number }[]): Promise<PartsRequestWithRefs> {
+  if (!items.length) throw new Error('Add at least one part'); const j = getJobRow(jobId); const a = actor(); const first = items[0];
+  const r: PartsRequest = { id: newId('pr'), number: nextPrNumber(), jobId: j.id, status: 'pending', partId: first.partId, qty: first.qty, items, searchTerms: items.map((i) => i.description), chat: [], requestedBy: a.by, requestedAt: new Date().toISOString(), station: a.station, source: 'pad' };
+  store.partsRequests.unshift(r); partsStamp(r, `pad request · ${items.map((i) => `${i.description} ×${i.qty}`).join(', ')}`); jobStamp(j, `Parts request ${r.number} (pad) · ${items.length} item(s)`);
+  return resolve(prRefs(r));
+}
+export async function getApprovalsQueue(): Promise<(PartsRequestWithRefs & { onHand: number })[]> { return resolve(store.partsRequests.filter((r) => r.status === 'pending' || r.status === 'on_order').sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)).map((r) => ({ ...prRefs(r), onHand: r.partId ? store.parts.find((p) => p.id === r.partId)?.stock ?? 0 : 0 }))); }
+export async function approvalAction(requestId: string, action: 'approve' | 'decline' | 'on_order' | 'received', note?: string): Promise<PartsRequestWithRefs> {
+  const r = byId(store.partsRequests, requestId); const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Supervisor / manager only'); const part = r.partId ? store.parts.find((p) => p.id === r.partId) : undefined;
+  if (action === 'approve') { if (!part) throw new Error('Free-typed part — order it or attach a catalog part'); if (part.stock <= 0) throw new Error(`${part.name} is OUT OF STOCK — use Order part`); r.status = 'approved'; rw18.picks.unshift({ id: newId('pk'), prId: r.id, partId: part.id, jobId: r.jobId, qty: r.qty, status: 'open', location: part.location ?? 'Unassigned', createdAt: new Date().toISOString() }); partsStamp(r, `approved (pad) · allocated · to picking${note ? ` · ${note}` : ''}`); }
+  else if (action === 'decline') { r.status = 'rejected'; r.note = note?.trim() || 'Declined on the pad'; partsStamp(r, `declined (pad)${note ? ` · ${note}` : ''}`); }
+  else if (action === 'on_order') { r.status = 'on_order'; partsStamp(r, `ordered (pad)${part && part.stock <= 0 ? ' · out of stock' : ''}`); const j = getJobRow(r.jobId); if (!activeHold(j) && canHold(j)) { j.holds.push({ id: newId('h'), type: 'parts', reason: `Part on order · ${r.number}`, priorStatus: j.status, placedAt: new Date().toISOString(), placedBy: a.by, station: a.station }); jobStamp(j, `Parts hold · ${r.number} on order`); } }
+  else { if (part) part.stock += r.qty; r.status = 'received'; partsStamp(r, `received (pad) · +${r.qty} on hand`); const j = getJobRow(r.jobId); const h = activeHold(j); if (h && h.reason.includes(r.number)) { h.releasedAt = new Date().toISOString(); h.releasedBy = a.by; jobStamp(j, `Parts hold released · ${r.number} received`); } rw18.picks.unshift({ id: newId('pk'), prId: r.id, partId: part?.id ?? '', jobId: r.jobId, qty: r.qty, status: 'open', location: part?.location ?? 'Receiving shelf', createdAt: new Date().toISOString() }); }
+  r.decidedBy = a.by; r.decidedAt = new Date().toISOString();
+  return resolve(prRefs(r));
+}
+// -- Picking queue
+const pickView = (t: PickTask): PickTaskView => { const part = store.parts.find((p) => p.id === t.partId) ?? { id: '', partNumber: '—', name: 'Free-typed part', category: '', compatibleRefs: [], calibers: [], aliases: [], price: 0, stock: 0, location: t.location }; return { ...t, part, job: jobRefs(getJobRow(t.jobId)), onHand: part.stock }; };
+export async function getPickingQueue(): Promise<{ tasks: PickTaskView[]; remaining: number; shortsToday: number }> { const tk = new Date().toISOString().slice(0, 10); return resolve({ tasks: rw18.picks.filter((t) => t.status === 'open' || (t.doneAt ?? '').startsWith(tk)).sort((a, b) => (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1) || a.createdAt.localeCompare(b.createdAt)).map(pickView), remaining: rw18.picks.filter((t) => t.status === 'open').length, shortsToday: rw18.picks.filter((t) => t.status === 'short' && (t.doneAt ?? '').startsWith(tk)).length }); }
+export async function pickAction(taskId: string, action: 'picked' | 'short' | 'found', location?: string): Promise<PickTaskView> {
+  const t = byId(rw18.picks, taskId); const part = store.parts.find((p) => p.id === t.partId); const r = store.partsRequests.find((x) => x.id === t.prId); const a = actor();
+  if (action === 'picked') { if (!part) throw new Error('No catalog part on this pick'); if (part.stock < t.qty) throw new Error(`Only ${part.stock} on hand at ${t.location} — need ${t.qty}. Flag it short or found elsewhere.`); part.stock -= t.qty; t.status = 'picked'; t.doneAt = new Date().toISOString(); const j = getJobRow(t.jobId); jobStamp(j, `Part picked · ${part.name} ×${t.qty} · allocated`); if (r) partsStamp(r, `picked ×${t.qty} · on hand now ${part.stock}`); }
+  else if (action === 'short') { t.status = 'short'; t.doneAt = new Date().toISOString(); if (r) { r.status = 'on_order'; partsStamp(r, 'short at pick → on order'); } appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, detail: `Pick ${t.id} short · ${part?.name ?? 'part'} · ordered` }); }
+  else { if (!location?.trim()) throw new Error('Type the actual location'); if (part) part.location = location.trim(); t.location = location.trim(); t.status = 'open'; t.note = 'found elsewhere'; appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, detail: `${part?.name ?? 'part'} relocated → ${location.trim()}` }); }
+  return resolve(pickView(t));
+}
+export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => p), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.fileName || `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by }))]); }
+export async function getRoomSummary(): Promise<RoomSummary> { const room = roomJobs(); return resolve({ jobsInRoom: room.filter((j) => STAGE_ORDER.includes(j.status)).length, waitingOnParts: room.filter((j) => activeHold(j)?.type === 'parts' || store.partsRequests.some((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order'))).length, waitingOnApproval: room.filter((j) => j.status === 'awaiting_customer_approval').length, picksRemaining: rw18.picks.filter((t) => t.status === 'open').length, shortsToday: rw18.picks.filter((t) => t.status === 'short').length }); }
+export const PART_LABELS = PART_LABEL;
+
 replayRcEvents();

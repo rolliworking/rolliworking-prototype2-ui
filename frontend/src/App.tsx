@@ -17,6 +17,12 @@ import RwPartsPage from '@/pages/rw/RwPartsPage';
 import RwQcPage from '@/pages/rw/RwQcPage';
 import RwEvidencePage from '@/pages/rw/RwEvidencePage';
 import RwFloorPage from '@/pages/rw/RwFloorPage';
+import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
+import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
+import RwWmPage from '@/pages/rw/RwWmPage';
+import RwStationScanPage from '@/pages/rw/RwStationScanPage';
+import RwPadPage from '@/pages/rw/RwPadPage';
+import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
 import RgManagerPage from '@/pages/rg/RgManagerPage';
@@ -106,6 +112,12 @@ export default function App() {
             <Route path="qc" element={<RwManagerOnly label="QC"><RwQcPage /></RwManagerOnly>} />
             <Route path="supervisor" element={<RwManagerOnly label="Supervisor board"><SupervisorPage /></RwManagerOnly>} />
             <Route path="floor" element={<RwFloorPage />} />
+            <Route path="queue" element={<RwWorkQueuePage />} />
+            <Route path="bulk" element={<RwManagerOnly label="Bulk Assign"><RwBulkAssignPage /></RwManagerOnly>} />
+            <Route path="wm" element={<RwWmPage />} />
+            <Route path="station" element={<RwStationScanPage />} />
+            <Route path="pad" element={<RwManagerOnly label="Supervisor Pad"><RwPadPage /></RwManagerOnly>} />
+            <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
             <Route path="today" element={<TodayPage />} />
             <Route path="*" element={<Navigate to="/rw" replace />} />

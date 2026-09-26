@@ -347,3 +347,14 @@ Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; 
 | `getReport('completions')` | `Report` | table form for the Reports page |
 | `completionsThisMonth(tech)` sync | number | Supervisor board header |
 | `transitionJob(id, 'to_testing')` (changed) | — | gated by components (see STATE-MACHINES §15); `qc_fail` logs rework on completed components |
+
+## 23. E18 — RW shop floor core
+| export | signature | notes |
+|---|---|---|
+| `getShopFloor(filter?)`, `movePart(jobId, key, to, via)`, `markReunited`, `finishGate(job)` sync, `finishJob(jobId)`, `getPartHistory(jobId, key)` | floor | lane rule, finish gate, auto-testing when all parts at Final assembly |
+| `parseTechCode` sync, `getScanSession` sync, `scanTech(code)`, `scanLabelAssign(label)`, `undoOutbox(id)`, `getQueuedOutbox()` | bulk assign | band-only labels add B + bracelet component |
+| `getWorkQueue()`, `simulateClientReply(jobId?)`, `clearClientReplied` | work queue | |
+| `getWmRoom(userId)`, `sendPartByScan(label, 'safe'\|'refinish', key?)`, `requestPartSimple(jobId, desc, qty, source)` | WM room | |
+| `getStationMemory` sync, `stationScan(station, label)` | station scanner | |
+| `getPadBoard()`, `padAdvance(jobId)`, `padSendBack(jobId, reason, note?)`, `SEND_BACK_REASONS`, `partSuggestions(jobId, q)` sync, `recordPartPick(jobId, partId)` sync, `submitPadPartsRequest(jobId, items)`, `getApprovalsQueue()`, `approvalAction(id, approve\|decline\|on_order\|received, note?)`, `getJobPhotoViews(jobId)`, `getRoomSummary()` | supervisor pad | manager tier on approvalAction |
+| `getPickingQueue()`, `pickAction(taskId, picked\|short\|found, location?)` | picking | decrements `Part.stock`; found → updates `Part.location` |

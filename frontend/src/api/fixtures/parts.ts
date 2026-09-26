@@ -20,7 +20,7 @@ export const parts: Part[] = [
   P('pt-13', '78360-580', 'Oyster bracelet end link 580', 'bracelet', ['16610', '16613', '16600'], [], ['end link', 'endlink', 'end piece'], 120, 4),
   P('pt-14', '93150-CL', 'Oysterlock clasp, 93150', 'bracelet', ['16610', '16613', '16600'], [], ['clasp', 'oysterlock', 'buckle'], 380, 2),
   P('pt-15', '72200-SB', 'Bracelet screw, Oyster 20mm', 'bracelet', ['116610', '126610', '116500', '126500', '124300'], [], ['screw', 'bracelet screw', 'link screw'], 28, 30),
-  P('pt-16', '77080-SP', 'Spring bar, 20mm curved', 'bracelet', ['16610', '16613', '116610', '126610', '16600', '116234'], [], ['spring bar', 'springbar', 'pin'], 12, 40),
+  P('pt-16', '77080-SP', 'Spring bar, 20mm curved', 'bracelet', ['16610', '16613', '116610', '126610', '16600', '116234'], [], ['spring bar', 'springbar', 'pin'], 12, 1),
   P('pt-17', '315-24280', 'Bezel insert, black aluminium (16610)', 'bezel', ['16610', '16613'], [], ['bezel insert', 'insert', 'bezel'], 260, 2),
   P('pt-18', '315-24290', 'Bezel insert, blue aluminium (16613)', 'bezel', ['16613', '16618'], [], ['bezel insert', 'blue insert', 'bezel'], 280, 1),
   P('pt-19', '410-16610', 'Hand set, luminous (Submariner 16610)', 'dial', ['16610', '16613'], ['3135'], ['hands', 'hand set', 'lume hands'], 340, 1),
@@ -30,7 +30,17 @@ export const parts: Part[] = [
   P('pt-23', '29-200-36', 'Case back gasket, 36mm', 'gasket', ['16200', '16234', '116234', '126234'], [], ['gasket', 'case back gasket', 'o-ring'], 16, 14),
   P('pt-24', '24-6030-0', 'Winding crown, Twinlock 6mm', 'crown', ['16200', '16234', '116234', '126234', '124300'], [], ['crown', 'twinlock', 'winding crown'], 180, 3),
   P('pt-25', 'PM-BZ-PT', 'Bezel refinish kit — platinum (precious metals)', 'bezel', ['228206', '126719'], [], ['platinum bezel', 'pm bezel', 'refinish kit'], 640, 1),
+  P('pt-26', '315-126710-BB', 'Bezel insert, Cerachrom black/blue (GMT 126710BLNR)', 'bezel', ['126710', '126710BLNR'], [], ['black/blue gmt insert', 'batman insert', 'bezel insert', 'blnr insert'], 690, 2),
+  P('pt-27', '315-126710-RB', 'Bezel insert, Cerachrom red/blue (GMT 126710BLRO)', 'bezel', ['126710', '126710BLRO'], [], ['pepsi insert', 'red/blue gmt insert', 'bezel insert'], 690, 0),
+  P('pt-28', '410-126710', 'Hand set, GMT with green 24h hand', 'dial', ['126710'], ['3285'], ['gmt hands', 'hand set', 'green gmt hand'], 380, 1),
+  P('pt-29', '78200-JB', 'Jubilee bracelet link, 20mm', 'bracelet', ['126710', '126334', '126234'], [], ['jubilee link', 'link', 'bracelet link'], 95, 6),
+  P('pt-30', '72610-CL', 'Oysterlock clasp, Glidelock (126610)', 'bracelet', ['126610', '126619'], [], ['glidelock', 'clasp', 'sub clasp'], 520, 1),
+  P('pt-31', '3135-710', 'Balance complete, cal. 3135', 'movement', ['16610', '16613', '16200'], ['3135'], ['balance', 'balance complete', 'balance wheel'], 780, 1),
+  P('pt-32', 'MT5402-330', 'Mainspring, Tudor MT5402', 'movement', ['79030', 'M79030N'], ['MT5402'], ['mainspring', 'spring', 'bb58 spring'], 70, 3),
 ];
+const LOCATIONS: Record<string, string> = { 'pt-01': 'Cabinet A · Drawer 1 · Bin 1', 'pt-02': 'Cabinet A · Drawer 1 · Bin 2', 'pt-03': 'Cabinet A · Drawer 2 · Bin 1', 'pt-04': 'Cabinet A · Drawer 2 · Bin 2', 'pt-05': 'Cabinet A · Drawer 6 · Bin 1', 'pt-06': 'Cabinet A · Drawer 7 · Bin 1', 'pt-07': 'Cabinet A · Drawer 6 · Bin 2', 'pt-08': 'Cabinet A · Drawer 7 · Bin 2', 'pt-09': 'Cabinet A · Drawer 8 · Bin 1', 'pt-10': 'Cabinet B · Drawer 2 · Bin 3', 'pt-11': 'Cabinet A · Drawer 3 · Bin 2', 'pt-12': 'Cabinet A · Drawer 3 · Bin 3', 'pt-13': 'Cabinet C · Drawer 2 · Bin 1', 'pt-14': 'Cabinet C · Drawer 2 · Bin 4', 'pt-15': 'Cabinet C · Drawer 1 · Bin 2', 'pt-16': 'Cabinet C · Drawer 1 · Bin 9', 'pt-17': 'Cabinet B · Drawer 12 · Bin 4', 'pt-18': 'Cabinet B · Drawer 12 · Bin 5', 'pt-19': 'Cabinet B · Drawer 9 · Bin 1', 'pt-20': 'Cabinet A · Drawer 6 · Bin 4', 'pt-21': 'Cabinet A · Drawer 6 · Bin 5', 'pt-22': 'Cabinet A · Drawer 9 · Bin 1', 'pt-23': 'Cabinet A · Drawer 3 · Bin 4', 'pt-24': 'Cabinet A · Drawer 2 · Bin 3', 'pt-25': 'Safe 2 · Shelf 1', 'pt-26': 'Cabinet B · Drawer 13 · Bin 1', 'pt-27': 'Cabinet B · Drawer 13 · Bin 2', 'pt-28': 'Cabinet B · Drawer 9 · Bin 3', 'pt-29': 'Cabinet C · Drawer 3 · Bin 1', 'pt-30': 'Cabinet C · Drawer 2 · Bin 6', 'pt-31': 'Cabinet A · Drawer 8 · Bin 3', 'pt-32': 'Cabinet A · Drawer 6 · Bin 6' };
+parts.forEach((p) => { p.location = LOCATIONS[p.id]; });
+
 
 const msg = (id: string, role: ChatMessage['role'], text: string, d: number, h: number, suggestions?: ChatMessage['suggestions']): ChatMessage => ({ id, role, text, suggestions, at: daysAgo(d, h) });
 
@@ -43,6 +53,17 @@ export const partsRequests: PartsRequest[] = [
     chat: [msg('cm-7', 'user', 'hairspring for the lady datejust', 0, 9), msg('cm-8', 'assistant', 'I need a reference or caliber to be sure — the job watch is ref 279171 (cal. 2236). Try “syloxi 2236”.', 0, 9), msg('cm-9', 'user', 'syloxi 2236', 0, 9), msg('cm-10', 'assistant', 'Found 1 match for cal. 2236.', 0, 9, [{ partId: 'pt-22', reason: 'caliber 2236 · hairspring' }])] },
   { id: 'pr-04', number: 'PR-0044', jobId: 'j-03', status: 'rejected', partId: 'pt-17', qty: 1, searchTerms: ['black insert 16613'], requestedBy: 'Walter', requestedAt: daysAgo(3, 14), station: 'Bench 2', decidedBy: 'MM', decidedAt: daysAgo(3, 15), decisionNote: 'Wrong colour — 16613 takes the blue insert; client asked for original spec',
     chat: [msg('cm-11', 'user', 'black insert 16613', 3, 14), msg('cm-12', 'assistant', 'Found 2 matches for ref 16613.', 3, 14, [{ partId: 'pt-17', reason: 'ref 16613 · bezel insert (black)' }, { partId: 'pt-18', reason: 'ref 16613 · bezel insert (blue)' }])] },
+  // E18 — approvals queue (pending) + approved picks
+  { id: 'pr-04', number: 'PR-0044', jobId: 'j-30', status: 'pending', partId: 'pt-26', qty: 1, note: 'Insert chipped at 12', searchTerms: ['black/blue gmt insert'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', source: 'wm', chat: [] },
+  { id: 'pr-05', number: 'PR-0045', jobId: 'j-06', status: 'pending', partId: 'pt-27', qty: 1, searchTerms: ['pepsi insert'], requestedBy: 'MM', requestedAt: daysAgo(0, 8), station: 'Bench 1', source: 'wm', chat: [] },
+  { id: 'pr-06', number: 'PR-0046', jobId: 'j-31', status: 'pending', partId: 'pt-15', qty: 4, searchTerms: ['bracelet screw'], requestedBy: 'Walter', requestedAt: daysAgo(0, 7), station: 'Refinishing', source: 'wm', chat: [] },
+  { id: 'pr-07', number: 'PR-0047', jobId: 'j-24', status: 'pending', partId: 'pt-31', qty: 1, note: 'Balance staff bent', searchTerms: ['balance complete'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 7), station: 'Bench 3', source: 'wm', chat: [] },
+  { id: 'pr-08', number: 'PR-0048', jobId: 'j-03', status: 'pending', partId: 'pt-12', qty: 1, searchTerms: ['crystal gasket'], requestedBy: 'MM', requestedAt: daysAgo(0, 6), station: 'Bench 1', source: 'wm', chat: [] },
+  { id: 'pr-09', number: 'PR-0049', jobId: 'j-32', status: 'pending', qty: 1, items: [{ description: 'Caseback sticker set (free-typed)', qty: 1 }], searchTerms: ['caseback sticker'], requestedBy: 'Walter', requestedAt: daysAgo(0, 6), station: 'Refinishing', source: 'pad', chat: [] },
+  { id: 'pr-10', number: 'PR-0050', jobId: 'j-01', status: 'approved', partId: 'pt-11', qty: 1, searchTerms: ['gasket'], requestedBy: 'MM', requestedAt: daysAgo(0, 7), station: 'Bench 1', decidedBy: 'MM', decidedAt: daysAgo(0, 8), source: 'wm', chat: [] },
+  { id: 'pr-11', number: 'PR-0051', jobId: 'j-04', status: 'approved', partId: 'pt-17', qty: 1, searchTerms: ['bezel insert'], requestedBy: 'MM', requestedAt: daysAgo(0, 7), station: 'Bench 2', decidedBy: 'MM', decidedAt: daysAgo(0, 8), source: 'wm', chat: [] },
+  { id: 'pr-12', number: 'PR-0052', jobId: 'j-24', status: 'approved', partId: 'pt-06', qty: 1, searchTerms: ['barrel'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', decidedBy: 'MM', decidedAt: daysAgo(0, 9), source: 'wm', chat: [] },
+  { id: 'pr-13', number: 'PR-0053', jobId: 'j-30', status: 'approved', partId: 'pt-16', qty: 2, searchTerms: ['spring bar'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', decidedBy: 'MM', decidedAt: daysAgo(0, 9), source: 'wm', chat: [] },
 ];
 
 export const partsKnowledge: PartsKnowledgeEntry[] = [

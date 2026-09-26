@@ -294,7 +294,11 @@ export interface JobComponent {
   completedAt?: string; completedBy?: string; completedStation?: string;
   amendedAt?: string; amendedBy?: string; amendedFrom?: string;
   rework: ComponentRework[];
+  // E18 — physical part on the shop floor
+  station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; history?: PartMove[];
 }
+export type PartStatus = 'not_started' | 'in_progress' | 'waiting' | 'reunited' | 'fulfilled';
+export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system'; note?: string }
 export interface TechCompletionRow { tech: string; months: Record<string, { total: number; byDept: Record<DeptCode, number> }>; total: number }
 export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]; generatedAt: string }
 
@@ -597,9 +601,10 @@ export interface Part {
   aliases: string[];
   price: number;
   stock: number;
+  location?: string;
 }
 
-export type PartsRequestStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+export type PartsRequestStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'on_order' | 'received';
 
 export interface ChatMessage {
   id: string;
@@ -624,6 +629,8 @@ export interface PartsRequest {
   station: string;
   decidedBy?: string;
   decidedAt?: string;
+  items?: { partId?: string; description: string; qty: number }[];
+  source?: 'chat' | 'wm' | 'pad';
   decisionNote?: string;
 }
 
@@ -948,3 +955,21 @@ export interface RequestRow extends ServiceRequest { client: Client; watch?: Wat
 export type RwStageKey = 'intake' | 'review' | 'bench' | 'polish';
 export interface RwStage { key: RwStageKey; label: string; jobs: JobWithRefs[] }
 export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage[]; finalAssembly: JobWithRefs[]; intoSafe: { key: 'components' | 'hold' | 'approval' | 'ready'; label: string; jobs: JobWithRefs[] }[] }
+
+// ---- E18 RW deep build — shop floor core ----------------------------------------------------------------
+export type RwLane = 'head' | 'band' | 'shared';
+export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'into_safe_head' | 'safe_await_band' | 'band_pre_queue' | 'refinish' | 'polish' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'finished';
+export interface RwStation { key: RwStationKey; label: string; lane: RwLane; order: number }
+export type PartColorKey = 'head' | 'case' | 'band';
+export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string }
+export interface ShopFloor { stations: RwStation[]; dots: FloorDot[]; counts: Record<RwStationKey, number>; techs: string[] }
+export interface PartHistoryView { job: JobWithRefs; part: JobComponent; moves: PartMove[] }
+export interface ScanSession { tech?: User; rows: { at: string; jobNumber: string; jobId: string; watchLabel: string; part: string; outboxId?: string }[] }
+export interface WorkQueueRow { job: JobWithRefs; overdue: boolean; clientReplied: boolean; parts: { key: ComponentKey; done: boolean; station?: RwStationKey }[] }
+export interface PickTask { id: string; prId: string; partId: string; jobId: string; qty: number; status: 'open' | 'picked' | 'short' | 'found'; location: string; createdAt: string; doneAt?: string; note?: string }
+export interface PickTaskView extends PickTask { part: Part; job: JobWithRefs; onHand: number }
+export interface PartSuggestion { part: Part; score: number; reason: 'recent' | 'name' | 'alias' | 'ref' }
+export type SendBackReason = 'rework' | 'waiting_on_part' | 'failed_qc' | 'other';
+export interface PadCard { job: JobWithRefs; stage: JobStatus; stageLabel: string; canAdvance: boolean; canSendBack: boolean; parts: FloorDot[]; photos: number; pendingParts: number }
+export interface RoomSummary { jobsInRoom: number; waitingOnParts: number; waitingOnApproval: number; picksRemaining: number; shortsToday: number }
+export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection'; at: string; by: string }
