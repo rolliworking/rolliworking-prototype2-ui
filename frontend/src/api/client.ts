@@ -3923,6 +3923,15 @@ export async function jobSummaryContext(jobId: string): Promise<JobSummaryContex
   const pr = (store.partsRequests ?? []).filter((r) => r.jobId === j.id); if (pr.some((r) => r.status === 'on_order')) open.push('a part is on order'); else if (pr.some((r) => r.status === 'approved' || r.status === 'pending' || r.status === 'pending_review')) open.push('a part request is being reviewed'); if (j.status === 'ready_to_ship') open.push('finished, ready for pickup / return shipping');
   return resolve({ jobNumber: j.number, clientFirstName: c.firstName, watch: `${w.brand} ${w.model}`, status: j.status, intakeStage: j.packageId ? store.packages.find((p) => p.id === j.packageId)?.status : undefined, dueAt: j.dueAt, daysOpen: days(j.createdAt), components, openItems: open, notes: j.notes.slice(-3).map((n) => n.text) });
 }
+// -- Custody by person: who physically holds each watch head / case / bracelet right now (same data as the floor board, grouped by holder)
+const HOLDER_NAME: Record<string, string> = { MH: 'Mike (MH)', MM: 'MM' };
+export interface CustodyItem extends FloorDot { clientLastName: string; workflow: DeptCode[]; status: JobStatus; stationLabel: string; heldSince?: string; notes: string[] }
+export interface CustodyByPerson { tech: string; name: string; items: CustodyItem[] }
+export async function getCustodyByPerson(): Promise<CustodyByPerson[]> {
+  const groups = new Map<string, CustodyItem[]>();
+  roomJobs().forEach((j) => { const c = byId(fx.clients, j.clientId); ensureParts(j).forEach((p) => { const holder = p.custodyTech; if (!holder) return; const d = dotOf(j, p); const last = p.history?.[p.history.length - 1]; (groups.get(holder) ?? groups.set(holder, []).get(holder)!).push({ ...d, clientLastName: c.lastName, workflow: j.workflow, status: j.status, stationLabel: stationOf(d.station).label, heldSince: last?.at, notes: j.notes.slice(-2).map((n) => n.text) }); }); });
+  return resolve([...groups.entries()].map(([tech, items]) => ({ tech, name: HOLDER_NAME[tech] ?? fx.users.find((u) => u.shortName === tech)?.displayName.split(' — ')[0] ?? tech, items: items.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber)) })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)));
+}
 export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
 export const POLISHERS = ['Walter', 'Joseph', 'Leo'];
 

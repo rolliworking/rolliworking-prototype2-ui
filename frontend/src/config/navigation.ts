@@ -25,16 +25,17 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick } from 'lucide-react';
+  MessagesSquare, MousePointerClick, Hand } from 'lucide-react';
 import type { AccessTier } from '@/api/client';
 
-export type NavGroupKey = 'intake' | 'clients' | 'rw';
+export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
 // Expandable sidebar groups. `path` = the header itself is a page (Intake → /intake); no path = pure folder (RW).
 export interface NavGroup { key: NavGroupKey; label: string; icon: LucideIcon; path?: string }
 export const NAV_GROUPS: NavGroup[] = [
   { key: 'intake', label: 'Intake', icon: Inbox, path: '/intake' },
   { key: 'clients', label: 'Clients', icon: Users, path: '/clients' },
   { key: 'rw', label: 'RW', icon: Hammer },
+  { key: 'parts', label: 'Parts & Inventory', icon: Boxes },
 ];
 
 export interface NavItem {
@@ -67,10 +68,12 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'supervisor', label: 'Supervisor', path: '/supervisor', icon: ClipboardCheck, tiers: MGR, group: 'rw', built: true, blurb: 'Assign watchmakers, approve parts, park holds, QC queue.' },
   { key: 'floor', label: 'Shop Floor', path: '/floor', icon: Map, tiers: MGR, group: 'rw', built: true, blurb: 'Station map — WATCH / BRACELET tracks, manager safes, gate scans, Bulk assign, Component lookup.' },
   { key: 'assign-move', label: 'Assign / Move', path: '/assign', icon: MousePointerClick, tiers: MGR, built: true, blurb: 'Click a destination on the map, scan labels, commit — moves jobs without the detail board.' },
-  { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
+  { key: 'custody', label: 'Custody', path: '/custody', icon: Hand, tiers: MGR, built: true, blurb: 'Who physically holds which watch head / case / bracelet right now, grouped by person.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, group: 'clients', built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
-  { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, built: true, blurb: 'Purchase orders, vendors and receiving.' },
-  { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, built: true, blurb: 'Parts, stock levels and reorder alerts.' },
+  { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, group: 'parts', built: true, blurb: 'Parts, stock levels and reorder alerts.' },
+  { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, group: 'parts', built: true, blurb: 'Purchase orders, vendors and receiving.' },
+  { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, group: 'parts', built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
+  { key: 'parts-catalog', label: 'Parts', path: '/parts', icon: Tag, tiers: MGR, group: 'parts', built: false, blurb: 'Parts catalog — its own home page is not built yet (stub).' },
   { key: 'bill-audit', label: 'Bill Audit', path: '/shipping/bill-audit', icon: Receipt, tiers: MGR, group: 'intake', built: true, blurb: 'Carrier bill vs our label ledger — variances, voided-but-billed, disputes.' },
   { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, built: true, blurb: 'Bag tags, shipping labels and QR codes.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },

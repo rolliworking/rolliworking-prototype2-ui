@@ -16,6 +16,7 @@ export default function PartsKnowledgePage() {
   useEffect(() => { api.getPartsKnowledge().then(setLog); api.getParts().then(setParts); }, []);
   return (
     <div data-testid="parts-knowledge-page" className="space-y-4">
+      <div data-testid="m3ke-handoff-banner" className="flex flex-wrap items-center gap-2 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><BookOpen size={13} /> <b>Parts Knowledge lives in M3KE / Jarvis</b> — a separately deployed app. This sidebar entry will launch out to it once the hand-off (new tab vs. embedded) and its URL are confirmed; the local mirror below stays as the prototype stand-in.</div>
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-ink">Parts knowledge</h1>
         <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-ink-500">The labeling loop made visible: every supervisor approval confirms a part ↔ reference and turns the requester's own words into aliases; rejections land too <Provisional note="Scripted assistant + seeded catalog — no AI, no real supplier data" /></p>

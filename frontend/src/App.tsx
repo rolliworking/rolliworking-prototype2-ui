@@ -17,6 +17,8 @@ import RwQcPage from '@/pages/rw/RwQcPage';
 import RwEvidencePage from '@/pages/rw/RwEvidencePage';
 import RwFloorPage from '@/pages/rw/RwFloorPage';
 import AssignMovePage from '@/pages/rw/AssignMovePage';
+import CustodyPage from '@/pages/rw/CustodyPage';
+import PartsStubPage from '@/pages/rs/PartsStubPage';
 import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
 import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
 import RwWmPage from '@/pages/rw/RwWmPage';
@@ -214,7 +216,9 @@ export default function App() {
               <Route path="/floor" element={<div data-testid="desktop-shop-floor" className="-mx-6 -my-5 min-h-[calc(100%+2.5rem)] bg-[#161b22] px-6 py-5 text-slate-100"><RwFloorPage /></div>} />
               <Route path="/floor/lanes" element={<FloorMapPage />} />
               <Route path="/assign" element={<AssignMovePage />} />
+              <Route path="/custody" element={<CustodyPage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
+              <Route path="/parts" element={<PartsStubPage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/inventory/count" element={<CycleCountPage />} />
