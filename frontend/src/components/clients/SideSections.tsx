@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, Globe, Mail, PackageCheck, PauseCircle, Phone, PlayCircle, ShieldAlert, Truck, User, type LucideIcon, Tablet } from 'lucide-react';
+import { Archive, ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, Globe, Mail, PackageCheck, PackageOpen, PauseCircle, Phone, PlayCircle, ScanLine, ShieldAlert, Truck, User, type LucideIcon, Tablet } from 'lucide-react';
 import { useState } from 'react';
 import * as api from '@/api/client';
 import { Link } from 'react-router-dom';
@@ -97,6 +97,9 @@ export const NotesTasksSection = ({ notes, tasks }: { notes: Client360['notes'];
 
 const CUSTODY: Record<CustodyKind, { icon: LucideIcon; tone: string; label: string }> = {
   package_arrived: { icon: ArrowDownToLine, tone: 'text-amber-800 bg-amber-50', label: 'Arrived' },
+  arrival_scan: { icon: ScanLine, tone: 'text-sky-800 bg-sky-50', label: 'Scan 1' },
+  shelved: { icon: Archive, tone: 'text-sky-800 bg-sky-50', label: 'Shelved' },
+  open_scan: { icon: PackageOpen, tone: 'text-violet-800 bg-violet-50', label: 'Scan 2' },
   watch_received: { icon: PackageCheck, tone: 'text-moss-700 bg-moss-50', label: 'In custody' },
   discrepancy: { icon: ShieldAlert, tone: 'text-rose-700 bg-rose-50', label: 'Discrepancy' },
   hold_placed: { icon: PauseCircle, tone: 'text-orange-800 bg-orange-50', label: 'Hold' },

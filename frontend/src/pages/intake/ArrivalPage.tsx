@@ -2,8 +2,9 @@ import { ArrowRight, Check, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { Carrier, PackageWithRefs } from '@/api/client';
+import type { Carrier, PackageWithRefs, ShelfRow } from '@/api/client';
 import { ScanInput, Stamp } from '@/components/intake/IntakeBits';
+import { OpenScanCard, ShelfBoard, ShelveCard } from '@/components/intake/TwoScanBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -21,11 +22,14 @@ export default function ArrivalPage() {
   const [walkInClient, setWalkInClient] = useState('unknown');
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PackageWithRefs | null>(null);
+  const { data: shelf, reload: reloadShelf } = useAsync(() => api.getShelf());
 
   const after = (pkg: PackageWithRefs, msg: string) => {
     setFlash(`${pkg.subNumber} · ${msg}`);
     setError(null);
     reload();
+    void reloadShelf();
     refreshCounts();
     setTimeout(() => setFlash(null), 3500);
   };
@@ -33,7 +37,8 @@ export default function ArrivalPage() {
   const scan = async (tracking: string) => {
     try {
       const pkg = await api.logArrival({ source: 'carrier', trackingNumber: tracking, carrier: carrier === 'auto' ? undefined : carrier, signatureNoted: signature });
-      after(pkg, `logged from ${pkg.carrier}`);
+      after(pkg, pkg.client ? `Scan 1 · matched ${fullName(pkg.client)} — assign a bin` : 'Scan 1 · no label match — assign client + bin');
+      setPending(pkg);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not log package');
     }
@@ -49,7 +54,7 @@ export default function ArrivalPage() {
   return (
     <div data-testid="arrival-page" className="grid grid-cols-[380px_1fr] gap-4">
       <div className="space-y-4">
-        <Card title="Scan package" subtitle="Seconds-fast as packages hit the door" testId="arrival-scan-card">
+        <Card title="Scan 1 · Arrival" subtitle="Scan the carrier tracking # as packages hit the door → matched to the client's label request → shelf bin" testId="arrival-scan-card">
           <ScanInput label="Tracking number" testId="arrival-tracking-input" onScan={scan} error={error} placeholder="Scan tracking… then Enter" />
           <div className="mt-3 flex items-center gap-3">
             <label className="flex items-center gap-1.5 text-xs text-ink-700">
@@ -69,6 +74,8 @@ export default function ArrivalPage() {
             </div>
           )}
         </Card>
+        {pending && <ShelveCard pkg={pending} clients={clients ?? []} onDone={(p, m) => { setPending(null); after(p, m); }} />}
+        <OpenScanCard compact />
 
         <Card title="Walk-in" subtitle="Known client or unknown — creates a Sub# record" testId="arrival-walkin-card">
           <div className="flex gap-2">
@@ -86,15 +93,18 @@ export default function ArrivalPage() {
         </Card>
       </div>
 
+      <div className="space-y-4">
+      <Card title="Shelf bins" subtitle="Bin → package → client · unopened packages wait here until the end-of-day open scan" testId="arrival-shelf-card"><ShelfBoard rows={(shelf ?? []) as ShelfRow[]} /></Card>
       <Card title="Shelf — arrived today" subtitle={`${arrived.length} awaiting processing`} bodyClassName="p-0" testId="arrival-list-card">
         <Table testId="arrival-table">
           <thead>
-            <tr><Th>Sub#</Th><Th>Via</Th><Th>Tracking</Th><Th>Client</Th><Th>Status</Th><Th>Logged</Th><Th /></tr>
+            <tr><Th>Sub#</Th><Th>Bin</Th><Th>Via</Th><Th>Tracking</Th><Th>Client</Th><Th>Status</Th><Th>Logged</Th><Th /></tr>
           </thead>
           <tbody>
             {arrived.map((p) => (
               <tr key={p.id} data-testid={`arrival-row-${p.id}`} className="transition-colors hover:bg-canvas/70">
                 <Td className="font-mono text-xs font-medium text-ink">{p.subNumber}</Td>
+                <Td>{p.shelfBin ? <span data-testid={`arrival-bin-${p.id}`} className="rounded-sm bg-sky-50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-800">{p.shelfBin}</span> : <button type="button" data-testid={`arrival-shelve-${p.id}`} onClick={() => setPending(p)} className="text-[11px] text-amber-800 underline">no bin — shelve</button>}</Td>
                 <Td className="text-ink-700">{p.carrier}{p.signatureNoted && <span className="ml-1 text-[10px] text-ink-400">SIG</span>}</Td>
                 <Td className="font-mono text-xs text-ink-500">{p.trackingNumber ?? '—'}</Td>
                 <Td>{p.client ? <span className="font-medium text-ink">{fullName(p.client)}</span> : <span className="italic text-ink-400">unknown</span>}</Td>
@@ -107,10 +117,11 @@ export default function ArrivalPage() {
                 </Td>
               </tr>
             ))}
-            {packages && arrived.length === 0 && <EmptyRow colSpan={7} text="Shelf is clear — nothing awaiting processing." />}
+            {packages && arrived.length === 0 && <EmptyRow colSpan={8} text="Shelf is clear — nothing awaiting processing." />}
           </tbody>
         </Table>
       </Card>
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { PartsRequestModal, PartsRequestPill } from '@/components/parts/PartsCha
 import { Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PackageCustodyCard } from '@/components/intake/TwoScanBits';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fullName } from '@/lib/format';
 
@@ -141,6 +142,7 @@ export default function JobDetailPage() {
           <Card title="Assignees" subtitle="Working techs" testId="job-assignment-card"><AssignmentPanel job={j} run={run} /></Card>
           <Card title="Holds" testId="job-holds-card"><HoldPanel job={j} onPlace={() => setModal({ kind: 'hold' })} onRelease={() => setModal({ kind: 'release' })} /></Card>
           <Card title="Details" testId="job-details-card"><DetailsPanel job={j} run={run} /></Card>
+          {j.packageId && <PackageCustodyCard packageId={j.packageId} />}
         </div>
       </div>
 

@@ -65,6 +65,7 @@ import type {
   LabelJob,
   OutboxEmail,
   Package,
+  PackageScan,
   PackagePhoto,
   PackageSource,
   PackageStatus,
@@ -529,6 +530,7 @@ export interface ArrivalInput {
   carrier?: Carrier;
   signatureNoted: boolean;
   clientId?: string;
+  shelfBin?: string;
 }
 
 export async function logArrival(input: ArrivalInput): Promise<PackageWithRefs> {
@@ -554,9 +556,54 @@ export async function logArrival(input: ArrivalInput): Promise<PackageWithRefs> 
     receiptPrinted: false,
   };
   store.packages.unshift(pkg);
-  if (tracking) { const sh = shp.rows.find((x) => x.trackingNumber === tracking && x.direction === 'inbound' && x.stage !== 'arrived'); if (sh) { const e = byId(store.estimates, sh.estimateId); sh.stage = 'arrived'; sh.arrivedAt = new Date().toISOString(); pkg.estimateId = e.id; pkg.clientId = sh.clientId; shipStamp(sh, `arrival scan matched · ${pkg.subNumber} · linked ${e.number}`); } }
-  stamp(input.source === 'walk_in' ? `Walk-in logged (${pkg.carrier})` : `Package arrived via ${pkg.carrier}${input.signatureNoted ? ' · signature noted' : ''}`, pkg.subNumber);
+  const sh = tracking ? shp.rows.find((x) => x.trackingNumber === tracking && x.direction === 'inbound' && x.stage !== 'arrived') : undefined;
+  if (sh) { const e = byId(store.estimates, sh.estimateId); sh.stage = 'arrived'; sh.arrivedAt = new Date().toISOString(); pkg.estimateId = e.id; pkg.clientId = sh.clientId; shipStamp(sh, `arrival scan matched · ${pkg.subNumber} · linked ${e.number}`); }
+  if (input.source === 'carrier') pkg.scans = [{ id: newId('scan'), kind: 'arrival', at: pkg.arrivedAt, by: a.by, station: a.station, trackingNumber: tracking, clientId: pkg.clientId, shipmentId: sh?.id, matched: sh ? 'label_request' : pkg.clientId ? 'manual' : 'none', note: sh ? `matched label request ${byId(store.estimates, sh.estimateId).number}` : 'no label request on file for this tracking #' }];
+  stamp(input.source === 'walk_in' ? `Walk-in logged (${pkg.carrier})` : `Package arrived via ${pkg.carrier}${input.signatureNoted ? ' · signature noted' : ''}${sh ? ` · Scan 1 matched ${byId(store.estimates, sh.estimateId).number}` : ' · Scan 1 · no label match'}`, pkg.subNumber);
+  if (input.shelfBin) return shelvePackage(pkg.id, { shelfBin: input.shelfBin });
   return resolve(pkgWithRefs(pkg));
+}
+
+// ---- Two-scan receive: Scan 1 = arrival + shelf bin (chain of custody starts), Scan 2 = open (feeds Stage 2 · Receive Package) ----
+export const SHELF_BINS = Array.from({ length: 12 }, (_, i) => `BIN-${String(i + 1).padStart(2, '0')}`);
+const normBin = (raw: string) => { const q = raw.trim().toUpperCase().replace(/\s+/g, ''); const n = q.match(/^(?:BIN-?|SHELF-?|B)?0*(\d{1,2})$/); return n ? `BIN-${n[1].padStart(2, '0')}` : q; };
+export interface ShelfRow { bin: string; pkg?: PackageWithRefs }
+export async function getShelf(): Promise<ShelfRow[]> {
+  const onShelf = store.packages.filter((p) => p.status === 'arrived' && p.shelfBin);
+  return resolve(SHELF_BINS.map((bin) => { const p = onShelf.find((x) => x.shelfBin === bin); return { bin, pkg: p ? pkgWithRefs(p) : undefined }; }));
+}
+const pushScan = (pkg: Package, s: Omit<PackageScan, 'id' | 'at' | 'by' | 'station'>) => { const a = actor(); const row: PackageScan = { id: newId('scan'), at: new Date().toISOString(), by: a.by, station: a.station, ...s }; (pkg.scans ??= []).push(row); return row; };
+// Courtesy note — distinct from the later "received and processed" email sent at Stage 2
+const queuePackageAcceptedEmail = (pkg: Package) => {
+  const c = pkg.clientId ? fx.clients.find((x) => x.id === pkg.clientId) : undefined; if (!c) return undefined; const a = actor(); const e = pkg.estimateId ? store.estimates.find((x) => x.id === pkg.estimateId) : undefined;
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e?.number ?? pkg.subNumber} · ${pkg.trackingNumber ?? pkg.subNumber}`, status: 'pending', subject: `We have your package — ${e?.number ?? pkg.subNumber}`, body: `Hello ${c.firstName},\n\nYour package${pkg.trackingNumber ? ` (${pkg.carrier} ${pkg.trackingNumber})` : ''} was accepted at Rolliworks today and is secured, unopened, in our receiving area. Packages are opened and checked in as a batch at the end of the day; you will get a second note with photos once your watch has been received and inspected.\n\nNothing to do on your side.\n\n— The Rolliworks team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  store.outbox.unshift(email); return email;
+};
+export async function shelvePackage(id: string, input: { shelfBin: string; clientId?: string; estimateId?: string }): Promise<PackageWithRefs> {
+  const pkg = getPkg(id); if (pkg.status !== 'arrived') throw new Error(`${pkg.subNumber} is already open — cannot shelve`);
+  const bin = normBin(input.shelfBin); if (!SHELF_BINS.includes(bin)) throw new Error(`Unknown bin “${input.shelfBin}” — use BIN-01…BIN-${SHELF_BINS.length}`);
+  const taken = store.packages.find((p) => p.id !== pkg.id && p.status === 'arrived' && p.shelfBin === bin); if (taken) throw new Error(`${bin} is occupied by ${taken.subNumber}`);
+  if (input.estimateId) { pkg.estimateId = input.estimateId; pkg.clientId = byId(store.estimates, input.estimateId).clientId; } else if (input.clientId) pkg.clientId = input.clientId;
+  pkg.shelfBin = bin; const manual = !!(input.clientId || input.estimateId);
+  const scan = pushScan(pkg, { kind: 'shelved', trackingNumber: pkg.trackingNumber, clientId: pkg.clientId, shelfBin: bin, matched: manual ? 'manual' : pkg.scans?.[0]?.matched ?? 'none', note: manual ? `client assigned by hand → ${fullNameOf(byId(fx.clients, pkg.clientId!))}` : undefined });
+  stamp(`Scan 1 · shelved in ${bin}${pkg.clientId ? ` · ${fullNameOf(byId(fx.clients, pkg.clientId))}` : ' · client unknown'}${manual ? ' (assigned by hand)' : ''}`, pkg.subNumber);
+  if (pkg.clientId && !pkg.scans?.some((s) => s.note?.includes('courtesy email'))) { const em = queuePackageAcceptedEmail(pkg); if (em) scan.note = [scan.note, `courtesy email queued → ${em.to}`].filter(Boolean).join(' · '); }
+  return resolve(pkgWithRefs(pkg));
+}
+// Scan 2 — by bin, tracking # or SUB#. Logs the open event and hands the package to Stage 2 (existing receivePackage flow, no duplication).
+export async function openScan(query: string): Promise<PackageWithRefs> {
+  const q = query.trim().toUpperCase(); if (!q) throw new Error('Scan a bin, tracking number or SUB#'); const bin = normBin(q);
+  const pkg = store.packages.find((p) => p.status === 'arrived' && (p.shelfBin === bin || p.trackingNumber?.toUpperCase() === q || p.subNumber.toUpperCase() === q));
+  if (!pkg) { const done = store.packages.find((p) => p.trackingNumber?.toUpperCase() === q || p.subNumber.toUpperCase() === q); throw new Error(done ? `${done.subNumber} was already opened (${done.status})` : `Nothing on the shelf matches “${query}”`); }
+  pkg.openedAt = new Date().toISOString(); pkg.openedBy = actor().by; pushScan(pkg, { kind: 'open', trackingNumber: pkg.trackingNumber, clientId: pkg.clientId, shelfBin: pkg.shelfBin, matched: pkg.clientId ? pkg.scans?.find((s) => s.kind === 'shelved')?.matched ?? 'manual' : 'none', note: `opened from ${pkg.shelfBin ?? 'shelf'} → Stage 2 · Receive Package` });
+  stamp(`Scan 2 · opened from ${pkg.shelfBin ?? 'shelf'} → Stage 2`, pkg.subNumber);
+  return resolve(pkgWithRefs(pkg));
+}
+export const shelfPackagesSync = (clientId: string): Package[] => store.packages.filter((p) => p.clientId === clientId && p.status === 'arrived' && !!p.shelfBin);
+export interface PackageCustody { pkg: PackageWithRefs; scans: PackageScan[]; shipment?: ShipmentWithRefs }
+export async function getPackageCustody(packageId: string): Promise<PackageCustody | null> {
+  const pkg = store.packages.find((p) => p.id === packageId); if (!pkg) return resolve(null); const sh = shp.rows.find((s) => pkg.trackingNumber && s.trackingNumber === pkg.trackingNumber);
+  return resolve({ pkg: pkgWithRefs(pkg), scans: [...(pkg.scans ?? [])].sort((a, b) => a.at.localeCompare(b.at)), shipment: sh ? shipRefs(sh) : undefined });
 }
 
 const estimateDigits = (s: string) => s.trim().toUpperCase().replace(/^EST-?/, '').replace(/^E/, '').replace(/^0+/, '');
@@ -2305,6 +2352,7 @@ const custodyOf = (clientId: string): CustodyEvent[] => {
   const watchLabel = (id?: string) => { const w = id ? store.watches.find((x) => x.id === id) : undefined; return w ? `${w.brand} ${w.model}` : 'watch'; };
   store.packages.filter((p) => p.clientId === clientId).forEach((p) => {
     out.push({ id: `cu-${p.id}-arr`, kind: 'package_arrived', at: p.arrivedAt, by: p.arrivedBy, station: p.arrivedStation, detail: `${p.subNumber} arrived · ${p.carrier}${p.trackingNumber ? ` ${p.trackingNumber}` : ''}${p.signatureNoted ? ' · signed' : ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/receive/${p.id}` });
+    (p.scans ?? []).forEach((s) => out.push({ id: `cu-${s.id}`, kind: s.kind === 'arrival' ? 'arrival_scan' : s.kind === 'open' ? 'open_scan' : 'shelved', at: s.at, by: s.by, station: s.station, detail: `${p.subNumber} · ${s.kind === 'arrival' ? `Scan 1 · arrival${s.trackingNumber ? ` · ${s.trackingNumber}` : ''} · ${s.matched === 'label_request' ? 'matched label request' : s.matched === 'manual' ? 'assigned by hand' : 'no match'}` : s.kind === 'open' ? `Scan 2 · opened from ${s.shelfBin ?? 'shelf'} → Stage 2` : `shelved in ${s.shelfBin}`}${s.note ? ` · ${s.note}` : ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/receive/${p.id}` }));
     const job = store.jobs.find((j) => j.packageId === p.id);
     if (p.inspectedAt && p.status === 'received') out.push({ id: `cu-${p.id}-rcv`, kind: 'watch_received', at: p.inspectedAt, by: p.inspectedBy ?? 'Unknown', station: 'Front Desk 1', detail: `${watchLabel(job?.watchId)} received into custody from ${p.subNumber}`, packageId: p.id, jobId: job?.id, watchId: job?.watchId, hitKey: job ? `job-${job.id}` : `pkg-${p.id}`, path: job ? `/jobs/${job.id}` : `/intake/receive/${p.id}` });
     if (p.status === 'discrepancy_hold' && p.inspectedAt) out.push({ id: `cu-${p.id}-dis`, kind: 'discrepancy', at: p.inspectedAt, by: p.inspectedBy ?? 'Unknown', station: 'Front Desk 1', detail: `Discrepancy hold on ${p.subNumber}: ${p.discrepancyReason ?? ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/inspection/${p.id}` });
@@ -2735,14 +2783,17 @@ export async function portalGetEstimate(clientId: string, id: string): Promise<E
 }
 const engage = (e: Estimate, kind: EngagementKind, detail?: string) => { (e.engagement ??= []).push({ kind, at: new Date().toISOString(), detail }); };
 export const SHOP_ADDRESS = { name: 'RolliSuite Service Center', line1: '590 Madison Avenue, Suite 1802', city: 'New York, NY 10022', hours: 'Mon–Fri 10:00–18:00 · Sat 11:00–16:00', phone: '(212) 555-0100' };
-// "Send us your watch" — the client's own click starts the inbound funnel (Label Requests, stage 1)
-export async function portalRequestLabel(clientId: string, estimateId: string, address: Address): Promise<ShipmentWithRefs> {
+// "Send us your watch" — the client's own click starts the inbound funnel (Label Requests, stage 1). Name / address / insured value / 1-day or 2-day are stored on the request; nothing is purchased until staff press Send.
+export interface PortalLabelRequestInput { address: Address; insuredValue: number; serviceLevel: ShipServiceLevel }
+export async function portalRequestLabel(clientId: string, estimateId: string, input: Address | PortalLabelRequestInput): Promise<ShipmentWithRefs> {
+  const address = 'address' in input ? input.address : input; const insuredValue = 'insuredValue' in input ? input.insuredValue : 0; const serviceLevel: ShipServiceLevel = 'serviceLevel' in input ? input.serviceLevel : '1_day';
   const e = requireOwner(clientId, store.estimates.find((x) => x.id === estimateId), 'estimate'); const c = byId(fx.clients, clientId);
   if (!address.name?.trim() || !address.street?.trim() || !address.city?.trim() || !address.state?.trim()) throw new Error('Please complete the pickup address');
+  if (!(insuredValue > 0)) throw new Error('Please enter the value to insure');
   if (shp.rows.some((r) => r.estimateId === e.id && r.stage !== 'arrived')) throw new Error('A shipping label is already on its way for this estimate');
-  const carrier = address.state === 'NY' || address.state === 'NJ' || address.state === 'CT' ? 'UPS' : 'FedEx';
-  const row: InboundShipment = { id: newId('sh'), direction: 'inbound', estimateId: e.id, clientId, stage: 'label_requested', carrier, service: carrier === 'UPS' ? 'UPS Next Day Air Saver' : 'FedEx Priority Overnight', declaredValue: e.total, destinationState: address.state, requestedAt: new Date().toISOString(), events: [], stamps: [{ at: new Date().toISOString(), by: `${c.firstName} ${c.lastName}`, station: 'RolliConnect', action: `Client requested a prepaid label from the estimate page · pickup ${address.street}, ${address.city} ${address.state}` }], emailIds: [] };
-  shp.rows.unshift(row); e.sendIntent = { kind: 'label', at: row.requestedAt, shipmentId: row.id }; engage(e, 'label_requested', `${address.city}, ${address.state}`); estStamp(e, `Client requested shipping label (portal) · ${address.city}, ${address.state}`); portalStamp(clientId, `Requested a shipping label for ${e.number}`);
+  const carrier = address.state === 'NY' || address.state === 'NJ' || address.state === 'CT' ? 'UPS' : 'FedEx'; const now = new Date().toISOString();
+  const row: InboundShipment = { id: newId('sh'), direction: 'inbound', estimateId: e.id, clientId, stage: 'label_requested', carrier, service: parcelpro.serviceName(carrier, serviceLevel), serviceLevel, declaredValue: insuredValue, destinationState: address.state, requestedAt: now, request: { name: address.name.trim(), street: address.street.trim(), city: address.city.trim(), state: address.state.trim().toUpperCase(), insuredValue, serviceLevel, submittedAt: now }, events: [], stamps: [{ at: now, by: `${c.firstName} ${c.lastName}`, station: 'RolliConnect', action: `Client requested a prepaid label from the estimate page · ${address.street}, ${address.city} ${address.state} · insure $${insuredValue.toLocaleString()} · ${serviceLevel === '1_day' ? '1-day' : '2-day'}` }], emailIds: [] };
+  shp.rows.unshift(row); e.sendIntent = { kind: 'label', at: row.requestedAt, shipmentId: row.id }; engage(e, 'label_requested', `${address.city}, ${address.state}`); estStamp(e, `Client requested shipping label (portal) · ${address.city}, ${address.state} · $${insuredValue.toLocaleString()} · ${serviceLevel === '1_day' ? '1-day' : '2-day'}`); portalStamp(clientId, `Requested a shipping label for ${e.number}`);
   return resolve(shipRefs(row));
 }
 export async function portalDropOff(clientId: string, estimateId: string): Promise<EstimateWithRefs> {
@@ -4094,7 +4145,8 @@ export async function getColleagueInbox(shortName: string): Promise<Conversation
 
 // ---- Inbound shipping (pre-arrival) + tracking lookup. Carrier calls go ONLY through src/api/carriers/parcelpro.ts ----
 import * as parcelpro from './carriers/parcelpro';
-import type { InboundCounts, LabelPrep, ShipAddress, ShipCarrierName, ShipStage, InboundShipment, ShipmentWithRefs } from './types';
+import type { InboundCounts, LabelPrep, ShipAddress, ShipCarrierName, ShipServiceLevel, ShipStage, InboundShipment, ShipmentWithRefs } from './types';
+export type { ShipServiceLevel, LabelRequestDetails, PackageScan, PackageScanKind, PackageMatch } from './types';
 const shp = { rows: fx.shipments.map((s): InboundShipment => ({ ...s, events: [...s.events], stamps: [...s.stamps], emailIds: [...s.emailIds] })) };
 export const SHIP_STAGE_LABEL: Record<ShipStage, string> = { label_requested: 'Label requested', label_sent: 'Label sent', in_transit: 'In transit', delivered_unscanned: 'Delivered · unscanned', arrived: 'Arrived' };
 const shipStamp = (s: InboundShipment, action: string) => { const a = actor(); s.stamps.push({ at: new Date().toISOString(), by: a.by, station: a.station, action }); appendAudit({ type: 'intake', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${byId(store.estimates, s.estimateId).number} · shipping · ${action}` }); };
@@ -4113,13 +4165,20 @@ export async function prepareLabel(id: string): Promise<LabelPrep> {
   const s = shipRefs(shipOf(id)); const c = s.client; const recipient: ShipAddress = { name: `${c.firstName} ${c.lastName}`, street: c.street, city: c.city, state: c.state || s.destinationState };
   return { shipment: s, recipient, validation: await parcelpro.validateAddress(recipient), declaredValue: s.declaredValue || s.estimate.total };
 }
-export async function createInboundLabel(id: string, recipient: ShipAddress, declaredValue: number, carrier: ShipCarrierName): Promise<ShipmentWithRefs> {
+export async function createInboundLabel(id: string, recipient: ShipAddress, declaredValue: number, carrier: ShipCarrierName, serviceLevel?: ShipServiceLevel): Promise<ShipmentWithRefs> {
   const s = shipOf(id); if (s.stage !== 'label_requested') throw new Error('Label already created'); if (!(declaredValue > 0)) throw new Error('Declared value is required'); const e = byId(store.estimates, s.estimateId);
   const v = await parcelpro.validateAddress(recipient); if (!v.valid) throw new Error(`Address not valid: ${v.riskFlag ?? 'incomplete'}`);
-  const label = await parcelpro.createLabel({ estimateNumber: e.number, recipient: v.cleaned, declaredValue, carrier });
-  s.carrier = carrier; s.service = carrier === 'UPS' ? 'UPS Next Day Air Saver' : 'FedEx Priority Overnight'; s.declaredValue = declaredValue; s.destinationState = v.cleaned.state; s.trackingNumber = label.trackingNumber; s.labelUrl = label.labelUrl; s.cost = label.cost; s.stage = 'label_sent'; s.labelSentAt = new Date().toISOString();
-  s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label').id); shipStamp(s, `label created · ${carrier} ${label.trackingNumber} · insured $${declaredValue.toLocaleString()} · cost $${label.cost} · emailed`);
+  const level = serviceLevel ?? s.request?.serviceLevel ?? s.serviceLevel ?? '1_day';
+  const r = await parcelpro.purchaseLabel({ reference: e.number, shipFrom: v.cleaned, shipTo: parcelpro.SHOP_SHIP_TO, carrier, serviceLevel: level, insuredValue: declaredValue, signatureRequired: true });
+  s.carrier = carrier; s.serviceLevel = level; s.service = r.service; s.declaredValue = r.insured.value; s.destinationState = v.cleaned.state; s.trackingNumber = r.trackingNumber; s.labelUrl = r.labelUrl; s.cost = r.total; s.confirmationId = r.confirmationId; s.stage = 'label_sent'; s.labelSentAt = new Date().toISOString();
+  s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label').id); shipStamp(s, `label purchased (Parcel Pro ${parcelpro.parcelProMode()}) · ${r.confirmationId} · ${carrier} ${r.service} · ${r.trackingNumber} · insurance bound $${r.insured.value.toLocaleString()} · cost $${r.total} · emailed`);
   return resolve(shipRefs(s));
+}
+// One click on a client's label request: ship-from + insured value + service level come straight off the request. Tracking # returned here is the join key the arrival scan uses.
+export async function sendLabelRequest(id: string): Promise<ShipmentWithRefs> {
+  const s = shipOf(id); const c = byId(fx.clients, s.clientId); const r = s.request;
+  const from: ShipAddress = r ? { name: r.name, street: r.street, city: r.city, state: r.state, zip: r.zip } : { name: `${c.firstName} ${c.lastName}`, street: c.street, city: c.city, state: c.state || s.destinationState };
+  return createInboundLabel(id, from, r?.insuredValue ?? s.declaredValue ?? byId(store.estimates, s.estimateId).total, s.carrier, r?.serviceLevel ?? s.serviceLevel ?? '1_day');
 }
 const queueShipEmail = (s: InboundShipment, subject: string, extra = '') => { const e = byId(store.estimates, s.estimateId); const c = byId(fx.clients, s.clientId); const a = actor(); const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e.number} · ${s.trackingNumber ?? 'label'}`, status: 'pending', subject: `${subject} — ${e.number}`, body: `Hello ${c.firstName},\n\n${extra || `Your prepaid, fully insured ${s.carrier} label for estimate ${e.number} is attached (insured value $${s.declaredValue.toLocaleString()}). Print it, pack the watch securely, and drop it at any ${s.carrier} location.`}\n\nLabel: ${s.labelUrl}\nTracking: ${s.trackingNumber}\nTrack it any time in RolliConnect: ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }; store.outbox.unshift(email); return email; };
 export async function resendLabelEmail(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label (resent)').id); shipStamp(s, 'label email re-queued'); return resolve(shipRefs(s)); }
@@ -4827,11 +4886,11 @@ export async function attachB2bMatch(packageId: string, m: { tier: B2bTier; code
 }
 
 // ---- RW client / job history lookup — no dollar amounts (MoneyContext hides them anyway; stripped here too) ----
-export interface RwHistoryHit { client: Client; watches: { watch: Watch; rows: Omit<WatchHistoryRow, 'amount'>[]; activeJobId?: string }[]; openRequests: number; jobs: number }
+export interface RwHistoryHit { client: Client; watches: { watch: Watch; rows: Omit<WatchHistoryRow, 'amount'>[]; activeJobId?: string }[]; openRequests: number; jobs: number; custody: CustodyEvent[] }
 export async function searchRwHistory(query: string): Promise<RwHistoryHit[]> {
   const q = query.trim(); if (q.length < 2) return resolve([]);
   const byJob = (await searchJobs(q)).map((j) => j.clientId); const ids = uniq([...(await searchClients(q)).map((c) => c.id), ...byJob]).slice(0, 6);
-  const out: RwHistoryHit[] = []; for (const id of ids) { const c = await getClient360(id); if (!c) continue; out.push({ client: c.client, watches: c.watches.map((w) => ({ watch: w.watch, activeJobId: w.activeJobId, rows: w.history.map(({ amount: _a, ...r }) => r) })), openRequests: c.summary.openRequests, jobs: c.jobs.length }); }
+  const out: RwHistoryHit[] = []; for (const id of ids) { const c = await getClient360(id); if (!c) continue; out.push({ client: c.client, watches: c.watches.map((w) => ({ watch: w.watch, activeJobId: w.activeJobId, rows: w.history.map(({ amount: _a, ...r }) => r) })), openRequests: c.summary.openRequests, jobs: c.jobs.length, custody: c.custody.filter((x) => x.kind === 'arrival_scan' || x.kind === 'shelved' || x.kind === 'open_scan' || x.kind === 'package_arrived' || x.kind === 'watch_received') }); }
   return resolve(out);
 }
 export const uniqComponents = (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));
@@ -4952,7 +5011,7 @@ export async function newInspectionForm(seed?: { jobId?: string; estimateNumber?
 }
 export async function saveInspectionForm(form: InspectionForm, commit: boolean): Promise<InspectionForm> {
   const i = insp.forms.findIndex((x) => x.id === form.id); if (i < 0) throw new Error('Form not found'); const a = actor();
-  if (commit && !form.customer.name.trim()) throw new Error('Customer is required'); if (commit && form.components.every((c) => !c.condition)) throw new Error('Grade at least one component');
+  if (commit && !form.customer.name.trim()) throw new Error('Customer is required');
   const next: InspectionForm = { ...form, total: inspectionTotal(form), status: commit ? 'saved' : form.status, savedAt: commit ? new Date().toISOString() : form.savedAt, savedBy: commit ? a.by : form.savedBy, station: commit ? a.station : form.station };
   insp.forms[i] = next; if (commit) { appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inspection form saved · ${next.estimateNumber || next.id} · ${fmtMoney(next.total)} · report ${next.token}` }); const j = next.jobId ? store.jobs.find((x) => x.id === next.jobId) : undefined; if (j) { jobStamp(j, `Inspection form saved → client report ${next.token} · ${fmtMoney(next.total)}`); if (j.status === 'intake' || j.status === 'in_review') { j.timeline.push({ id: newId('tl'), from: j.status, to: 'awaiting_customer_approval', action: 'request_approval', at: new Date().toISOString(), by: a.by, station: a.station } as Job['timeline'][number]); j.status = 'awaiting_customer_approval'; jobStamp(j, 'Inspection submitted → awaiting client approval (step 7)'); } } }
   return resolve({ ...next });

@@ -440,6 +440,10 @@ export type PackageStatus = 'arrived' | 'processed' | 'awaiting_inspection' | 'r
 export type PackageSource = 'carrier' | 'walk_in';
 export type Carrier = 'FedEx' | 'UPS' | 'USPS' | 'DHL' | 'Hand delivery';
 export type Bin = 'inspection' | 'concierge';
+// Two-scan receive: Scan 1 (arrival → shelf bin) and Scan 2 (open → Stage 2). Each is a chain-of-custody record.
+export type PackageScanKind = 'arrival' | 'shelved' | 'open';
+export type PackageMatch = 'label_request' | 'manual' | 'none';
+export interface PackageScan { id: string; kind: PackageScanKind; at: string; by: string; station: string; trackingNumber?: string; clientId?: string; shipmentId?: string; shelfBin?: string; matched: PackageMatch; note?: string }
 
 export interface PackagePhoto {
   id: string;
@@ -477,6 +481,10 @@ export interface Package {
   discrepancyReason?: string;
   componentsVerified?: string[];
   b2b?: { tier: string; code: string; at: string };
+  shelfBin?: string;
+  scans?: PackageScan[];
+  openedAt?: string;
+  openedBy?: string;
   notes?: string;
 }
 
@@ -755,9 +763,13 @@ export type ShipStage = 'label_requested' | 'label_sent' | 'in_transit' | 'deliv
 export type ShipCarrierName = 'UPS' | 'FedEx';
 export interface TrackingEvent { at: string; status: string; location: string; note?: string }
 export interface ShipStamp extends Stamp { action: string }
+export type ShipServiceLevel = '1_day' | '2_day';
+// What the client typed on the estimate page (Part A) — staff act on it with one "Send"
+export interface LabelRequestDetails { name: string; street: string; city: string; state: string; zip?: string; insuredValue: number; serviceLevel: ShipServiceLevel; submittedAt: string }
 export interface InboundShipment {
   id: string; direction: 'inbound' | 'outbound'; estimateId: string; clientId: string; stage: ShipStage; carrier: ShipCarrierName; service: string;
   declaredValue: number; destinationState: string; requestedAt: string; labelSentAt?: string; trackingNumber?: string; labelUrl?: string; cost?: number;
+  request?: LabelRequestDetails; serviceLevel?: ShipServiceLevel; confirmationId?: string;
   events: TrackingEvent[]; eta?: string; deliveredAt?: string; arrivedAt?: string; reissued?: boolean; stamps: ShipStamp[]; emailIds: string[];
 }
 export interface ShipmentWithRefs extends InboundShipment { estimate: Estimate; client: Client; watch?: Watch; ageDays: number; outstandingDays: number; lastEvent?: TrackingEvent; arrivingToday: boolean; unscannedHours: number }
@@ -780,7 +792,7 @@ export interface SearchHit {
 export interface SearchGroup { kind: IdentifierKind; label: string; hits: SearchHit[] }
 export interface SearchResults { query: string; groups: SearchGroup[]; total: number }
 
-export type CustodyKind = 'package_arrived' | 'watch_received' | 'discrepancy' | 'hold_placed' | 'hold_released' | 'shipped' | 'picked_up';
+export type CustodyKind = 'package_arrived' | 'arrival_scan' | 'shelved' | 'open_scan' | 'watch_received' | 'discrepancy' | 'hold_placed' | 'hold_released' | 'shipped' | 'picked_up';
 
 export interface CustodyEvent {
   id: string;

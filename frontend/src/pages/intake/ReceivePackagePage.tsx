@@ -8,6 +8,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { PhotoStrip, ScanInput, Stamp } from '@/components/intake/IntakeBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { ContentPills, PhotoCapture, ReceiptPreview } from '@/components/intake/ReceiveBits';
+import { PackageCustodyCard } from '@/components/intake/TwoScanBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DeptBadge, StatusPill } from '@/components/ui/Pills';
@@ -98,6 +99,8 @@ export default function ReceivePackagePage() {
         </Link>
         <div className="flex items-center gap-3 text-xs">
           <span className="font-mono font-semibold text-ink" data-testid="receive-subnumber">{pkg.subNumber}</span>
+          {pkg.shelfBin && <span data-testid="receive-shelf-bin" className="rounded-sm bg-sky-50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-800">{pkg.shelfBin}</span>}
+          {pkg.status === 'arrived' && !pkg.openedAt && (pkg.scans?.length ?? 0) > 0 && <span data-testid="receive-no-open-scan" className="rounded-sm bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">opened without Scan 2</span>}
           <StatusPill status={pkg.status} testId="receive-status" />
           <Stamp by={pkg.arrivedBy} station={pkg.arrivedStation} at={pkg.arrivedAt} />
         </div>
@@ -105,6 +108,7 @@ export default function ReceivePackagePage() {
 
       <div className="grid grid-cols-[1fr_340px] gap-4">
         <div className="space-y-4">
+          {(pkg.scans?.length ?? 0) > 0 && <PackageCustodyCard packageId={pkg.id} />}
           <Card title="Identify" subtitle="Tracking + estimate # — a matching estimate pre-fills client and expected contents" testId="receive-identify-card">
             <div className="grid grid-cols-2 gap-4">
               <div>

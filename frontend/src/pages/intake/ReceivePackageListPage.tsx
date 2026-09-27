@@ -1,17 +1,20 @@
 import { ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { PackageWithRefs } from '@/api/client';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
+import { OpenScanCard } from '@/components/intake/TwoScanBits';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtTime, fullName } from '@/lib/format';
 
-const Row = ({ p, action }: { p: PackageWithRefs; action?: string }) => (
-  <tr data-testid={`receive-row-${p.id}`} className="transition-colors hover:bg-canvas/70">
-    <Td className="font-mono text-xs font-medium text-ink">{p.subNumber}</Td>
+const Row = ({ p, action }: { p: PackageWithRefs; action?: string }) => {
+  const nav = useNavigate();
+  const open = async (e: React.MouseEvent) => { if (p.status !== 'arrived' || p.openedAt) return; e.preventDefault(); try { await api.openScan(p.subNumber); } catch { /* already open */ } nav(`/intake/receive/${p.id}`); };
+  return <tr data-testid={`receive-row-${p.id}`} className="transition-colors hover:bg-canvas/70">
+    <Td className="font-mono text-xs font-medium text-ink">{p.subNumber}{p.shelfBin && <span className="ml-1 rounded-sm bg-sky-50 px-1 py-0.5 text-[10px] font-semibold text-sky-800">{p.shelfBin}</span>}</Td>
     <Td className="font-mono text-xs text-ink-500">{p.trackingNumber ?? '—'}</Td>
     <Td>{p.client ? fullName(p.client) : <span className="italic text-ink-400">unknown</span>}</Td>
     <Td className="font-mono text-xs">{p.estimate?.number ?? '—'}</Td>
@@ -21,13 +24,13 @@ const Row = ({ p, action }: { p: PackageWithRefs; action?: string }) => (
     <Td><span className="tabular">{fmtTime(p.processedAt ?? p.arrivedAt)}</span> <Stamp by={p.processedBy ?? p.arrivedBy} station={p.arrivedStation} /></Td>
     <Td className="text-right">
       {action && (
-        <Link to={`/intake/receive/${p.id}`} data-testid={`receive-open-${p.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+        <Link to={`/intake/receive/${p.id}`} onClick={open} data-testid={`receive-open-${p.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
           {action} <ArrowRight size={12} />
         </Link>
       )}
     </Td>
-  </tr>
-);
+  </tr>;
+};
 
 export default function ReceivePackageListPage() {
   const { data } = useAsync(() => api.getPackages());
@@ -36,6 +39,7 @@ export default function ReceivePackageListPage() {
 
   return (
     <div data-testid="receive-list-page" className="space-y-4">
+      <OpenScanCard />
       <Card title="To process" subtitle="End-of-day: open a package from the shelf, link its estimate, photograph, describe" bodyClassName="p-0" testId="receive-todo-card">
         <Table testId="receive-todo-table">
           <thead><tr><Th>Sub#</Th><Th>Tracking</Th><Th>Client</Th><Th>Estimate</Th><Th>Contents</Th><Th>Photos</Th><Th>Status</Th><Th>Arrived</Th><Th /></tr></thead>
