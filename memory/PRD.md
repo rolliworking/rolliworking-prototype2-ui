@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-09-26  
+**Last updated**: 2026-09-27  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -249,3 +249,26 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 
 ### Docs publishing rule (2026-09-26)
 - `/app/frontend/docs/` is the PUBLISHED copy of `/app/docs/` (GitHub sync was not carrying `/app/docs`). Keep byte-identical: run `bash /app/docs/sync-to-frontend.sh` after any docs edit (`_gen.py` runs it automatically). Never edit `frontend/docs` directly.
+
+### Stage / bin audit · Trade job flow · Scan-to-complete · Client split strip (2026-09-27, MH briefs)
+- **Audit**: `/rw/station` Move ↔ Audit toggle + `/rw/pad` Audit tab (`components/rw/AuditPanel.tsx`). 14 stations + 3 derived bins (`AUDIT_LOCATIONS`), belief vs scanned → ✓ matched / ? unexpected (Correct location = `via: 'audit_correction'`, or Investigate) / ⚠ missing (identity · client · value tier · last custody). Append-only `AuditSession`; missing → manager hit-list pin. Floor chips `floor-audited-<key>` amber after N days (Setup → Audits, `setAuditStaleDays`, default 7). Seeds aud-01 clean (WM Bench 2), aud-02 missing (Safe await band, j-32 head, pin-audit-01).
+- **Trade jobs**: `JobKind 'trade'`, `JobStatus 'awaiting_manager_review'` (JOB_FLOW; other kinds skip it via `skipStages`), `Client.managerShort/internal`; c-31 RolliShop (internal, Walter), c-25 Vidal (external, MH). `/intake/trade` scan-in (`tradeScanIn`) → in_service; testing → `to_manager_review` (pin to account manager, own division) → Dashboard `TradeReviewPanel` Accept (`trade_accept` → SO; internal = no email, external = invoice email) / Send back (reason picker → bench, rework). `TradePathStrip` on RS/RW job pages; `KindPill` shows account. Seeds j-t1 E02050 (band at Refinishing), j-t2 E02051 (awaiting Walter, pin-trade-01). `queueJobEmail` suppressed for trade accounts.
+- **Scan-to-complete**: `movePart` into safe_await_band/head completes the component (credit to scanning tech, once) + auto-transition when all in; `FloorDot.completed` → `CompleteToast` (station page + floor) with 10 s `undoScanComplete` full revert (`SCAN_UNDO_MS`).
+- **Client split strip**: `PortalSplit` on `PortalWatch`/`PortalRequestCard` (`portalSplitFor`), `rc/RcSplitStrip.tsx` (full on watch page, compact on cards). Seed: j-r3 band complete (Rosa, safe_await_head), head on WM Bench 2.
+- Job counter now seeded from max job number (was colliding at E02031).
+
+### RolliTime re-homed + Work grading gate (2026-09-27)
+- `/rt` → `/rw/testing` (+ `/rw/testing/test/:jobId`), redirects kept; files `pages/rw/testing/`. RW nav "Testing"; `RwStationKey 'testing'` station (floor right column, auditable); `testingStationScan` = custody transfer of all parts; `timingPassed(j)` Q47 flag → `/rw/qc` "timing pass" badge, sorted first.
+- **Grading gate** (`GradeGatePanel`): categories = Setup lookup (`SetupGradingCard`, `addGradeCategory/toggle`, scopes head/case/bracelet/whole; seeds Cleanliness · Case condition), 1–5 tap, note/photo required ≤3, tech auto-resolved from component completions (editable), self-graded flag, append-only `WorkGrade`; ≤2 pins manager list; `recordTimingTest` throws until gate ready; Start test button locked with missing names. Bench Goals tiles show ★ avg; Reports → Tech completions gains quality rows. Seeds `gradeSeeds` (Rosa/MM history, wg-07 self-grade, wg-12 low → pin-grade-01); j-16 E02026 in testing ungraded (blocked).
+
+### Client rating badge + incoming-call screen-pop MOCK (2026-09-27)
+- `ClientRating` A/C/N (`clientRatingSync`, `setClientRating` logged), `RatingBadge`/`RatingEditor` on Client 360, Inbox thread, RS/RW job pages, RW job lookup rows, call toast. STRICTLY internal — never imported by /rc. Seeds c-30 5/3, c-05 4/4, c-10 2/4.
+- `src/api/telephony.ts` seam (`onInboundCall` → `receiveInboundCall` → `onScreenPop` listeners) — the one file a Vonage VIP webhook replaces. TopBar 📞 dev menu (`SimulateCallMenu`), `CallPopToast` (known → Client 360 + Companion; unknown → `/clients?new=1&phone=` → `NewClientFromCall`). Call events → client comms history + audit log. MOCKED.
+- Tested iteration_35 (all pass after counter fix; two reported misses were reload artefacts, re-verified in-app).
+
+### Deliverables
+- `/app/frontend/public/supervisor-pad-screens.zip` — 15 PNG iPad screens + INDEX.txt (script `/app/memory/tools/pad_shots.py`).
+
+## Pending / next
+- **Claude AI integration** (user asked; order chosen: after the briefs). Still need the user to say WHAT Claude should power (they picked "Something else — tell me" but gave no detail). Model default if unspecified: Claude Sonnet 4.6 via Emergent key, tiny FastAPI `/api/ai/*` endpoint + `client.ts` call. Call integration_expert before coding.
+- Backlog: amber/provisional items (Q57 floor lanes, per-kind evidence slots, etc.).

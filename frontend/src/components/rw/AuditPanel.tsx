@@ -87,7 +87,7 @@ export const CompleteToast = ({ done, onUndone }: { done: { label: string; by: s
   const [left, setLeft] = useState(10); const [gone, setGone] = useState(false);
   useEffect(() => { setLeft(Math.round(api.SCAN_UNDO_MS / 1000)); setGone(false); if (!done) return; const i = setInterval(() => setLeft((n) => n - 1), 1000); const t = setTimeout(() => setGone(true), api.SCAN_UNDO_MS); return () => { clearInterval(i); clearTimeout(t); }; }, [done?.token]);
   if (!done || gone) return null;
-  return <div data-testid="complete-toast" className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-emerald-400/40 bg-[#0f2a1e] px-5 py-3 text-emerald-100 shadow-2xl">
+  return <div data-testid="complete-toast" className="fixed bottom-6 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-3 rounded-full border border-emerald-400/40 bg-[#0f2a1e] px-5 py-3 text-emerald-100 shadow-2xl">
     <Check size={18} className="text-emerald-300" /><span className="font-semibold">{done.label} COMPLETE — {done.by} ✓</span>{done.transitioned && <span className="text-xs text-emerald-300">· all parts in → testing</span>}
     <button data-testid="complete-undo" onClick={async () => { try { await api.undoScanComplete(done.token); setGone(true); onUndone(); } catch (e) { window.alert(e instanceof Error ? e.message : 'Undo failed'); } }} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-sm hover:bg-white/20"><RotateCcw size={13} /> undo · {left}s</button>
   </div>;

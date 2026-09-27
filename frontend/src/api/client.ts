@@ -156,7 +156,7 @@ const store = {
   messages: fx.messages.map((m): Message => ({ ...m })),
   jobMessages: fx.jobMessages.map((m) => ({ ...m, mentions: [...m.mentions], notify: [...m.notify], readBy: [...m.readBy] })),
   magicLinks: readJson<MagicLink[]>('rollisuite.rc.magicLinks', []),
-  counters: { sub: 314, label: 3, estimate: 1058, job: 2030, so: 107, pr: 44 },
+  counters: { sub: 314, label: 3, estimate: 1058, job: Math.max(2030, ...fx.jobs.map((j) => Number(j.number.replace(/\D/g, '')) || 0)), so: 107, pr: 44 },
 };
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
