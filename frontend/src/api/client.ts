@@ -4632,3 +4632,53 @@ export const getRequests = route('getRequests', getRequestsMock, real.getRequest
 export const getPackages = route('getPackages', getPackagesMock, real.getPackages);
 export const getDashboardStats = route('getDashboardStats', getDashboardStatsMock, real.getDashboardStats);
 export const getRecentActivity = route('getRecentActivity', getRecentActivityMock, real.getRecentActivity);
+
+// ---- SUPERVISOR DEPARTMENT DASHBOARD (WM room today; the same shape re-parameterises for the band room) ----
+import type { DeptDashboard, DeptGoalMonth, DeptGoals, JobPart, JobPartsView, PaceStatus, PartsReturn, QuickAddResult, TechPace } from './types';
+const dept = { goals: { wm: 48_000, band: 22_000 } as Record<'wm' | 'band', number>, history: { wm: [[3, 45_000, 47_800], [2, 46_000, 41_200], [1, 48_000, 49_350]], band: [[3, 20_000, 21_100], [2, 21_000, 18_400], [1, 22_000, 22_900]] } as Record<'wm' | 'band', [number, number, number][]>, stuckDays: 5 };
+const paceOf = (actual: number, target: number): PaceStatus => (actual >= target * 1.1 ? 'ahead' : actual >= target * 0.9 ? 'on_pace' : 'behind');
+const deptMonth = (monthsAgo: number) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - monthsAgo); return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) }; };
+// Revenue attribution = estimate lines of the department (W = watchmaking, B/P = band room) on jobs finished this month, plus parts quick-added (sale price)
+const deptRevenueMtd = (d: 'wm' | 'band') => { const mk = deptMonth(0).key; const depts = d === 'wm' ? ['W'] : ['B', 'P']; return store.jobs.filter((j) => ['ready_to_ship', 'closed', 'awaiting_manager_review', 'testing'].includes(j.status) && (j.timeline.at(-1)?.at ?? j.createdAt).startsWith(mk)).reduce((t, j) => t + j.lines.filter((l) => depts.includes(l.dept)).reduce((s, l) => s + l.qty * l.unitPrice, 0), 0) + Object.values(rwParts.byJob).flat().filter((p) => p.at.startsWith(mk)).reduce((t, p) => t + p.price * p.qty, 0); };
+export const getDeptGoal = (d: 'wm' | 'band') => dept.goals[d];
+export async function setDeptGoal(d: 'wm' | 'band', goal: number): Promise<number> { const a = managerOnly(); if (!(goal > 0)) throw new Error('Goal must be positive'); dept.goals[d] = Math.round(goal); appendAudit({ type: 'rollitime', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${d.toUpperCase()} room monthly revenue goal set · ${fmtMoney(dept.goals[d])}` }); return resolve(dept.goals[d]); }
+const deptGoals = (d: 'wm' | 'band'): DeptGoals => {
+  const now = new Date(); const dayOfMonth = now.getDate(); const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(); const goal = dept.goals[d]; const actualMtd = Math.round(deptRevenueMtd(d)); const projected = Math.round((actualMtd / Math.max(1, dayOfMonth)) * daysInMonth);
+  const history: DeptGoalMonth[] = dept.history[d].map(([ago, g, a]) => ({ ...deptMonth(ago), goal: g, actual: a, hit: a >= g })); history.push({ ...deptMonth(0), goal, actual: actualMtd, hit: actualMtd >= goal, current: true });
+  return { goal, actualMtd, projected, pace: paceOf(projected, goal), dayOfMonth, daysInMonth, history };
+};
+const daysInStage = (j: Job) => Math.floor((Date.now() - new Date(j.timeline.at(-1)?.at ?? j.createdAt).getTime()) / 86_400_000);
+export async function getDeptDashboard(d: 'wm' | 'band' = 'wm'): Promise<DeptDashboard> {
+  const cards = await getPadBoard(); const techNames = Object.keys(fx.techGoals);
+  const techs: TechPace[] = techNames.map((short) => { const user = fx.users.find((u) => u.shortName === short)!; const g = benchGoals(short); const mine = cards.filter((c) => c.job.assignees.includes(user.id) || c.parts.some((p) => p.tech === short)); const testing = mine.filter((c) => c.stage === 'testing'); return { user, goal: g.current.goal, actual: g.current.actual, paceTarget: g.paceTarget, pace: paceOf(g.current.actual, g.paceTarget), activeJobs: mine.length - testing.length, testingJobs: testing.length, cards: mine.filter((c) => c.stage !== 'testing') }; });
+  const funnel = STAGE_ORDER.map((stage) => ({ stage, label: cards.find((c) => c.stage === stage)?.stageLabel ?? stage, count: cards.filter((c) => c.stage === stage).length })).filter((f) => f.count > 0 || true);
+  return resolve({ department: d, label: d === 'wm' ? 'Watchmaker Room' : 'Band / Polish Room', goals: deptGoals(d), techs, funnel, totalJobs: cards.length, stuck: cards.filter((c) => c.stage !== 'testing' && daysInStage(c.job) >= dept.stuckDays).sort((a, b) => daysInStage(b.job) - daysInStage(a.job)), problem: cards.filter((c) => activeHold(c.job) || c.job.status === 'awaiting_manager_review'), awaitingParts: cards.filter((c) => c.pendingParts > 0), testing: cards.filter((c) => c.stage === 'testing'), stuckDays: dept.stuckDays });
+}
+export const jobDaysInStage = (j: Job) => daysInStage(j);
+
+// ---- PARTS: per-job allowance ($300–$1000, job-level), Quick Add (no approval while under allowance), returns (no approval, audited) ----
+const rwParts = { allowance: {} as Record<string, number>, byJob: {} as Record<string, JobPart[]>, returns: [] as PartsReturn[] };
+export const jobPartsAllowance = (jobId: string): number => rwParts.allowance[jobId] ?? (300 + (Math.abs([...jobId].reduce((h, c) => h * 31 + c.charCodeAt(0), 7)) % 8) * 100);
+export async function setJobPartsAllowance(jobId: string, amount: number): Promise<number> { const a = managerOnly(); if (amount < 300 || amount > 1000) throw new Error('Allowance is $300–$1,000'); rwParts.allowance[jobId] = Math.round(amount); const j = byId(store.jobs, jobId); jobStamp(j, `Parts allowance set · ${fmtMoney(rwParts.allowance[jobId])}`); void a; return resolve(rwParts.allowance[jobId]); }
+export async function getJobParts(jobId: string): Promise<JobPartsView> { const parts = rwParts.byJob[jobId] ?? []; const used = parts.reduce((t, p) => t + p.price * p.qty, 0); const allowance = jobPartsAllowance(jobId); return resolve({ allowance, used, remaining: allowance - used, parts: [...parts].reverse(), returns: rwParts.returns.filter((r) => r.jobId === jobId) }); }
+// Scan watch → scan part → Save. Inventory decrements now; only the addition that would cross the allowance routes to pending approval.
+export async function quickAddPart(jobId: string, partCode: string, qty = 1): Promise<QuickAddResult> {
+  const a = actor(); const j = byId(store.jobs, jobId); const part = resolvePartScan(partCode); if (!part) throw new Error(`No part matches “${partCode}”`);
+  const view = await getJobParts(jobId); const cost = part.price * qty;
+  if (view.used + cost > view.allowance) { const r = await submitPadRequest(jobId, [{ partId: part.id, partNumber: part.partNumber, description: part.name, qty, price: part.price }]); jobStamp(j, `Quick Add ${part.partNumber} would exceed the ${fmtMoney(view.allowance)} allowance (${fmtMoney(view.used + cost)}) → ${r.number} pending approval`); return resolve({ kind: 'routed_to_approval', part, view: await getJobParts(jobId), requestNumber: r.number }); }
+  if (part.stock < qty) throw new Error(`${part.partNumber} is out of stock (${part.stock} on hand) — request it instead`);
+  part.stock -= qty; rs.movements.unshift({ id: newId('mv'), kind: 'issue', partId: part.id, locationId: 'loc-a1', delta: -qty, before: part.stock + qty, after: part.stock, reason: `Quick Add → ${j.number}`, by: a.by, station: a.station, at: new Date().toISOString() } as StockMovement);
+  (rwParts.byJob[jobId] ??= []).push({ id: newId('jp'), jobId, partId: part.id, partNumber: part.partNumber, name: part.name, price: part.price, qty, addedBy: a.by, at: new Date().toISOString(), via: 'quick_add' });
+  jobStamp(j, `Quick Add · ${part.partNumber} ${part.name} ×${qty} · ${fmtMoney(cost)} · parts ${fmtMoney(view.used + cost)} of ${fmtMoney(view.allowance)}`);
+  return resolve({ kind: 'added', part, view: await getJobParts(jobId) });
+}
+// Return = correction: part off the job, unit back to stock, who/when/note. Adder or any manager.
+export async function returnJobPart(jobPartId: string, note?: string): Promise<JobPartsView> {
+  const a = actor(); const jobId = Object.keys(rwParts.byJob).find((k) => rwParts.byJob[k].some((p) => p.id === jobPartId)); if (!jobId) throw new Error('Part not found on any job'); const p = rwParts.byJob[jobId].find((x) => x.id === jobPartId)!;
+  if (p.addedBy !== a.by && a.user?.accessTier !== 'manager') throw new Error('Only the person who added it or a manager can return a part');
+  rwParts.byJob[jobId] = rwParts.byJob[jobId].filter((x) => x.id !== jobPartId); const part = store.parts.find((x) => x.id === p.partId); if (part) part.stock += p.qty;
+  if (part) rs.movements.unshift({ id: newId('mv'), kind: 'receipt', partId: p.partId, locationId: 'loc-a1', delta: p.qty, before: part.stock - p.qty, after: part.stock, reason: `Returned from ${byId(store.jobs, jobId).number}${note ? ` · ${note}` : ''}`, by: a.by, station: a.station, at: new Date().toISOString() } as StockMovement);
+  rwParts.returns.unshift({ id: newId('pr'), jobId, partId: p.partId, partNumber: p.partNumber, qty: p.qty, note: note?.trim() || undefined, by: a.by, at: new Date().toISOString() });
+  jobStamp(byId(store.jobs, jobId), `Part returned · ${p.partNumber} ×${p.qty} back to stock${note ? ` · ${note}` : ''}`);
+  return getJobParts(jobId);
+}

@@ -1137,3 +1137,14 @@ export interface BillAuditLine { id: string; bucket: BillBucket; bill?: BillLine
 export interface BillAuditTotals { billed: number; matchedClean: number; variance: number; disputed: number; recovered: number; lines: number }
 export interface BillAuditEvent { at: string; by: string; text: string }
 export interface BillAudit { id: string; number: string; vendor: string; fileName: string; uploadedAt: string; by: string; station: string; lines: BillAuditLine[]; totals: BillAuditTotals; disputeEmailId?: string; disputeSentAt?: string; recoveredAt?: string; events: BillAuditEvent[] }
+
+// ---- Supervisor department dashboard + parts quick-add / returns ----
+export type PaceStatus = 'ahead' | 'on_pace' | 'behind';
+export interface DeptGoalMonth { key: string; label: string; goal: number; actual: number; hit: boolean; current?: boolean }
+export interface DeptGoals { goal: number; actualMtd: number; projected: number; pace: PaceStatus; dayOfMonth: number; daysInMonth: number; history: DeptGoalMonth[] }
+export interface TechPace { user: User; goal: number; actual: number; paceTarget: number; pace: PaceStatus; activeJobs: number; testingJobs: number; cards: PadCard[] }
+export interface DeptDashboard { department: 'wm' | 'band'; label: string; goals: DeptGoals; techs: TechPace[]; funnel: { stage: JobStatus; label: string; count: number }[]; totalJobs: number; stuck: PadCard[]; problem: PadCard[]; awaitingParts: PadCard[]; testing: PadCard[]; stuckDays: number }
+export interface JobPart { id: string; jobId: string; partId: string; partNumber: string; name: string; price: number; qty: number; addedBy: string; at: string; via: 'quick_add' | 'request' }
+export interface PartsReturn { id: string; jobId: string; partId: string; partNumber: string; qty: number; note?: string; by: string; at: string }
+export interface JobPartsView { allowance: number; used: number; remaining: number; parts: JobPart[]; returns: PartsReturn[] }
+export interface QuickAddResult { kind: 'added' | 'routed_to_approval'; part: Part; view: JobPartsView; requestNumber?: string }

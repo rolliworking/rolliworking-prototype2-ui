@@ -5,6 +5,7 @@ import type { PadPartsContext, PadSuggestion, PartsRequestItem, PartsRequestWith
 import { ScanInput } from '@/components/rw/RwBits';
 import { Big, Chip, Price, STATUS_LABEL, statusTone } from './PadBits';
 import { PadHistory, PastOnJob } from './PadHistory';
+import { PadQuickAdd } from './PadQuickAdd';
 import { fmtMoney, fmtTime } from '@/lib/format';
 
 type Say = (m: string, tone?: 'ok' | 'learn' | 'err') => void;
@@ -14,12 +15,12 @@ const SuggestionRow = ({ s, onPick, testId }: { s: PadSuggestion; onPick: () => 
     <span className="flex-1"><span className="text-lg text-white">{s.part.name}</span><span className="ml-2 font-mono text-sm text-slate-500">{s.part.partNumber}</span><span className="block text-xs text-slate-500">{s.hint}</span></span>
     {s.learned && <span data-testid={`${testId}-learned`} className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[11px] font-bold uppercase text-white"><Wand2 size={11} /> learned</span>}
     {s.source !== 'learned' && <span className={`rounded-full px-2 py-0.5 text-[11px] uppercase ${s.source === 'ref' ? 'bg-emerald-800 text-emerald-100' : 'bg-sky-800 text-sky-100'}`}>{s.source === 'ref' ? 'model' : 'caliber'}</span>}
-    <span className="w-24 text-right"><Price value={s.part.price} /><span className="block font-mono text-[11px] text-slate-500">{s.part.stock} on hand</span></span>
+    <span className="w-28 text-right"><Price value={s.part.price} /><span data-testid={`${testId}-stock`} className={`block font-mono text-[11px] ${s.part.stock <= 0 ? 'font-bold text-rose-300' : 'text-slate-500'}`}>{s.part.stock <= 0 ? 'OUT OF STOCK' : `${s.part.stock} on hand · retail`}</span></span>
   </button>
 );
 
 // The request composer: scan → job / reference / caliber chip → caliber query (automatic) → reference-scoped description search → generic fallback
-export const PadParts = ({ ctx, onCtx, say, requests, reload }: { ctx: PadPartsContext | null; onCtx: (c: PadPartsContext | null) => void; say: Say; requests: PartsRequestWithRefs[]; reload: () => void }) => {
+export const PadParts = ({ ctx, onCtx, say, requests, reload, isManager }: { ctx: PadPartsContext | null; onCtx: (c: PadPartsContext | null) => void; say: Say; requests: PartsRequestWithRefs[]; reload: () => void; isManager: boolean }) => {
   const [q, setQ] = useState(''); const [items, setItems] = useState<PartsRequestItem[]>([]); const [busy, setBusy] = useState(false); const [seg, setSeg] = useState<'new' | 'history'>('new');
   const tick = requests.length;
   useEffect(() => { setItems([]); setQ(''); }, [ctx?.job.id]);
@@ -34,12 +35,13 @@ export const PadParts = ({ ctx, onCtx, say, requests, reload }: { ctx: PadPartsC
       : <>
         <header data-testid="pad-parts-header" className="flex flex-wrap items-center gap-3 rounded-[28px] border border-white/10 bg-[#1f2630] p-4"><Chip tone="amber" testId="pad-parts-job"><span className="font-mono">{ctx.job.number}</span></Chip><Chip testId="pad-parts-ref">{ctx.reference} · {ctx.job.watch.model}</Chip><Chip tone="blue" testId="pad-parts-caliber"><Cpu size={16} /> cal. {ctx.caliber ?? 'unknown'}</Chip><span className="text-sm text-slate-400">{ctx.job.client.firstName} {ctx.job.client.lastName}</span><button data-testid="pad-parts-rescan" onClick={() => onCtx(null)} className="ml-auto min-h-[44px] rounded-full border border-white/15 px-4 text-sm text-slate-200">Scan another</button></header>
         <div className="relative rounded-[28px] border border-white/10 bg-[#1f2630] p-4">
-          <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Describe the part · scoped to {ctx.reference}</label>
+          <label className="text-xs font-bold uppercase tracking-wide text-slate-400">Describe the part · catalog narrowed to {ctx.reference}{ctx.caliber ? ` / cal. ${ctx.caliber}` : ''} by the scan</label>
           <input data-testid="pad-part-input" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(results[0]); } }} placeholder="e.g. crystal ring, black insert, mainspring…" className="mt-1 min-h-[60px] w-full rounded-2xl border border-white/15 bg-[#0f131a] px-4 text-xl text-slate-100 outline-none focus:border-amber-400" />
           {q.trim() && <div data-testid="pad-suggestions" className="mt-2 divide-y divide-white/5 rounded-2xl border border-white/10 bg-[#161b22]">{results.map((s) => <SuggestionRow key={s.part.id} s={s} onPick={() => add(s)} testId={`pad-suggest-${s.part.id}`} />)}
             <button data-testid="pad-freetype-add" onClick={() => add()} className="flex min-h-[60px] w-full items-center gap-3 rounded-b-2xl px-4 text-left hover:bg-white/5"><Sparkles size={18} className="text-amber-300" /><span className="flex-1"><span className="text-lg text-amber-100">{results.length ? 'None of these — ' : 'No match — '}add “{q.trim()}” as a GENERIC line</span><span className="block text-xs text-slate-500">No part number yet · the manager resolves it at review</span></span></button></div>}
           {!q.trim() && <div data-testid="pad-caliber-suggestions" className="mt-3"><div className="mb-1 inline-flex items-center gap-2 text-sm font-semibold text-sky-300"><Cpu size={16} /> Caliber {ctx.caliber ?? '—'} parts · offered automatically</div><div className="divide-y divide-white/5 rounded-2xl border border-white/10 bg-[#161b22]">{ctx.caliberParts.map((s) => <SuggestionRow key={s.part.id} s={s} onPick={() => add(s)} testId={`pad-cal-${s.part.id}`} />)}{!ctx.caliberParts.length && <p className="px-4 py-6 text-center text-slate-500">No caliber parts on file for this movement.</p>}</div></div>}
         </div>
+        <PadQuickAdd ctx={ctx} say={say} tick={tick} isManager={isManager} />
         <PastOnJob jobId={ctx.job.id} tick={tick} />
         <div data-testid="pad-request-lines" className="rounded-[28px] border border-white/10 bg-[#1f2630] p-4">
           <div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Request lines <span className="font-mono text-slate-400">{items.length}</span></h3><span className="text-sm text-slate-400">Sale price · total <span className="font-mono text-white">{fmtMoney(total)}</span>{items.some((i) => i.generic) && <span className="ml-2 text-amber-300">+ generic lines priced at review</span>}</span></div>
