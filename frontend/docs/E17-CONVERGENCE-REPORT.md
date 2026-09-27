@@ -10,7 +10,7 @@ Architecture: `src/api/realClient.ts` (HTTP impls, same signatures) · `src/api/
 | `GET /contract` lists every endpoint **with `maps_to`** naming the client function | `/contract` is a **stub**: `{"stub": true, "endpoints": ["GET /health", "GET|POST /estimates*", …]}` — patterns only, **no `maps_to`**. The endpoint → client-function mapping below is **inferred by hand** and should be confirmed by the API team. |
 | `POST /auth/switch-user` returns `session_token`; wire the **password** path | `switch-user` requires `device_id` (device-bound) and a **4-digit `pin`** (`invalid_pin` when a password is sent). `POST /auth/sign-in` (password) returns **401 for every seeded staff password** (`michael/michael123`, `vienna/vienna123`…). |
 | `GET /hit-list` | Returns `deprecated: true` — "D-186: prefer GET /today" — which needs `user_id` (staff_code). Wired to `/today`. |
-| `GET|POST /intake/*` | No list endpoint discovered (`/intake/`, `/intake/list`, `/intake/queue`, `/intake/packages`, `/intake/estimates`, `/intake/pending` → 404). |
+| `GET|POST /intake/*` | Only `GET /intake/packages` found (200, 6 rows, `?status=` accepted); `/intake/`, `/intake/list`, `/intake/queue`, `/intake/estimates`, `/intake/pending` → 404. |
 
 Sign-in as wired: `POST /auth/sign-in {username, password, device_id}` → on 401 the prototype verifies the password locally (seeded users) and binds the device with `POST /auth/switch-user {username, pin, device_id, camera_fallback}` to obtain the bearer token. Webcam snapshot stays client-side. Token → `localStorage.rollisuite.api.token`, sent as `Authorization: Bearer`. Device id → `localStorage.rollisuite.api.deviceId` (`web-<uuid>`, minted once).
 
@@ -26,7 +26,7 @@ Sign-in as wired: `POST /auth/sign-in {username, password, device_id}` → on 40
 | `getSalesOrders` | `GET /sales-orders` | **real** | renders; payments ledger empty |
 | `getSalesOrder` | `GET /sales-orders/:id` | **real** | 404 → mock lookup |
 | `getRequests` | `GET /client-requests` | **real** | API returns `{requests: [], stub: true}` → empty list = live |
-| `getPackages` | `GET /intake/packages` | **real** → falls back | **404 every call** → toast + mock (see §C) |
+| `getPackages` | `GET /intake/packages` | **real** | 200; but `receive_status` vocabulary ≠ `PackageStatus`, so live rows land in **no** intake stage (shelf reads empty — §B) |
 | `getEstimates` (list) | `GET /estimates` | **mock (parked)** | realClient implemented; list view throws `Invalid time value` — no `valid_until` on the wire (§B) |
 | `getJobs` (board) | `GET /jobs` | **mock (parked)** | realClient implemented; status vocabulary mismatch crashes lane grouping (§B) |
 | `getJob` | `GET /jobs/:id` | **mock (parked)** | realClient implemented; detail view needs number/watch/timeline (§B) |
@@ -73,6 +73,13 @@ Flip any row by editing `API_SOURCE` in `src/api/config.ts` (one line each).
 | `lines[].rate/pickedUpQty/shippedQty` | list rows have **no lines**; detail: `quantity/unit_price` | "0 / 0" picked/shipped |
 | `job` ref, `watch` ref | `job_id` (null) | no job / watch context |
 
+### `getPackages` — `GET /intake/packages`
+| UI expects (`Package`) | API returns | Effect |
+|---|---|---|
+| `status` ∈ `arrived · processed · awaiting_inspection · received · discrepancy_hold` | `receive_status` ∈ `received · pending · needs_review · not_client_asset` | only `received` overlaps → Arrival shelf / Receive Package / Work Order lists show nothing live; stage counters still come from the mock (`getIntakeCounts` not covered) |
+| `subNumber` (SUB#), `source`, `signatureNoted`, `contents[]`, `photos[]`, `bin`, `workflow`, `arrivedStation`, `discrepancyReason` | absent (`memo`, `matched_estimate_id`, `estimate_number`, `scanned_by/at`, `received_by/at`) | SUB# shown as `EST <number>` placeholder; no photos / contents |
+| `client` / `estimate` refs | ids only | blank client column |
+
 ### `getToday` — `GET /today?user_id=`
 UI expects `{ pinned: PinnedItem[], rows: TodayRow[] (source ∈ owner/assignee/hold/discrepancy/task/thread, jobId, dueAt, overdue, urgent), waitingOn: Task[] }`. API returns `{ items: [], owner_user_id, role, derived: true }` — item shape unknown (empty for every seeded user); mapped to `source: 'task'` placeholder.
 
@@ -92,7 +99,7 @@ UI expects a `User` (shortName, displayName, roles, accessTier, division, pin). 
 | `GET /today` (no `user_id`) | 400 `user_id_required` |
 | `POST /auth/sign-in` (seeded passwords) | 401 `unauthorized` for michael / vienna / mh / MH; `staff_code` body → 400 `badge_rejected` (D-181) |
 | `POST /auth/switch-user` with `password` | 400 `invalid_pin` (needs 4-digit `pin`) |
-| `GET /intake/packages` (and every `/intake/*` list guess) | 404 `not_found` — `getPackages` falls back to mock on every call (toast fires once) |
+| `GET /intake/{list,queue,estimates,pending}` | 404 `not_found` (only `/intake/packages` exists) |
 | `GET /client-requests` | 200 but `{stub: true, requests: []}` |
 | Not exercised this session (no UI read path yet) | `/pickup/*`, `/ship/*`, `/shipping/shipments`, `/qbo/*`, `/custody/*`, `/jobs/:id/messages*`, `/m3ke/events/*`, `/parcelpro/*` |
 
@@ -100,6 +107,6 @@ UI expects a `User` (shortName, displayName, roles, accessTier, division, pin). 
 - Sign-in → `POST /auth/sign-in` 401 → `POST /auth/switch-user` 200 → token stored → dashboard: KPI cards (50 watches in house, $3,130 MTD), recent activity (SO-2374…) and Today hit list all from live calls (`GET /estimates`, `/jobs`, `/sales-orders`, `/today?user_id=michael` in the network tab). Banner: "PROTOTYPE — FAKE DATA · LIVE API".
 - `/estimates/902ffdaf-…` (live) renders: 303613 · converted · PRACTICE INTAKE · 1 line $40 — with the gaps in §B visible (blank creator, no watch, "valid until" default).
 - `/sales` + `/sales/21f0f9…` live: 17 shipped · 33 picked up · SO-2374 detail renders.
-- `/intake` → `GET /intake/packages` 404 → toast "API unreachable — showing mock data" → mock intake board (walkable).
+- `/intake` → `GET /intake/packages` 200 (6 live packages) but none match a `PackageStatus`, so the live shelf reads empty while stage counters (mock) still show 3/2/3/2 — the clearest visible vocabulary mismatch. The fallback path itself (toast + rose banner) was exercised by the tester with a forced failure and by the `route()` unit behaviour.
 - `/estimates` list and `/jobs` board/detail: parked at mock (crashes documented above; the error boundary contained them when they were live).
 - Mode toggle: banner chip → MOCK reloads with the pre-E17 behaviour; toggling back restores hybrid.

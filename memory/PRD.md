@@ -290,3 +290,8 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 
 ### Code review fixes (2026-09-27; tested iteration_39, backend 16/16)
 - `ai_routes.extract_bill`: message built once, `text` assigned on a single path; return type hints on `server.py` routes; test files: implicit boolean asserts + type hints. No behaviour change.
+
+### E17 Convergence — hybrid mock → real API (2026-09-27; tested iteration_40)
+- `src/api/config.ts` (API_BASE_URL https://rolligroup-prototype-api.fly.dev, API_MODE hybrid|mock via localStorage `rollisuite.api.mode`, API_SOURCE split), `src/api/routing.ts` (route + per-call mock fallback + toast + health), `src/api/realClient.ts` (hand-generated from stub /contract — no maps_to), routed exports at the tail of `client.ts`; AppShell banner "· LIVE API / · MOCK" (click flips mode), ApiToast, RouteErrorBoundary (never white-screen).
+- Live: sign-in (sign-in 401 → switch-user PIN), dashboard KPIs/activity (derived), today, search, estimate detail, SOs, requests (stub), packages. Parked at mock (real impl ready): getEstimates list, getJobs, getJob — shape gaps. Full findings: `docs/E17-CONVERGENCE-REPORT.md`.
+- Remaining briefs from the same message (not started): component chips + trickle-down chain, per-staff client reviews, QBO setup screen, station intercom + paging, Band room pad + WM department dashboard, no-estimate receiving branch (SUB#).
