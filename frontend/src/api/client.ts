@@ -753,7 +753,7 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
   pkg.inspectedBy = a.by;
   pkg.workflow = [...input.workflow];
   pkg.componentsVerified = [...input.componentsReceived];
-  pkg.notes = input.notes || pkg.notes;
+  pkg.notes = input.notes || pkg.notes; pkg.itemLabel = input.itemLabel?.trim() || pkg.itemLabel;
 
   const watch = store.watches.find((w) => w.id === ctx.estimate.watchId);
   if (watch) {
@@ -3801,7 +3801,7 @@ const ensureParts = (j: Job): JobComponent[] => {
   });
   return comps;
 };
-const dotOf = (j: Job, c: JobComponent): FloorDot => { const p = derivePlacement(j, c); const w = byId(store.watches, j.watchId); return { jobId: j.id, jobNumber: j.number, key: c.key, label: PART_LABEL[c.key], station: p.station, partStatus: p.status, tech: c.custodyTech ?? c.completedBy, kind: j.kind, priority: j.priority, watchLabel: `${w.brand} ${w.model}` }; };
+const dotOf = (j: Job, c: JobComponent): FloorDot => { const p = derivePlacement(j, c); const w = byId(store.watches, j.watchId); const pk = j.packageId ? store.packages.find((x) => x.id === j.packageId) : undefined; return { jobId: j.id, jobNumber: j.number, key: c.key, label: PART_LABEL[c.key], station: p.station, partStatus: p.status, tech: c.custodyTech ?? c.completedBy, kind: j.kind, priority: j.priority, watchLabel: `${w.brand} ${w.model}`, clientId: j.clientId, estimateNumber: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId)?.number : undefined, itemLabel: pk?.itemLabel }; };
 const roomJobs = () => store.jobs.filter((j) => j.division === getSessionDivision() && j.status !== 'closed');
 export async function getShopFloor(filter?: { tech?: string; kind?: JobKind }): Promise<ShopFloorT> {
   const dots = roomJobs().flatMap((j) => ensureParts(j).map((c) => dotOf(j, c))).filter((d) => (!filter?.tech || d.tech === filter.tech) && (!filter?.kind || d.kind === filter.kind));
@@ -3877,8 +3877,11 @@ const gateParts = (j: Job, track: GateTrack): { parts: JobComponent[]; bundled: 
 };
 export interface GateScanResult { scan: GateScan; job: JobWithRefs; dots: FloorDot[] }
 export async function polishGateScan(label: string, direction: GateDirection, track: GateTrack, assignTo?: string): Promise<GateScanResult> {
+  const j = await findJobByLabel(label.trim().replace(/^BAND-/i, '')); if (!j) throw new Error(`No job matches label ${label}`);
+  return gateScanJob(getJobRow(j.id), direction, track, assignTo);
+}
+const gateScanJob = (row: Job, direction: GateDirection, track: GateTrack, assignTo?: string): GateScanResult => {
   const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Manager gate — only a manager can scan parts in or out of the safe');
-  const j = await findJobByLabel(label.trim().replace(/^BAND-/i, '')); if (!j) throw new Error(`No job matches label ${label}`); const row = getJobRow(j.id);
   const { parts, bundled } = gateParts(row, track); const g = GATE[track][direction];
   const wm = ensureParts(row).find((c) => c.key === 'head')?.custodyTech ?? row.assignees[0];
   const to = direction === 'in' ? assignTo?.trim() : assignTo?.trim() || wm; if (!to) throw new Error(direction === 'in' ? 'Pick the polisher this part is handed to' : 'No watchmaker on the job — pick who receives it');
@@ -3889,7 +3892,26 @@ export async function polishGateScan(label: string, direction: GateDirection, tr
   const scan: GateScan = { id: newId('gate'), at: new Date().toISOString(), by: a.by, station: a.station, jobId: row.id, jobNumber: row.number, direction, track, parts: parts.map((c) => c.key), bundled, assignedTo: to, from: g.from, to: g.to };
   gateScans.unshift(scan);
   appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Manager gate ${direction.toUpperCase()} · ${row.number} · ${parts.map((c) => PART_LABEL[c.key]).join(' + ')}${bundled ? ' (bundled)' : ''} · ${stationOf(g.from).label} → ${stationOf(g.to).label} · handed to ${to}` });
-  return resolve({ scan, job: jobRefs(row), dots: parts.map((c) => dotOf(row, c)) });
+  return { scan, job: jobRefs(row), dots: parts.map((c) => dotOf(row, c)) };
+};
+// Bulk assign — click a destination card on the map, scan many labels, review, Commit once. Gate destinations reuse the manager-gate rules; everything else is a plain move.
+export interface BulkRow { id: string; at: string; label: string; jobId: string; jobNumber: string; watchLabel: string; key: ComponentKey; clientName: string }
+export interface BulkResult { row: BulkRow; ok: boolean; detail: string }
+const GATE_TARGET: Partial<Record<RwStationKey, { direction: GateDirection; track: GateTrack }>> = { polish_room: { direction: 'in', track: 'watch' }, movement_service: { direction: 'out', track: 'watch' }, refinish: { direction: 'in', track: 'band' }, band_qc: { direction: 'out', track: 'band' } };
+export const bulkPartFor = (to: RwStationKey, bandLabel: boolean): ComponentKey => (bandLabel || stationOf(to).lane === 'band' ? 'band' : GATE_TARGET[to] || to.includes('polish') ? 'case' : 'head');
+export async function resolveBulkLabel(label: string, to: RwStationKey): Promise<BulkRow> {
+  const band = /^BAND-|\|B$/i.test(label.trim()); const j = await findJobByLabel(label.trim().replace(/^BAND-/i, '').replace(/\|B$/i, '')); if (!j) throw new Error(`No job matches label ${label}`);
+  const key = bulkPartFor(to, band); const row = getJobRow(j.id); if (key !== 'case' && !ensureParts(row).some((c) => c.key === key)) throw new Error(`${j.number} has no ${PART_LABEL[key].toLowerCase()} part`);
+  return resolve({ id: newId('bulk'), at: new Date().toISOString(), label: label.trim(), jobId: j.id, jobNumber: j.number, watchLabel: `${j.watch.brand} ${j.watch.model}`, key, clientName: `${j.client.firstName} ${j.client.lastName}` });
+}
+export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: string): Promise<BulkResult[]> {
+  const out: BulkResult[] = []; const seen = new Set<string>();
+  for (const r of rows) { if (seen.has(r.jobId + r.key)) continue; seen.add(r.jobId + r.key);
+    try { const gate = GATE_TARGET[to]; if (gate) { const g = gateScanJob(getJobRow(r.jobId), gate.direction, gate.track, handTo); out.push({ row: r, ok: true, detail: `gate ${gate.direction.toUpperCase()} · ${g.scan.parts.map((k) => PART_LABEL[k]).join(' + ')}${g.scan.bundled ? ' (bundled)' : ''} → ${stationOf(g.scan.to).label} · ${g.scan.assignedTo}` }); }
+      else { const d = await movePart(r.jobId, r.key, to, 'bulk_assign'); if (handTo) { const { j, c } = partOf(r.jobId, r.key); c.custodyTech = handTo; jobStamp(j, `${PART_LABEL[c.key]} custody → ${handTo} (bulk assign)`); } out.push({ row: r, ok: true, detail: `${d.label} → ${stationOf(to).label}${handTo ? ` · ${handTo}` : ''}` }); } }
+    catch (e) { out.push({ row: r, ok: false, detail: e instanceof Error ? e.message : 'Failed' }); } }
+  const a = actor(); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `Bulk assign → ${stationOf(to).label}${handTo ? ` · ${handTo}` : ''} · ${out.filter((x) => x.ok).length}/${out.length} moved` });
+  return resolve(out);
 }
 export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
 export const POLISHERS = ['Walter', 'Joseph', 'Leo'];

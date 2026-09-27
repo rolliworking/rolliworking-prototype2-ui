@@ -30,25 +30,30 @@ const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ram
 const TRACK_LINES: string[][] = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band']];
 const RAMPS: { from: string; leg: string[]; to: string }[] = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }, { from: 'assign_band', leg: ['band_safe_in', 'refinish', 'band_safe_out'], to: 'band_qc' }];
 
-const Dot = ({ d, onOpen }: { d: FloorDot; onOpen: () => void }) => (
-  <button draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', `${d.jobId}|${d.key}`)} onClick={onOpen} data-testid={`floor-dot-${d.jobId}-${d.key}`} title={`${d.jobNumber} · ${d.label} · ${d.watchLabel}${d.tech ? ` · ${d.tech}` : ' · UNASSIGNED'}`} className={`inline-flex items-center gap-1 rounded-full border bg-[#0f131a] px-1.5 py-0.5 text-[10px] text-slate-200 hover:-translate-y-px ${d.priority === 'urgent' ? 'border-rose-400' : d.priority === 'high' ? 'border-orange-400/70' : 'border-white/15'}`}>
-    <span style={{ background: PART_COLOR[d.key] }} className="h-3 w-3 rounded-full" /><span className="font-mono">{d.jobNumber.slice(-4)}</span>{d.tech ? <span className="text-slate-500">{d.tech}</span> : <span className="text-amber-300">?</span>}
-  </button>
-);
+// Badge code by room / custodian: W · <watchmaker> (head lane), P · <refinisher> (polish leg), B · <band tech> (band lane), FA / T / ✓ for the shared column
+export const roomCode = (d: FloorDot): string => { const s = d.station; const who = d.tech ? ` · ${d.tech}` : ''; if (s === 'final_assembly') return `FA${who}`; if (s === 'testing') return `T${who}`; if (s === 'finished') return `✓${who}`; if (s === 'polish_room' || s === 'refinish' || s.includes('polish')) return `P${who}`; if (s.startsWith('band') || s === 'into_safe_band' || s === 'safe_await_head') return `B${who}`; return `W${who}`; };
+const Dot = ({ d, onOpen, focus }: { d: FloorDot; onOpen: () => void; focus?: Set<string> }) => {
+  const hit = focus?.has(d.jobId); const dim = focus && !hit;
+  return <button draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', `${d.jobId}|${d.key}`)} onClick={onOpen} data-testid={`floor-dot-${d.jobId}-${d.key}`} data-focus={hit ? 'true' : undefined} title={`${d.jobNumber} · ${d.label} · ${d.watchLabel}${d.tech ? ` · ${d.tech}` : ' · UNASSIGNED'}${d.itemLabel ? ` · ${d.itemLabel}` : ''}`} className={`inline-flex items-center gap-1 rounded-full border bg-[#0f131a] px-1.5 py-0.5 text-[10px] text-slate-200 hover:-translate-y-px ${dim ? 'opacity-20' : ''} ${hit ? 'ring-2 ring-amber-400' : ''} ${d.priority === 'urgent' ? 'border-rose-400' : d.priority === 'high' ? 'border-orange-400/70' : 'border-white/15'}`}>
+    <span style={{ background: PART_COLOR[d.key] }} className="h-3 w-3 rounded-full" /><span className="font-mono">{hit ? d.estimateNumber ?? d.jobNumber : d.jobNumber.slice(-4)}</span>{hit ? <span className="rounded bg-amber-400/20 px-1 font-semibold text-amber-200">{roomCode(d)}{d.itemLabel ? ` · ${d.itemLabel}` : ''}</span> : d.tech ? <span className="text-slate-500">{d.tech}</span> : <span className="text-amber-300">?</span>}
+  </button>;
+};
 
-const Node = ({ n, dots, onDrop, onOpen }: { n: MapNode; dots: FloorDot[]; onDrop: (e: React.DragEvent) => void; onOpen: (d: FloorDot) => void }) => {
+const Node = ({ n, dots, onDrop, onOpen, onSelect, selected, focus }: { n: MapNode; dots: FloorDot[]; onDrop: (e: React.DragEvent) => void; onOpen: (d: FloorDot) => void; onSelect?: (n: MapNode) => void; selected?: boolean; focus?: Set<string> }) => {
   const [over, setOver] = useState(false); const needs = n.assign && dots.some((d) => !d.tech);
-  return <div data-node={n.id} data-testid={`map-node-${n.id}`} data-lock={!!n.lock} data-needs-assign={!!needs} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW_INDEX[n.row] }} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); onDrop(e); }}
-    className={`relative z-10 flex min-h-[92px] flex-col rounded-md border p-1.5 transition-colors ${over ? 'border-amber-400 bg-amber-400/10' : n.lock ? 'border-white/25 bg-black/50' : needs ? 'border-amber-400/70 bg-[#0b0e13]' : n.assign ? 'border-white/15 bg-[#0b0e13]' : 'border-white/10 bg-black/20'}`}>
+  return <div data-node={n.id} data-testid={`map-node-${n.id}`} data-lock={!!n.lock} data-needs-assign={!!needs} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW_INDEX[n.row] }} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); onDrop(e); }} onClick={onSelect ? (e) => { if ((e.target as HTMLElement).closest('button')) return; onSelect(n); } : undefined} data-selected={selected ? 'true' : undefined}
+    className={`relative z-10 flex min-h-[92px] flex-col rounded-md border p-1.5 transition-colors ${onSelect ? 'cursor-pointer hover:border-amber-300/60' : ''} ${selected ? 'ring-2 ring-amber-400 border-amber-400' : ''} ${over ? 'border-amber-400 bg-amber-400/10' : n.lock ? 'border-white/25 bg-black/50' : needs ? 'border-amber-400/70 bg-[#0b0e13]' : n.assign ? 'border-white/15 bg-[#0b0e13]' : 'border-white/10 bg-black/20'}`}>
     <div className="mb-1 flex items-start justify-between gap-1 text-[10px] text-slate-300"><span className="inline-flex items-center gap-1 font-semibold">{n.lock ? <Lock size={10} className="text-amber-300" /> : n.assign ? <UserPlus size={10} className={needs ? 'text-amber-300' : 'text-slate-500'} /> : null}{n.label}</span><span data-testid={`map-count-${n.id}`} className="font-mono text-slate-400">{dots.length}</span></div>
     {(n.sub || n.owner) && <div className="mb-1 text-[9px] leading-tight text-slate-500">{n.owner && <span className="text-amber-200/80">{n.owner}'s safe</span>}{n.owner && n.sub && ' · '}{n.sub}</div>}
     {needs && <div data-testid={`map-assign-cta-${n.id}`} className="mb-1 rounded-sm bg-amber-400/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-200">{n.label} needed</div>}
-    <div className="flex flex-wrap content-start gap-1">{dots.map((d) => <Dot key={`${d.jobId}-${d.key}`} d={d} onOpen={() => onOpen(d)} />)}</div>
+    <div className="flex flex-wrap content-start gap-1">{dots.map((d) => <Dot key={`${d.jobId}-${d.key}`} d={d} onOpen={() => onOpen(d)} focus={focus} />)}</div>
   </div>;
 };
 
+export const targetKey = (n: MapNode, dots: FloorDot[]): RwStationKey => (n.keys.length > 1 ? [...n.keys].sort((a, b) => dots.filter((d) => d.station === a).length - dots.filter((d) => d.station === b).length)[0] : n.keys[0]);
+export const SHARED_NODES: MapNode[] = [{ id: 'final', keys: ['final_assembly'], label: 'Final assembly', row: 'wat', col: 13, free: true }, { id: 'testing', keys: ['testing'], label: 'Testing', row: 'wat', col: 13, free: true }, { id: 'finished', keys: ['finished'], label: 'Finished', row: 'wat', col: 13, free: true }];
 const center = (r: DOMRect, host: DOMRect, side: 'l' | 'r' | 't' | 'b') => ({ x: side === 'l' ? r.left - host.left : side === 'r' ? r.right - host.left : r.left - host.left + r.width / 2, y: side === 't' ? r.top - host.top : side === 'b' ? r.bottom - host.top : r.top - host.top + r.height / 2 });
-export const StationMap = ({ dots, onDrop, onOpen }: { dots: FloorDot[]; onDrop: (to: RwStationKey, e: React.DragEvent) => void; onOpen: (d: FloorDot) => void }) => {
+export const StationMap = ({ dots, onDrop, onOpen, onSelect, selectedId, focus }: { dots: FloorDot[]; onDrop: (to: RwStationKey, e: React.DragEvent) => void; onOpen: (d: FloorDot) => void; onSelect?: (n: MapNode) => void; selectedId?: string; focus?: Set<string> }) => {
   const host = useRef<HTMLDivElement>(null); const [paths, setPaths] = useState<{ d: string; kind: 'track' | 'ramp' | 'merge' }[]>([]); const [size, setSize] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
     const el = host.current; if (!el) return;
@@ -62,7 +67,7 @@ export const StationMap = ({ dots, onDrop, onOpen }: { dots: FloorDot[]; onDrop:
     draw(); const ro = new ResizeObserver(draw); ro.observe(el); return () => ro.disconnect();
   }, [dots]);
   const at = (keys: RwStationKey[]) => dots.filter((d) => keys.includes(d.station));
-  const dropTo = (n: MapNode) => (e: React.DragEvent) => { const target = n.keys.length > 1 ? [...n.keys].sort((a, b) => at([a]).length - at([b]).length)[0] : n.keys[0]; onDrop(target, e); };
+  const dropTo = (n: MapNode) => (e: React.DragEvent) => onDrop(targetKey(n, dots), e);
   return <div data-testid="station-map" ref={host} className="relative rounded-md border border-white/10 bg-[#141920] p-3">
     <svg data-testid="station-map-lines" className="pointer-events-none absolute inset-0 z-0" width={size.w} height={size.h}>{paths.map((p, i) => <path key={i} d={p.d} fill="none" stroke={p.kind === 'ramp' ? '#f59e0b' : p.kind === 'merge' ? '#94a3b8' : '#64748b'} strokeWidth={p.kind === 'ramp' ? 2 : 1.5} strokeDasharray={p.kind === 'ramp' ? undefined : '5 5'} opacity={p.kind === 'ramp' ? 0.9 : 0.7} />)}</svg>
     <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(4, auto)' }}>
@@ -70,9 +75,9 @@ export const StationMap = ({ dots, onDrop, onOpen }: { dots: FloorDot[]; onDrop:
       <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       <div style={{ gridColumn: 1, gridRow: 3 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-green-300" data-testid="track-label-bra">BRA</div>
       <div style={{ gridColumn: 1, gridRow: 4 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
-      {NODES.map((n) => <Node key={n.id} n={n} dots={at(n.keys)} onDrop={dropTo(n)} onOpen={onOpen} />)}
+      {NODES.map((n) => <Node key={n.id} n={n} dots={at(n.keys)} onDrop={dropTo(n)} onOpen={onOpen} onSelect={onSelect} selected={selectedId === n.id} focus={focus} />)}
       <div style={{ gridColumn: 13, gridRow: '1 / span 4' }} className="grid grid-rows-3 gap-2">
-        {([['final', 'final_assembly', 'Final assembly'], ['testing', 'testing', 'Testing'], ['finished', 'finished', 'Finished']] as [string, RwStationKey, string][]).map(([id, k, label]) => <Node key={id} n={{ id, keys: [k], label, row: 'wat', col: 13, free: true }} dots={at([k])} onDrop={(e) => onDrop(k, e)} onOpen={onOpen} />)}
+        {([['final', 'final_assembly', 'Final assembly'], ['testing', 'testing', 'Testing'], ['finished', 'finished', 'Finished']] as [string, RwStationKey, string][]).map(([id, k, label]) => <Node key={id} n={{ id, keys: [k], label, row: 'wat', col: 13, free: true }} dots={at([k])} onDrop={(e) => onDrop(k, e)} onOpen={onOpen} onSelect={onSelect} selected={selectedId === id} focus={focus} />)}
       </div>
     </div>
     <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-dashed border-slate-400" /> track</span><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-amber-400" /> manager-gated polish off-ramp (scan IN → refinisher · scan OUT → back)</span><span className="inline-flex items-center gap-1"><Lock size={10} className="text-amber-300" /> = physically in that manager's safe</span><span className="inline-flex items-center gap-1"><UserPlus size={10} className="text-amber-300" /> needs assignment</span></div>

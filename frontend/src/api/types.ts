@@ -482,6 +482,7 @@ export interface Package {
   componentsVerified?: string[];
   b2b?: { tier: string; code: string; at: string };
   shelfBin?: string;
+  itemLabel?: string;
   scans?: PackageScan[];
   openedAt?: string;
   openedBy?: string;
@@ -534,6 +535,7 @@ export interface InspectionContext {
 }
 
 export interface ReceiveWatchInput {
+  itemLabel?: string;
   reference: string;
   serial: string;
   linesVerified: number[];
@@ -1088,7 +1090,7 @@ export type GateTrack = 'watch' | 'band';
 export interface GateScan { id: string; at: string; by: string; station: string; jobId: string; jobNumber: string; direction: GateDirection; track: GateTrack; parts: ComponentKey[]; bundled: boolean; assignedTo: string; from: RwStationKey; to: RwStationKey }
 export interface RwStation { key: RwStationKey; label: string; lane: RwLane; order: number }
 export type PartColorKey = 'head' | 'case' | 'band';
-export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string; completed?: { by: string; undoToken: string; transitioned: boolean } }
+export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string; clientId: string; estimateNumber?: string; itemLabel?: string; completed?: { by: string; undoToken: string; transitioned: boolean } }
 export interface ShopFloor { stations: RwStation[]; dots: FloorDot[]; counts: Record<RwStationKey, number>; techs: string[] }
 export interface PartHistoryView { job: JobWithRefs; part: JobComponent; moves: PartMove[] }
 export interface ScanSession { tech?: User; rows: { at: string; jobNumber: string; jobId: string; watchLabel: string; part: string; outboxId?: string }[] }

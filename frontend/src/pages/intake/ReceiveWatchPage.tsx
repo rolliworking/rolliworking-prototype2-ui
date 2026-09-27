@@ -27,7 +27,7 @@ export default function ReceiveWatchPage() {
   const [decision, setDecision] = useState<'n/a' | 'returning' | 'conflict'>('n/a');
   const [workflow, setWorkflow] = useState<DeptCode[]>([]);
   const [extraWatch, setExtraWatch] = useState(false);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(''); const [itemLabel, setItemLabel] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReceiveWatchResult | null>(null);
@@ -60,7 +60,7 @@ export default function ReceiveWatchPage() {
   }, [ctx, reference, serial]);
 
   const input: ReceiveWatchInput | null = ctx
-    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined }
+    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined }
     : null;
   const discrepancies = useMemo(() => (ctx && input ? api.computeDiscrepancies(ctx, input) : []), [ctx, input]);
   const forkPending = !!match && decision === 'n/a';
@@ -166,6 +166,7 @@ export default function ReceiveWatchPage() {
       <Card title="4 · Inspector’s confirmation — what is physically in hand" subtitle="Tap each item you are holding right now; this is compared against what was recorded as received above" testId="inspection-components-card" accent="moss">
         <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...pkg.contents])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = pkg.contents.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} disabled={readOnly} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors ${ver ? 'border-moss bg-moss text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
         <ComponentChecklist expected={ctx.expectedComponents} received={components} onToggle={(c) => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} />
+        <label className="mt-3 block text-xs text-ink-500">Item description · shown on the shop-floor badge (multiple items on one estimate → 1/3, 2/3, 3/3)<input data-testid="rw-item-label" value={itemLabel} onChange={(e) => setItemLabel(e.target.value)} disabled={readOnly} placeholder="e.g. 1/3 · Submariner head" className="mt-1 block h-9 w-72 rounded-sm border border-line bg-canvas px-2.5 font-mono text-[13px] focus:border-ink focus:bg-surface focus:outline-none" /></label>
         <textarea data-testid="rw-inhand-notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={readOnly} rows={2} placeholder="Anything else in hand not covered above — new dial, hands, box, papers…" className="mt-3 w-full rounded-sm border border-line bg-canvas px-2.5 py-1.5 text-[13px] focus:border-ink focus:bg-surface focus:outline-none" />
         <label className="mt-2 inline-flex items-center gap-1.5 text-xs text-ink-700"><input type="checkbox" data-testid="extra-watch" checked={extraWatch} disabled={readOnly} onChange={(e) => setExtraWatch(e.target.checked)} className="accent-rose-600" /> Extra / unexpected watch in package</label>
       </Card>

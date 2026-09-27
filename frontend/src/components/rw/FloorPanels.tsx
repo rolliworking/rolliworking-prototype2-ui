@@ -1,0 +1,67 @@
+import { Check, Lock, MousePointerClick, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import * as api from '@/api/client';
+import type { BulkResult, BulkRow, Client, FloorDot, JobWithRefs, RwStationKey } from '@/api/client';
+import { PART_NAME, PartDot, ScanInput } from '@/components/rw/RwBits';
+import { roomCode, type MapNode } from '@/components/rw/StationMap';
+import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
+import { fmtTime, fullName } from '@/lib/format';
+
+const stationLabel = (k?: RwStationKey) => (k ? api.RW_STATIONS.find((s) => s.key === k)?.label ?? k : '—');
+const GATE_DEST = new Set<RwStationKey>(['polish_room', 'movement_service', 'refinish', 'band_qc']);
+
+// Bulk assign — destination = a card clicked on the map; scan many; review; Commit once. Gate destinations obey the manager-gate rules per item.
+export const BulkPanel = ({ node, target, onClear, onCommitted }: { node: MapNode | null; target?: RwStationKey; onClear: () => void; onCommitted: (m: string) => void }) => {
+  const [rows, setRows] = useState<BulkRow[]>([]); const [results, setResults] = useState<BulkResult[] | null>(null); const [handTo, setHandTo] = useState(''); const [busy, setBusy] = useState(false); const [mode, setMode] = useState<'map' | 'handout'>('map');
+  useEffect(() => { setRows([]); setResults(null); }, [node?.id]);
+  if (mode === 'handout') return <div data-testid="bulk-handout" className="space-y-2"><div className="flex items-center justify-between text-xs"><span className="text-slate-400">Narrow mode: morning handout — distribute heads to several watchmakers by scanning TECH-codes (auto-commits per label).</span><button data-testid="bulk-mode-map" onClick={() => setMode('map')} className="rounded-full border border-white/15 px-3 py-1 text-slate-200 hover:bg-white/10">← Back to Bulk assign</button></div><div className="rounded-md border border-white/10 p-2"><RwBulkAssignPage /></div></div>;
+  const gate = target && GATE_DEST.has(target); const needsHand = gate && (target === 'polish_room' || target === 'refinish');
+  const scan = async (label: string) => { const r = await api.resolveBulkLabel(label, target!); setRows((v) => [r, ...v]); setResults(null); };
+  const commit = async () => { setBusy(true); try { const res = await api.bulkCommit([...rows].reverse(), target!, handTo || undefined); setResults(res); setRows(res.filter((x) => !x.ok).map((x) => x.row)); onCommitted(`${res.filter((x) => x.ok).length}/${res.length} moved → ${stationLabel(target)}`); } finally { setBusy(false); } };
+  return <div data-testid="bulk-panel" className="space-y-2">
+    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+      {node ? <div data-testid="bulk-destination" className="inline-flex items-center gap-2 rounded-md border border-amber-400/60 bg-amber-400/10 px-3 py-1.5 text-amber-100"><MousePointerClick size={13} /> Assigning to <b>{node.label}</b>{node.owner && <span className="text-amber-200/70">· {node.owner}'s safe</span>}{stationLabel(target) !== node.label && <span className="font-mono text-amber-200/70">{stationLabel(target)}</span>}{gate && <span className="rounded bg-amber-400/20 px-1.5 text-[10px] font-semibold uppercase">manager gate rules</span>}<button data-testid="bulk-clear" onClick={onClear} className="ml-1 text-amber-200/70 hover:text-white"><X size={12} /></button></div>
+        : <div data-testid="bulk-pick-hint" className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-1.5 text-slate-300"><MousePointerClick size={13} className="text-amber-300" /> Click a station or safe card on the map to choose the destination, then scan labels.</div>}
+      <button data-testid="bulk-mode-handout" onClick={() => setMode('handout')} className="text-slate-400 underline-offset-2 hover:text-white hover:underline">Morning handout (TECH-code mode) →</button>
+    </div>
+    {node && <>
+      <div className="grid gap-3 md:grid-cols-[1fr_260px]">
+        <div className="space-y-2">
+          <ScanInput testId="bulk-scan" placeholder={`Scan labels for ${node.label} · E02016 · BAND-E02031`} onScan={scan} big />
+          <div className="flex items-center gap-2 text-xs"><span className="text-slate-400">{needsHand ? 'Hand to (required for gate IN)' : 'Hand custody to (optional)'}</span><select data-testid="bulk-handto" value={handTo} onChange={(e) => setHandTo(e.target.value)} className="rounded-md border border-white/10 bg-[#0f131a] px-2 py-1 text-slate-100"><option value="">{needsHand ? '— pick —' : 'keep / by rule'}</option>{[...new Set([...api.POLISHERS, 'MM', 'Leo', 'Joseph', 'Walter', 'MH'])].map((p) => <option key={p}>{p}</option>)}</select></div>
+        </div>
+        <div className="rounded-md border border-white/10 bg-[#0f131a] p-3 text-xs"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Session</div><div data-testid="bulk-count" className="text-2xl font-semibold text-white">{rows.length}</div><div className="text-slate-400">scanned · nothing moves until Commit</div>
+          <button data-testid="bulk-commit" disabled={!rows.length || busy || (needsHand && !handTo)} onClick={() => void commit()} className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md bg-amber-400 py-2 text-sm font-semibold text-[#161b22] disabled:opacity-40"><Check size={14} /> Commit {rows.length ? `${rows.length} item${rows.length === 1 ? '' : 's'}` : ''}</button></div>
+      </div>
+      <table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase tracking-wide text-slate-500"><th className="py-1">Time</th><th>Job</th><th>Client</th><th>Watch</th><th>Part</th><th /></tr></thead>
+        <tbody data-testid="bulk-rows">{rows.map((r) => <tr key={r.id} data-testid={`bulk-row-${r.id}`} className="border-t border-white/5"><td className="py-1.5 text-slate-400">{fmtTime(r.at)}</td><td className="font-mono font-semibold text-amber-300">{r.jobNumber}</td><td className="text-slate-300">{r.clientName}</td><td className="text-slate-300">{r.watchLabel}</td><td className="inline-flex items-center gap-1 py-1.5 text-slate-200"><PartDot k={r.key} size={10} /> {PART_NAME[r.key]}</td><td className="text-right"><button data-testid={`bulk-remove-${r.id}`} onClick={() => setRows((v) => v.filter((x) => x.id !== r.id))} title="Remove mis-scan" className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-rose-300"><Trash2 size={12} /></button></td></tr>)}{!rows.length && !results && <tr><td colSpan={6} className="py-4 text-center text-slate-500">Nothing scanned yet.</td></tr>}</tbody></table>
+      {results && <ul data-testid="bulk-results" className="divide-y divide-white/5 rounded-md border border-white/10 bg-[#0f131a] text-xs">{results.map((x) => <li key={x.row.id} data-testid={`bulk-result-${x.row.id}`} data-ok={x.ok} className="flex items-center gap-2 px-3 py-1.5"><span className={`rounded px-1.5 text-[10px] font-semibold uppercase ${x.ok ? 'bg-emerald-900/60 text-emerald-200' : 'bg-rose-900/60 text-rose-200'}`}>{x.ok ? 'moved' : 'blocked'}</span><span className="font-mono text-amber-300">{x.row.jobNumber}</span><span className="text-slate-300">{PART_NAME[x.row.key]}</span><span className="text-slate-400">{x.detail}</span></li>)}</ul>}
+    </>}
+  </div>;
+};
+
+// Component lookup — one bar: est# / ref# / barcode / client name (type-ahead). A client → every component, badge-coded by room + custodian, est# per job, item label (1/3…) from Receive Watch.
+export const LookupPanel = ({ dots, onOpen, onFocus }: { dots: FloorDot[]; onOpen: (d: FloorDot) => void; onFocus: (ids: Set<string> | undefined) => void }) => {
+  const [q, setQ] = useState(''); const [sugg, setSugg] = useState<Client[]>([]); const [client, setClient] = useState<Client | null>(null); const [job, setJob] = useState<JobWithRefs | null>(null); const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { const s = q.trim(); if (s.length < 2 || /^\d|^E\d|^BAND-/i.test(s) || (client && s === fullName(client))) { setSugg([]); return; } const t = setTimeout(() => api.searchClients(s).then((c) => setSugg(c.slice(0, 8))), 150); return () => clearTimeout(t); }, [q, client]);
+  const pick = (c: Client) => { setClient(c); setJob(null); setSugg([]); setQ(fullName(c)); setErr(null); onFocus(new Set(dots.filter((d) => d.clientId === c.id).map((d) => d.jobId))); };
+  const go = async (e: React.FormEvent) => { e.preventDefault(); const s = q.trim(); if (!s) return; if (sugg.length === 1) return pick(sugg[0]);
+    const j = await api.findJobByLabel(s.replace(/^BAND-/i, '')) ?? (await api.searchJobs(s)).find((x) => x.watch.reference.toUpperCase() === s.toUpperCase() || x.estimate?.number.toUpperCase() === s.toUpperCase());
+    if (j) { setJob(j); setClient(null); setErr(null); onFocus(new Set([j.id])); return; } const cs = await api.searchClients(s); if (cs.length) return pick(cs[0]); setErr(`Nothing matches “${s}”`); onFocus(undefined); };
+  const clear = () => { setQ(''); setClient(null); setJob(null); setSugg([]); setErr(null); onFocus(undefined); };
+  const mine = client ? dots.filter((d) => d.clientId === client.id) : job ? dots.filter((d) => d.jobId === job.id) : []; const jobs = [...new Set(mine.map((d) => d.jobId))];
+  return <div data-testid="lookup-panel" className="space-y-2">
+    <form onSubmit={go} className="relative flex gap-2"><div className="relative flex-1"><Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-slate-500" /><input data-testid="lookup-input" value={q} onChange={(e) => { setQ(e.target.value); if (client) { setClient(null); onFocus(undefined); } }} placeholder="Estimate # · ref # · scan a barcode · client name" autoComplete="off" className="w-full rounded-md border border-white/10 bg-[#0f131a] py-2 pl-8 pr-3 text-sm text-slate-100" />
+      {sugg.length > 0 && <ul data-testid="lookup-suggestions" className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0f131a] shadow-2xl">{sugg.map((c) => <li key={c.id}><button type="button" data-testid={`lookup-suggest-${c.id}`} onClick={() => pick(c)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-100 hover:bg-white/10"><span className="font-medium">{fullName(c)}</span><span className="text-xs text-slate-500">{c.company ?? c.email}</span><span className="ml-auto text-[10px] text-slate-500">{dots.filter((d) => d.clientId === c.id).length} part{dots.filter((d) => d.clientId === c.id).length === 1 ? '' : 's'} on floor</span></button></li>)}</ul>}</div>
+      <button data-testid="lookup-go" className="rounded-md bg-amber-400 px-4 text-sm font-semibold text-[#161b22]">Look up</button>{(client || job) && <button type="button" data-testid="lookup-clear" onClick={clear} className="rounded-md border border-white/15 px-3 text-sm text-slate-200">Clear</button>}</form>
+    {err && <div data-testid="lookup-error" className="text-xs text-rose-300">{err}</div>}
+    {(client || job) && <div data-testid="lookup-result" className="rounded-md border border-white/10 bg-[#0f131a] p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2"><span className="text-base font-semibold text-white">{client ? fullName(client) : job ? `${job.client.firstName} ${job.client.lastName}` : ''}</span>{job && <><Link to={`/rw/jobs/${job.id}`} className="font-mono text-amber-300 hover:underline">{job.number}</Link><span className="text-slate-300">{job.watch.brand} {job.watch.model}</span><span className="rounded bg-white/10 px-1.5 text-[10px] uppercase text-slate-300">{job.workflow.join('')}</span><span className="text-slate-500">{api.isSplitFlow(job) ? 'split · bracelet on its own track' : 'not split · bracelet rides the case off-ramp'}</span></>}<span className="ml-auto text-slate-500">{jobs.length} job{jobs.length === 1 ? '' : 's'} · {mine.length} component{mine.length === 1 ? '' : 's'} on the floor · highlighted on the map</span></div>
+      <ul className="mt-2 divide-y divide-white/5">{mine.map((d) => <li key={`${d.jobId}-${d.key}`} data-testid={`lookup-part-${d.jobId}-${d.key}`} className="flex flex-wrap items-center gap-2 py-1.5">
+        <span data-testid={`lookup-badge-${d.jobId}-${d.key}`} className="rounded bg-amber-400/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">{roomCode(d)}</span>
+        {jobs.length > 1 && <span className="font-mono text-slate-300">{d.estimateNumber ?? d.jobNumber}</span>}{d.itemLabel && <span data-testid={`lookup-item-${d.jobId}-${d.key}`} className="rounded bg-white/10 px-1.5 font-mono text-[11px] text-white">{d.itemLabel}</span>}
+        <PartDot k={d.key} size={10} /><span className="w-20 text-slate-200">{PART_NAME[d.key]}</span><span className="text-slate-400">{d.watchLabel}</span><span className="flex-1 text-slate-300">{api.isSafeStation(d.station) && <Lock size={10} className="mr-1 inline text-amber-300" />}{stationLabel(d.station)}</span><span className="text-slate-500">{d.partStatus}</span><button data-testid={`lookup-history-${d.jobId}-${d.key}`} onClick={() => onOpen(d)} className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] hover:bg-white/10">history</button></li>)}{!mine.length && <li className="py-2 text-slate-500">No components on the floor.</li>}</ul>
+    </div>}
+  </div>;
+};

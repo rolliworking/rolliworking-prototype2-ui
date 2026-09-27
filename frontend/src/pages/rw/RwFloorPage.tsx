@@ -1,13 +1,13 @@
-import { ArrowDownToLine, ArrowUpFromLine, Lock, ScanLine, Search, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Lock, MousePointerClick, ScanLine, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { ComponentKey, FloorDot, GateDirection, GateScan, GateTrack, JobKind, JobWithRefs, PartHistoryView, RwStationKey, ShopFloor } from '@/api/client';
+import type { ComponentKey, FloorDot, GateDirection, GateScan, GateTrack, JobKind, PartHistoryView, RwStationKey, ShopFloor } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { CompleteToast } from '@/components/rw/AuditPanel';
 import { PART_NAME, PartDot, ScanInput } from '@/components/rw/RwBits';
-import { StationMap } from '@/components/rw/StationMap';
-import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
+import { StationMap, targetKey, type MapNode } from '@/components/rw/StationMap';
+import { BulkPanel, LookupPanel } from '@/components/rw/FloorPanels';
 import { fmtDate, fmtTime } from '@/lib/format';
 
 type Tab = 'gate' | 'bulk' | 'lookup';
@@ -39,21 +39,8 @@ const GatePanel = ({ onDone }: { onDone: (m: string) => void }) => {
   </div>;
 };
 
-// Component lookup: a job label → every physical part, where it sits, who holds it
-const LookupPanel = ({ dots, onOpen }: { dots: FloorDot[]; onOpen: (d: FloorDot) => void }) => {
-  const [q, setQ] = useState(''); const [job, setJob] = useState<JobWithRefs | null>(null); const [err, setErr] = useState<string | null>(null);
-  const go = async (e: React.FormEvent) => { e.preventDefault(); const j = await api.findJobByLabel(q.trim().replace(/^BAND-/i, '')); setJob(j); setErr(j ? null : `No job matches “${q}”`); };
-  const mine = job ? dots.filter((d) => d.jobId === job.id) : [];
-  return <div data-testid="lookup-panel" className="space-y-2">
-    <form onSubmit={go} className="flex gap-2"><div className="relative flex-1"><Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-slate-500" /><input data-testid="lookup-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Job label · E02031" className="w-full rounded-md border border-white/10 bg-[#0f131a] py-2 pl-8 pr-3 text-sm text-slate-100" /></div><button data-testid="lookup-go" className="rounded-md bg-amber-400 px-4 text-sm font-semibold text-[#161b22]">Look up</button></form>
-    {err && <div className="text-xs text-rose-300">{err}</div>}
-    {job && <div data-testid="lookup-result" className="rounded-md border border-white/10 bg-[#0f131a] p-3 text-xs"><div className="flex items-center gap-2"><Link to={`/rw/jobs/${job.id}`} className="font-mono text-base font-semibold text-amber-300 hover:underline">{job.number}</Link><span className="text-slate-300">{job.watch.brand} {job.watch.model} · {job.client.lastName}</span><span className="rounded bg-white/10 px-1.5 text-[10px] uppercase text-slate-300">{job.workflow.join('')}</span><span className="text-slate-500">{api.isSplitFlow(job) ? 'split · bracelet on its own track' : 'not split · bracelet rides the case off-ramp'}</span></div>
-      <ul className="mt-2 divide-y divide-white/5">{mine.map((d) => <li key={d.key} data-testid={`lookup-part-${d.key}`} className="flex items-center gap-2 py-1.5"><PartDot k={d.key} /><span className="w-24 text-slate-200">{PART_NAME[d.key]}</span><span className="flex-1 text-slate-300">{api.isSafeStation(d.station) && <Lock size={10} className="mr-1 inline text-amber-300" />}{stationLabel(d.station)}</span><span className="text-slate-400">{d.partStatus}</span><span className="w-16 text-slate-300">{d.tech ?? <span className="text-amber-300">unassigned</span>}</span><button data-testid={`lookup-history-${d.key}`} onClick={() => onOpen(d)} className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] hover:bg-white/10">history</button></li>)}{!mine.length && <li className="py-2 text-slate-500">No parts on the floor for this job.</li>}</ul></div>}
-  </div>;
-};
-
 export default function RwFloorPage() {
-  const [m, setM] = useState<ShopFloor | null>(null); const [tech, setTech] = useState(''); const [kind, setKind] = useState<'' | JobKind>(''); const [hist, setHist] = useState<PartHistoryView | null>(null); const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null); const [done, setDone] = useState<{ label: string; by: string; token: string; transitioned: boolean } | null>(null); const [tab, setTab] = useState<Tab>('gate'); const [log, setLog] = useState<GateScan[]>([]);
+  const [m, setM] = useState<ShopFloor | null>(null); const [tech, setTech] = useState(''); const [kind, setKind] = useState<'' | JobKind>(''); const [hist, setHist] = useState<PartHistoryView | null>(null); const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null); const [done, setDone] = useState<{ label: string; by: string; token: string; transitioned: boolean } | null>(null); const [tab, setTab] = useState<Tab>('gate'); const [log, setLog] = useState<GateScan[]>([]); const [dest, setDest] = useState<MapNode | null>(null); const [focus, setFocus] = useState<Set<string> | undefined>(undefined);
   const load = useCallback(() => Promise.all([api.getShopFloor({ tech: tech || undefined, kind: kind || undefined }).then(setM), api.getGateScans().then(setLog)]).then(() => undefined), [tech, kind]);
   useEffect(() => { void load(); }, [load]);
   const say = (tone: 'ok' | 'err', text: string) => { setMsg({ tone, text }); window.setTimeout(() => setMsg(null), tone === 'ok' ? 4000 : 6000); };
@@ -71,12 +58,13 @@ export default function RwFloorPage() {
     </div>
     <CompleteToast done={done} onUndone={() => { setDone(null); void load(); }} />
     {msg && <div data-testid="floor-message" className={`rounded-md px-3 py-2 text-sm ${msg.tone === 'ok' ? 'bg-emerald-950/60 text-emerald-300' : 'bg-rose-950/60 text-rose-200'}`}>{msg.text}</div>}
-    <StationMap dots={m.dots} onDrop={(to, e) => void drop(to, e)} onOpen={open} />
+    <StationMap dots={m.dots} onDrop={(to, e) => void drop(to, e)} onOpen={open} onSelect={tab === 'bulk' ? (n) => setDest(n) : undefined} selectedId={tab === 'bulk' ? dest?.id : undefined} focus={tab === 'lookup' ? focus : undefined} />
+    {tab === 'bulk' && !dest && <div data-testid="bulk-map-hint" className="-mt-1 flex items-center gap-1.5 text-xs text-amber-200"><MousePointerClick size={12} /> Bulk assign: click a card on the map above to choose the destination.</div>}
     <section data-testid="floor-tabs" className="rounded-md border border-white/10 bg-[#1f2630] p-3">
-      <nav className="mb-3 flex gap-1 border-b border-white/10">{([['gate', 'Manager gate scan', ScanLine], ['bulk', 'Bulk assign', ArrowDownToLine], ['lookup', 'Component lookup', Search]] as [Tab, string, typeof ScanLine][]).map(([k, l, I]) => <button key={k} data-testid={`floor-tab-${k}`} aria-current={tab === k} onClick={() => setTab(k)} className={`-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-3 text-[13px] font-medium ${tab === k ? 'border-amber-400 text-white' : 'border-transparent text-slate-400 hover:text-white'}`}><I size={13} /> {l}</button>)}</nav>
+      <nav className="mb-3 flex gap-1 border-b border-white/10">{([['gate', 'Manager gate scan', ScanLine], ['bulk', 'Bulk assign', MousePointerClick], ['lookup', 'Component lookup', Search]] as [Tab, string, typeof ScanLine][]).map(([k, l, I]) => <button key={k} data-testid={`floor-tab-${k}`} aria-current={tab === k} onClick={() => setTab(k)} className={`-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-3 text-[13px] font-medium ${tab === k ? 'border-amber-400 text-white' : 'border-transparent text-slate-400 hover:text-white'}`}><I size={13} /> {l}</button>)}</nav>
       {tab === 'gate' && <GatePanel onDone={(t) => { say('ok', t); void load(); }} />}
-      {tab === 'bulk' && <div data-testid="bulk-embed" className="rounded-md border border-white/10 p-2"><RwBulkAssignPage /></div>}
-      {tab === 'lookup' && <LookupPanel dots={m.dots} onOpen={open} />}
+      {tab === 'bulk' && <BulkPanel node={dest} target={dest ? targetKey(dest, m.dots) : undefined} onClear={() => setDest(null)} onCommitted={(t) => { say('ok', t); void load(); }} />}
+      {tab === 'lookup' && <LookupPanel dots={m.dots} onOpen={open} onFocus={setFocus} />}
     </section>
     <section data-testid="gate-log" className="rounded-md border border-white/10 bg-[#1f2630] p-3">
       <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold text-white">Chain of custody · manager gate scans</h2><span className="text-[11px] text-slate-500">who scanned · what · handed to whom · when — same ledger pattern as the two-scan receive</span></div>
