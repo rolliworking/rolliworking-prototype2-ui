@@ -99,7 +99,7 @@ export default function EstimateDetailPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="estimate-number">{e.number}</h1>
-            <span className="rounded-sm bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-ink-500" data-testid="estimate-revision">rev {e.revision}</span>
+            <span className="rounded-sm bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-ink-500" data-testid="estimate-revision">rev {e.revision}</span>{e.validUntil && <span className="text-[11px] text-ink-500" data-testid="estimate-valid-until">Valid until {fmtDate(e.validUntil)}</span>}
             <EstimateStatusPill status={e.status} testId="estimate-status" />
             {e.historical && <span data-testid="historical-badge" className="inline-flex items-center gap-1 rounded-sm bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"><Lock size={10} /> Historical · read-only</span>}
             {e.revision > 1 && e.sentAt && e.updatedAt > e.sentAt && e.status === 'sent' && <span className="text-[11px] text-amber-800">revised since last send</span>}

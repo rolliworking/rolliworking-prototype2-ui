@@ -3647,6 +3647,10 @@ export async function submitKioskCheckIn(input: KioskSubmission): Promise<KioskR
 const requestRow = (r: ServiceRequest): RequestRow => ({ ...r, client: byId(fx.clients, r.clientId), watch: r.watchId ? store.watches.find((w) => w.id === r.watchId) : undefined });
 export async function getRequestsQueue(): Promise<RequestRow[]> {
   const div = getSessionDivision();
+  if (API_MODE === 'hybrid' && API_SOURCE.getRequests === 'real') {
+    // Live intake leads (/intake/leads) — the lead's name/email stand in for a client record until it is matched
+    const live = await getRequests(); return resolve(live.map((r) => { const known = fx.clients.find((c) => c.id === r.clientId); const [fn = '', ...rest] = (r.createdBy || 'Unknown lead').split(' '); return { ...r, client: known ?? ({ id: r.clientId || `lead-${r.id}`, firstName: fn, lastName: rest.join(' '), email: r.station, phone: '', street: '', city: '', state: '', type: 'retail', since: r.createdAt } as unknown as Client) }; }));
+  }
   return resolve(store.requests.filter((r) => (r.division ?? 'rolliworks') === div).sort((a, b) => Number(isOpenRequest(b)) - Number(isOpenRequest(a)) || b.createdAt.localeCompare(a.createdAt)).map(requestRow));
 }
 const isOpenRequest = (r: ServiceRequest) => r.status === 'new' || r.status === 'quoted';
@@ -4641,6 +4645,7 @@ export async function markBillRecovered(auditId: string, amount: number): Promis
 // ---- E17 CONVERGENCE — routing layer. Covered functions go to the real Prototype API in hybrid mode and fall back to the mock above per call. ----
 import * as real from './realClient';
 import { route } from './routing';
+import { API_MODE, API_SOURCE } from './config';
 export { API_BASE_URL, API_MODE, API_SOURCE, setApiMode } from './config';
 export { getApiHealth, subscribeApiHealth, API_TOAST_EVENT, isReal } from './routing';
 export const signInWithPassword = route('signInWithPassword', signInWithPasswordMock, async (userId: string, password: string, photo: VerificationPhoto) => { const u = await real.signInWithPassword(userId, password, photo); await signInWithPasswordMock(userId, password, photo); return u; });
@@ -4887,8 +4892,9 @@ const SERIAL_PREFIXES: { re: RegExp; brand: string; model: string; caliber: stri
 export const decodeSerial = (serial: string, reference?: string): SerialDecode => {
   const s = serial.trim().toUpperCase(); const ref = (reference ?? '').trim().toUpperCase(); if (!s) return { brand: '', model: '', caliber: '', confidence: 'none' };
   const w = store.watches.find((x) => x.serial.toUpperCase() === s || (ref && x.reference.toUpperCase() === ref)); const cat = ref ? fx.parts.find((p) => p.compatibleRefs?.some((r) => r.toUpperCase() === ref) && p.calibers.length) : undefined;
-  if (w) return { brand: w.brand, model: w.model, caliber: cat?.calibers[0] ? `cal. ${cat.calibers[0]}` : 'cal. —', confidence: 'reference' };
-  const hit = SERIAL_PREFIXES.find((p) => p.re.test(s.split('-')[0])) ?? SERIAL_PREFIXES.find((p) => ref && p.re.test(ref)); return hit ? { brand: hit.brand, model: hit.model, caliber: hit.caliber, era: hit.era, confidence: 'prefix' } : { brand: '', model: '', caliber: '', confidence: 'none' };
+  const hit = SERIAL_PREFIXES.find((p) => p.re.test(s.split('-')[0])); if (hit) return { brand: hit.brand, model: hit.model, caliber: hit.caliber, era: hit.era, confidence: 'prefix' };
+  if (w && w.serial.toUpperCase() === s) return { brand: w.brand, model: w.model, caliber: cat?.calibers[0] ? `cal. ${cat.calibers[0]}` : 'cal. —', confidence: 'reference' };
+  const hit2 = SERIAL_PREFIXES.find((p) => ref && p.re.test(ref)); return hit2 ? { brand: hit2.brand, model: hit2.model, caliber: hit2.caliber, era: hit2.era, confidence: 'prefix' } : { brand: '', model: '', caliber: '', confidence: 'none' };
 };
 
 // ---- NEW INSPECTION FORM (legacy RolliWorks structure) — learned preset-note library, per-component authenticity, bracelet repair lines, running total, tokened client report ----
