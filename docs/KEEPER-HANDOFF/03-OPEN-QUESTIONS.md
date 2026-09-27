@@ -100,3 +100,4 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | Companion money for non-managers | Companion | hidden | |
 | Job page omission list in RW | `/rw/jobs/:id` | see rolliworking.md | |
 | RolliTime QC-queue handoff (status stays testing) | `/rt` PASS | flag only | |
+| Q91 · Bench techs counting drawers | `/inventory/count` | MGR tier only (Inventory gate); variance $ manager-only inside | yes → open the count page to concierge tier, keep variance report manager-only / no → as is | |
