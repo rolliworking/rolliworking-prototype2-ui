@@ -1,4 +1,5 @@
-import { ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft, Check, Download } from 'lucide-react';
+import { RcSendWatch } from '@/rc/RcSendWatch';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -24,7 +25,7 @@ export default function RcEstimatePage() {
 
   if (loading) return null;
   if (!e) return <p className="text-rc-muted" data-testid="rc-estimate-missing">We couldn’t find that estimate on your account.</p>;
-  const open = e.status === 'sent';
+  const open = e.status === 'sent'; const newer = e.supersededById ? e.supersededById : undefined;
 
   return (
     <div className="space-y-6" data-testid="rc-estimate-page">
@@ -36,6 +37,7 @@ export default function RcEstimatePage() {
         {e.watch && <p className="text-sm text-rc-muted">Ref. {e.watch.reference} · Sent {e.sentAt ? rcDate(e.sentAt) : rcDate(e.createdAt)} · Valid until {rcDate(e.validUntil)}</p>}
       </div>
 
+      {newer && <div data-testid="rc-estimate-superseded" className="rounded-lg border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900">A newer estimate replaces this one. <Link to={`/rc/estimates/${newer}`} data-testid="rc-estimate-newer-link" className="font-medium underline">Open the current estimate →</Link></div>}
       <RcCard eyebrow="What we propose" testId="rc-estimate-lines">
         <ul className="divide-y divide-rc-line">
           {e.lines.map((l) => (
@@ -51,6 +53,7 @@ export default function RcEstimatePage() {
         </div>
         {e.clientNotes && <p className="mt-4 text-[15px] leading-relaxed text-rc-muted"><span className="font-medium text-rc-ink">What you told us: </span>{e.clientNotes}</p>}
         {e.messageNotes && <p className="mt-2 text-[15px] leading-relaxed text-rc-muted">{e.messageNotes}</p>}
+        <div className="mt-4 flex items-center justify-between border-t border-rc-line pt-3 text-sm text-rc-muted"><span>This is the copy we sent you{e.sentAt ? ` on ${rcDate(e.sentAt)}` : ''} — it never changes.</span><button type="button" data-testid="rc-estimate-download" onClick={() => window.print()} className="inline-flex items-center gap-1.5 text-rc-ink underline decoration-rc-accent underline-offset-4"><Download size={14} /> Download PDF</button></div>
       </RcCard>
 
       {open ? (
@@ -78,11 +81,13 @@ export default function RcEstimatePage() {
           <p className="text-[15px] text-rc-muted">
             {e.status === 'approved' || e.status === 'converted' ? <>You approved this estimate{e.approvedAt ? ` on ${rcDate(e.approvedAt)}` : ''}{e.approvedVia === 'portal' ? ' here in RolliConnect' : ''}. {e.jobId ? <Link to={e.watchId ? `/rc/watches/${e.watchId}` : '/rc/home'} className="text-rc-ink underline decoration-rc-accent underline-offset-4">Follow the work</Link> : 'We’ll let you know when your watch is on the bench.'}</> : null}
             {e.status === 'declined' && <>You declined this estimate{e.declinedAt ? ` on ${rcDate(e.declinedAt)}` : ''}{e.declineReason ? ` — “${e.declineReason}”` : ''}. If you change your mind, just message us.</>}
-            {e.status === 'expired' && <>This estimate has expired. Message us and we’ll refresh it.</>}
+            {e.status === 'expired' && <span data-testid="rc-estimate-expired">This estimate expired on {rcDate(e.validUntil)} — ready to send it in? {e.engagement?.some((x) => x.kind === 'requote_requested') ? <span data-testid="rc-requote-sent" className="text-rc-ink">We have your request — a refreshed quote is on its way.</span> : <button type="button" data-testid="rc-requote" disabled={busy} onClick={() => run(() => api.portalRequestRequote(client!.id, e.id))} className="font-medium text-rc-ink underline decoration-rc-accent underline-offset-4">Ask us to refresh this quote</button>}</span>}
             {e.status === 'draft' && <>Our team is still preparing this estimate.</>}
           </p>
+          <RcError text={err} />
         </RcCard>
       )}
+      {(open || e.status === 'approved' || e.status === 'converted') && !newer && <RcSendWatch estimate={e} onChange={reload} />}
     </div>
   );
 }

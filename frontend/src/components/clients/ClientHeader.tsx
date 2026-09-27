@@ -1,5 +1,6 @@
 import { ArrowLeft, FilePlus2, Mail, MapPin, Phone } from 'lucide-react';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { CallCounter } from '@/components/clients/CallLedger';
 import { Link } from 'react-router-dom';
 import type { Client360 } from '@/api/client';
 import { fmtDate, fmtMoneyCents, fullName, humanize, relativeTime } from '@/lib/format';
@@ -22,7 +23,7 @@ export const ClientHeader = ({ data }: { data: Client360 }) => {
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h1 className="text-xl font-semibold tracking-tight text-ink" data-testid="client360-name">{fullName(client)}</h1><RatingBadge clientId={client.id} editable size="md" testId="client360-rating" />
+            <h1 className="text-xl font-semibold tracking-tight text-ink" data-testid="client360-name">{fullName(client)}</h1><RatingBadge clientId={client.id} editable size="md" testId="client360-rating" /><CallCounter clientId={client.id} />
             {client.company && <span className="text-sm text-ink-500">{client.company}</span>}
             <span className="rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-ink-500">{humanize(client.type)} · since {new Date(client.since).getFullYear()}</span>
             <span className="text-[11px] text-ink-400">ID {client.id}</span>

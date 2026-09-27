@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { RcCard } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
@@ -7,15 +7,15 @@ import { useRcSession } from '@/rc/RcSession';
 export default function RcAuthPage() {
   const { token = '' } = useParams();
   const { refresh } = useRcSession();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); const [sp] = useSearchParams(); const next = sp.get('next');
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     api.portalRedeemMagicLink(token)
       .then(() => refresh())
-      .then(() => navigate('/rc/home', { replace: true }))
+      .then(() => navigate(next && next.startsWith('/rc/') ? next : '/rc/home', { replace: true }))
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'This link is invalid'));
-  }, [token, refresh, navigate]);
+  }, [token, refresh, navigate, next]);
 
   return (
     <div className="mx-auto max-w-[520px] pt-8" data-testid="rc-auth-page">

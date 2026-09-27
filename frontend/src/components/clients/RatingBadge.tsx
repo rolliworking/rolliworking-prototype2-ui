@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as api from '@/api/client';
 import type { ClientRating, Star as StarScore } from '@/api/client';
 import { Modal } from '@/components/ui/Modal';
@@ -14,7 +15,7 @@ export const RatingBadge = ({ clientId, editable, size = 'sm', testId }: { clien
   const inner = <><Star size={size === 'md' ? 12 : 10} className={unrated ? 'text-ink-300' : 'text-amber-500'} />{r.badge}</>;
   return <>
     {editable ? <button data-testid={testId ?? `rating-badge-${clientId}`} title={r.tooltip} onClick={() => setOpen(true)} className={`${cls} hover:border-ink-300`}>{inner}</button> : <span data-testid={testId ?? `rating-badge-${clientId}`} title={r.tooltip} className={cls}>{inner}</span>}
-    {open && <RatingEditor rating={r} onClose={() => setOpen(false)} onSaved={(n) => { setR(n); }} />}
+    {open && createPortal(<RatingEditor rating={r} onClose={() => setOpen(false)} onSaved={(n) => { setR(n); }} />, document.body)}
   </>;
 };
 

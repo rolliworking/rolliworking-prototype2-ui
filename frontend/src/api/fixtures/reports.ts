@@ -5,6 +5,8 @@ export const REPORT_COMPONENTS = ['Case', 'Crystal', 'Dial & hands', 'Movement',
 
 // Eleanor · Daytona · job j-11 (awaiting customer approval) — v2 supersedes v1
 export const inspectionReports: InspectionReportDoc[] = [
+  // Calloway R3 — pending approval, walkable: open link → read → ask a question → approve (job already in service; approval records the decisions)
+  { id: 'rep-r3', token: 'IR-E02040-V1-CALLOWAY', version: 1, jobId: 'j-r3', watchId: 'w-42', clientId: 'c-30', estimateId: 'e-r3', status: 'issued', grades: [{ component: 'Case', grade: 'fair', note: 'Desk-diving marks on the lugs, light hairlines on the bezel' }, { component: 'Crystal', grade: 'good' }, { component: 'Dial & hands', grade: 'good' }, { component: 'Movement', grade: 'worn', note: 'Amplitude 215°, service overdue' }, { component: 'Crown & tube', grade: 'good' }, { component: 'Gaskets', grade: 'replace' }, { component: 'Bracelet', grade: 'worn', note: 'Stretch between links 4–6' }, { component: 'Clasp', grade: 'good' }], notes: 'Movement service recommended now; bracelet refinish included in the estimate. Tell us how much polish you want — some clients prefer to keep the original edges.', photoIds: [], issuedAt: daysAgo(3, 10), issuedBy: 'MM', station: 'Inspection Bench' },
   { id: 'rep-01', token: 'IR-ELEANOR-V1', version: 1, jobId: 'j-11', watchId: 'w-02', clientId: 'c-02', estimateId: 'e-02', status: 'superseded', supersededById: 'rep-02',
     grades: [{ component: 'Case', grade: 'fair', note: 'light scratches' }, { component: 'Crystal', grade: 'good' }, { component: 'Dial & hands', grade: 'good' }, { component: 'Movement', grade: 'worn', note: 'amplitude low' }, { component: 'Crown & tube', grade: 'good' }, { component: 'Gaskets', grade: 'replace' }, { component: 'Bracelet', grade: 'good' }, { component: 'Clasp', grade: 'good' }],
     notes: 'Initial inspection.', photoIds: [], issuedAt: daysAgo(6, 11), issuedBy: 'Walter', station: 'Inspection Bench' },
@@ -21,4 +23,10 @@ export const inspectionReports: InspectionReportDoc[] = [
   { id: 'rep-05', token: 'IR-E02014-V1', version: 1, jobId: 'j-04', watchId: 'w-06', clientId: 'c-06', estimateId: 'e-06', status: 'approved',
     grades: [{ component: 'Case', grade: 'good' }, { component: 'Crystal', grade: 'good' }, { component: 'Dial & hands', grade: 'worn', note: 'lume failing on hour hand — relume approved' }, { component: 'Movement', grade: 'replace', note: 'barrel bridge wear' }, { component: 'Crown & tube', grade: 'fair' }, { component: 'Gaskets', grade: 'replace', note: 'crystal gasket' }, { component: 'Bracelet', grade: 'good' }, { component: 'Clasp', grade: 'good' }],
     notes: 'Relume hands + crystal gasket per client.', photoIds: [], issuedAt: daysAgo(20, 11), issuedBy: 'MH', station: 'Inspection Bench', decidedAt: daysAgo(19, 9), decidedVia: 'portal' },
+];
+
+import type { InspectionDecisionRecord } from '../types';
+// R1 — completed decision record in Watch Records ("Your decisions · <date>")
+export const decisionSeeds: InspectionDecisionRecord[] = [
+  { id: 'dec-r1', reportId: 'rep-r1', reportVersion: 1, jobId: 'j-r1', jobNumber: 'E01871', watchId: 'w-40', clientId: 'c-30', decision: 'approve', polish: 'light', survey: [{ q: 'How did you hear about us?', a: 'Referred by a friend' }, { q: 'Anything we should know about this watch?', a: 'Wedding gift — please keep the caseback engraving untouched' }], signature: 'Robert Calloway', decidedAt: daysAgo(375, 19), via: 'portal' },
 ];

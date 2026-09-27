@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { MissedCallsPanel } from '@/components/layout/MissedCallsPanel';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Assignee, Role, ConvMessage, ConversationWithRefs, InboxView, PackagePhoto, RenderedTemplate, StaffInboxRow, TemplateKey, ThreadView } from '@/api/client';
@@ -39,6 +40,7 @@ export default function InboxPage() {
         </nav>
         <div className="flex min-h-0 flex-col gap-1">
           {staffName && <div data-testid="inbox-staff-header" className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs"><span className="font-semibold text-ink">{staffName === user?.shortName ? 'My inbox' : `${staffName}’s inbox`} <span className="font-normal text-ink-500">· {rows.length} open assigned · read &amp; reply</span></span><button data-testid="inbox-back-to-mine" onClick={() => go({ staff: undefined, view: 'mine', client: undefined, thread: undefined })} className="font-medium text-brand hover:underline">← Back to my inbox</button></div>}
+        {view === 'needs_reply' && <MissedCallsPanel />}
         <ul data-testid="inbox-list" className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
           {rows.map((r) => <li key={r.id}><button data-testid={`thread-row-${r.id}`} onClick={() => go({ thread: r.id })} className={`w-full rounded-md border p-2 text-left text-xs transition-colors ${threadId === r.id ? 'border-ink bg-canvas' : 'border-line hover:bg-canvas/60'}`}>
             <div className="flex items-center justify-between gap-2"><span className="font-medium text-ink">{r.client.firstName} {r.client.lastName}{r.unread > 0 && <span data-testid={`thread-unread-${r.id}`} className="ml-1.5 rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">{r.unread}</span>}</span><span className="text-[10px] text-ink-400">{r.needsReply ? <span data-testid={`thread-age-${r.id}`} className="font-semibold text-rose-700">waiting {age(r.ageHours)}</span> : r.status === 'snoozed' ? `snoozed → ${fmtDate(r.snoozedUntil!)}` : r.status}</span></div>

@@ -415,3 +415,14 @@ _Action items raised (fixed in the following commit unless noted in SESSION-LOG)
 
 _Ran full frontend E2E for RolliSuite View-as-Client block (T1–T8) via Playwright against the public preview URL as Vienna (staff) and robert.calloway@example.com (portal magic link). All acceptance criteria for T1–T7 pass; T8 verified for Robert (magic-link auto-login, no banner, 4 cards) — Camille cross-client isolation was set up but full assertion was cut mid-run (see context note). Zero staff-only leak strings found on /rc/home, /rc/watches/w-42, /rc/messages while viewing-as._
 
+
+## Iteration 35
+
+_Frontend-only smoke tested the five new features (A Stage/Bin Audit, B Trade Job Flow, C Scan-to-Complete + Client Split, D RolliTime + Grading Gate, E Client Rating + Call Pop) on http://localhost:3000 (public URL was behind a Cloudflare challenge). All feature acceptance criteria pass except two issues found in Feature B trade flow._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Bump store.counters.job seed in /app/frontend/src/api/client.ts from 2030 to (at least) the highest seeded job number + 1 (e.g. 2060) so nextJobNumber() cannot collide with seeded E02031/E02050/E02051. This unblocks tradeScanIn newWatch path.
+- Ensure transitionJob('trade_accept') links the newly-created SO back to the job so [data-testid="act-open-so"] renders on /jobs/j-t2 (currently only act-invoice fallback appears / SO not linked to job).
+- In StationScannerPage, hide/defer the 'Client requests' modal until the 10s complete-undo window has elapsed, or ensure the undo/toast row remains above z-70 so users can undo without dismissing.
+- Verify the rw-qc-timing-pass-<jobId> badge is rendered in /rw/qc after a passed timing test (spelling / rendering may be missing).

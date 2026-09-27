@@ -71,7 +71,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | side effects | callers |
 |---|---|---|---|---|
-| `getJobs` | async | `(): Promise<JobWithRefs[]>` | none (read) | components/today/NewTaskForm.tsx, pages/rs/RsPages.tsx |
+| `getJobs` | async | `(): Promise<JobWithRefs[]>` | none (read) | components/clients/CallLedger.tsx, components/layout/CallPop.tsx, components/today/NewTaskForm.tsx, pages/rs/RsPages.tsx |
 | `getJob` | async | `(id: string): Promise<JobWithRefs \| null>` | none (read) | components/companion/CompanionPanel.tsx, components/companion/CompanionTabs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwJobPage.tsx, pages/rw/testing/RwTestingTestPage.tsx |
 | `getJobsForClient` | async | `(clientId: string): Promise<JobWithRefs[]>` | audit | — (internal / other client.ts functions only) |
 
@@ -304,6 +304,8 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `replayRcEvents` | sync | `(): number` | email → Outbox, localStorage | — (internal / other client.ts functions only) |
 | `resetRcEvents` | async | `(): Promise<void>` | audit, email → Outbox, localStorage | pages/SetupPage.tsx |
 | `portalRequestMagicLink` | async | `(email: string): Promise<` | audit, email → Outbox, localStorage | pages/rc/RcLoginPage.tsx |
+| `portalDeepLink` **[post-E16]** | sync | `= (clientId: string, next: string): string =>` | audit, localStorage | — (internal / other client.ts functions only) |
+| `portalRevokeLink` **[post-E16]** | async | `(token: string): Promise<void>` | audit, localStorage | — (internal / other client.ts functions only) |
 | `portalRedeemMagicLink` | async | `(token: string): Promise<Client>` | audit, localStorage | pages/rc/RcAuthPage.tsx |
 | `portalGetSession` | async | `(): Promise<` | audit, localStorage | rc/RcSession.tsx |
 | `portalSignOut` | async | `(): Promise<void>` | audit, localStorage | rc/RcSession.tsx |
@@ -326,9 +328,13 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `REQUEST_CLOSE_REASONS` | sync | `:` | none (read) | components/clients/SideSections.tsx, pages/rc/RcRequestsCard.tsx |
 | `portalCloseRequest` | async | `(clientId: string, id: string, reason: RequestCloseReason, duplicateOfId?: string): Promise<PortalRequest>` | audit, email → Outbox, localStorage | pages/rc/RcRequestsCard.tsx |
 | `closeRequest` | async | `(id: string, reason: RequestCloseReason, note?: string, duplicateOfId?: string): Promise<ServiceRequest>` | audit | components/clients/SideSections.tsx |
-| `portalGetHome` | async | `(clientId: string): Promise<PortalHome>` | audit, comms thread, job status | pages/rc/RcHomePage.tsx, pages/rc/RcMessagesPage.tsx |
-| `portalGetWatch` | async | `(clientId: string, watchId: string): Promise<PortalWatch>` | audit, comms thread, job status | pages/rc/RcWatchPage.tsx |
-| `portalGetEstimate` | async | `(clientId: string, id: string): Promise<EstimateWithRefs>` | audit, comms thread, job status | pages/rc/RcEstimatePage.tsx |
+| `portalGetHome` | async | `(clientId: string): Promise<PortalHome>` | audit | pages/rc/RcHomePage.tsx, pages/rc/RcMessagesPage.tsx |
+| `portalGetWatch` | async | `(clientId: string, watchId: string): Promise<PortalWatch>` | audit | pages/rc/RcWatchPage.tsx |
+| `portalGetEstimate` | async | `(clientId: string, id: string): Promise<EstimateWithRefs>` | audit | pages/rc/RcEstimatePage.tsx |
+| `SHOP_ADDRESS` **[post-E16]** | sync | `` | audit | rc/RcSendWatch.tsx |
+| `portalRequestLabel` **[post-E16]** | async | `(clientId: string, estimateId: string, address: Address): Promise<ShipmentWithRefs>` | audit | rc/RcSendWatch.tsx |
+| `portalDropOff` **[post-E16]** | async | `(clientId: string, estimateId: string): Promise<EstimateWithRefs>` | audit, comms thread, job status | rc/RcSendWatch.tsx |
+| `portalRequestRequote` **[post-E16]** | async | `(clientId: string, estimateId: string): Promise<EstimateWithRefs>` | audit, comms thread, job status | pages/rc/RcEstimatePage.tsx |
 | `portalApproveEstimate` | async | `(clientId: string, id: string): Promise<EstimateWithRefs>` | email → Outbox, localStorage | pages/rc/RcEstimatePage.tsx |
 | `portalDeclineEstimate` | async | `(clientId: string, id: string, reason: string): Promise<EstimateWithRefs>` | audit, email → Outbox, localStorage | pages/rc/RcEstimatePage.tsx |
 | `portalGetInvoice` | async | `(clientId: string, id: string): Promise<SalesOrderWithRefs>` | audit, comms thread | pages/rc/RcInvoicePage.tsx |
@@ -439,9 +445,9 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `mergeValuesForConversation` **[post-E16]** | async | `(conversationId: string): Promise<Record<string, string>>` | audit, email → Outbox, comms thread | pages/InboxPage.tsx |
 | `replyInThread` | async | `(id: string, input:` | audit, email → Outbox, comms thread | pages/InboxPage.tsx |
 | `addThreadNote` | async | `(id: string, text: string): Promise<ConvMessage>` | audit, comms thread | pages/InboxPage.tsx |
-| `simulateInboundReply` | async | `(id: string, text: string): Promise<ConvMessage>` | audit, email → Outbox, comms thread | pages/InboxPage.tsx |
+| `simulateInboundReply` | async | `(id: string, text: string): Promise<ConvMessage>` | audit, comms thread | pages/InboxPage.tsx |
 | `threadNeedsReplyFor` | sync | `= (anchor: ConversationAnchor): ConversationWithRefs \| undefined =>` | email → Outbox | components/jobs/JobBits.tsx, pages/estimates/EstimatesListPage.tsx |
-| `clientNeedsReplyCount` | sync | `= (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;` | none (read) | — (internal / other client.ts functions only) |
+| `clientNeedsReplyCount` | sync | `= (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;` | comms thread | — (internal / other client.ts functions only) |
 | `threadsNeedingReplyForUser` | sync | `= (me: User) =>` | audit, email → Outbox | — (internal / other client.ts functions only) |
 | `getCommsUnread` | async | `(): Promise<number>` | email → Outbox | — (internal / other client.ts functions only) |
 
@@ -451,10 +457,13 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|
 | `REPORT_COMPONENTS` | const | `fixture re-export` | none (read) | components/jobs/InspectionReportPanel.tsx |
 | `COMPONENT_GRADES` | sync | `: ComponentGrade[] = ['good', 'fair', 'worn', 'replace'];` | none (read) | components/jobs/InspectionReportPanel.tsx |
+| `INSPECTION_SURVEY` **[post-E16]** | sync | `= ['How would you like us to reach you with updates?', 'Anything we should know about this watch?'];` | email → Outbox | pages/rc/RcReportPage.tsx |
+| `getInspectionDecisions` **[post-E16]** | async | `(filter:` | email → Outbox | components/jobs/JobDecisionRecords.tsx, pages/rc/RcWatchPage.tsx |
+| `portalAskAboutReport` **[post-E16]** | async | `(token: string, text: string): Promise<Message>` | email → Outbox | pages/rc/RcReportPage.tsx |
 | `getInspectionReportsForJob` | async | `(jobId: string): Promise<InspectionReportDoc[]>` | audit, email → Outbox, comms thread, job status | components/jobs/InspectionReportPanel.tsx |
 | `issueInspectionReport` | async | `(jobId: string, grades:` | audit, email → Outbox, comms thread, job status | components/jobs/InspectionReportPanel.tsx |
-| `portalGetInspectionReport` | async | `(token: string): Promise<PortalInspectionReport>` | audit, comms thread, job status | pages/rc/RcReportPage.tsx |
-| `portalDecideInspectionReport` | async | `(token: string, decision: 'approve' \| 'decline', reason?: string): Promise<PortalInspectionReport>` | audit, comms thread, job status | pages/rc/RcReportPage.tsx |
+| `portalGetInspectionReport` | async | `(token: string): Promise<PortalInspectionReport>` | job status | pages/rc/RcReportPage.tsx |
+| `portalDecideInspectionReport` | async | `(token: string, decision: 'approve' \| 'decline', reason?: string, input?: DecisionInput): Promise<PortalInspectionReport>` | audit, comms thread, job status | pages/rc/RcReportPage.tsx |
 
 ## E12 RolliTime timing bench (NEW automation — legacy never had it)
 
@@ -677,11 +686,23 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | export | kind | signature | side effects | callers |
 |---|---|---|---|---|
 | `clientRatingSync` **[post-E16]** | sync | `= (clientId: string): ClientRating =>` | none (read) | components/clients/RatingBadge.tsx |
-| `getClientRating` **[post-E16]** | async | `(clientId: string): Promise<ClientRating>` | audit, comms thread | — (internal / other client.ts functions only) |
-| `setClientRating` **[post-E16]** | async | `(clientId: string, input:` | audit, comms thread | components/clients/RatingBadge.tsx |
+| `getClientRating` **[post-E16]** | async | `(clientId: string): Promise<ClientRating>` | audit | — (internal / other client.ts functions only) |
+| `setClientRating` **[post-E16]** | async | `(clientId: string, input:` | audit | components/clients/RatingBadge.tsx |
+
+## Call ledger (mock of Vonage VIP, both directions later). Every call = a comms event on the client; missed calls weigh like unanswered email.
+
+| export | kind | signature | side effects | callers |
+|---|---|---|---|---|
 | `receiveInboundCall` **[post-E16]** | async | `(ev: InboundCallEvent): Promise<ScreenPop>` | audit, comms thread | — (internal / other client.ts functions only) |
-| `getCallEvents` **[post-E16]** | async | `(clientId?: string): Promise<CallEvent[]>` | none (read) | — (internal / other client.ts functions only) |
+| `getCallEvents` **[post-E16]** | async | `(filter: CallFilter \| string` | audit, comms thread | components/clients/CallLedger.tsx |
+| `callCountsSync` **[post-E16]** | sync | `= (clientId?: string, jobId?: string): CallCounts =>` | audit, comms thread | components/clients/CallLedger.tsx |
+| `getCallCounts` **[post-E16]** | async | `(clientId?: string, jobId?: string): Promise<CallCounts>` | audit, comms thread | — (internal / other client.ts functions only) |
+| `logCall` **[post-E16]** | async | `(input:` | audit, comms thread | components/clients/CallLedger.tsx |
+| `addCallNote` **[post-E16]** | async | `(id: string, text: string): Promise<CallEvent>` | audit, comms thread | components/clients/CallLedger.tsx, components/layout/CallPop.tsx |
+| `linkCallToJob` **[post-E16]** | async | `(id: string, jobId?: string): Promise<CallEvent>` | audit, comms thread | components/clients/CallLedger.tsx, components/layout/CallPop.tsx |
+| `getMissedCalls` **[post-E16]** | async | `(): Promise<MissedCallRow[]>` | comms thread | components/layout/MissedCallsPanel.tsx |
+| `resolveMissedCall` **[post-E16]** | async | `(id: string, resolution: 'called_back' \| 'handled', note?: string): Promise<CallEvent>` | comms thread | components/layout/MissedCallsPanel.tsx |
 
-_Total exports: 445 · baseline at E16: 296 · **[post-E16] new: 149**._
+_Total exports: 461 · baseline at E16: 296 · **[post-E16] new: 165**._
 
-Post-E16 exports (diff list for coverage): `totalsFor as computeEstimateTotals`, `isTradeJob`, `isInternalTrade`, `TRADE_SEND_BACK`, `payLinkPath`, `payLinkUrl`, `sendInvoice`, `getPayPage`, `payViaLink`, `startViewAsClient`, `exitViewAsClient`, `portalPhotoSections`, `portalGetPhotoSections`, `portalGetRequestCards`, `personalTemplateFor`, `getPersonalTemplates`, `getAllPersonalTemplates`, `getTemplateVariants`, `savePersonalTemplate`, `deletePersonalTemplate`, `unrenderTemplate`, `renderTemplateForEstimate`, `mergeValuesForConversation`, `timingPassed`, `testingStationScan`, `RW_STATIONS`, `getShopFloor`, `movePart`, `SCAN_UNDO_MS`, `undoScanComplete`, `markReunited`, `finishGate`, `finishJob`, `getPartHistory`, `parseTechCode`, `getScanSession`, `scanTech`, `scanLabelAssign`, `undoOutbox`, `getQueuedOutbox`, `getWorkQueue`, `simulateClientReply`, `clearClientReplied`, `getWmRoom`, `sendPartByScan`, `requestPartSimple`, `getStationMemory`, `stationScan`, `getPadBoard`, `padAdvance`, `padSendBack`, `SEND_BACK_REASONS`, `partSuggestions`, `recordPartPick`, `submitPadPartsRequest`, `getApprovalsQueue`, `approvalAction`, `getPickingQueue`, `pickAction`, `getJobPhotoViews`, `PHOTO_SLOTS`, `capturePadPhoto`, `getRoomPartsHistory`, `getRoomSummary`, `PART_LABELS`, `caliberOf`, `getPadPartsContext`, `padSearchParts`, `padRecordSelection`, `submitPadRequest`, `getPadRequests`, `getReviewQueue`, `reviewItem`, `sendForClientApproval`, `simulateClientPartsDecision`, `padAllocate`, `partsOnHand`, `getM3keEvents`, `getRoomTechs`, `padSetTech`, `getPadCondition`, `openClientRequests`, `qcRequestGaps`, `addClientRequest`, `removeClientRequest`, `clientRequestAlert`, `ackClientRequests`, `checkClientRequest`, `uncheckClientRequest`, `getStaffInboxRows`, `getColleagueInbox`, `SHIP_STAGE_LABEL`, `getInboundBoard`, `getShipment`, `getShipmentsForClient`, `getShipmentForEstimate`, `prepareLabel`, `createInboundLabel`, `resendLabelEmail`, `followUpLabel`, `voidAndReissue`, `simulateTrackingEvent`, `clientStatusLine`, `isManagerTier`, `staffForMention`, `getJobThreads`, `postJobMessage`, `getMessageInbox`, `unreadMessageCount`, `markJobThreadRead`, `STUCK_WORKING_DAYS`, `getBenchSettings`, `verifySupervisorPin`, `saveBenchSettings`, `setKioskOffline`, `benchPinIn`, `cacheBenchBoard`, `readCachedBenchBoard`, `getBenchBoard`, `getTradeAccounts`, `tradeScanIn`, `getTradeReviewQueue`, `TRADE_PATH`, `tradePathIndex`, `AUDIT_LOCATIONS`, `valueTierOf`, `getAuditLocations`, `getAuditStaleDays`, `setAuditStaleDays`, `getAuditLive`, `startAudit`, `cancelAudit`, `auditScan`, `auditResolve`, `finishAudit`, `getAuditSessions`, `getGradeCategories`, `addGradeCategory`, `toggleGradeCategory`, `gradeGateFor`, `getGradeGate`, `recordWorkGrade`, `getWorkGrades`, `techQuality`, `clientRatingSync`, `getClientRating`, `setClientRating`, `receiveInboundCall`, `getCallEvents`
+Post-E16 exports (diff list for coverage): `totalsFor as computeEstimateTotals`, `isTradeJob`, `isInternalTrade`, `TRADE_SEND_BACK`, `payLinkPath`, `payLinkUrl`, `sendInvoice`, `getPayPage`, `payViaLink`, `portalDeepLink`, `portalRevokeLink`, `startViewAsClient`, `exitViewAsClient`, `portalPhotoSections`, `portalGetPhotoSections`, `portalGetRequestCards`, `SHOP_ADDRESS`, `portalRequestLabel`, `portalDropOff`, `portalRequestRequote`, `personalTemplateFor`, `getPersonalTemplates`, `getAllPersonalTemplates`, `getTemplateVariants`, `savePersonalTemplate`, `deletePersonalTemplate`, `unrenderTemplate`, `renderTemplateForEstimate`, `mergeValuesForConversation`, `INSPECTION_SURVEY`, `getInspectionDecisions`, `portalAskAboutReport`, `timingPassed`, `testingStationScan`, `RW_STATIONS`, `getShopFloor`, `movePart`, `SCAN_UNDO_MS`, `undoScanComplete`, `markReunited`, `finishGate`, `finishJob`, `getPartHistory`, `parseTechCode`, `getScanSession`, `scanTech`, `scanLabelAssign`, `undoOutbox`, `getQueuedOutbox`, `getWorkQueue`, `simulateClientReply`, `clearClientReplied`, `getWmRoom`, `sendPartByScan`, `requestPartSimple`, `getStationMemory`, `stationScan`, `getPadBoard`, `padAdvance`, `padSendBack`, `SEND_BACK_REASONS`, `partSuggestions`, `recordPartPick`, `submitPadPartsRequest`, `getApprovalsQueue`, `approvalAction`, `getPickingQueue`, `pickAction`, `getJobPhotoViews`, `PHOTO_SLOTS`, `capturePadPhoto`, `getRoomPartsHistory`, `getRoomSummary`, `PART_LABELS`, `caliberOf`, `getPadPartsContext`, `padSearchParts`, `padRecordSelection`, `submitPadRequest`, `getPadRequests`, `getReviewQueue`, `reviewItem`, `sendForClientApproval`, `simulateClientPartsDecision`, `padAllocate`, `partsOnHand`, `getM3keEvents`, `getRoomTechs`, `padSetTech`, `getPadCondition`, `openClientRequests`, `qcRequestGaps`, `addClientRequest`, `removeClientRequest`, `clientRequestAlert`, `ackClientRequests`, `checkClientRequest`, `uncheckClientRequest`, `getStaffInboxRows`, `getColleagueInbox`, `SHIP_STAGE_LABEL`, `getInboundBoard`, `getShipment`, `getShipmentsForClient`, `getShipmentForEstimate`, `prepareLabel`, `createInboundLabel`, `resendLabelEmail`, `followUpLabel`, `voidAndReissue`, `simulateTrackingEvent`, `clientStatusLine`, `isManagerTier`, `staffForMention`, `getJobThreads`, `postJobMessage`, `getMessageInbox`, `unreadMessageCount`, `markJobThreadRead`, `STUCK_WORKING_DAYS`, `getBenchSettings`, `verifySupervisorPin`, `saveBenchSettings`, `setKioskOffline`, `benchPinIn`, `cacheBenchBoard`, `readCachedBenchBoard`, `getBenchBoard`, `getTradeAccounts`, `tradeScanIn`, `getTradeReviewQueue`, `TRADE_PATH`, `tradePathIndex`, `AUDIT_LOCATIONS`, `valueTierOf`, `getAuditLocations`, `getAuditStaleDays`, `setAuditStaleDays`, `getAuditLive`, `startAudit`, `cancelAudit`, `auditScan`, `auditResolve`, `finishAudit`, `getAuditSessions`, `getGradeCategories`, `addGradeCategory`, `toggleGradeCategory`, `gradeGateFor`, `getGradeGate`, `recordWorkGrade`, `getWorkGrades`, `techQuality`, `clientRatingSync`, `getClientRating`, `setClientRating`, `receiveInboundCall`, `getCallEvents`, `callCountsSync`, `getCallCounts`, `logCall`, `addCallNote`, `linkCallToJob`, `getMissedCalls`, `resolveMissedCall`

@@ -1,5 +1,7 @@
 import { ArrowLeft, FileText, Package, Pin, Receipt, Trash2, Watch as WatchIcon } from 'lucide-react';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { JobCallsLine } from '@/components/clients/CallLedger';
+import { JobDecisionRecords } from '@/components/jobs/JobDecisionRecords';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -98,6 +100,8 @@ export default function JobDetailPage() {
       {flash && <div data-testid="job-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
       {error && <div data-testid="job-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
       {j.kind === 'trade' && <TradePathStrip job={j} />}
+      <JobDecisionRecords jobId={j.id} />
+      <JobCallsLine job={j} />
       <ReviewGate job={j} />
       {api.activeHold(j) && <div data-testid="held-banner" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs text-rose-900">This job is parked on hold — status actions return when the hold is released.</div>}
       {actions.length === 0 && !api.activeHold(j) && j.status === 'closed' && <div data-testid="closed-banner" className="rounded-sm bg-slate-100 px-3 py-1.5 text-xs text-slate-600">Closed — end of the line. Invoice / pickup is the next session.</div>}

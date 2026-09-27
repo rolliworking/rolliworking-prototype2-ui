@@ -16,3 +16,5 @@ export async function onInboundCall(event: InboundCallEvent): Promise<ScreenPop>
 // Dev simulation payloads (MOCK — no carrier involved)
 export const simulateKnownCall = () => onInboundCall({ number: '(203) 555-0130', at: new Date().toISOString(), direction: 'inbound' }); // Robert Calloway
 export const simulateUnknownCall = () => onInboundCall({ number: '954-555-0182', at: new Date().toISOString(), direction: 'inbound' });
+export const simulateMissedCall = () => onInboundCall({ number: '(203) 555-0130', at: new Date().toISOString(), direction: 'inbound', answered: false }); // Calloway, no answer
+export const simulateMissedUnknown = () => onInboundCall({ number: '954-555-0182', at: new Date().toISOString(), direction: 'inbound', answered: false, voicemail: true });

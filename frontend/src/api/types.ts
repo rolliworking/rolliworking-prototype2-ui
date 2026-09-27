@@ -117,6 +117,9 @@ export type Department = 'watchmaking' | 'band' | 'polish';
 export type DeptCode = 'W' | 'B' | 'P' | 'PM';
 
 export type EstimateStatus = 'draft' | 'sent' | 'approved' | 'converted' | 'expired' | 'declined';
+// Estimates-as-URLs engagement (opens, label request, drop-off intent, re-quote ask) — logged per estimate
+export type EngagementKind = 'opened' | 'label_requested' | 'drop_off' | 'requote_requested' | 'approved' | 'declined';
+export interface EngagementEvent { kind: EngagementKind; at: string; detail?: string }
 export type LineType = 'service' | 'part' | 'shipping';
 
 export interface EstimateLine {
@@ -146,6 +149,10 @@ export interface EstimateRevision {
   shippingAmount: number;
   total: number;
   validUntil: string;
+  requiresApproval?: boolean;
+  engagement?: EngagementEvent[];
+  supersededById?: string;
+  sendIntent?: { kind: 'label' | 'drop_off'; at: string; shipmentId?: string };
   clientNotes: string;
   messageNotes: string;
   internalNotes: string;
@@ -168,6 +175,10 @@ export interface Estimate {
   taxAmount: number;
   total: number;
   validUntil: string;
+  requiresApproval?: boolean;
+  engagement?: EngagementEvent[];
+  supersededById?: string;
+  sendIntent?: { kind: 'label' | 'drop_off'; at: string; shipmentId?: string };
   clientNotes: string;
   messageNotes: string;
   internalNotes: string;
@@ -843,7 +854,7 @@ export interface ClientDirectoryRow {
 
 export interface PickupWindow { date: string; slot: 'morning' | 'afternoon'; confirmedAt: string; note?: string }
 
-export interface MagicLink { token: string; clientId: string; email: string; createdAt: string; usedAt?: string }
+export interface MagicLink { token: string; clientId: string; email: string; createdAt: string; usedAt?: string; next?: string; revokedAt?: string }
 export interface PortalSession { clientId: string; email: string; token: string; issuedAt: string; viewAs?: { by: string; at: string; returnTo: string } }
 
 // ---- Portal "Your requests" — one card per request across the lifecycle, so a multi-request client never wonders which watch a card is about ----
@@ -983,7 +994,11 @@ export interface InspectionReportDoc {
   grades: { component: string; grade: ComponentGrade; note?: string }[]; notes: string; photoIds: string[];
   issuedAt: string; issuedBy: string; station: string; emailId?: string; decidedAt?: string; decidedVia?: 'portal' | 'staff'; declineReason?: string;
 }
-export interface PortalInspectionReport { report: InspectionReportDoc; watch: Watch; client: Client; job: Job; estimate?: Estimate; photos: PackagePhoto[]; newerToken?: string }
+export interface PortalInspectionReport { report: InspectionReportDoc; watch: Watch; client: Client; job: Job; estimate?: Estimate; photos: PackagePhoto[]; newerToken?: string; decision?: InspectionDecisionRecord }
+// The client's permanent decision record — what they approved/declined/chose/signed and when; visible in Watch Records and on the job
+export type PolishChoice = 'none' | 'light' | 'full';
+export interface InspectionDecisionRecord { id: string; reportId: string; reportVersion: number; jobId: string; jobNumber: string; watchId: string; clientId: string; decision: 'approve' | 'decline'; reason?: string; polish: PolishChoice; survey: { q: string; a: string }[]; signature: string; decidedAt: string; via: 'portal' | 'staff' }
+export interface DecisionInput { polish: PolishChoice; survey: { q: string; a: string }[]; signature: string; reason?: string }
 
 // ---- E12 RolliTime timing bench -----------------------------------------------------------------------
 export type TimingPosition = 'DU' | 'DD' | 'CD' | 'CL' | 'CU' | 'CR';
@@ -1077,6 +1092,10 @@ export type Star = 1 | 2 | 3 | 4 | 5;
 export interface RatingChange { at: string; by: string; station: string; field: 'attitude' | 'communication'; from?: Star; to: Star }
 export interface ClientRating { clientId: string; attitude?: Star; communication?: Star; completed: number; badge: string; tooltip: string; history: RatingChange[] }
 // ---- Telephony seam (mock of Vonage VIP) — src/api/telephony.ts adapts inbound events into screen-pops + comms history ----------------
-export interface InboundCallEvent { number: string; at: string; direction: 'inbound' }
-export type ScreenPop = { kind: 'known'; client: Client; rating: ClientRating; inService: number; needsReply: number; callId: string } | { kind: 'unknown'; number: string; callId: string };
-export interface CallEvent { id: string; at: string; number: string; clientId?: string; answeredBy: string; station: string; outcome: 'screen_pop' | 'unknown_caller' }
+export interface InboundCallEvent { number: string; at: string; direction: 'inbound'; answered?: boolean; voicemail?: boolean }
+export type ScreenPop = { kind: 'known'; client: Client; rating: ClientRating; inService: number; needsReply: number; callId: string } | { kind: 'unknown'; number: string; callId: string } | { kind: 'missed'; client?: Client; number: string; callId: string };
+export type CallOutcome = 'answered' | 'missed' | 'voicemail' | 'manual';
+export interface CallNote { at: string; by: string; text: string }
+export interface CallEvent { id: string; at: string; direction: 'in' | 'out'; number: string; clientId?: string; answeredBy?: string; station: string; outcome: CallOutcome; durationSec?: number; jobId?: string; notes: CallNote[]; afterHours: boolean; resolvedAt?: string; resolvedBy?: string; resolution?: 'called_back' | 'handled' }
+export interface CallCounts { total: number; thisMonth: number; missed: number; openMissed: number }
+export interface MissedCallRow { call: CallEvent; client?: Client; badge?: string }

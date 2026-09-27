@@ -891,6 +891,9 @@ export async function reviseEstimate(id: string, patch: EstimatePatch): Promise<
 }
 
 export async function duplicateEstimate(id: string): Promise<EstimateWithRefs> {
+  const srcRow = getEst(id); const out = await duplicateEstimateInner(id); srcRow.supersededById = out.id; return out;
+}
+async function duplicateEstimateInner(id: string): Promise<EstimateWithRefs> {
   const src = getEst(id);
   const a = actor();
   const copy: Estimate = { ...src, id: `e-${Date.now().toString(36)}`, number: nextEstimateNumber(), revision: 1, revisions: [], status: 'draft', lines: src.lines.map((l) => ({ ...l, id: newLineId() })), historical: false, createdAt: new Date().toISOString(), createdBy: a.by, updatedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString(), sentAt: undefined, convertedAt: undefined, approvedAt: undefined, declinedAt: undefined, declineReason: undefined };
@@ -931,7 +934,7 @@ export async function sendEstimate(id: string, override?: { subject: string; bod
     to: c.email, toName: `${c.firstName} ${c.lastName}`,
     relatedRef: `${e.number} rev ${e.revision}`, status: 'pending',
     subject: override?.subject ?? `${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`,
-    body: override?.body ?? `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. Review and approve it here:\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/estimates/${e.id}\n\n— The RolliSuite team`,
+    body: override?.body ?? `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. One tap opens it in your RolliConnect portal — review, approve, and request a prepaid shipping label right there. No attachment needed.\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}${portalDeepLink(c.id, `/rc/estimates/${e.id}`)}\n\n— The RolliSuite team`,
     createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
   };
   store.outbox.unshift(email);
@@ -2424,9 +2427,18 @@ export async function portalRequestMagicLink(email: string): Promise<{ link: Mag
   return resolve({ link, path });
 }
 
+// Deep link: magic-link token that lands inside the portal on one page (Q43: unguessable; revoke = banner, never a dead page)
+export const portalDeepLink = (clientId: string, next: string): string => {
+  const c = byId(fx.clients, clientId);
+  const link: MagicLink = { token: `${c.id}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`, clientId: c.id, email: c.email, createdAt: new Date().toISOString(), next };
+  store.magicLinks.unshift(link); writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20));
+  return `/rc/auth/${link.token}?next=${encodeURIComponent(next)}`;
+};
+export async function portalRevokeLink(token: string): Promise<void> { const l = store.magicLinks.find((x) => x.token === token); if (l) { l.revokedAt = new Date().toISOString(); writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20)); } return resolve(undefined); }
 export async function portalRedeemMagicLink(token: string): Promise<Client> {
   const link = store.magicLinks.find((l) => l.token === token);
   if (!link) throw new Error('This link is invalid or has expired');
+  if (link.revokedAt) throw new Error('This link was revoked by our team — request a fresh one below and you will land on the same page');
   link.usedAt = new Date().toISOString();
   const session: PortalSession = { clientId: link.clientId, email: link.email, token, issuedAt: link.usedAt };
   writeJson(KEYS.portalSession, session);
@@ -2689,10 +2701,39 @@ export async function portalGetWatch(clientId: string, watchId: string): Promise
 export async function portalGetEstimate(clientId: string, id: string): Promise<EstimateWithRefs> {
   const e = requireOwner(clientId, store.estimates.find((x) => x.id === id), 'estimate');
   if (e.status === 'draft') throw new Error('That estimate isn’t ready yet');
+  if (e.status === 'sent' && new Date(e.validUntil).getTime() < Date.now()) { e.status = 'expired'; estStamp(e, 'Expired (opened after validUntil)'); }
+  engage(e, 'opened'); return resolve(withRefs(e));
+}
+const engage = (e: Estimate, kind: EngagementKind, detail?: string) => { (e.engagement ??= []).push({ kind, at: new Date().toISOString(), detail }); };
+export const SHOP_ADDRESS = { name: 'RolliSuite Service Center', line1: '590 Madison Avenue, Suite 1802', city: 'New York, NY 10022', hours: 'Mon–Fri 10:00–18:00 · Sat 11:00–16:00', phone: '(212) 555-0100' };
+// "Send us your watch" — the client's own click starts the inbound funnel (Label Requests, stage 1)
+export async function portalRequestLabel(clientId: string, estimateId: string, address: Address): Promise<ShipmentWithRefs> {
+  const e = requireOwner(clientId, store.estimates.find((x) => x.id === estimateId), 'estimate'); const c = byId(fx.clients, clientId);
+  if (!address.name?.trim() || !address.street?.trim() || !address.city?.trim() || !address.state?.trim()) throw new Error('Please complete the pickup address');
+  if (shp.rows.some((r) => r.estimateId === e.id && r.stage !== 'arrived')) throw new Error('A shipping label is already on its way for this estimate');
+  const carrier = address.state === 'NY' || address.state === 'NJ' || address.state === 'CT' ? 'UPS' : 'FedEx';
+  const row: InboundShipment = { id: newId('sh'), direction: 'inbound', estimateId: e.id, clientId, stage: 'label_requested', carrier, service: carrier === 'UPS' ? 'UPS Next Day Air Saver' : 'FedEx Priority Overnight', declaredValue: e.total, destinationState: address.state, requestedAt: new Date().toISOString(), events: [], stamps: [{ at: new Date().toISOString(), by: `${c.firstName} ${c.lastName}`, station: 'RolliConnect', action: `Client requested a prepaid label from the estimate page · pickup ${address.street}, ${address.city} ${address.state}` }], emailIds: [] };
+  shp.rows.unshift(row); e.sendIntent = { kind: 'label', at: row.requestedAt, shipmentId: row.id }; engage(e, 'label_requested', `${address.city}, ${address.state}`); estStamp(e, `Client requested shipping label (portal) · ${address.city}, ${address.state}`); portalStamp(clientId, `Requested a shipping label for ${e.number}`);
+  return resolve(shipRefs(row));
+}
+export async function portalDropOff(clientId: string, estimateId: string): Promise<EstimateWithRefs> {
+  const e = requireOwner(clientId, store.estimates.find((x) => x.id === estimateId), 'estimate');
+  e.sendIntent = { kind: 'drop_off', at: new Date().toISOString() }; engage(e, 'drop_off'); estStamp(e, 'Client will drop the watch off (portal)'); portalStamp(clientId, `Will drop off ${e.number} in person`);
+  return resolve(withRefs(e));
+}
+// Expired → "ready to send it in?" → asks for a refreshed quote: pins the owner + lands in the Inbox as Needs reply anchored to the estimate
+export async function portalRequestRequote(clientId: string, estimateId: string): Promise<EstimateWithRefs> {
+  const e = requireOwner(clientId, store.estimates.find((x) => x.id === estimateId), 'estimate'); const c = byId(fx.clients, clientId);
+  if (e.status !== 'expired') throw new Error('Only an expired estimate can be refreshed');
+  if (e.engagement?.some((x) => x.kind === 'requote_requested')) throw new Error('We already have your request — a refreshed quote is on its way');
+  engage(e, 'requote_requested'); estStamp(e, 'Client asked for a refreshed quote (portal) → re-quote / duplicate flow');
+  threadEvent(clientId, { kind: 'estimate', id: e.id }, 'portal', `${c.firstName} ${c.lastName}`, `Ready to send the watch in — please refresh expired estimate ${e.number}.`);
+  store.pinned.unshift({ id: newId('pin'), title: `Re-quote requested · ${e.number} ${fullNameOf(c)} (expired ${new Date(e.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}) — duplicate & resend`, assignedTo: { type: 'role', role: 'concierge' }, createdBy: 'RolliConnect', createdAt: new Date().toISOString(), station: 'RolliConnect', division: 'rollishop' });
   return resolve(withRefs(e));
 }
 
 export async function portalApproveEstimate(clientId: string, id: string): Promise<EstimateWithRefs> {
+  { const e0 = store.estimates.find((x) => x.id === id); if (e0) engage(e0, 'approved'); }
   requireOwner(clientId, store.estimates.find((e) => e.id === id), 'estimate');
   recordRcEvent({ t: 'approve', clientId, id });
   const r = await asClient(clientId, () => approveEstimate(id, 'portal'));
@@ -3272,7 +3313,11 @@ export async function getCommsUnread(): Promise<number> { wakeSnoozed(); return 
 import type { ComponentGrade, InspectionReportDoc, PortalInspectionReport } from './types';
 export { REPORT_COMPONENTS } from './fixtures/reports';
 export const COMPONENT_GRADES: ComponentGrade[] = ['good', 'fair', 'worn', 'replace'];
-const rp = { reports: fx.inspectionReports.map((r): InspectionReportDoc => ({ ...r, grades: r.grades.map((g) => ({ ...g })) })) };
+const rp = { reports: fx.inspectionReports.map((r): InspectionReportDoc => ({ ...r, grades: r.grades.map((g) => ({ ...g })) })), decisions: fx.decisionSeeds.map((d): InspectionDecisionRecord => ({ ...d, survey: d.survey.map((q) => ({ ...q })) })) };
+export const INSPECTION_SURVEY = ['How would you like us to reach you with updates?', 'Anything we should know about this watch?'];
+export async function getInspectionDecisions(filter: { clientId?: string; jobId?: string; watchId?: string }): Promise<InspectionDecisionRecord[]> { return resolve(rp.decisions.filter((d) => (!filter.clientId || d.clientId === filter.clientId) && (!filter.jobId || d.jobId === filter.jobId) && (!filter.watchId || d.watchId === filter.watchId)).sort((a, b) => b.decidedAt.localeCompare(a.decidedAt))); }
+// "Ask a question" on the approval page → portal thread + staff Inbox Needs reply, anchored to the job
+export async function portalAskAboutReport(token: string, text: string): Promise<Message> { const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid'); const m = await portalSendMessage(r.clientId, `[Inspection report v${r.version}] ${text.trim()}`, r.watchId); return m; }
 // seeded short notification for Eleanor's v2 report
 store.outbox.push({ id: 'ob-rep-02', to: 'eleanor.vance@example.com', toName: 'Eleanor Vance', relatedRef: 'E02021', status: 'pending', subject: 'Your inspection report is ready — Cosmograph Daytona', body: `Hello Eleanor,\n\nWe have finished inspecting your Rolex Cosmograph Daytona. Condition grades, photos and our notes are on your report page, where you can approve or decline:\n\n▶ /rc/report/IR-ELEANOR-V2\n\n— The RolliSuite team`, createdAt: rp.reports[1].issuedAt, createdBy: 'Walter', station: 'Inspection Bench' });
 
@@ -3291,6 +3336,7 @@ export async function issueInspectionReport(jobId: string, grades: { component: 
   if (j.status === 'in_review' && legalJobActions(j).some((x) => x.key === 'request_approval')) pushTransition(j, 'request_approval', 'awaiting_customer_approval', `Inspection report v${r.version} issued — portal link sent`, true);
   const t = renderTemplateFor('inspection_ready', { clientId: j.clientId, anchor: { kind: 'job', id: j.id } });
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: t.subject, body: t.body, createdAt: r.issuedAt, createdBy: a.by, station: a.station };
+  email.body = `${email.body}\n\n▶ Open your inspection report: ${typeof window !== 'undefined' ? window.location.origin : ''}${portalDeepLink(j.clientId, `/rc/report/${r.token}`)}`;
   store.outbox.unshift(email); r.emailId = email.id;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'system', a.by, `Inspection report v${r.version} issued — notification queued with portal link /rc/report/${r.token}`);
   jobStamp(j, `Inspection report v${r.version} issued to client (portal-first)`);
@@ -3299,10 +3345,11 @@ export async function issueInspectionReport(jobId: string, grades: { component: 
 export async function portalGetInspectionReport(token: string): Promise<PortalInspectionReport> {
   const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid');
   const job = getJobRow(r.jobId); const end = chainEnd(r);
-  return resolve({ report: r, watch: byId(store.watches, r.watchId), client: byId(fx.clients, r.clientId), job, estimate: r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined, photos: job.photos.filter((p) => !r.photoIds.length || r.photoIds.includes(p.id)), newerToken: end.id !== r.id ? end.token : undefined });
+  return resolve({ decision: rp.decisions.find((d) => d.reportId === r.id), report: r, watch: byId(store.watches, r.watchId), client: byId(fx.clients, r.clientId), job, estimate: r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined, photos: job.photos.filter((p) => !r.photoIds.length || r.photoIds.includes(p.id)), newerToken: end.id !== r.id ? end.token : undefined });
 }
-export async function portalDecideInspectionReport(token: string, decision: 'approve' | 'decline', reason?: string): Promise<PortalInspectionReport> {
+export async function portalDecideInspectionReport(token: string, decision: 'approve' | 'decline', reason?: string, input?: DecisionInput): Promise<PortalInspectionReport> {
   const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid');
+  if (!input?.signature?.trim()) throw new Error('Please sign with your name to confirm');
   if (r.status === 'superseded') throw new Error('A newer report replaces this one'); if (r.status !== 'issued') throw new Error('This report has already been decided');
   if (decision === 'decline' && !reason?.trim()) throw new Error('Please tell us why');
   const j = getJobRow(r.jobId); const est = r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined;
@@ -3311,6 +3358,7 @@ export async function portalDecideInspectionReport(token: string, decision: 'app
     else { if (j.status === 'awaiting_customer_approval') await transitionJob(j.id, 'back_to_review', `Client declined inspection report v${r.version}: ${reason!.trim()}`); if (est?.status === 'sent') await declineEstimate(est.id, reason!.trim(), 'portal'); }
   });
   r.status = decision === 'approve' ? 'approved' : 'declined'; r.decidedAt = new Date().toISOString(); r.decidedVia = 'portal'; r.declineReason = decision === 'decline' ? reason!.trim() : undefined;
+  { const j2 = getJobRow(r.jobId); const rec: InspectionDecisionRecord = { id: newId('dec'), reportId: r.id, reportVersion: r.version, jobId: r.jobId, jobNumber: j2.number, watchId: r.watchId, clientId: r.clientId, decision, reason: reason?.trim() || undefined, polish: input!.polish, survey: input!.survey, signature: input!.signature.trim(), decidedAt: new Date().toISOString(), via: 'portal' }; rp.decisions.unshift(rec); jobStamp(j2, `Client decision record · ${decision} · polish ${rec.polish} · signed “${rec.signature}”`); }
   threadEvent(r.clientId, { kind: 'job', id: j.id }, 'approval', clientName(r.clientId), decision === 'approve' ? `Approved inspection report v${r.version} (${j.number}) in RolliConnect${est ? ` · estimate ${est.number} approved` : ''}` : `Declined inspection report v${r.version} (${j.number}): ${reason!.trim()}`, { kind: decision === 'approve' ? 'estimate_approved' : 'estimate_declined', refId: r.id, label: `Inspection · ${j.number}` });
   portalStamp(r.clientId, `${decision === 'approve' ? 'Approved' : 'Declined'} inspection report v${r.version} · ${j.number}`);
   return portalGetInspectionReport(token);
@@ -4169,7 +4217,8 @@ export const techQuality = (tech: string, month: string): TechQuality => {
 
 
 // ---- Client rating — Attitude / Communication staff-set (concierge+), completed jobs DERIVED; logged old→new. Internal only: no portal read function touches this. ----
-import type { CallEvent, ClientRating, InboundCallEvent, RatingChange, ScreenPop, Star } from './types';
+import type { CallCounts, CallEvent, CallOutcome, ClientRating, InboundCallEvent, MissedCallRow, RatingChange, ScreenPop, Star } from './types';
+import type { DecisionInput, EngagementKind, InspectionDecisionRecord } from './types';
 const ratings = { rows: new Map<string, { attitude?: Star; communication?: Star; history: RatingChange[] }>([
   ['c-30', { attitude: 5, communication: 3, history: [{ at: new Date(Date.now() - 40 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'attitude', to: 5 }, { at: new Date(Date.now() - 40 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'communication', to: 3 }] }],
   ['c-05', { attitude: 4, communication: 4, history: [{ at: new Date(Date.now() - 90 * 86_400_000).toISOString(), by: 'MH', station: 'Front Desk 1', field: 'attitude', to: 4 }, { at: new Date(Date.now() - 90 * 86_400_000).toISOString(), by: 'MH', station: 'Front Desk 1', field: 'communication', to: 4 }] }],
@@ -4187,16 +4236,56 @@ export async function setClientRating(clientId: string, input: { attitude?: Star
   (['attitude', 'communication'] as const).forEach((f) => { const to = input[f]; if (to && to !== r[f]) { r.history.push({ at: now, by: a.by, station: a.station, field: f, from: r[f], to }); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Client rating · ${fullNameOf(byId(fx.clients, clientId))} · ${f} ${r[f] ?? '–'} → ${to}` }); r[f] = to; } });
   ratings.rows.set(clientId, r); return resolve(clientRatingSync(clientId));
 }
-// Telephony receiver (mock of Vonage VIP). The adapter in ./telephony.ts calls this; a real webhook later replaces that one file.
+// ---- Call ledger (mock of Vonage VIP, both directions later). Every call = a comms event on the client; missed calls weigh like unanswered email. ----
+const isAfterHours = (iso: string) => { const h = new Date(iso).getHours(); const d = new Date(iso).getDay(); return h < 9 || h >= 18 || d === 0; };
+const seedCall = (id: string, clientId: string | undefined, number: string, daysBack: number, hour: number, direction: 'in' | 'out', outcome: CallOutcome, by: string | undefined, jobId?: string, note?: string, dur?: number): CallEvent => { const at = new Date(Date.now() - daysBack * 86_400_000); at.setHours(hour, (id.length * 7) % 60, 0, 0); const iso = at.toISOString(); return { id, at: iso, direction, number, clientId, answeredBy: by, station: 'Front Desk 1', outcome, durationSec: dur, jobId, notes: note ? [{ at: iso, by: by ?? 'system', text: note }] : [], afterHours: isAfterHours(iso), resolvedAt: outcome === 'missed' && daysBack > 3 ? iso : undefined, resolvedBy: outcome === 'missed' && daysBack > 3 ? 'Vienna' : undefined, resolution: outcome === 'missed' && daysBack > 3 ? 'called_back' : undefined }; };
+ratings.calls.push(
+  seedCall('call-s01', 'c-30', '(203) 555-0130', 40, 11, 'in', 'answered', 'Vienna', 'j-r3', 'Asked when the Datejust would be ready; mentioned he is traveling in November.', 240),
+  seedCall('call-s02', 'c-30', '(203) 555-0130', 12, 15, 'out', 'answered', 'MH', 'j-r3', 'Explained the bracelet stretch finding; he wants the bracelet un-polished.', 380),
+  seedCall('call-s03', 'c-30', '(203) 555-0130', 6, 19, 'in', 'missed', undefined),
+  seedCall('call-s04', 'c-30', '(203) 555-0130', 5, 10, 'out', 'answered', 'Vienna', undefined, 'Returned last night’s call — booked a Thursday visit.', 150),
+  seedCall('call-s05', 'c-30', '(203) 555-0130', 0.6, 20, 'in', 'voicemail', undefined, undefined, 'Voicemail: “It’s Robert — call me about the Day-Date estimate when you can.”'),
+  seedCall('call-s06', 'c-05', '(212) 555-0105', 3, 12, 'in', 'answered', 'MH', undefined, undefined, 90),
+  seedCall('call-s07', undefined, '917-555-0144', 0.5, 7, 'in', 'missed', undefined),
+);
+const callRow = (c: CallEvent) => c;
 export async function receiveInboundCall(ev: InboundCallEvent): Promise<ScreenPop> {
   const a = actor(); const digits = (p: string) => p.replace(/\D/g, '').slice(-10); const client = fx.clients.find((c) => digits(c.phone) === digits(ev.number)); const callId = newId('call');
-  ratings.calls.unshift({ id: callId, at: ev.at, number: ev.number, clientId: client?.id, answeredBy: a.by, station: a.station, outcome: client ? 'screen_pop' : 'unknown_caller' });
-  if (!client) { appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inbound call · unknown caller ${ev.number} · answered by ${a.by}` }); return resolve({ kind: 'unknown', number: ev.number, callId }); }
-  threadEvent(client.id, undefined, 'note', a.by, `Inbound call from ${ev.number} · answered by ${a.by} at ${a.station} (screen-pop)`, undefined);
-  const inService = store.jobs.filter((j) => j.clientId === client.id && j.status !== 'closed' && j.simpleStatus === 'on_hand').length;
-  const needsReply = clientNeedsReplyCount(client.id);
-  return resolve({ kind: 'known', client, rating: clientRatingSync(client.id), inService, needsReply, callId });
+  const answered = ev.answered !== false; const outcome: CallOutcome = answered ? 'answered' : ev.voicemail ? 'voicemail' : 'missed';
+  ratings.calls.unshift({ id: callId, at: ev.at, direction: 'in', number: ev.number, clientId: client?.id, answeredBy: answered ? a.by : undefined, station: a.station, outcome, notes: [], afterHours: isAfterHours(ev.at) });
+  if (client) threadEvent(client.id, undefined, 'note', answered ? a.by : 'system', answered ? `Inbound call from ${ev.number} · answered by ${a.by} at ${a.station}` : `Missed call from ${ev.number}${outcome === 'voicemail' ? ' · voicemail left' : ''}`, undefined);
+  appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inbound call · ${client ? fullNameOf(client) : `unknown ${ev.number}`} · ${outcome}${answered ? ` · ${a.by}` : ''}` });
+  if (!answered) return resolve({ kind: 'missed', client, number: ev.number, callId });
+  if (!client) return resolve({ kind: 'unknown', number: ev.number, callId });
+  return resolve({ kind: 'known', client, rating: clientRatingSync(client.id), inService: store.jobs.filter((j) => j.clientId === client.id && j.status !== 'closed' && j.simpleStatus === 'on_hand').length, needsReply: clientNeedsReplyCount(client.id), callId });
 }
-export async function getCallEvents(clientId?: string): Promise<CallEvent[]> { return resolve(ratings.calls.filter((c) => !clientId || c.clientId === clientId)); }
+export interface CallFilter { clientId?: string; jobId?: string; direction?: 'in' | 'out'; staff?: string; from?: string; to?: string; openMissedOnly?: boolean }
+export async function getCallEvents(filter: CallFilter | string = {}): Promise<CallEvent[]> {
+  const f: CallFilter = typeof filter === 'string' ? { clientId: filter } : filter;
+  return resolve(ratings.calls.filter((c) => (!f.clientId || c.clientId === f.clientId) && (!f.jobId || c.jobId === f.jobId) && (!f.direction || c.direction === f.direction) && (!f.staff || c.answeredBy === f.staff) && (!f.from || c.at >= f.from) && (!f.to || c.at <= `${f.to}T23:59:59`) && (!f.openMissedOnly || ((c.outcome === 'missed' || c.outcome === 'voicemail') && !c.resolvedAt))).map(callRow).sort((a, b) => b.at.localeCompare(a.at)));
+}
+export const callCountsSync = (clientId?: string, jobId?: string): CallCounts => { const rows = ratings.calls.filter((c) => (!clientId || c.clientId === clientId) && (!jobId || c.jobId === jobId)); const m = monthKey(new Date().toISOString()); const missed = rows.filter((c) => c.outcome === 'missed' || c.outcome === 'voicemail'); return { total: rows.length, thisMonth: rows.filter((c) => monthKey(c.at) === m).length, missed: missed.length, openMissed: missed.filter((c) => !c.resolvedAt).length }; };
+export async function getCallCounts(clientId?: string, jobId?: string): Promise<CallCounts> { return resolve(callCountsSync(clientId, jobId)); }
+const callOf = (id: string) => { const c = ratings.calls.find((x) => x.id === id); if (!c) throw new Error('No such call'); return c; };
+// Manual "+ Log call" for off-system calls (cell phone, walk-up) — same fields, marked manual
+export async function logCall(input: { clientId: string; direction: 'in' | 'out'; durationSec?: number; jobId?: string; note?: string; at?: string }): Promise<CallEvent> {
+  const a = actor(); const c = byId(fx.clients, input.clientId); const at = input.at ?? new Date().toISOString();
+  const row: CallEvent = { id: newId('call'), at, direction: input.direction, number: c.phone, clientId: c.id, answeredBy: a.by, station: a.station, outcome: 'manual', durationSec: input.durationSec, jobId: input.jobId, notes: input.note?.trim() ? [{ at, by: a.by, text: input.note.trim() }] : [], afterHours: isAfterHours(at) };
+  ratings.calls.unshift(row); threadEvent(c.id, input.jobId ? { kind: 'job', id: input.jobId } : undefined, 'note', a.by, `${input.direction === 'in' ? 'Inbound' : 'Outbound'} call (logged manually)${input.note ? ` · ${input.note.trim()}` : ''}`, undefined);
+  if (input.jobId) jobStamp(getJobRow(input.jobId), `Call logged (manual, ${input.direction}) by ${a.by}${input.note ? ` · ${input.note.trim()}` : ''}`);
+  return resolve(row);
+}
+// Notes append (who/when stamped) — never overwrite; job link = one-tap "which job was this about?"
+export async function addCallNote(id: string, text: string): Promise<CallEvent> { const c = callOf(id); if (!text.trim()) throw new Error('Write a note first'); const a = actor(); c.notes.push({ at: new Date().toISOString(), by: a.by, text: text.trim() }); if (c.clientId) threadEvent(c.clientId, c.jobId ? { kind: 'job', id: c.jobId } : undefined, 'note', a.by, `Call note · ${text.trim()}`, undefined); if (c.jobId) jobStamp(getJobRow(c.jobId), `Call note by ${a.by} · ${text.trim()}`); return resolve(c); }
+export async function linkCallToJob(id: string, jobId?: string): Promise<CallEvent> { const c = callOf(id); c.jobId = jobId; if (jobId) jobStamp(getJobRow(jobId), `Call ${c.direction === 'in' ? 'from' : 'to'} client linked to this job by ${actor().by}`); return resolve(c); }
+// Missed call → Inbox Needs reply until someone clears it
+export async function getMissedCalls(): Promise<MissedCallRow[]> { return resolve(ratings.calls.filter((c) => (c.outcome === 'missed' || c.outcome === 'voicemail') && !c.resolvedAt).sort((a, b) => b.at.localeCompare(a.at)).map((call) => { const client = call.clientId ? byId(fx.clients, call.clientId) : undefined; return { call, client, badge: client ? clientRatingSync(client.id).badge : undefined }; })); }
+export async function resolveMissedCall(id: string, resolution: 'called_back' | 'handled', note?: string): Promise<CallEvent> {
+  const c = callOf(id); const a = actor(); if (c.resolvedAt) throw new Error('Already cleared'); c.resolvedAt = new Date().toISOString(); c.resolvedBy = a.by; c.resolution = resolution;
+  if (note?.trim()) c.notes.push({ at: c.resolvedAt, by: a.by, text: note.trim() });
+  if (resolution === 'called_back') ratings.calls.unshift({ id: newId('call'), at: c.resolvedAt, direction: 'out', number: c.number, clientId: c.clientId, answeredBy: a.by, station: a.station, outcome: 'answered', jobId: c.jobId, notes: note?.trim() ? [{ at: c.resolvedAt, by: a.by, text: note.trim() }] : [], afterHours: isAfterHours(c.resolvedAt) });
+  if (c.clientId) threadEvent(c.clientId, c.jobId ? { kind: 'job', id: c.jobId } : undefined, 'note', a.by, `${resolution === 'called_back' ? 'Called back' : 'Handled'} missed call from ${new Date(c.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${note ? ` · ${note.trim()}` : ''}`, undefined);
+  return resolve(c);
+}
 
 replayRcEvents();

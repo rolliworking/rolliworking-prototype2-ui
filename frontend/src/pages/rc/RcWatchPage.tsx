@@ -6,6 +6,7 @@ import type { PortalDocument } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { RcSplitStrip } from '@/rc/RcSplitStrip';
+import { RcDecisionRecord } from '@/rc/RcDecisionRecord';
 import { useRcSession } from '@/rc/RcSession';
 import { RcPhotoSections } from '@/rc/RcPhotoSections';
 
@@ -40,6 +41,7 @@ export default function RcWatchPage() {
   const { id = '' } = useParams();
   const { client } = useRcSession();
   const { data: pw, loading } = useAsync(() => api.portalGetWatch(client!.id, id), [id]);
+  const { data: decisionsData } = useAsync(() => api.getInspectionDecisions({ clientId: client!.id, watchId: id }), [id]); const decisions = decisionsData ?? [];
   if (loading) return null;
   if (!pw) return <p className="text-rc-muted">We couldn’t find that watch on your account.</p>;
   const { watch: w } = pw;
@@ -61,6 +63,7 @@ export default function RcWatchPage() {
       </div>
 
       {pw.split && <RcSplitStrip split={pw.split} testId="rc-watch-split" />}
+      {decisions.map((d) => <RcDecisionRecord key={d.id} d={d} compact />)}
       {pw.jobIds.map((jid) => <RcPhotoSections key={jid} clientId={client!.id} jobId={jid} />)}
       <RcCard eyebrow="Documents" title={`${papers.length} item${papers.length === 1 ? '' : 's'}`} testId="rc-watch-documents">
         {papers.length > 0 && <div className="grid gap-2 sm:grid-cols-2">{papers.map((d) => <DocTile key={d.id} d={d} />)}</div>}
