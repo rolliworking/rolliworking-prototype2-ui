@@ -8,9 +8,11 @@ import { NODES, SHARED_NODES, type MapNode } from '@/components/rw/StationMap';
 const ROW: Record<MapNode['row'], number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4 };
 // Pre-approval / Pre-queue are not scan-to destinations — dropped from this map entirely
 const HIDDEN = new Set(['pre_approval', 'pre_queue', 'band_pre']);
-const DEST_NODES = NODES.filter((n) => !HIDDEN.has(n.id));
-const TRACKS = [['assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['assign_band', 'band_qc', 'safe_band']];
-const RAMPS = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }, { from: 'assign_band', leg: ['band_safe_in', 'refinish', 'band_safe_out'], to: 'band_qc' }];
+// Band flow is a straight inline line here (no off-ramp): Assign band tech → safe → Assign refinisher → safe → QC inspect
+const INLINE_BAND = new Set(['band_safe_in', 'refinish', 'band_safe_out']);
+const DEST_NODES = NODES.filter((n) => !HIDDEN.has(n.id)).map((n) => (INLINE_BAND.has(n.id) ? { ...n, row: 'bra' as const } : n));
+const TRACKS = [['assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['assign_band', 'band_safe_in', 'refinish', 'band_safe_out', 'band_qc', 'safe_band']];
+const RAMPS = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }];
 // Layout-unit geometry (offset*, not getBoundingClientRect) so the overlay stays aligned when the map is embedded zoomed/scaled (corner widget)
 interface Box { left: number; top: number; width: number; height: number }
 const pt = (r: Box, side: 'l' | 'r' | 'b') => ({ x: side === 'l' ? r.left : side === 'r' ? r.left + r.width : r.left + r.width / 2, y: side === 'b' ? r.top + r.height : r.top + r.height / 2 });
@@ -50,13 +52,12 @@ export const DestinationMap = ({ selectedId, onSelect, focus = [] }: { selectedI
   }, [focus.length]);
   return <div data-testid="destination-map" ref={host} className="relative rounded-md border border-white/10 bg-[#141920] p-3">
     <svg className="pointer-events-none absolute inset-0 z-0" width={size.w} height={size.h}>{paths.map((p, i) => <path key={i} d={p.d} fill="none" stroke={p.ramp ? '#f59e0b' : '#64748b'} strokeWidth={p.ramp ? 2 : 1.5} strokeDasharray={p.ramp ? undefined : '5 5'} opacity={0.8} />)}</svg>
-    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(4, auto)' }}>
+    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(3, auto)' }}>
       <div style={{ gridColumn: 1, gridRow: 1 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-blue-300">WAT</div>
       <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       <div style={{ gridColumn: 1, gridRow: 3 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-green-300">BRA</div>
-      <div style={{ gridColumn: 1, gridRow: 4 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       {DEST_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}
-      <div style={{ gridColumn: 13, gridRow: '1 / span 4' }} className="grid grid-rows-3 gap-2">{SHARED_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}</div>
+      <div style={{ gridColumn: 13, gridRow: '1 / span 3' }} className="grid grid-rows-3 gap-2">{SHARED_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}</div>
     </div>
     <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-dashed border-slate-400" /> track</span><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-amber-400" /> manager-gated polish off-ramp</span><span className="inline-flex items-center gap-1"><img src="/safe.png" alt="" className="h-4 w-4 object-contain" /> = a manager's safe</span></div>
   </div>;
