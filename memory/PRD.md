@@ -302,3 +302,19 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 ### Supervisor Pad dashboard + parts Quick Add/returns + request history (2026-09-27; tested iteration_41 ~92%, Rosa gate = standing ruling)
 - `PadDashboard.tsx` (DeptGoalTracker reusable), `PadQuickAdd.tsx`, `PadReview.tsx` RequestHistory chips; client.ts: getDeptDashboard/setDeptGoal, jobPartsAllowance/setJobPartsAllowance/getJobParts/quickAddPart/returnJobPart.
 - Backlog (not built): OOS → client notice email; "also used on" cross-ref display; pad job-row density; RW history lookup; Band room pad; component chips + trickle-down; per-staff client reviews; QBO setup; intercom + paging; SUB# receiving branch. Re-run `scripts/ipad_screens.py` after Band pad ships.
+
+### Queued-brief batch — everything built + full iPad screen set (2026-09-27; tested iteration_42 ≈100%)
+- **Quick fix**: Send back LEFT / Advance RIGHT on Pad job cards + Dashboard TradeReviewPanel.
+- **Rosa gate fixed**: `/rw/pad` no longer manager-only; bench tier mounts the pad with only Requests (read-only `pad-review-readonly`) + Picking tabs.
+- **Component code chips + trickle-down chain**: `Estimate.components` (W/B/P/PM, inferred from lines until toggled — `inferComponentCodes`, `estimateComponentCodes`, `setEstimateComponents`), `Package.componentsVerified` written at Scan 2, `getVerificationChain`/`getJobVerificationChain` → Expected → Received → Verified rows (ok/missing/extra/pending). UI: `components/estimates/ComponentChain.tsx` on estimate create/detail, job detail, and "What's in the box" pills on Receive Watch (`box-pill-*`).
+- **Per-staff client reviews**: `StaffReview` (A/C per staff, N = jobs handled, note), `getClientReviews`/`submitClientReview`; aggregate badge = rounded mean of latest review per staff (still via `setClientRating`, logged). `RatingEditor` is now the drill-down review panel. Seeds rv-01..05.
+- **QBO setup (MOCKED)**: `/integrations/quickbooks` (`QboSetupPage`): connect/disconnect, push/pull toggles, fixed field mapping, client sync table (synced/conflict/not linked, link/skip), invoice push queue, activity log. Linked from the Integrations qbo tile.
+- **Intercom + paging (MOCK)**: `src/api/intercom.ts` (ring → live → hang up, storewide page overlay 8 s, Daily.co TODO seam) + `IntercomButton` in RS TopBar and RW shell header.
+- **Band / Polish Room Manager Pad**: `/rw/band` = `RwPadPage room="band"`; `getPadBoard(room)` filters B/P/PM workflows; `ROOM_TECHS` (band: Joseph, Rosa); new staff **joseph / joseph123** (manager, rolliworks). RW nav "Band Pad" (manager).
+- **No-estimate SUB# branch**: `NoEstimatePanel` on Receive Package — `matchB2bLabel` 3-tier chain (tracking/estimate # → trade account code → name/email → none) + `attachB2bMatch` (pkg.b2b stamp, client link or SUB#-only).
+- **Inbox threading**: `?group=1` toggle groups threads by request / job / estimate anchor (General for unanchored).
+- **Jobs board tabs**: All lanes · Queue · In progress (columns per tech, chip filters tech + stage) · Finished (`components/jobs/JobTabs.tsx`, `?tab=`); `JobCard` density tightened.
+- **RW History lookup**: `/rw/history` (`searchRwHistory`, no amounts) — client → watches → every record; RW nav "History".
+- **Screens**: `scripts/ipad_screens.py` rewritten (35 screens + INDEX.txt, forces mock mode, handles PIN-day sign-in) → `frontend/public/ipad-screens-2026-09-27.zip` (same public URL).
+- Gauge hygiene: `lineDollars` normalises cents-scale seeded trade lines for the dept revenue gauge only.
+- Not done / open: docs/KEEPER-HANDOFF regen (`_gen.py`) not re-run this session; Daily.co + Intuit OAuth remain Keeper.
