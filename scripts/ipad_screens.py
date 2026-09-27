@@ -97,7 +97,7 @@ async def main():
         await shot(page, "11-rw-client-job-history-lookup", "/rw/history", hist, note="NEW · client / job history lookup inside RW")
         await shot(page, "12-rw-picking", "/rw/picking")
         await shot(page, "13-rw-today", "/rw/today")
-        await shot(page, "13b-rw-reports-quick-overdue", "/rw/reports", lambda: click(page, "[data-testid='quick-overdue']"), note="NEW · RW Reports: quick reports, filters, results, Print (US Letter)")
+        await shot(page, "13b-rw-reports-quick-at-risk", "/rw/reports", lambda: click(page, "[data-testid='quick-at_risk']"), note="NEW · RW Reports: quick reports, filters, results, Print (US Letter)")
         await shot(page, "14-rw-intercom-paging", "/rw/jobs", lambda: click(page, "[data-testid='intercom-btn']"), note="NEW · station intercom + storewide paging (mock)")
 
         # ---- Band / Polish Room Manager Pad (Joseph) ----
