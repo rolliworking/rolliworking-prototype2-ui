@@ -309,7 +309,7 @@ export async function getUsersSignedInToday(): Promise<User[]> {
   return resolve(fx.users.filter((u) => signedInTodaySync(u.id)));
 }
 
-export async function signInWithPassword(userId: string, password: string, photo: VerificationPhoto): Promise<User> {
+async function signInWithPasswordMock(userId: string, password: string, photo: VerificationPhoto): Promise<User> {
   const user = byId(fx.users, userId);
   const stationName = stationNameOrUnknown();
   if (user.password !== password) {
@@ -388,11 +388,11 @@ export async function getWatchesForClient(clientId: string): Promise<Watch[]> {
 
 // ---- Estimates --------------------------------------------------------------
 
-export async function getEstimates(): Promise<EstimateWithRefs[]> {
+async function getEstimatesMock(): Promise<EstimateWithRefs[]> {
   return resolve([...store.estimates].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(withRefs));
 }
 
-export async function getEstimate(id: string): Promise<EstimateWithRefs | null> {
+async function getEstimateMock(id: string): Promise<EstimateWithRefs | null> {
   const e = store.estimates.find((x) => x.id === id);
   return resolve(e ? withRefs(e) : null);
 }
@@ -412,11 +412,11 @@ const jobRefs = (j: Job): JobWithRefs => ({
   pkg: j.packageId ? store.packages.find((p) => p.id === j.packageId) ?? null : store.packages.find((p) => p.estimateId && p.estimateId === j.estimateId) ?? null,
 });
 
-export async function getJobs(): Promise<JobWithRefs[]> {
+async function getJobsMock(): Promise<JobWithRefs[]> {
   return resolve([...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(jobRefs));
 }
 
-export async function getJob(id: string): Promise<JobWithRefs | null> {
+async function getJobMock(id: string): Promise<JobWithRefs | null> {
   const j = store.jobs.find((x) => x.id === id);
   return resolve(j ? jobRefs(j) : null);
 }
@@ -427,7 +427,7 @@ export async function getJobsForClient(clientId: string): Promise<JobWithRefs[]>
 
 // ---- Activity ---------------------------------------------------------------
 
-export async function getRecentActivity(limit = 10): Promise<ActivityEvent[]> {
+async function getRecentActivityMock(limit = 10): Promise<ActivityEvent[]> {
   const sorted = [...fx.activity].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return resolve(sorted.slice(0, limit));
 }
@@ -443,7 +443,7 @@ const DEPARTMENTS: { key: Department; name: string }[] = [
 const OPEN_ESTIMATE: Estimate['status'][] = ['draft', 'sent'];
 const ACTIVE_JOB: Job['status'][] = ['approved', 'in_service', 'testing'];
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+async function getDashboardStatsMock(): Promise<DashboardStats> {
   const completedThisMonth = store.jobs.filter((j) => isThisMonth(j.finishedAt));
   return resolve({
     watchesInHouse: store.watches.filter((w) => w.status !== 'released' && w.status !== 'expected').length,
@@ -497,7 +497,7 @@ export const detectCarrier = (tracking: string): Carrier => {
   return 'FedEx';
 };
 
-export async function getPackages(status?: PackageStatus): Promise<PackageWithRefs[]> {
+async function getPackagesMock(status?: PackageStatus): Promise<PackageWithRefs[]> {
   const rows = store.packages.filter((p) => !status || p.status === status);
   return resolve(rows.map(pkgWithRefs).sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt)));
 }
@@ -1592,7 +1592,7 @@ export async function dismissPinned(id: string): Promise<PinnedItem> {
   return resolve({ ...p });
 }
 
-export async function getToday(userId?: string): Promise<TodayView> {
+async function getTodayMock(userId?: string): Promise<TodayView> {
   const me = userId ? byId(fx.users, userId) : currentUserSync();
   if (!me) return resolve({ pinned: [], rows: [], waitingOn: [] });
   const sessionDiv = getSessionDivision();
@@ -1679,10 +1679,10 @@ export function tailStage(job: Job): TailStage | null {
   return 'awaiting_payment';
 }
 
-export async function getSalesOrders(): Promise<SalesOrderWithRefs[]> {
+async function getSalesOrdersMock(): Promise<SalesOrderWithRefs[]> {
   return resolve([...store.salesOrders].sort((a, b) => b.orderDate.localeCompare(a.orderDate)).map(soRefs));
 }
-export async function getSalesOrder(id: string): Promise<SalesOrderWithRefs | null> {
+async function getSalesOrderMock(id: string): Promise<SalesOrderWithRefs | null> {
   const o = store.salesOrders.find((x) => x.id === id);
   return resolve(o ? soRefs(o) : null);
 }
@@ -2212,11 +2212,11 @@ const clientPath = (clientId: string | undefined, hitKey: string, fallback: stri
 const GROUP_LABEL: Record<IdentifierKind, string> = { client: 'Clients', estimate: 'Estimates', job: 'Jobs', package: 'Packages / SUB#', sales_order: 'Invoices (SO)', watch: 'Watches', request: 'Requests', shipment: 'Shipments' };
 const GROUP_ORDER: IdentifierKind[] = ['client', 'watch', 'estimate', 'job', 'sales_order', 'package', 'request', 'shipment'];
 
-export async function getRequests(): Promise<ServiceRequest[]> { return resolve([...store.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
+async function getRequestsMock(): Promise<ServiceRequest[]> { return resolve([...store.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
 export async function getRequestsForClient(clientId: string): Promise<ServiceRequest[]> { return resolve(store.requests.filter((r) => r.clientId === clientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
 
 // Accepts ANY identifier: name, email, phone, estimate #, job #, SUB#, tracking, watch ref / serial, SO #, pickup code, request #
-export async function resolveIdentifier(query: string): Promise<SearchResults> {
+async function resolveIdentifierMock(query: string): Promise<SearchResults> {
   const raw = query.trim();
   const q = raw.toLowerCase();
   const nq = norm(raw);
@@ -4613,3 +4613,22 @@ export async function markBillRecovered(auditId: string, amount: number): Promis
   b.totals = { ...b.totals, recovered: Math.round((b.totals.recovered + amount) * 100) / 100 }; b.recoveredAt = new Date().toISOString(); b.events.push({ at: b.recoveredAt, by: a.by, text: `Credit received · ${fmtMoney(amount)} · recovered to date ${fmtMoney(b.totals.recovered)}` }); baStamp(`${b.number} credit ${fmtMoney(amount)}`);
   return resolve(baRefs(b));
 }
+
+// ---- E17 CONVERGENCE — routing layer. Covered functions go to the real Prototype API in hybrid mode and fall back to the mock above per call. ----
+import * as real from './realClient';
+import { route } from './routing';
+export { API_BASE_URL, API_MODE, API_SOURCE, setApiMode } from './config';
+export { getApiHealth, subscribeApiHealth, API_TOAST_EVENT, isReal } from './routing';
+export const signInWithPassword = route('signInWithPassword', signInWithPasswordMock, async (userId: string, password: string, photo: VerificationPhoto) => { const u = await real.signInWithPassword(userId, password, photo); await signInWithPasswordMock(userId, password, photo); return u; });
+export const getEstimates = route('getEstimates', getEstimatesMock, real.getEstimates);
+export const getEstimate = route('getEstimate', getEstimateMock, async (id: string) => (await real.getEstimate(id)) ?? getEstimateMock(id));
+export const getJobs = route('getJobs', getJobsMock, real.getJobs);
+export const getJob = route('getJob', getJobMock, async (id: string) => (await real.getJob(id)) ?? getJobMock(id));
+export const getSalesOrders = route('getSalesOrders', getSalesOrdersMock, real.getSalesOrders);
+export const getSalesOrder = route('getSalesOrder', getSalesOrderMock, async (id: string) => (await real.getSalesOrder(id)) ?? getSalesOrderMock(id));
+export const getToday = route('getToday', getTodayMock, real.getToday);
+export const resolveIdentifier = route('resolveIdentifier', resolveIdentifierMock, real.resolveIdentifier);
+export const getRequests = route('getRequests', getRequestsMock, real.getRequests);
+export const getPackages = route('getPackages', getPackagesMock, real.getPackages);
+export const getDashboardStats = route('getDashboardStats', getDashboardStatsMock, real.getDashboardStats);
+export const getRecentActivity = route('getRecentActivity', getRecentActivityMock, real.getRecentActivity);
