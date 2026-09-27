@@ -1,0 +1,31 @@
+import { ChevronDown, History, Search, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import * as api from '@/api/client';
+import type { Client, EstimateWithRefs, JobWithRefs, SalesOrderWithRefs } from '@/api/client';
+import { fmtDate, fullName } from '@/lib/format';
+
+interface Hits { clients: Client[]; estimates: EstimateWithRefs[]; jobs: JobWithRefs[]; sos: SalesOrderWithRefs[] }
+const EMPTY: Hits = { clients: [], estimates: [], jobs: [], sos: [] };
+
+// Persistent bottom-right client / job history lookup — separate from global search. Name, email, estimate #, SO #, job # → jump straight to the record.
+export const CornerLookup = ({ variant }: { variant: 'rs' | 'rw' }) => {
+  const [open, setOpen] = useState(false); const [q, setQ] = useState(''); const [hits, setHits] = useState<Hits>(EMPTY);
+  useEffect(() => { const s = q.trim(); if (s.length < 2) { setHits(EMPTY); return; } const t = setTimeout(async () => { const [clients, jobs, est, sos] = await Promise.all([api.searchClients(s), api.searchJobs(s), api.lookupEstimate(s).catch(() => null), api.getSalesOrders().catch(() => [] as SalesOrderWithRefs[])]); const ql = s.toLowerCase(); setHits({ clients: clients.slice(0, 5), jobs: jobs.slice(0, 5), estimates: est ? [est] : [], sos: sos.filter((o) => o.number.toLowerCase().includes(ql) || fullName(o.client).toLowerCase().includes(ql)).slice(0, 4) }); }, 150); return () => clearTimeout(t); }, [q]);
+  const dark = variant === 'rw'; const clientHref = (c: Client) => (dark ? `/rw/history?q=${encodeURIComponent(c.lastName)}` : `/clients/${c.id}`); const jobHref = (j: JobWithRefs) => (dark ? `/rw/jobs/${j.id}` : `/jobs/${j.id}`);
+  const box = dark ? 'border-white/10 bg-[#1f2630] text-slate-100' : 'border-line bg-surface text-ink'; const sub = dark ? 'text-slate-400' : 'text-ink-500'; const row = dark ? 'hover:bg-white/5' : 'hover:bg-canvas';
+  const total = hits.clients.length + hits.estimates.length + hits.jobs.length + hits.sos.length;
+  if (!open) return <button data-testid="corner-lookup-open" onClick={() => setOpen(true)} title="Client / job history lookup" className={`fixed bottom-4 right-4 z-[70] inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold shadow-xl ${dark ? 'border-amber-400/40 bg-[#1f2630] text-amber-300' : 'border-line bg-ink text-white'}`}><History size={16} /> History lookup</button>;
+  return <div data-testid="corner-lookup" className={`fixed bottom-4 right-4 z-[70] w-[360px] rounded-xl border shadow-2xl ${box}`}>
+    <div className="flex items-center gap-2 border-b border-inherit px-3 py-2"><History size={14} className={dark ? 'text-amber-300' : 'text-ink-500'} /><span className="text-xs font-semibold">Client / job history</span><span className={`text-[10px] ${sub}`}>name · email · est# · SO# · job#</span><button data-testid="corner-lookup-close" onClick={() => setOpen(false)} className={`ml-auto ${sub} hover:opacity-80`}><ChevronDown size={14} /></button></div>
+    <div className="relative p-2"><Search size={13} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${sub}`} /><input data-testid="corner-lookup-input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Calloway · E02041 · SO-26-0051 · vidal@…" className={`h-9 w-full rounded-md border pl-7 pr-7 text-sm ${dark ? 'border-white/10 bg-[#0f131a] text-slate-100' : 'border-line bg-canvas'}`} />{q && <button data-testid="corner-lookup-clear" onClick={() => setQ('')} className={`absolute right-4 top-1/2 -translate-y-1/2 ${sub}`}><X size={13} /></button>}</div>
+    {q.trim().length >= 2 && <div data-testid="corner-lookup-results" className="max-h-[360px] overflow-y-auto px-1 pb-2 text-xs">
+      {hits.clients.length > 0 && <Group label="Clients" sub={sub}>{hits.clients.map((c) => <Link key={c.id} to={clientHref(c)} data-testid={`corner-client-${c.id}`} onClick={() => setOpen(false)} className={`flex items-center gap-2 rounded px-2 py-1.5 ${row}`}><span className="font-medium">{fullName(c)}</span><span className={`truncate ${sub}`}>{c.company ?? c.email}</span><span className={`ml-auto text-[10px] ${sub}`}>since {fmtDate(c.since)}</span></Link>)}</Group>}
+      {hits.estimates.length > 0 && <Group label="Estimates" sub={sub}>{hits.estimates.map((e) => <Link key={e.id} to={dark ? `/rw/history?q=${encodeURIComponent(e.client.lastName)}` : `/estimates/${e.id}`} data-testid={`corner-estimate-${e.id}`} onClick={() => setOpen(false)} className={`flex items-center gap-2 rounded px-2 py-1.5 ${row}`}><span className="font-mono font-semibold">{e.number}</span><span className="truncate">{fullName(e.client)}</span><span className={`ml-auto capitalize ${sub}`}>{e.status.replace(/_/g, ' ')}</span></Link>)}</Group>}
+      {hits.jobs.length > 0 && <Group label="Jobs" sub={sub}>{hits.jobs.map((j) => <Link key={j.id} to={jobHref(j)} data-testid={`corner-job-${j.id}`} onClick={() => setOpen(false)} className={`flex items-center gap-2 rounded px-2 py-1.5 ${row}`}><span className="font-mono font-semibold">{j.number}</span><span className="truncate">{fullName(j.client)} · {j.watch.model}</span><span className={`ml-auto capitalize ${sub}`}>{j.status.replace(/_/g, ' ')}</span></Link>)}</Group>}
+      {hits.sos.length > 0 && <Group label="Sales orders" sub={sub}>{hits.sos.map((o) => <Link key={o.id} to={dark ? (o.jobId ? `/rw/jobs/${o.jobId}` : `/rw/history?q=${encodeURIComponent(o.client.lastName)}`) : `/sales/${o.id}`} data-testid={`corner-so-${o.id}`} onClick={() => setOpen(false)} className={`flex items-center gap-2 rounded px-2 py-1.5 ${row}`}><span className="font-mono font-semibold">{o.number}</span><span className="truncate">{fullName(o.client)}</span><span className={`ml-auto capitalize ${sub}`}>{o.status.replace(/_/g, ' ')}</span></Link>)}</Group>}
+      {!total && <p data-testid="corner-lookup-empty" className={`px-2 py-3 text-center ${sub}`}>Nothing matches “{q}”</p>}
+    </div>}
+  </div>;
+};
+const Group = ({ label, sub, children }: { label: string; sub: string; children: React.ReactNode }) => <div className="mb-1"><div className={`px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide ${sub}`}>{label}</div>{children}</div>;

@@ -26,6 +26,8 @@ import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RwHistoryPage from '@/pages/rw/RwHistoryPage';
 import RwReportsPage from '@/pages/rw/RwReportsPage';
 import AllJobsPage from '@/pages/jobs/AllJobsPage';
+import InspectionFormPage from '@/pages/inspection/InspectionFormPage';
+import RcInspectionFormPage from '@/pages/rc/RcInspectionFormPage';
 import QboSetupPage from '@/pages/rs/QboSetupPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
@@ -159,6 +161,7 @@ export default function App() {
             <Route path="invoices/:id" element={<RcInvoicePage />} />
             <Route path="watches/:id" element={<RcWatchPage />} />
             <Route path="report/:token" element={<RcReportPage />} />
+            <Route path="inspection/:token" element={<RcInspectionFormPage />} />
             <Route path="messages" element={<RcMessagesPage />} />
             <Route path="*" element={<RcNotFound />} />
           </Route>
@@ -176,6 +179,8 @@ export default function App() {
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/jobs/new" element={<JobCreatePage />} />
               <Route path="/jobs/all" element={<AllJobsPage />} />
+              <Route path="/inspection/new" element={<InspectionFormPage />} />
+              <Route path="/inspection/:id" element={<InspectionFormPage />} />
               <Route path="/jobs/shop-time" element={<ShopTimePage />} />
               <Route path="/jobs/:id" element={<JobDetailPage />} />
               <Route path="/intake" element={<IntakeLayout />}>

@@ -41,3 +41,10 @@ export async function extractShippingBill(file: File): Promise<BillExtraction> {
   const lines: BillLine[] = (out.lines ?? []).map((l, i) => ({ id: `bl-${i + 1}`, trackingNumber: String(l.trackingNumber ?? '').trim(), shipDate: String(l.shipDate ?? ''), service: String(l.service ?? ''), billed: Number(l.billed ?? 0), surcharges: (l.surcharges ?? []).map((s) => ({ kind: String(s.kind), amount: Number(s.amount) })).filter((s) => s.amount), declaredValue: l.declaredValue == null ? null : Number(l.declaredValue), carrier: out.carrier ?? undefined })).filter((l) => l.trackingNumber);
   return { lines, source: 'claude', carrier: out.carrier, invoiceNumber: out.invoiceNumber, confidence: out.confidence, fileName: file.name };
 }
+
+// 4. Filled "Inspection Scantron — Rolliworks v1.1" (photo/scan/PDF) → suggested form values. Green highlighter = selection, red ink = handwriting. Suggest → verify, never auto-commit.
+export interface SheetSuggestionWire { components: Record<string, Record<string, unknown>>; bracelet: Record<string, Record<string, unknown>>; additionalNotes?: string | null; confidence?: number | null; raw?: string }
+export async function extractInspectionSheet(file: File): Promise<SheetSuggestionWire> {
+  const dataUrl = await readAs(file, 'dataUrl'); const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+  return post<SheetSuggestionWire>('extract-inspection-sheet', { fileBase64: dataUrl, mime, fileName: file.name });
+}

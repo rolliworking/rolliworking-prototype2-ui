@@ -14,7 +14,7 @@ export const fmtTime = (iso: string) => time.format(new Date(iso));
 
 export const fullName = (c: Pick<Client, 'firstName' | 'lastName'>) => `${c.firstName} ${c.lastName}`;
 
-export const humanize = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+export const humanize = (s?: string | null) => (s ?? '—').replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
 export const relativeTime = (iso: string) => {
   const diffMs = Date.now() - new Date(iso).getTime();

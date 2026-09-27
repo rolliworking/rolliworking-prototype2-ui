@@ -3207,14 +3207,16 @@ import type { ConvMessage, Conversation, ConversationAnchor, ConversationWithRef
 const cx = { conversations: fx.conversations.map((c): Conversation => ({ ...c })), messages: fx.convMessages.map((m): ConvMessage => ({ ...m })) };
 const cxStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); };
 const wakeSnoozed = () => { const now = new Date().toISOString(); cx.conversations.forEach((c) => { if (c.status === 'snoozed' && c.snoozedUntil && c.snoozedUntil <= now) { c.status = 'open'; c.snoozedUntil = undefined; } }); };
-const convNeedsReply = (c: Conversation) => c.status === 'open' && !!c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt);
+// Unreplied = client messages newer than our last outbound reply that nobody has Cleared (marked handled without a reply)
+const unrepliedOf = (c: Conversation) => cx.messages.filter((m) => m.conversationId === c.id && m.direction === 'in' && !m.cleared && m.at > (c.lastOutboundAt ?? ''));
+const convNeedsReply = (c: Conversation) => c.status === 'open' && unrepliedOf(c).length > 0;
 const anchorRef = (a?: ConversationAnchor): { label?: string; path?: string } => {
   if (!a) return {};
   if (a.kind === 'job') { const j = store.jobs.find((x) => x.id === a.id); return j ? { label: `Job ${j.number}`, path: `/jobs/${j.id}` } : {}; }
   if (a.kind === 'estimate') { const e = store.estimates.find((x) => x.id === a.id); return e ? { label: `Estimate ${e.number}`, path: `/estimates/${e.id}` } : {}; }
   const r = store.requests.find((x) => x.id === a.id); return r ? { label: `Request ${r.number}`, path: `/clients/${r.clientId}?hit=req-${r.id}` } : {};
 };
-const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined, linkedEstimate: linkedEstimateFor(c.anchor) }; };
+const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, unreplied: unrepliedOf(c).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined, linkedEstimate: linkedEstimateFor(c.anchor) }; };
 const convOf = (id: string) => byId(cx.conversations, id);
 const ensureConversation = (clientId: string, subject: string, anchor?: ConversationAnchor, division?: Division): Conversation => {
   const found = cx.conversations.find((c) => c.clientId === clientId && c.status !== 'closed' && (anchor ? c.anchor?.kind === anchor.kind && c.anchor.id === anchor.id : !c.anchor));
@@ -3251,6 +3253,13 @@ export async function getClientFolder(clientId: string): Promise<ConversationWit
 export async function getThread(id: string): Promise<ThreadView> {
   const c = convOf(id); const messages = cx.messages.filter((m) => m.conversationId === id).sort((a, b) => a.at.localeCompare(b.at));
   return resolve({ conversation: convRefs(c), messages, folder: await getClientFolder(c.clientId) });
+}
+export async function clearMessage(conversationId: string, messageId: string): Promise<ThreadView> {
+  const a = actor(); const c = convOf(conversationId); const m = cx.messages.find((x) => x.id === messageId && x.conversationId === conversationId); if (!m) throw new Error('Message not found'); if (m.direction !== 'in') throw new Error('Only client messages can be cleared'); if (m.cleared) throw new Error('Already cleared');
+  m.cleared = { by: a.by, at: new Date().toISOString() }; m.readByStaff = true;
+  cx.messages.push({ id: newId('cm'), conversationId, clientId: c.clientId, direction: 'internal', source: 'note', by: a.by, station: a.station, text: `Cleared without reply — “${m.text.slice(0, 60)}${m.text.length > 60 ? '…' : ''}” marked handled, no email sent`, at: new Date().toISOString(), readByStaff: true });
+  appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inbox · ${c.subject} · client message cleared without reply` });
+  return getThread(conversationId);
 }
 export async function markConversationRead(id: string): Promise<void> { cx.messages.filter((m) => m.conversationId === id && m.direction === 'in').forEach((m) => { m.readByStaff = true; }); return resolve(undefined); }
 export async function assignConversation(id: string, assignee: Assignee | null): Promise<ConversationWithRefs> { const c = convOf(id); c.assignedTo = assignee ?? undefined; cxStamp(`Thread ${c.subject} → ${assignee ? assigneeLabel(assignee) : 'unassigned'}`); return resolve(convRefs(c)); }
@@ -4862,3 +4871,66 @@ export async function getJobReport(f: JobReportFilter = {}): Promise<{ rows: Job
     .sort((a, b) => (a.due ?? '9').localeCompare(b.due ?? '9'));
   return resolve({ rows, total: store.jobs.length, generatedAt: new Date().toISOString() });
 }
+
+// ---- Receive Watch (Stage 4) helpers — est# → awaiting-inspection package, and a simple prefix decoder for the serial field (real authentication reference tables are still outstanding from MH) ----
+export async function findInspectionPackage(numberOrId: string): Promise<{ packageId: string; estimateNumber: string } | null> {
+  const q = numberOrId.trim().toUpperCase(); if (!q) return resolve(null);
+  const pkg = store.packages.find((p) => p.subNumber.toUpperCase() === q) ?? (() => { const e = store.estimates.find((x) => x.number.toUpperCase() === q || x.id.toUpperCase() === q); return e ? store.packages.filter((p) => p.estimateId === e.id).sort((a, b) => (a.status === 'awaiting_inspection' ? -1 : 1) - (b.status === 'awaiting_inspection' ? -1 : 1))[0] : undefined; })();
+  return resolve(pkg ? { packageId: pkg.id, estimateNumber: store.estimates.find((e) => e.id === pkg.estimateId)?.number ?? '' } : null);
+}
+export interface SerialDecode { brand: string; model: string; caliber: string; era?: string; confidence: 'reference' | 'prefix' | 'none' }
+const SERIAL_PREFIXES: { re: RegExp; brand: string; model: string; caliber: string; era?: string }[] = [
+  { re: /^1601/, brand: 'Rolex', model: 'Datejust 36 (fluted, cal. 1570 era)', caliber: 'cal. 1570', era: '1960s–70s' }, { re: /^1603/, brand: 'Rolex', model: 'Datejust 36 (engine-turned)', caliber: 'cal. 1570' }, { re: /^1675/, brand: 'Rolex', model: 'GMT-Master', caliber: 'cal. 1575', era: '1959–80' },
+  { re: /^5513/, brand: 'Rolex', model: 'Submariner (no date)', caliber: 'cal. 1520 / 1530', era: '1962–89' }, { re: /^1680/, brand: 'Rolex', model: 'Submariner Date', caliber: 'cal. 1575' }, { re: /^16[0-9]{3}/, brand: 'Rolex', model: 'Oyster (16xxx family)', caliber: 'cal. 3035 / 3135' },
+  { re: /^126/, brand: 'Rolex', model: '126xxx family', caliber: 'cal. 3235 / 3285' }, { re: /^116/, brand: 'Rolex', model: '116xxx family', caliber: 'cal. 3135 / 3186' }, { re: /^[A-Z]\d{6}$/, brand: 'Rolex', model: 'Letter-prefix serial (1987–2010)', caliber: 'see reference' },
+];
+export const decodeSerial = (serial: string, reference?: string): SerialDecode => {
+  const s = serial.trim().toUpperCase(); const ref = (reference ?? '').trim().toUpperCase(); if (!s) return { brand: '', model: '', caliber: '', confidence: 'none' };
+  const w = store.watches.find((x) => x.serial.toUpperCase() === s || (ref && x.reference.toUpperCase() === ref)); const cat = ref ? fx.parts.find((p) => p.compatibleRefs?.some((r) => r.toUpperCase() === ref) && p.calibers.length) : undefined;
+  if (w) return { brand: w.brand, model: w.model, caliber: cat?.calibers[0] ? `cal. ${cat.calibers[0]}` : 'cal. —', confidence: 'reference' };
+  const hit = SERIAL_PREFIXES.find((p) => p.re.test(s.split('-')[0])) ?? SERIAL_PREFIXES.find((p) => ref && p.re.test(ref)); return hit ? { brand: hit.brand, model: hit.model, caliber: hit.caliber, era: hit.era, confidence: 'prefix' } : { brand: '', model: '', caliber: '', confidence: 'none' };
+};
+
+// ---- NEW INSPECTION FORM (legacy RolliWorks structure) — learned preset-note library, per-component authenticity, bracelet repair lines, running total, tokened client report ----
+import { AUTHENTICITY, BRACELET_LINES, CONDITIONS, DIAL_VARIANTS, INSPECTION_COMPONENTS, NOTE_LIBRARY, OVERALL_QUICK_TAGS, blankForm, seededForm, type InspComponent, type InspComponentEntry, type InspectionForm } from './fixtures/inspectionForm';
+export { AUTHENTICITY, BRACELET_LINES, CONDITIONS, INSPECTION_COMPONENTS, type BraceletRepairLine, type InspComponent, type InspComponentEntry, type InspectionForm, type Condition, type Authenticity } from './fixtures/inspectionForm';
+const insp = { forms: [seededForm] as InspectionForm[], notes: Object.fromEntries(Object.entries(NOTE_LIBRARY).map(([k, v]) => [k, [...v]])) as Record<InspComponent, string[]>, quickTags: [...OVERALL_QUICK_TAGS], dialVariants: [...DIAL_VARIANTS] };
+export const inspectionNoteLibrary = (c: InspComponent) => insp.notes[c];
+export const inspectionQuickTags = () => insp.quickTags;
+export const dialVariantTags = () => insp.dialVariants;
+// suggest-and-learn: a typed note that isn't in the library joins it (gets the next number) — same pattern as parts aliases / photo tags
+export async function learnInspectionNote(c: InspComponent, text: string): Promise<number> { const t = text.trim(); if (!t) throw new Error('Empty note'); const i = insp.notes[c].findIndex((n) => n.toLowerCase() === t.toLowerCase()); if (i >= 0) return resolve(i); insp.notes[c].push(t); const a = actor(); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inspection note library · ${c} · learned #${insp.notes[c].length} “${t}”` }); return resolve(insp.notes[c].length - 1); }
+export async function learnDialVariant(tag: string): Promise<string[]> { const t = tag.trim().toUpperCase(); if (t && !insp.dialVariants.some((v) => v.toUpperCase() === t)) { insp.dialVariants.push(tag.trim()); const a = actor(); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Dial variant vocabulary · learned “${tag.trim()}”` }); } return resolve([...insp.dialVariants]); }
+export async function learnQuickTag(tag: string): Promise<string[]> { const t = tag.trim(); if (t && !insp.quickTags.includes(t)) insp.quickTags.push(t); return resolve([...insp.quickTags]); }
+export const inspectionTotal = (f: InspectionForm): number => {
+  const comp = f.components.reduce((t, c) => t + (c.price || 0) + (c.caseRestorationPrice || 0) + (c.weldingPrice || 0) + (c.polishUpYesNo ? c.polishUpPrice || 0 : 0), 0);
+  const br = f.bracelet.reduce((t, l) => t + (l.mode === 'qty_price' ? (l.qty || 0) * (l.price || 0) : l.mode === 'hours_rate' ? (l.hours || 0) * (l.rate || 0) : 0), 0);
+  return Math.round((comp + br + (f.overall.price || 0)) * 100) / 100;
+};
+export async function listInspectionForms(): Promise<InspectionForm[]> { return resolve(insp.forms.map((f) => ({ ...f, total: inspectionTotal(f) })).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
+export async function getInspectionForm(id: string): Promise<InspectionForm | null> { const f = insp.forms.find((x) => x.id === id); return resolve(f ? { ...f, total: inspectionTotal(f) } : null); }
+export async function getInspectionFormByToken(token: string): Promise<(InspectionForm & { notesText: (c: InspComponentEntry) => string[] }) | null> { const f = insp.forms.find((x) => x.token === token && x.status === 'saved'); return resolve(f ? { ...f, total: inspectionTotal(f), notesText: (c) => c.notes.map((n) => insp.notes[c.component][n]).filter(Boolean) } : null); }
+export async function newInspectionForm(seed?: { jobId?: string; estimateNumber?: string }): Promise<InspectionForm> {
+  const id = newId('insp'); let f = blankForm(id, `INSP-${Date.now().toString(36).toUpperCase()}`);
+  const j = seed?.jobId ? store.jobs.find((x) => x.id === seed.jobId) : seed?.estimateNumber ? store.jobs.find((x) => x.number.toUpperCase() === seed.estimateNumber!.toUpperCase()) : undefined;
+  const e = j?.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : seed?.estimateNumber ? store.estimates.find((x) => x.number.toUpperCase() === seed.estimateNumber!.toUpperCase()) : undefined;
+  const w = j ? store.watches.find((x) => x.id === j.watchId) : e?.watchId ? store.watches.find((x) => x.id === e.watchId) : undefined; const c = j ? fx.clients.find((x) => x.id === j.clientId) : e ? fx.clients.find((x) => x.id === e.clientId) : undefined;
+  if (j || e) f = { ...f, jobId: j?.id, token: `INSP-${(j?.number ?? e?.number ?? id).toUpperCase()}-${Date.now().toString(36).slice(-3).toUpperCase()}`, customer: c ? { name: fullNameOf(c), email: c.email, phone: c.phone } : f.customer, brand: w?.brand ?? '', model: w?.model ?? '', reference: w?.reference ?? '', estimateNumber: e?.number ?? j?.number ?? '', deptTags: [...(j?.workflow ?? (e ? estimateComponentCodes(e).codes : []))], jobType: j ? j.kind.replace('_', ' ') : 'Service' };
+  insp.forms.unshift(f); return resolve({ ...f });
+}
+export async function saveInspectionForm(form: InspectionForm, commit: boolean): Promise<InspectionForm> {
+  const i = insp.forms.findIndex((x) => x.id === form.id); if (i < 0) throw new Error('Form not found'); const a = actor();
+  if (commit && !form.customer.name.trim()) throw new Error('Customer is required'); if (commit && form.components.every((c) => !c.condition)) throw new Error('Grade at least one component');
+  const next: InspectionForm = { ...form, total: inspectionTotal(form), status: commit ? 'saved' : form.status, savedAt: commit ? new Date().toISOString() : form.savedAt, savedBy: commit ? a.by : form.savedBy, station: commit ? a.station : form.station };
+  insp.forms[i] = next; if (commit) { appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inspection form saved · ${next.estimateNumber || next.id} · ${fmtMoney(next.total)} · report ${next.token}` }); const j = next.jobId ? store.jobs.find((x) => x.id === next.jobId) : undefined; if (j) jobStamp(j, `Inspection form saved → client report ${next.token} · ${fmtMoney(next.total)}`); }
+  return resolve({ ...next });
+}
+export async function addInspectionPhoto(id: string, p: { source: 'ipevo' | 'microscope'; dataUrl: string }): Promise<InspectionForm> { const f = insp.forms.find((x) => x.id === id); if (!f) throw new Error('Form not found'); f.photos.push({ id: newId('ip'), source: p.source, dataUrl: p.dataUrl, at: new Date().toISOString() }); return resolve({ ...f }); }
+// Scantron extraction → suggested form values (numbers on the sheet = library indexes + 1). Human verifies before applying.
+export interface SheetSuggestion { components: Partial<Record<InspComponent, { condition?: number; notes?: number[]; other?: string; price?: number; yesNo?: boolean; retailPolish?: boolean; caseRestoration?: number; polishUp?: boolean }>>; bracelet: Partial<Record<string, { qty?: number; price?: number; hours?: number; yesNo?: boolean; rec?: 'rec' | 'not_rec'; scale?: number; include?: boolean }>>; additionalNotes?: string; confidence: number | null; raw?: string }
+export const applySheetSuggestion = (f: InspectionForm, s: SheetSuggestion, accepted: Set<string>): InspectionForm => {
+  const components = f.components.map((c) => { const sg = s.components[c.component]; if (!sg || !accepted.has(c.component)) return c; const cond = sg.condition ? CONDITIONS.find((x) => x.n === sg.condition)?.key : undefined; return { ...c, condition: cond ?? c.condition, notes: sg.notes?.length ? uniq(sg.notes.map((n) => n - 1).filter((n) => n >= 0 && n < insp.notes[c.component].length)) : c.notes, otherNote: sg.other ?? c.otherNote, price: sg.price ?? c.price, yesNo: sg.yesNo ?? c.yesNo, retailPolish: sg.retailPolish ?? c.retailPolish, caseRestorationPrice: sg.caseRestoration ?? c.caseRestorationPrice, polishUpYesNo: sg.polishUp ?? c.polishUpYesNo }; });
+  const bracelet = f.bracelet.map((l) => { const sg = s.bracelet[l.key]; return sg && accepted.has(`bracelet:${l.key}`) ? { ...l, ...sg } : l; });
+  return { ...f, components, bracelet, overall: accepted.has('additional') && s.additionalNotes ? { ...f.overall, notes: [f.overall.notes, s.additionalNotes].filter(Boolean).join('\n') } : f.overall, sheetScan: { at: new Date().toISOString(), by: actor().by, confidence: s.confidence } };
+};
+void AUTHENTICITY; void BRACELET_LINES; void INSPECTION_COMPONENTS;

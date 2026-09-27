@@ -8,6 +8,7 @@ import { MoneyContext } from '@/components/MoneyContext';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { IntercomButton } from '@/components/layout/IntercomPanel';
+import { CornerLookup } from '@/components/layout/CornerLookup';
 
 export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTier[]; end?: boolean }[] = [
   { key: 'bench', label: 'Bench', path: '/rw', tiers: ['manager', 'concierge'], end: true },
@@ -59,6 +60,7 @@ export default function RwShell() {
         {blocked && <div data-testid="rw-blocked" className="flex items-center gap-2 border-b border-rose-900/50 bg-rose-950/60 px-4 py-1.5 text-xs text-rose-200"><ShieldOff size={12} /> <span className="font-mono">{blocked}</span> is a RolliSuite screen — not reachable from RolliWorking (access boundary). Use a front-desk station.<button onClick={() => setBlocked(null)} className="ml-auto text-rose-300 hover:text-white">dismiss</button></div>}
         <main className={`rw-dark min-h-0 flex-1 overflow-y-auto ${fullscreen ? '' : 'p-4'}`}>
           {user || bench ? <Outlet /> : <RwSignIn />}
+          {user && !bench && !fullscreen && <CornerLookup variant="rw" />}
         </main>
       </div>
     </MoneyContext.Provider>

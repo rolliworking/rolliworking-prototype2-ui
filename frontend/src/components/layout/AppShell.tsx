@@ -1,3 +1,4 @@
+import { CornerLookup } from '@/components/layout/CornerLookup';
 import { Component, useEffect, useState, type ReactNode } from 'react';
 import { Outlet } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -49,6 +50,7 @@ export default function AppShell() {
       <div className="flex h-full flex-col">
         <PrototypeBanner />
         <ApiToast />
+        <CornerLookup variant="rs" />
         <div className="flex min-h-0 flex-1">
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">

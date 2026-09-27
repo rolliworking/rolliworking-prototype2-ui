@@ -1,16 +1,18 @@
-import { AlertTriangle, ArrowLeft, Check, MessageSquareQuote, Tags } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, MessageSquareQuote, Printer, ScanLine, Tags } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { DeptCode, ReceiveWatchInput, ReceiveWatchResult, WatchMatch } from '@/api/client';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
-import { ComponentChecklist, LineChecklist, SameWatchFork, WorkflowPicker } from '@/components/intake/InspectionBits';
+import { ComponentChecklist, LineChecklist, SameWatchFork } from '@/components/intake/InspectionBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { DeptBadge, StatusPill } from '@/components/ui/Pills';
+import { StatusPill } from '@/components/ui/Pills';
 import { useAsync } from '@/hooks/useAsync';
-import { fullName } from '@/lib/format';
+import { fmtDate, fmtMoney, fmtTime, fullName } from '@/lib/format';
 
 export default function ReceiveWatchPage() {
   const { id = '' } = useParams();
@@ -29,6 +31,7 @@ export default function ReceiveWatchPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReceiveWatchResult | null>(null);
+  const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
   useEffect(() => {
@@ -75,12 +78,13 @@ export default function ReceiveWatchPage() {
   const { pkg, estimate } = ctx;
   const expWatch = estimate.watch!;
 
-  const commit = async () => {
+  const commit = async (print: boolean) => {
     setBusy(true);
     setError(null);
     try {
       const res = await api.receiveWatch(pkg.id, input);
-      setResult(res);
+      if (print) await Promise.all(res.labels.map((l) => api.setLabelPrinted(l.id, true)));
+      setResult({ ...res, printed: print } as ReceiveWatchResult & { printed?: boolean });
       refreshCounts();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not commit');
@@ -110,7 +114,7 @@ export default function ReceiveWatchPage() {
                 </ul>
               ) : (
                 <div className="mt-3 rounded-sm bg-canvas p-3 text-xs" data-testid="inspection-result-labels">
-                  <div className="mb-1 inline-flex items-center gap-1 font-semibold text-ink-500"><Tags size={12} /> 2 labels queued (unprinted)</div>
+                  <div className="mb-1 inline-flex items-center gap-1 font-semibold text-ink-500"><Tags size={12} /> {(result as ReceiveWatchResult & { printed?: boolean }).printed ? '2 component labels printed' : '2 labels queued (unprinted)'}</div>
                   {result.labels.map((l) => (
                     <div key={l.id} className="font-mono text-ink-700">{l.type === 'pdf417_data' ? 'PDF417' : 'REF/SER'} · {l.payload}</div>
                   ))}
@@ -118,7 +122,8 @@ export default function ReceiveWatchPage() {
               )}
               <div className="mt-4 flex gap-2">
                 <Link to="/intake/inspection" data-testid="inspection-result-back"><Button>Back to bins</Button></Link>
-                {!hold && <Link to="/intake/labels" data-testid="inspection-result-labels-link"><Button variant="primary">Open Label Queue</Button></Link>}
+                {!hold && <Link to="/intake/labels" data-testid="inspection-result-labels-link"><Button>Open Label Queue</Button></Link>}
+                {!hold && <Link to={`/inspection/new?est=${encodeURIComponent(estimate.number)}&camera=1`} data-testid="inspection-result-start-inspection"><Button variant="primary">Start inspection → camera (2× IPEVO, then microscope)</Button></Link>}
               </div>
             </div>
           </div>
@@ -128,103 +133,79 @@ export default function ReceiveWatchPage() {
   }
 
   const readOnly = pkg.status !== 'awaiting_inspection';
+  const decoded = api.decodeSerial(serial, reference);
 
+  // Top-to-bottom: scan est# → customer → what was received (read-only) → inspector's confirmation → component chips → serial decode → date → estimate copy → actions
   return (
-    <div data-testid="receive-watch-page" className="space-y-4">
+    <div data-testid="receive-watch-page" className="mx-auto max-w-[880px] space-y-4">
       <div className="flex items-center justify-between">
-        <Link to="/intake/inspection" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Receive Watch</Link>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="font-mono font-semibold text-ink" data-testid="inspection-estimate-number">{estimate.number}</span>
-          <span className="font-mono text-ink-500">{pkg.subNumber}</span>
-          <StatusPill status={pkg.status} />
-          <Stamp by={pkg.workOrderBy} station={pkg.arrivedStation} at={pkg.workOrderAt} />
-        </div>
+        <Link to="/intake/inspection" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Receive Watch · Stage 4 · VERIFIED</Link>
+        <div className="flex items-center gap-3 text-xs"><span className="font-mono font-semibold text-ink" data-testid="inspection-estimate-number">{estimate.number}</span><span className="font-mono text-ink-500">{pkg.subNumber}</span><StatusPill status={pkg.status} /><Stamp by={pkg.workOrderBy} station={pkg.arrivedStation} at={pkg.workOrderAt} /></div>
       </div>
-
       {readOnly && <div className="rounded-sm bg-amber-50 px-3 py-2 text-xs text-amber-900">This package has already been inspected — read only.</div>}
 
-      <div className="grid grid-cols-[1fr_360px] gap-4">
-        <div className="space-y-4">
-          <Card title="From the estimate" subtitle={`${fullName(estimate.client)} · ${expWatch.brand} ${expWatch.model} · verify each line is in scope`} testId="inspection-lines-card">
-            <LineChecklist lines={estimate.lines} verified={linesVerified} onToggle={(i) => setLinesVerified((v) => (v.includes(i) ? v.filter((x) => x !== i) : [...v, i]))} />
-            <div className="mt-3 flex items-start gap-2 rounded-sm bg-canvas p-2.5 text-xs text-ink-700" data-testid="inspection-concerns">
-              <MessageSquareQuote size={13} className="mt-0.5 shrink-0 text-ink-400" />
-              <span><span className="font-semibold text-ink-500">Client’s stated concerns:</span> {estimate.clientNotes}</span>
-            </div>
-          </Card>
+      <Card title="1 · Scan estimate barcode or enter est#" subtitle="Resolves the job the moment either one is used" testId="rw-scan-card">
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void api.findInspectionPackage(scanQ).then((hit) => { if (!hit) { setScanErr(`No package for “${scanQ}”`); return; } setScanErr(null); if (hit.packageId !== pkg.id) nav(`/intake/inspection/${hit.packageId}`); }); }}>
+          <div className="relative flex-1"><ScanLine size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" /><input data-testid="rw-scan-input" value={scanQ} onChange={(e) => setScanQ(e.target.value)} placeholder="Scan the estimate barcode · or type E02041 / SUB-26-0310" className="h-11 w-full rounded-sm border border-line bg-canvas pl-9 pr-3 font-mono text-[15px] focus:border-ink focus:bg-surface focus:outline-none" /></div>
+          <Button type="submit" data-testid="rw-scan-go">Resolve</Button>
+        </form>
+        {scanErr && <p data-testid="rw-scan-error" className="mt-1 text-xs text-rose-700">{scanErr}</p>}
+      </Card>
 
-          <Card title="What’s in the box" subtitle="Scan 2 · Expected (estimate chips) → Received (Scan 1) → tap what you verify now" testId="inspection-components-card">
-            <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...pkg.contents])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = pkg.contents.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${ver ? 'border-moss-600 bg-moss-600 text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
-            <ComponentChecklist expected={ctx.expectedComponents} received={components} onToggle={(c) => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} />
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <span className="text-ink-400">Stage 2 logged: {pkg.contents.join(', ') || '—'}</span>
-              <label className="inline-flex items-center gap-1.5 text-ink-700">
-                <input type="checkbox" data-testid="extra-watch" checked={extraWatch} onChange={(e) => setExtraWatch(e.target.checked)} className="accent-rose-600" /> Extra / unexpected watch in package
-              </label>
-            </div>
-            {pkg.photos.length > 0 && <div className="mt-3 border-t border-line pt-3"><PhotoStrip photos={pkg.photos} size="sm" /></div>}
-          </Card>
+      <Card title="2 · Customer" testId="rw-customer-card">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"><span className="font-semibold text-ink" data-testid="rw-customer-name">{fullName(estimate.client)}</span><span className="text-ink-500">{estimate.client.email}</span><span className="text-ink-500">{estimate.client.phone}</span>{estimate.client.company && <span className="rounded bg-canvas px-1.5 text-xs text-ink-600">{estimate.client.company}</span>}<span className="ml-auto text-xs text-ink-400">Expected: {expWatch.brand} {expWatch.model} · <span className="font-mono">{expWatch.reference}</span></span></div>
+        {estimate.clientNotes && <div className="mt-2 flex items-start gap-2 rounded-sm bg-canvas p-2.5 text-xs text-ink-700" data-testid="inspection-concerns"><MessageSquareQuote size={13} className="mt-0.5 shrink-0 text-ink-400" /><span><span className="font-semibold text-ink-500">Client’s stated concerns:</span> {estimate.clientNotes}</span></div>}
+      </Card>
 
-          <Card title="Watch identity" subtitle="Verify reference and serial on the watch itself — NS if the serial is unreadable" testId="inspection-identity-card">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Reference</label>
-                <input data-testid="identity-reference" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 w-full rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" />
-                <p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.reference}</span></p>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Serial</label>
-                <div className="flex gap-2">
-                  <input data-testid="identity-serial" value={serial} onChange={(e) => setSerial(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 flex-1 rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" />
-                  <Button type="button" data-testid="identity-ns" onClick={() => setSerial('NS')} disabled={readOnly} title="Serial unreadable — placeholder">NS</Button>
-                </div>
-                <p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.serial}</span>{serial === 'NS' && <span className="ml-1 text-amber-800">· NS placeholder — skips the same-watch check</span>}</p>
-              </div>
-            </div>
-            {match && (
-              <div className="mt-4">
-                <SameWatchFork match={match} expectedClientId={estimate.clientId} decision={decision} onDecide={setDecision} />
-              </div>
-            )}
-            {!match && serial && serial !== 'NS' && <p data-testid="same-watch-clear" className="mt-3 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> No prior history for this reference + serial.</p>}
-          </Card>
+      <Card title="3 · What was received" subtitle="Read-only recap from Receive Package (Scan 1 / pill tap) — not editable here" testId="rw-received-card">
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="rw-received-pills">{pkg.contents.map((c) => <span key={c} className="rounded-full border border-line bg-canvas px-3 py-1 text-xs font-medium text-ink">{c}</span>)}{!pkg.contents.length && <span className="text-xs text-ink-400">Nothing logged at Scan 1</span>}<span className="ml-auto text-[11px] text-ink-400">logged by {pkg.processedBy ?? pkg.arrivedBy} · {fmtDate(pkg.processedAt ?? pkg.arrivedAt)} {fmtTime(pkg.processedAt ?? pkg.arrivedAt)}</span></div>
+        {pkg.notes && <p data-testid="rw-received-other" className="mt-2 text-xs text-ink-700"><span className="font-semibold text-ink-500">Other items noted at intake:</span> {pkg.notes}</p>}
+        {pkg.photos.length > 0 && <div className="mt-3 border-t border-line pt-3"><PhotoStrip photos={pkg.photos} size="sm" /></div>}
+      </Card>
 
-          <Card title="Workflow" subtitle="Pre-selected from the estimate’s departments" testId="inspection-workflow-card">
-            <WorkflowPicker value={workflow} onChange={setWorkflow} />
-            <textarea data-testid="inspection-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Inspector notes (optional)" className="mt-3 w-full rounded-sm border border-line bg-canvas px-2.5 py-1.5 text-[13px] focus:border-ink focus:bg-surface focus:outline-none" />
-          </Card>
+      <Card title="4 · Inspector’s confirmation — what is physically in hand" subtitle="Tap each item you are holding right now; this is compared against what was recorded as received above" testId="inspection-components-card" accent="moss">
+        <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...pkg.contents])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = pkg.contents.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} disabled={readOnly} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors ${ver ? 'border-moss bg-moss text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
+        <ComponentChecklist expected={ctx.expectedComponents} received={components} onToggle={(c) => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} />
+        <textarea data-testid="rw-inhand-notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={readOnly} rows={2} placeholder="Anything else in hand not covered above — new dial, hands, box, papers…" className="mt-3 w-full rounded-sm border border-line bg-canvas px-2.5 py-1.5 text-[13px] focus:border-ink focus:bg-surface focus:outline-none" />
+        <label className="mt-2 inline-flex items-center gap-1.5 text-xs text-ink-700"><input type="checkbox" data-testid="extra-watch" checked={extraWatch} disabled={readOnly} onChange={(e) => setExtraWatch(e.target.checked)} className="accent-rose-600" /> Extra / unexpected watch in package</label>
+      </Card>
+
+      <Card title="5 · Component codes" subtitle="Pre-selected from the estimate’s chips — override here if the watch in hand says otherwise (override is logged, never lost)" testId="inspection-workflow-card">
+        <ComponentCodeChips value={workflow} inferred={workflow.join() === ctx.suggestedWorkflow.join()} readOnly={readOnly} onToggle={(c) => setWorkflow((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} testId="rw-chips" />
+      </Card>
+
+      <Card title="6 · Serial # and reference" subtitle="Verify on the watch itself — NS if the serial is unreadable · serial auto-decodes brand / model / caliber" testId="inspection-identity-card">
+        <div className="grid grid-cols-2 gap-4">
+          <div><label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Serial #</label><div className="flex gap-2"><input data-testid="identity-serial" value={serial} onChange={(e) => setSerial(e.target.value.toUpperCase())} disabled={readOnly} placeholder="1601-1545646546" className="h-11 flex-1 rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" /><Button type="button" data-testid="identity-ns" onClick={() => setSerial('NS')} disabled={readOnly} title="Serial unreadable — placeholder">NS</Button></div><p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.serial}</span>{serial === 'NS' && <span className="ml-1 text-amber-800">· NS placeholder — skips the same-watch check</span>}</p></div>
+          <div><label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Reference</label><input data-testid="identity-reference" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 w-full rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" /><p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.reference}</span></p></div>
         </div>
+        {decoded.confidence !== 'none' && <div data-testid="serial-decode" data-confidence={decoded.confidence} className="mt-3 flex flex-wrap items-center gap-2 rounded-sm bg-canvas px-3 py-2 text-xs"><span className="font-semibold text-ink-500">Decoded:</span><span data-testid="serial-decode-brand" className="font-semibold text-ink">{decoded.brand}</span><span data-testid="serial-decode-model" className="text-ink-700">{decoded.model}</span><span data-testid="serial-decode-caliber" className="font-mono text-ink-700">{decoded.caliber}</span>{decoded.era && <span className="text-ink-400">{decoded.era}</span>}<span className="ml-auto text-[10px] uppercase text-ink-400">{decoded.confidence === 'reference' ? 'from our records' : 'prefix lookup · provisional'}</span></div>}
+        {match && <div className="mt-4"><SameWatchFork match={match} expectedClientId={estimate.clientId} decision={decision} onDecide={setDecision} /></div>}
+        {!match && serial && serial !== 'NS' && <p data-testid="same-watch-clear" className="mt-3 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> No prior history for this reference + serial.</p>}
+      </Card>
 
-        <div className="space-y-4">
-          <Card title="Commit" testId="inspection-commit-card" accent={discrepancies.length ? 'none' : 'moss'} className={discrepancies.length ? 'border-l-[3px] border-rose-500' : ''}>
-            <div className="mb-3 flex flex-wrap gap-1">{workflow.map((d) => <DeptBadge key={d} code={d} />)}{workflow.length === 0 && <span className="text-xs text-rose-700">Pick a workflow</span>}</div>
-            <ul className="space-y-1 text-xs text-ink-700">
-              <li className="flex items-center gap-1.5"><Check size={12} className={linesVerified.length === estimate.lines.length ? 'text-moss' : 'text-ink-300'} /> {linesVerified.length}/{estimate.lines.length} estimate lines verified</li>
-              <li className="flex items-center gap-1.5"><Check size={12} className={components.length === ctx.expectedComponents.length ? 'text-moss' : 'text-rose-600'} /> {components.length}/{ctx.expectedComponents.length} expected components received</li>
-              <li className="flex items-center gap-1.5"><Check size={12} className={match ? (decision !== 'n/a' ? 'text-moss' : 'text-amber-600') : 'text-moss'} /> Same-watch check {match ? (decision === 'n/a' ? 'needs a decision' : decision === 'returning' ? 'same watch returning' : 'conflict flagged') : 'clear'}</li>
-            </ul>
+      <Card title="7 · Date received" testId="rw-date-card"><div className="text-sm text-ink" data-testid="rw-date-received">{fmtDate(pkg.processedAt ?? pkg.arrivedAt)} {fmtTime(pkg.processedAt ?? pkg.arrivedAt)} <span className="text-xs text-ink-400">· auto-filled from the receive timestamp · {pkg.carrier} {pkg.trackingNumber ?? ''}</span></div></Card>
 
-            {discrepancies.length > 0 && (
-              <div data-testid="discrepancy-list" className="mt-3 rounded-sm bg-rose-50 p-2.5 text-xs text-rose-800">
-                <div className="mb-1 inline-flex items-center gap-1 font-semibold"><AlertTriangle size={12} /> Discrepancy — commit places a hold</div>
-                <ul className="space-y-0.5">{discrepancies.map((d) => <li key={d}>• {d}</li>)}</ul>
-              </div>
-            )}
-            {error && <p data-testid="inspection-commit-error" className="mt-2 text-xs font-medium text-rose-700">{error}</p>}
+      <Card title="8 · Copy of the estimate" subtitle={`${estimate.number} · ${fullName(estimate.client)} · verify each line is in scope`} testId="inspection-lines-card">
+        <LineChecklist lines={estimate.lines} verified={linesVerified} onToggle={(i) => setLinesVerified((v) => (v.includes(i) ? v.filter((x) => x !== i) : [...v, i]))} />
+        <div className="mt-2 flex justify-end text-xs text-ink-500">Estimate total <span className="ml-2 font-mono font-semibold text-ink">{fmtMoney(estimate.total)}</span></div>
+      </Card>
 
-            <Button
-              variant="primary"
-              className={`mt-3 w-full justify-center ${discrepancies.length ? '!bg-rose-700 hover:!bg-rose-800' : ''}`}
-              data-testid="inspection-commit"
-              disabled={!canCommit || busy}
-              onClick={commit}
-            >
-              {busy ? 'Committing…' : discrepancies.length ? 'Commit → discrepancy hold' : 'Commit → received, queue 2 labels'}
-            </Button>
-            <p className="mt-2 text-[11px] leading-4 text-ink-400">{forkPending ? 'Resolve the same-watch check first.' : discrepancies.length ? 'Reason is recorded on the package; nothing is queued for print.' : 'Queues a PDF417 data label and a ref/serial watch label (unprinted). Status → received — awaiting approval.'}</p>
-          </Card>
+      <Card title="9 · Save" testId="inspection-commit-card" accent={discrepancies.length ? 'none' : 'moss'} className={discrepancies.length ? 'border-l-[3px] border-rose-500' : ''}>
+        <ul className="space-y-1 text-xs text-ink-700">
+          <li className="flex items-center gap-1.5"><Check size={12} className={linesVerified.length === estimate.lines.length ? 'text-moss' : 'text-ink-300'} /> {linesVerified.length}/{estimate.lines.length} estimate lines verified</li>
+          <li className="flex items-center gap-1.5"><Check size={12} className={components.length === ctx.expectedComponents.length ? 'text-moss' : 'text-rose-600'} /> {components.length}/{ctx.expectedComponents.length} expected components verified in hand</li>
+          <li className="flex items-center gap-1.5"><Check size={12} className={match ? (decision !== 'n/a' ? 'text-moss' : 'text-amber-600') : 'text-moss'} /> Same-watch check {match ? (decision === 'n/a' ? 'needs a decision' : decision === 'returning' ? 'same watch returning' : 'conflict flagged') : 'clear'}</li>
+        </ul>
+        {discrepancies.length > 0 && <div data-testid="discrepancy-list" className="mt-3 rounded-sm bg-rose-50 p-2.5 text-xs text-rose-800"><div className="mb-1 inline-flex items-center gap-1 font-semibold"><AlertTriangle size={12} /> Discrepancy — save places a hold</div><ul className="space-y-0.5">{discrepancies.map((d) => <li key={d}>• {d}</li>)}</ul></div>}
+        {error && <p data-testid="inspection-commit-error" className="mt-2 text-xs font-medium text-rose-700">{error}</p>}
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <Link to="/intake/inspection" data-testid="inspection-cancel"><Button>Cancel</Button></Link>
+          <Button data-testid="inspection-commit" disabled={!canCommit || busy} onClick={() => commit(false)}>{busy ? 'Saving…' : 'Save'}</Button>
+          <Button variant="primary" data-testid="inspection-save-print" className={discrepancies.length ? '!bg-rose-700 hover:!bg-rose-800' : ''} disabled={!canCommit || busy} onClick={() => commit(true)}><Printer size={13} /> {busy ? 'Saving…' : discrepancies.length ? 'Save → discrepancy hold' : 'Save & Print labels'}</Button>
         </div>
-      </div>
+        <p className="mt-2 text-right text-[11px] leading-4 text-ink-400">{forkPending ? 'Resolve the same-watch check first.' : discrepancies.length ? 'Reason is recorded on the package; nothing is queued for print.' : 'Save queues the component labels unprinted · Save & Print marks them printed and routes the watch.'}</p>
+      </Card>
     </div>
   );
 }
