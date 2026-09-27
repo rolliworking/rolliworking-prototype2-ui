@@ -2,7 +2,8 @@ import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { Address, Client, EstimateLine, QuoteContext, RequestPrefill, Watch } from '@/api/client';
+import type { Address, Client, DeptCode, EstimateLine, QuoteContext, RequestPrefill, Watch } from '@/api/client';
+import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Provisional, QuoteContextStrip } from '@/components/estimates/EstimateBits';
 import { ClientPicker, EstimateMeta, ShippingCalculator, WatchPicker } from '@/components/estimates/EstimateForm';
 import { blankLine, LineEditor } from '@/components/estimates/LineEditor';
@@ -19,6 +20,8 @@ export default function EstimateCreatePage() {
   const [client, setClient] = useState<Client | null>(null);
   const [watch, setWatch] = useState<Watch | null>(null);
   const [lines, setLines] = useState<EstimateLine[]>([blankLine(false)]);
+  const [codes, setCodes] = useState<DeptCode[] | null>(null);
+  const shownCodes = codes ?? api.inferComponentCodes(lines);
   const [meta, setMeta] = useState({ validUntil: plus30(), clientNotes: '', messageNotes: 'Thank you for your business.', internalNotes: '', billing: EMPTY, shipping: EMPTY, mirror: true });
   const [ctx, setCtx] = useState<QuoteContext | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export default function EstimateCreatePage() {
     setBusy(true);
     setError(null);
     try {
-      const e = await api.createEstimate({ clientId: client.id, watchId: watch?.id, requestId, lines, validUntil: meta.validUntil, clientNotes: meta.clientNotes, messageNotes: meta.messageNotes, internalNotes: meta.internalNotes, billingAddress: meta.billing, shippingAddress: meta.shipping, shippingMirrorsBilling: meta.mirror });
+      const e = await api.createEstimate({ clientId: client.id, watchId: watch?.id, requestId, lines, components: shownCodes, validUntil: meta.validUntil, clientNotes: meta.clientNotes, messageNotes: meta.messageNotes, internalNotes: meta.internalNotes, billingAddress: meta.billing, shippingAddress: meta.shipping, shippingMirrorsBilling: meta.mirror });
       navigate(`/estimates/${e.id}${thenSend ? '?send=1' : ''}`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -81,6 +84,7 @@ export default function EstimateCreatePage() {
 
           <Card title="Lines" subtitle="Pick from the catalog — department tag is inherited; custom lines pick their own" testId="create-lines-card">
             <LineEditor lines={lines} onChange={setLines} blankTaxableDefault={false} />
+            <div className="mt-3 rounded-md border border-line bg-canvas/60 p-2.5"><div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Component codes · what we expect in the box</div><ComponentCodeChips value={shownCodes} inferred={codes === null} onToggle={(c) => setCodes(shownCodes.includes(c) ? shownCodes.filter((x) => x !== c) : [...shownCodes, c])} /></div>
             <div className="mt-4"><ShippingCalculator onAddLine={(amount, label) => setLines((ls) => [...ls.filter((l) => l.description.trim() || l.unitPrice), { ...blankLine(false), description: label, unitPrice: amount, type: 'shipping', dept: 'W' }])} /></div>
           </Card>
 

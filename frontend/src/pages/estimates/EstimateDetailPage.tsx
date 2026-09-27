@@ -8,6 +8,7 @@ import { EstimateStatusPill, Provisional } from '@/components/estimates/Estimate
 import { EstimateMeta, WatchPicker } from '@/components/estimates/EstimateForm';
 import { DeclineModal, RevisionHistory, SendModal } from '@/components/estimates/EstimateModals';
 import { LineEditor } from '@/components/estimates/LineEditor';
+import { ChainForEstimate, ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { PrintPreview } from '@/components/estimates/PrintPreview';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -142,6 +143,11 @@ export default function EstimateDetailPage() {
 
       <Card title="Lines" subtitle={editing ? 'Drag or use arrows to reorder · edit amount to back-calc rate · ≥2 blank rows kept' : 'Read-only in this status'} testId="detail-lines-card">
         <LineEditor lines={form.lines} onChange={(ls) => change({ lines: ls })} readOnly={!editing} blankTaxableDefault minBlank={editing ? 2 : 0} />
+      </Card>
+
+      <Card title="Components · trickle-down chain" subtitle="Expected (these chips) → Received at Scan 1 → Verified at Scan 2 · toggling a chip is an explicit override, logged" testId="detail-chain-card">
+        <ComponentCodeChips value={api.estimateComponentCodes(e).codes} inferred={api.estimateComponentCodes(e).inferred} readOnly={!!e.legacy || e.status === 'converted'} onToggle={(c) => { const cur = api.estimateComponentCodes(e).codes; api.setEstimateComponents(e.id, cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]).then(() => { void load(); say(`Component codes updated`); }).catch((x) => setError(x.message)); }} />
+        <div className="mt-3 border-t border-line pt-3"><ChainForEstimate estimateId={e.id} tick={e.updatedAt} /></div>
       </Card>
 
       <Card title="Details" testId="detail-meta-card">

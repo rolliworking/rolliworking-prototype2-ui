@@ -2,7 +2,8 @@ import { ArrowLeft, Check, Mail } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { EstimateWithRefs, PackagePhoto } from '@/api/client';
+import type { Client, EstimateWithRefs, PackagePhoto } from '@/api/client';
+import { NoEstimatePanel } from '@/components/intake/NoEstimatePanel';
 import { useAuth } from '@/auth/AuthContext';
 import { PhotoStrip, ScanInput, Stamp } from '@/components/intake/IntakeBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
@@ -23,6 +24,7 @@ export default function ReceivePackagePage() {
   const seededFor = useRef<string | null>(null);
   const [tracking, setTracking] = useState('');
   const [estimate, setEstimate] = useState<EstimateWithRefs | null>(null);
+  const [b2b, setB2b] = useState<{ client: Client | null; tier: string; code: string } | null>(null);
   const [estError, setEstError] = useState<string | null>(null);
   const [contents, setContents] = useState<string[]>([]);
   const [photos, setPhotos] = useState<PackagePhoto[]>([]);
@@ -64,7 +66,7 @@ export default function ReceivePackagePage() {
     setBusy(true);
     setError(null);
     try {
-      await api.receivePackage(pkg.id, { trackingNumber: tracking, estimateId: estimate?.id, contents, photos, notes: notes || undefined });
+      await api.receivePackage(pkg.id, { trackingNumber: tracking, estimateId: estimate?.id, clientId: b2b?.client?.id, contents, photos, notes: notes || undefined });
       refreshCounts();
       navigate('/intake/receive', { replace: true });
     } catch (e) {
@@ -143,6 +145,8 @@ export default function ReceivePackagePage() {
               </div>
             )}
             {!estimate && pkg.client && <p className="mt-3 text-xs text-ink-500">Client from arrival: <span className="font-medium text-ink">{fullName(pkg.client)}</span></p>}
+            {!estimate && !readOnly && <NoEstimatePanel packageId={pkg.id} subNumber={pkg.subNumber} onEstimate={(e) => { setEstimate(e); setEstError(null); if (contents.length === 0) setContents(Array.from(new Set(api.estimateComponentCodes(e).codes.flatMap((d) => api.DEPT_COMPONENTS[d])))); }} onClient={(c, m) => { setB2b({ client: c, tier: m.tier, code: m.code }); }} />}
+            {b2b && !estimate && <p data-testid="b2b-linked" className="mt-2 text-xs text-ink-700">{b2b.client ? <>No estimate · client <b>{fullName(b2b.client)}</b> linked via {b2b.tier} · label <span className="font-mono">{b2b.code}</span></> : <>No estimate · <b>SUB# only</b> · label <span className="font-mono">{b2b.code}</span> — resolve at the desk</>}</p>}
           </Card>
 
           <Card title="Photos" subtitle="Webcam capture and file upload — multiple" testId="receive-photos-card">

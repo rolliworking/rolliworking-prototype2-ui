@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, Target } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { DeptDashboard, PadCard, PaceStatus } from '@/api/client';
+import type { DeptDashboard, PadCard, PadRoom, PaceStatus } from '@/api/client';
 import { ScanInput } from '@/components/rw/RwBits';
 import { fmtMoney } from '@/lib/format';
 import { Chip } from './PadBits';
@@ -32,10 +32,10 @@ const Accordion = ({ id, title, cards, tone, extra }: { id: string; title: strin
   </section>;
 };
 
-export const PadDashboard = ({ tick }: { tick: number }) => {
+export const PadDashboard = ({ tick, room = 'wm' }: { tick: number; room?: PadRoom }) => {
   const [d, setD] = useState<DeptDashboard | null>(null); const [openTech, setOpenTech] = useState<string | null>(null); const nav = useNavigate();
-  const load = () => api.getDeptDashboard('wm').then(setD);
-  useEffect(() => { void load(); }, [tick]);
+  const load = () => api.getDeptDashboard(room).then(setD);
+  useEffect(() => { void load(); }, [tick, room]);
   if (!d) return null;
   return <div data-testid="pad-dashboard" className="space-y-4">
     <div className="rounded-[28px] border border-amber-400/30 bg-amber-400/5 p-4"><ScanInput big testId="dash-scan" placeholder="Scan a job barcode → opens its record" onScan={async (code) => { const c = await api.getPadPartsContext(code); nav(`/rw/jobs/${c.job.id}`); }} /></div>

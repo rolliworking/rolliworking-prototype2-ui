@@ -7,6 +7,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { MoneyContext } from '@/components/MoneyContext';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
+import { IntercomButton } from '@/components/layout/IntercomPanel';
 
 export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTier[]; end?: boolean }[] = [
   { key: 'bench', label: 'Bench', path: '/rw', tiers: ['manager', 'concierge'], end: true },
@@ -20,7 +21,9 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
   { key: 'testing', label: 'Testing', path: '/rw/testing', tiers: ['manager', 'concierge'] },
   { key: 'qc', label: 'QC', path: '/rw/qc', tiers: ['manager'] },
   { key: 'supervisor', label: 'Supervisor', path: '/rw/supervisor', tiers: ['manager'] },
-  { key: 'pad', label: 'Pad', path: '/rw/pad', tiers: ['manager'] },
+  { key: 'pad', label: 'Pad', path: '/rw/pad', tiers: ['manager', 'concierge'] },
+  { key: 'band', label: 'Band Pad', path: '/rw/band', tiers: ['manager'] },
+  { key: 'history', label: 'History', path: '/rw/history', tiers: ['manager', 'concierge'] },
   { key: 'bench-pad', label: 'Bench Pad', path: '/rw/bench', tiers: ['manager', 'concierge'] },
   { key: 'picking', label: 'Picking', path: '/rw/picking', tiers: ['manager', 'concierge'] },
   { key: 'evidence', label: 'Evidence', path: '/rw/evidence', tiers: ['manager', 'concierge'] },
@@ -32,7 +35,7 @@ const JOB_LINK = /^\/jobs\/([^/?#]+)$/;
 export default function RwShell() {
   const { user, station, signOut } = useAuth(); const nav = useNavigate(); const { pathname } = useLocation();
   const [blocked, setBlocked] = useState<string | null>(null);
-  const bench = pathname.startsWith('/rw/bench'); const fullscreen = bench || (user && /^\/rw\/(wm|pad|picking)/.test(pathname));
+  const bench = pathname.startsWith('/rw/bench'); const fullscreen = bench || (user && /^\/rw\/(wm|pad|band|picking)/.test(pathname));
   useEffect(() => { document.title = 'RolliWorking'; return () => { document.title = 'RolliSuite — Prototype'; }; }, []);
   useEffect(() => { setBlocked(null); }, [pathname]);
   // Access boundary: RS links inside re-homed components are rewritten (jobs) or blocked (everything else)
@@ -50,7 +53,7 @@ export default function RwShell() {
         {!fullscreen && <header className="flex items-center gap-4 border-b border-white/10 bg-[#0f131a] px-4 py-2">
           <NavLink to="/rw" data-testid="rw-brand" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white"><Hammer size={16} className="text-amber-400" /> RolliWorking <span className="text-[10px] font-normal text-white/50">workshop · {station?.name ?? 'unregistered'} · {station ? api.RG_DIVISION_LABEL[station.division] : ''}</span></NavLink>
           {user && <nav data-testid="rw-nav" className="flex items-center gap-1 text-xs">{RW_NAV.filter((n) => n.tiers.includes(user.accessTier)).map((n) => <NavLink key={n.key} to={n.path} end={n.end} data-testid={`rw-nav-${n.key}`} className={({ isActive }) => `rounded-sm px-2.5 py-1.5 font-medium ${isActive ? 'bg-amber-400 text-[#161b22]' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>{n.label}</NavLink>)}</nav>}
-          <div className="ml-auto flex items-center gap-3 text-xs"><Provisional note="RolliWorking standalone is an ACCESS BOUNDARY in Keeper: bench tiers authenticate into RW only and cannot reach RS. The prototype shares one origin and one station session." />{user && <><span data-testid="rw-user" className="text-white/80">{user.shortName} · {user.dutyLabel}</span><button data-testid="rw-sign-out" onClick={() => void signOut()} className="text-white/60 hover:text-white">Sign out</button></>}</div>
+          <div className="ml-auto flex items-center gap-3 text-xs"><IntercomButton dark /><Provisional note="RolliWorking standalone is an ACCESS BOUNDARY in Keeper: bench tiers authenticate into RW only and cannot reach RS. The prototype shares one origin and one station session." />{user && <><span data-testid="rw-user" className="text-white/80">{user.shortName} · {user.dutyLabel}</span><button data-testid="rw-sign-out" onClick={() => void signOut()} className="text-white/60 hover:text-white">Sign out</button></>}</div>
         </header>}
         {blocked && <div data-testid="rw-blocked" className="flex items-center gap-2 border-b border-rose-900/50 bg-rose-950/60 px-4 py-1.5 text-xs text-rose-200"><ShieldOff size={12} /> <span className="font-mono">{blocked}</span> is a RolliSuite screen — not reachable from RolliWorking (access boundary). Use a front-desk station.<button onClick={() => setBlocked(null)} className="ml-auto text-rose-300 hover:text-white">dismiss</button></div>}
         <main className={`rw-dark min-h-0 flex-1 overflow-y-auto ${fullscreen ? '' : 'p-4'}`}>

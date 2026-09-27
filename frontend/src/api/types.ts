@@ -197,6 +197,7 @@ export interface Estimate {
   approvedVia?: 'staff' | 'portal';
   jobId?: string;
   requestId?: string;
+  components?: DeptCode[];
   legacy?: LegacyMeta;
   convertedFromLegacy?: { id: string; number: string };
 }
@@ -471,6 +472,8 @@ export interface Package {
   inspectedBy?: string;
   workflow?: DeptCode[];
   discrepancyReason?: string;
+  componentsVerified?: string[];
+  b2b?: { tier: string; code: string; at: string };
   notes?: string;
 }
 
@@ -1148,3 +1151,29 @@ export interface JobPart { id: string; jobId: string; partId: string; partNumber
 export interface PartsReturn { id: string; jobId: string; partId: string; partNumber: string; qty: number; note?: string; by: string; at: string }
 export interface JobPartsView { allowance: number; used: number; remaining: number; parts: JobPart[]; returns: PartsReturn[] }
 export interface QuickAddResult { kind: 'added' | 'routed_to_approval'; part: Part; view: JobPartsView; requestNumber?: string }
+
+// ---- Component code chips + trickle-down verification chain (Expected → Received → Verified) ----
+export type ChainState = 'ok' | 'missing' | 'extra' | 'pending';
+export interface ChainRow { component: string; expected: boolean; received?: boolean; verified?: boolean; state: ChainState }
+export interface VerificationChain { estimateId: string; estimateNumber: string; codes: DeptCode[]; inferred: boolean; rows: ChainRow[]; received?: { at: string; by: string; packageId: string; subNumber: string }; verified?: { at: string; by: string }; complete: boolean; discrepancies: number }
+
+// ---- Per-staff client reviews (STRICTLY internal) — one review per staff member per client, latest wins, history kept ----
+export interface StaffReview { id: string; clientId: string; by: string; attitude: Star; communication: Star; jobsHandled: number; note?: string; at: string; station: string }
+export interface ClientReviews { clientId: string; aggregate: ClientRating; reviews: StaffReview[]; mine?: StaffReview }
+
+// ---- QuickBooks Online setup (MOCKED — no OAuth, no network) ----
+export type QboSyncState = 'synced' | 'pending' | 'conflict' | 'not_linked';
+export interface QboMapping { rolli: string; qbo: string; direction: 'push' | 'pull' | 'both' }
+export interface QboClientRow { client: Client; qboCustomerId?: string; state: QboSyncState; lastSync?: string; issue?: string }
+export interface QboSetup { connected: boolean; company?: string; realmId?: string; connectedBy?: string; connectedAt?: string; lastSync?: string; toggles: { pushInvoices: boolean; pushPayments: boolean; pushClients: boolean; pullPayments: boolean }; mapping: QboMapping[]; clients: QboClientRow[]; queue: QboQueueRow[]; log: { at: string; by: string; text: string }[] }
+
+// ---- No-estimate receiving branch — three-tier B2B label match chain ----
+export type B2bTier = 'tracking' | 'account_code' | 'name' | 'none';
+export interface B2bMatch { code: string; tier: B2bTier; estimate?: EstimateWithRefs; client?: Client; candidates: Client[]; subNumber: string; explain: string }
+
+// ---- Station intercom + storewide paging (mock state; Daily.co seam) ----
+export type IntercomKind = 'station' | 'room' | 'pad';
+export interface IntercomStation { id: string; label: string; kind: IntercomKind; division: Division; online: boolean; busy: boolean }
+export interface IntercomCall { id: string; from: string; to: string; startedAt: string; state: 'ringing' | 'live' | 'ended'; endedAt?: string }
+export interface StorePage { id: string; by: string; from: string; text: string; at: string; division: Division | 'all' }
+export interface IntercomState { me: string; stations: IntercomStation[]; call?: IntercomCall; pages: StorePage[]; history: IntercomCall[] }

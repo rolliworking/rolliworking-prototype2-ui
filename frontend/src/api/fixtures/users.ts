@@ -62,4 +62,16 @@ export const users: User[] = [
     password: 'rosa123',
     pin: '1234',
   },
+  {
+    id: 'u-joseph',
+    roles: ['manager', 'watchmaker'],
+    firstName: 'joseph',
+    shortName: 'Joseph',
+    displayName: 'Joseph — Band / Polish Room Manager',
+    dutyLabel: 'Band / Polish Room Manager',
+    accessTier: 'manager',
+    division: 'rolliworks',
+    password: 'joseph123',
+    pin: '1234',
+  },
 ];

@@ -23,6 +23,8 @@ import RwStationScanPage from '@/pages/rw/RwStationScanPage';
 import RwPadPage from '@/pages/rw/RwPadPage';
 import RwBenchPage from '@/pages/rw/RwBenchPage';
 import RwPickingPage from '@/pages/rw/RwPickingPage';
+import RwHistoryPage from '@/pages/rw/RwHistoryPage';
+import QboSetupPage from '@/pages/rs/QboSetupPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
 import RgManagerPage from '@/pages/rg/RgManagerPage';
@@ -125,7 +127,9 @@ export default function App() {
             <Route path="bulk" element={<RwManagerOnly label="Bulk Assign"><RwBulkAssignPage /></RwManagerOnly>} />
             <Route path="wm" element={<RwWmPage />} />
             <Route path="station" element={<RwStationScanPage />} />
-            <Route path="pad" element={<RwManagerOnly label="Supervisor Pad"><RwPadPage /></RwManagerOnly>} />
+            <Route path="pad" element={<RwPadPage room="wm" />} />
+            <Route path="band" element={<RwPadPage room="band" />} />
+            <Route path="history" element={<RwHistoryPage />} />
             <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
@@ -198,6 +202,7 @@ export default function App() {
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/accounting" element={<AccountingPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
+              <Route path="/integrations/quickbooks" element={<QboSetupPage />} />
               <Route path="/help" element={<HelpPage />} />
               <Route path="/sales" element={<SalesOrdersPage />} />
               <Route path="/sales/new" element={<SalesOrderDetailPage />} />

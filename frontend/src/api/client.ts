@@ -636,7 +636,7 @@ const uniq = <T>(xs: T[]) => Array.from(new Set(xs));
 export async function getInspectionContext(packageId: string): Promise<InspectionContext> {
   const pkg = pkgWithRefs(getPkg(packageId));
   if (!pkg.estimate || !pkg.estimate.watch) throw new Error('Package has no linked estimate with a watch — go back to Receive Package');
-  const depts = uniq(pkg.estimate.lines.map((l) => l.dept));
+  const depts = pkg.estimate.components?.length ? [...pkg.estimate.components] : uniq(pkg.estimate.lines.map((l) => l.dept));
   const expectedComponents = uniq(depts.flatMap((d) => fx.DEPT_COMPONENTS[d]));
   return resolve({ pkg, estimate: pkg.estimate, expectedComponents, suggestedWorkflow: depts });
 }
@@ -695,6 +695,7 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
   pkg.inspectedAt = new Date().toISOString();
   pkg.inspectedBy = a.by;
   pkg.workflow = [...input.workflow];
+  pkg.componentsVerified = [...input.componentsReceived];
   pkg.notes = input.notes || pkg.notes;
 
   const watch = store.watches.find((w) => w.id === ctx.estimate.watchId);
@@ -814,6 +815,7 @@ export interface EstimateInput {
   billingAddress: Address;
   shippingAddress: Address;
   shippingMirrorsBilling: boolean;
+  components?: DeptCode[];
 }
 
 const realLines = (lines: EstimateLine[]) => lines.filter((l) => l.description.trim() || l.unitPrice !== 0);
@@ -840,6 +842,7 @@ export async function createEstimate(input: EstimateInput): Promise<EstimateWith
     billingAddress: input.billingAddress,
     shippingAddress: input.shippingMirrorsBilling ? input.billingAddress : input.shippingAddress,
     shippingMirrorsBilling: input.shippingMirrorsBilling,
+    components: input.components?.length ? [...input.components] : uniq(lines.map((l) => l.dept)),
     historical: false,
     createdAt: new Date().toISOString(),
     createdBy: a.by,
@@ -3832,8 +3835,12 @@ export async function stationScan(station: RwStationKey, label: string): Promise
 // -- Supervisor pad
 const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship'];
 const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', awaiting_manager_review: 'Manager review', ready_to_ship: 'Finished' };
-export async function getPadBoard(): Promise<PadCard[]> {
-  return resolve(roomJobs().filter((j) => STAGE_ORDER.includes(j.status)).sort((a, b) => STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status) || a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), stage: j.status, stageLabel: STAGE_LABEL[j.status], canAdvance: j.status !== 'ready_to_ship' && !activeHold(j), canSendBack: j.status !== 'approved' && !activeHold(j), parts: ensureParts(j).map((c) => dotOf(j, c)), photos: fx.jobPhotos.filter((p) => p.jobId === j.id).length + j.photos.length, pendingParts: store.partsRequests.filter((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order')).length })));
+export type PadRoom = 'wm' | 'band';
+export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Rosa', 'MM', 'MH', 'Walter'], band: ['Joseph', 'Rosa'] };
+export const ROOM_LABEL: Record<PadRoom, string> = { wm: 'Watchmaker Room', band: 'Band / Polish Room' };
+const inRoom = (j: Job, room: PadRoom) => room === 'wm' || j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
+export async function getPadBoard(room: PadRoom = 'wm'): Promise<PadCard[]> {
+  return resolve(roomJobs().filter((j) => STAGE_ORDER.includes(j.status) && inRoom(j, room)).sort((a, b) => STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status) || a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), stage: j.status, stageLabel: STAGE_LABEL[j.status], canAdvance: j.status !== 'ready_to_ship' && !activeHold(j), canSendBack: j.status !== 'approved' && !activeHold(j), parts: ensureParts(j).map((c) => dotOf(j, c)), photos: fx.jobPhotos.filter((p) => p.jobId === j.id).length + j.photos.length, pendingParts: store.partsRequests.filter((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order')).length })));
 }
 export async function padAdvance(jobId: string): Promise<JobWithRefs> {
   const j = getJobRow(jobId); if (activeHold(j)) throw new Error('On hold — release first');
@@ -4639,7 +4646,9 @@ const dept = { goals: { wm: 48_000, band: 22_000 } as Record<'wm' | 'band', numb
 const paceOf = (actual: number, target: number): PaceStatus => (actual >= target * 1.1 ? 'ahead' : actual >= target * 0.9 ? 'on_pace' : 'behind');
 const deptMonth = (monthsAgo: number) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - monthsAgo); return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) }; };
 // Revenue attribution = estimate lines of the department (W = watchmaking, B/P = band room) on jobs finished this month, plus parts quick-added (sale price)
-const deptRevenueMtd = (d: 'wm' | 'band') => { const mk = deptMonth(0).key; const depts = d === 'wm' ? ['W'] : ['B', 'P']; return store.jobs.filter((j) => ['ready_to_ship', 'closed', 'awaiting_manager_review', 'testing'].includes(j.status) && (j.timeline.at(-1)?.at ?? j.createdAt).startsWith(mk)).reduce((t, j) => t + j.lines.filter((l) => depts.includes(l.dept)).reduce((s, l) => s + l.qty * l.unitPrice, 0), 0) + Object.values(rwParts.byJob).flat().filter((p) => p.at.startsWith(mk)).reduce((t, p) => t + p.price * p.qty, 0); };
+// Some seeded trade lines are in cents (≥ $20k per line is not a watch-service rate) — normalise for the gauge only
+const lineDollars = (p: number) => (p >= 20_000 ? p / 100 : p);
+const deptRevenueMtd = (d: 'wm' | 'band') => { const mk = deptMonth(0).key; const depts = d === 'wm' ? ['W'] : ['B', 'P']; return store.jobs.filter((j) => ['ready_to_ship', 'closed', 'awaiting_manager_review', 'testing'].includes(j.status) && (j.timeline.at(-1)?.at ?? j.createdAt).startsWith(mk)).reduce((t, j) => t + j.lines.filter((l) => depts.includes(l.dept)).reduce((s, l) => s + l.qty * lineDollars(l.unitPrice), 0), 0) + Object.values(rwParts.byJob).flat().filter((p) => p.at.startsWith(mk)).reduce((t, p) => t + p.price * p.qty, 0); };
 export const getDeptGoal = (d: 'wm' | 'band') => dept.goals[d];
 export async function setDeptGoal(d: 'wm' | 'band', goal: number): Promise<number> { const a = managerOnly(); if (!(goal > 0)) throw new Error('Goal must be positive'); dept.goals[d] = Math.round(goal); appendAudit({ type: 'rollitime', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${d.toUpperCase()} room monthly revenue goal set · ${fmtMoney(dept.goals[d])}` }); return resolve(dept.goals[d]); }
 const deptGoals = (d: 'wm' | 'band'): DeptGoals => {
@@ -4649,10 +4658,10 @@ const deptGoals = (d: 'wm' | 'band'): DeptGoals => {
 };
 const daysInStage = (j: Job) => Math.floor((Date.now() - new Date(j.timeline.at(-1)?.at ?? j.createdAt).getTime()) / 86_400_000);
 export async function getDeptDashboard(d: 'wm' | 'band' = 'wm'): Promise<DeptDashboard> {
-  const cards = await getPadBoard(); const techNames = Object.keys(fx.techGoals);
+  const cards = await getPadBoard(d); const techNames = ROOM_TECHS[d];
   const techs: TechPace[] = techNames.map((short) => { const user = fx.users.find((u) => u.shortName === short)!; const g = benchGoals(short); const mine = cards.filter((c) => c.job.assignees.includes(user.id) || c.parts.some((p) => p.tech === short)); const testing = mine.filter((c) => c.stage === 'testing'); return { user, goal: g.current.goal, actual: g.current.actual, paceTarget: g.paceTarget, pace: paceOf(g.current.actual, g.paceTarget), activeJobs: mine.length - testing.length, testingJobs: testing.length, cards: mine.filter((c) => c.stage !== 'testing') }; });
   const funnel = STAGE_ORDER.map((stage) => ({ stage, label: cards.find((c) => c.stage === stage)?.stageLabel ?? stage, count: cards.filter((c) => c.stage === stage).length })).filter((f) => f.count > 0 || true);
-  return resolve({ department: d, label: d === 'wm' ? 'Watchmaker Room' : 'Band / Polish Room', goals: deptGoals(d), techs, funnel, totalJobs: cards.length, stuck: cards.filter((c) => c.stage !== 'testing' && daysInStage(c.job) >= dept.stuckDays).sort((a, b) => daysInStage(b.job) - daysInStage(a.job)), problem: cards.filter((c) => activeHold(c.job) || c.job.status === 'awaiting_manager_review'), awaitingParts: cards.filter((c) => c.pendingParts > 0), testing: cards.filter((c) => c.stage === 'testing'), stuckDays: dept.stuckDays });
+  return resolve({ department: d, label: ROOM_LABEL[d], goals: deptGoals(d), techs, funnel, totalJobs: cards.length, stuck: cards.filter((c) => c.stage !== 'testing' && daysInStage(c.job) >= dept.stuckDays).sort((a, b) => daysInStage(b.job) - daysInStage(a.job)), problem: cards.filter((c) => activeHold(c.job) || c.job.status === 'awaiting_manager_review'), awaitingParts: cards.filter((c) => c.pendingParts > 0), testing: cards.filter((c) => c.stage === 'testing'), stuckDays: dept.stuckDays });
 }
 export const jobDaysInStage = (j: Job) => daysInStage(j);
 
@@ -4682,3 +4691,91 @@ export async function returnJobPart(jobPartId: string, note?: string): Promise<J
   jobStamp(byId(store.jobs, jobId), `Part returned · ${p.partNumber} ×${p.qty} back to stock${note ? ` · ${note}` : ''}`);
   return getJobParts(jobId);
 }
+
+// ---- COMPONENT CODE CHIPS (W · B · P · PM) + TRICKLE-DOWN VERIFICATION CHAIN — Expected (estimate) → Received (Scan 1, package contents) → Verified (Scan 2, inspector) ----
+import type { B2bMatch, B2bTier, ChainRow, ChainState, ClientReviews, QboMapping, QboSetup, QboSyncState, StaffReview, VerificationChain } from './types';
+export const inferComponentCodes = (lines: EstimateLine[]): DeptCode[] => uniq(lines.filter((l) => l.type !== 'shipping' && (l.description.trim() || l.unitPrice)).map((l) => l.dept));
+export const estimateComponentCodes = (e: Estimate): { codes: DeptCode[]; inferred: boolean } => (e.components?.length ? { codes: e.components, inferred: false } : { codes: inferComponentCodes(e.lines), inferred: true });
+export async function setEstimateComponents(id: string, codes: DeptCode[]): Promise<EstimateWithRefs> {
+  const e = byId(store.estimates, id); if (e.legacy) throw new Error('Legacy record is read-only'); if (!codes.length) throw new Error('Pick at least one component code');
+  const before = estimateComponentCodes(e).codes.join('+'); e.components = uniq(codes); e.updatedAt = new Date().toISOString(); estStamp(e, `Component codes ${before || '—'} → ${e.components.join('+')}`);
+  return resolve(withRefs(e));
+}
+const chainFor = (e: Estimate): VerificationChain => {
+  const { codes, inferred } = estimateComponentCodes(e); const expected = uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));
+  const pkg = store.packages.filter((p) => p.estimateId === e.id && p.status !== 'arrived').sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt))[0];
+  const received = pkg ? pkg.contents : undefined; const verified = pkg?.componentsVerified;
+  const all = uniq([...expected, ...(received ?? []), ...(verified ?? [])]);
+  const rows: ChainRow[] = all.map((component) => { const exp = expected.includes(component); const rec = received?.includes(component); const ver = verified?.includes(component);
+    const state: ChainState = verified ? (exp && ver ? 'ok' : exp ? 'missing' : 'extra') : received ? (exp && rec ? 'pending' : exp ? 'missing' : 'extra') : 'pending';
+    return { component, expected: exp, received: rec, verified: ver, state }; });
+  return { estimateId: e.id, estimateNumber: e.number, codes, inferred, rows, received: pkg ? { at: pkg.processedAt ?? pkg.arrivedAt, by: pkg.processedBy ?? pkg.arrivedBy, packageId: pkg.id, subNumber: pkg.subNumber } : undefined, verified: pkg?.inspectedAt ? { at: pkg.inspectedAt, by: pkg.inspectedBy ?? '—' } : undefined, complete: !!verified, discrepancies: rows.filter((r) => r.state === 'missing' || r.state === 'extra').length };
+};
+export async function getVerificationChain(estimateId: string): Promise<VerificationChain | null> { const e = store.estimates.find((x) => x.id === estimateId); return resolve(e ? chainFor(e) : null); }
+export async function getJobVerificationChain(jobId: string): Promise<VerificationChain | null> { const j = store.jobs.find((x) => x.id === jobId); const e = j?.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined; return resolve(e ? chainFor(e) : null); }
+
+// ---- PER-STAFF CLIENT REVIEWS — every staff member rates independently (A / C); N = jobs that person handled for the client. Aggregate badge = rounded mean of the latest review per staff. Internal only. ----
+const reviews = { rows: [] as StaffReview[] };
+const seedReview = (id: string, clientId: string, by: string, attitude: Star, communication: Star, daysBack: number, note?: string): StaffReview => ({ id, clientId, by, attitude, communication, jobsHandled: 0, note, at: new Date(Date.now() - daysBack * 86_400_000).toISOString(), station: 'Front Desk 1' });
+reviews.rows.push(seedReview('rv-01', 'c-30', 'Vienna', 5, 3, 40, 'Lovely in person; slow to answer emails — call him.'), seedReview('rv-02', 'c-30', 'MM', 5, 4, 12), seedReview('rv-03', 'c-05', 'MH', 4, 4, 90), seedReview('rv-04', 'c-10', 'Vienna', 3, 4, 60), seedReview('rv-05', 'c-10', 'Walter', 2, 4, 12, 'Raised his voice at the counter over a pickup code.'));
+const jobsHandledBy = (clientId: string, by: string) => { const u = fx.users.find((x) => x.shortName === by); return store.jobs.filter((j) => j.clientId === clientId && ((u && j.assignees.includes(u.id)) || j.createdBy === by || j.timeline.some((t) => t.by === by))).length; };
+const latestPerStaff = (clientId: string) => { const m = new Map<string, StaffReview>(); [...reviews.rows].filter((r) => r.clientId === clientId).sort((a, b) => a.at.localeCompare(b.at)).forEach((r) => m.set(r.by, r)); return [...m.values()].map((r) => ({ ...r, jobsHandled: jobsHandledBy(clientId, r.by) })).sort((a, b) => b.at.localeCompare(a.at)); };
+export async function getClientReviews(clientId: string): Promise<ClientReviews> { const a = actor(); const rows = latestPerStaff(clientId); return resolve({ clientId, aggregate: clientRatingSync(clientId), reviews: rows, mine: rows.find((r) => r.by === a.by) }); }
+export async function submitClientReview(clientId: string, input: { attitude: Star; communication: Star; note?: string }): Promise<ClientReviews> {
+  const a = actor(); if (!a.user) throw new Error('Sign in to review a client'); byId(fx.clients, clientId);
+  reviews.rows.push({ id: newId('rv'), clientId, by: a.by, attitude: input.attitude, communication: input.communication, jobsHandled: jobsHandledBy(clientId, a.by), note: input.note?.trim() || undefined, at: new Date().toISOString(), station: a.station });
+  const rows = latestPerStaff(clientId); const mean = (k: 'attitude' | 'communication') => Math.round(rows.reduce((t, r) => t + r[k], 0) / rows.length) as Star;
+  await setClientRating(clientId, { attitude: mean('attitude'), communication: mean('communication') });
+  appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user.shortName, detail: `Client review · ${fullNameOf(byId(fx.clients, clientId))} · A${input.attitude} C${input.communication}${input.note ? ' · note' : ''}` });
+  return getClientReviews(clientId);
+}
+
+// ---- QUICKBOOKS ONLINE — MOCKED setup screen (no OAuth, no network). Toggles + field mapping + client sync table; every action logged. ----
+const qbo = { connected: false as boolean, company: undefined as string | undefined, realmId: undefined as string | undefined, connectedBy: undefined as string | undefined, connectedAt: undefined as string | undefined, lastSync: undefined as string | undefined,
+  toggles: { pushInvoices: true, pushPayments: true, pushClients: false, pullPayments: false }, links: new Map<string, { qboCustomerId?: string; state: QboSyncState; lastSync?: string; issue?: string }>(), log: [] as { at: string; by: string; text: string }[],
+  mapping: [{ rolli: 'Client → name / company', qbo: 'Customer.DisplayName', direction: 'push' }, { rolli: 'Client → email', qbo: 'Customer.PrimaryEmailAddr', direction: 'push' }, { rolli: 'Sales order', qbo: 'Invoice', direction: 'push' }, { rolli: 'SO line · dept W/B/P/PM', qbo: 'Invoice.Line → Item (per dept)', direction: 'push' }, { rolli: 'Payment (card / cash / check / wire)', qbo: 'Payment', direction: 'both' }, { rolli: 'Sales tax', qbo: 'TxnTaxDetail', direction: 'push' }] as QboMapping[] };
+const qboLog = (text: string) => { const a = actor(); qbo.log.unshift({ at: new Date().toISOString(), by: a.by, text }); appendAudit({ type: 'accounting', stationName: a.station, userShortName: a.user?.shortName, detail: `QBO (mock) · ${text}` }); };
+const qboClientRows = () => fx.clients.map((client) => { const l = qbo.links.get(client.id); return { client, qboCustomerId: l?.qboCustomerId, state: l?.state ?? 'not_linked' as QboSyncState, lastSync: l?.lastSync, issue: l?.issue }; }).sort((a, b) => (a.state === 'conflict' ? -1 : b.state === 'conflict' ? 1 : a.client.lastName.localeCompare(b.client.lastName)));
+export async function getQboSetup(): Promise<QboSetup> { return resolve({ connected: qbo.connected, company: qbo.company, realmId: qbo.realmId, connectedBy: qbo.connectedBy, connectedAt: qbo.connectedAt, lastSync: qbo.lastSync, toggles: { ...qbo.toggles }, mapping: [...qbo.mapping], clients: qboClientRows(), queue: await getQboQueue(), log: [...qbo.log] }); }
+export async function qboConnect(company: string): Promise<QboSetup> { const a = managerOnly(); if (!company.trim()) throw new Error('Company name is required'); qbo.connected = true; qbo.company = company.trim(); qbo.realmId = `mock-${Math.abs([...company].reduce((h, c) => h * 31 + c.charCodeAt(0), 7)) % 900000 + 100000}`; qbo.connectedBy = a.by; qbo.connectedAt = new Date().toISOString(); qboLog(`Connected to “${qbo.company}” (realm ${qbo.realmId}) — MOCK, no OAuth`); return getQboSetup(); }
+export async function qboDisconnect(): Promise<QboSetup> { managerOnly(); qbo.connected = false; qboLog(`Disconnected from “${qbo.company}”`); qbo.company = undefined; qbo.realmId = undefined; return getQboSetup(); }
+export async function setQboToggle(key: keyof QboSetup['toggles'], value: boolean): Promise<QboSetup> { managerOnly(); qbo.toggles[key] = value; qboLog(`${key} → ${value ? 'on' : 'off'}`); return getQboSetup(); }
+export async function qboSyncClient(clientId: string): Promise<QboSetup> {
+  managerOnly(); if (!qbo.connected) throw new Error('Connect QuickBooks first'); const c = byId(fx.clients, clientId); const now = new Date().toISOString();
+  if (!c.email || !c.email.includes('@')) { qbo.links.set(clientId, { state: 'conflict', lastSync: now, issue: 'Email missing — QBO customer requires one' }); qboLog(`Client ${fullNameOf(c)} → conflict (email missing)`); }
+  else if (qbo.links.get(clientId)?.state === 'conflict' && qbo.links.get(clientId)?.issue?.startsWith('Duplicate')) { qbo.links.set(clientId, { qboCustomerId: `QB-${clientId.replace('c-', '10')}`, state: 'synced', lastSync: now }); qboLog(`Client ${fullNameOf(c)} → linked to existing QBO customer`); }
+  else { qbo.links.set(clientId, { qboCustomerId: `QB-${clientId.replace('c-', '10')}`, state: 'synced', lastSync: now }); qboLog(`Client ${fullNameOf(c)} → pushed as Customer QB-${clientId.replace('c-', '10')}`); }
+  qbo.lastSync = now; return getQboSetup();
+}
+export async function qboSyncAllClients(): Promise<QboSetup> { managerOnly(); if (!qbo.connected) throw new Error('Connect QuickBooks first'); if (!qbo.toggles.pushClients) throw new Error('Turn on “Push clients” first'); const now = new Date().toISOString(); fx.clients.forEach((c, i) => { if (qbo.links.get(c.id)?.state === 'synced') return; if (i % 9 === 4) qbo.links.set(c.id, { state: 'conflict', lastSync: now, issue: `Duplicate DisplayName “${fullNameOf(c)}” already in QBO — link or rename` }); else qbo.links.set(c.id, { qboCustomerId: `QB-${c.id.replace('c-', '10')}`, state: 'synced', lastSync: now }); }); qbo.lastSync = now; qboLog(`Client sync · ${qboClientRows().filter((r) => r.state === 'synced').length} synced · ${qboClientRows().filter((r) => r.state === 'conflict').length} conflicts`); return getQboSetup(); }
+export async function qboResolveConflict(clientId: string, how: 'link' | 'skip'): Promise<QboSetup> { managerOnly(); const c = byId(fx.clients, clientId); if (how === 'link') qbo.links.set(clientId, { qboCustomerId: `QB-${clientId.replace('c-', '10')}`, state: 'synced', lastSync: new Date().toISOString() }); else qbo.links.delete(clientId); qboLog(`Conflict on ${fullNameOf(c)} → ${how === 'link' ? 'linked to existing customer' : 'skipped'}`); return getQboSetup(); }
+
+// ---- NO-ESTIMATE RECEIVING BRANCH — three-tier B2B label match chain: (1) tracking # on a label we issued → estimate · (2) trade account code → client · (3) name / email → candidates. SUB# is issued either way. ----
+const normCode = (t: string) => t.replace(/\s/g, '').toUpperCase();
+const accountCodes = (c: Client) => { const name = c.company ?? `${c.firstName} ${c.lastName}`; return uniq([name.split(/\s+/).map((w) => w[0]).join(''), name.replace(/\W/g, '').slice(0, 3), name.replace(/\W/g, '').slice(0, 4), c.lastName.replace(/\W/g, '').slice(0, 3)].map((x) => x.toUpperCase())); };
+export async function matchB2bLabel(code: string, packageId?: string): Promise<B2bMatch> {
+  const raw = code.trim(); if (!raw) throw new Error('Scan or type the label'); const n = normCode(raw); const pkg = packageId ? store.packages.find((p) => p.id === packageId) : undefined; const subNumber = pkg?.subNumber ?? `SUB-26-0${store.counters.sub + 1}`;
+  const ship = shp.rows.find((s) => s.trackingNumber && normCode(s.trackingNumber) === n) ?? shp.rows.find((s) => s.trackingNumber && n.length >= 8 && normCode(s.trackingNumber).endsWith(n.slice(-8)));
+  if (ship) { const e = withRefs(byId(store.estimates, ship.estimateId)); return resolve({ code: raw, tier: 'tracking', estimate: e, client: e.client, candidates: [e.client], subNumber, explain: `Tier 1 · tracking # matches the ${ship.carrier} label we issued for ${e.number}` }); }
+  const est = await lookupEstimate(raw); if (est) return resolve({ code: raw, tier: 'tracking', estimate: est, client: est.client, candidates: [est.client], subNumber, explain: `Tier 1 · label carries estimate ${est.number}` });
+  const trade = fx.clients.filter((c) => c.type === 'trade'); const m = /^(?:RS|TRD|ACCT|B2B)?-?([A-Z]{2,4})(?:-|\d|$)/.exec(n); const acct = m ? trade.find((c) => accountCodes(c).includes(m[1])) : undefined;
+  if (acct) return resolve({ code: raw, tier: 'account_code', client: acct, candidates: [acct], subNumber, explain: `Tier 2 · account code ${m![1]} → trade account ${acct.company ?? fullNameOf(acct)}` });
+  const q = raw.toLowerCase().replace(/[^a-z@. ]/g, ' ').trim(); const cands = q.length >= 3 ? fx.clients.filter((c) => [c.firstName, c.lastName, c.email, c.company ?? ''].some((f) => f.toLowerCase().includes(q)) || q.split(/\s+/).every((w) => `${c.firstName} ${c.lastName} ${c.company ?? ''}`.toLowerCase().includes(w))).slice(0, 5) : [];
+  if (cands.length) return resolve({ code: raw, tier: 'name', client: cands.length === 1 ? cands[0] : undefined, candidates: cands, subNumber, explain: `Tier 3 · name / email on the label → ${cands.length} candidate${cands.length === 1 ? '' : 's'}` });
+  return resolve({ code: raw, tier: 'none', candidates: [], subNumber, explain: 'No match on tracking, account code or name — receive under SUB# only and resolve at the desk' });
+}
+export async function attachB2bMatch(packageId: string, m: { tier: B2bTier; code: string; clientId?: string; estimateId?: string }): Promise<PackageWithRefs> {
+  const pkg = getPkg(packageId); pkg.b2b = { tier: m.tier, code: m.code, at: new Date().toISOString() }; if (m.estimateId) { pkg.estimateId = m.estimateId; pkg.clientId = byId(store.estimates, m.estimateId).clientId; } else if (m.clientId) pkg.clientId = m.clientId;
+  stamp(`No-estimate branch · label “${m.code}” · ${m.tier === 'none' ? 'unmatched, SUB# only' : `matched via ${m.tier}`}${pkg.clientId ? ` → ${fullNameOf(byId(fx.clients, pkg.clientId))}` : ''}`, pkg.subNumber);
+  return resolve(pkgWithRefs(pkg));
+}
+
+// ---- RW client / job history lookup — no dollar amounts (MoneyContext hides them anyway; stripped here too) ----
+export interface RwHistoryHit { client: Client; watches: { watch: Watch; rows: Omit<WatchHistoryRow, 'amount'>[]; activeJobId?: string }[]; openRequests: number; jobs: number }
+export async function searchRwHistory(query: string): Promise<RwHistoryHit[]> {
+  const q = query.trim(); if (q.length < 2) return resolve([]);
+  const byJob = (await searchJobs(q)).map((j) => j.clientId); const ids = uniq([...(await searchClients(q)).map((c) => c.id), ...byJob]).slice(0, 6);
+  const out: RwHistoryHit[] = []; for (const id of ids) { const c = await getClient360(id); if (!c) continue; out.push({ client: c.client, watches: c.watches.map((w) => ({ watch: w.watch, activeJobId: w.activeJobId, rows: w.history.map(({ amount: _a, ...r }) => r) })), openRequests: c.summary.openRequests, jobs: c.jobs.length }); }
+  return resolve(out);
+}
+export const uniqComponents = (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));

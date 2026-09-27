@@ -153,7 +153,8 @@ export default function ReceiveWatchPage() {
             </div>
           </Card>
 
-          <Card title="Expected components" subtitle="Derived from scope — confirm each was actually received" testId="inspection-components-card">
+          <Card title="What’s in the box" subtitle="Scan 2 · Expected (estimate chips) → Received (Scan 1) → tap what you verify now" testId="inspection-components-card">
+            <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...pkg.contents])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = pkg.contents.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${ver ? 'border-moss-600 bg-moss-600 text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
             <ComponentChecklist expected={ctx.expectedComponents} received={components} onToggle={(c) => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} />
             <div className="mt-3 flex items-center justify-between text-xs">
               <span className="text-ink-400">Stage 2 logged: {pkg.contents.join(', ') || '—'}</span>

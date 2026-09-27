@@ -6,6 +6,7 @@ import * as api from '@/api/client';
 import type { DeptCode, JobWithRefs } from '@/api/client';
 import { JobBoard, JobGroupedList, LANES, LANE_LABEL, laneOf } from '@/components/jobs/JobBoard';
 import { JobsSubNav, Provisional } from '@/components/jobs/JobBits';
+import { JobTabs, TAB_LABEL, tabOf, type JobTab } from '@/components/jobs/JobTabs';
 import { Card } from '@/components/ui/Card';
 import { FilterChip } from '@/components/ui/Button';
 import { DeptBadge } from '@/components/ui/Pills';
@@ -15,6 +16,7 @@ const WORKFLOWS: DeptCode[] = ['W', 'B', 'P', 'PM'];
 export default function JobsPage() {
   const [params, setParams] = useSearchParams();
   const view = params.get('view') === 'list' ? 'list' : 'board';
+  const tab = (['queue', 'progress', 'finished'].includes(params.get('tab') ?? '') ? params.get('tab') : 'all') as JobTab;
   const lane = params.get('status') ?? 'all';
   const wf = params.get('wf') ?? 'all';
   const [q, setQ] = useState(params.get('q') ?? '');
@@ -62,12 +64,14 @@ export default function JobsPage() {
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-1.5" data-testid="status-filters">
+      <div className="mb-3 flex items-center gap-1 border-b border-line" data-testid="jobs-tabs">{(['all', 'queue', 'progress', 'finished'] as JobTab[]).map((t) => <button key={t} type="button" data-testid={`jobs-tab-${t}`} onClick={() => set({ tab: t === 'all' ? '' : t, status: 'all' })} className={clsx('-mb-px inline-flex h-8 items-center gap-1.5 border-b-2 px-3 text-xs font-medium', tab === t ? 'border-ink text-ink' : 'border-transparent text-ink-500 hover:text-ink')}>{TAB_LABEL[t]}<span data-testid={`jobs-tab-count-${t}`} className="rounded-full bg-canvas px-1.5 font-mono text-[10px] text-ink-500">{t === 'all' ? byWf.length : byWf.filter((j) => tabOf(j) === t).length}</span></button>)}</div>
+
+      {tab === 'all' && <div className="mb-3 flex flex-wrap items-center gap-1.5" data-testid="status-filters">
         <FilterChip active={lane === 'all'} onClick={() => set({ status: 'all' })} testId="job-filter-all">All</FilterChip>
         {LANES.map((l) => <FilterChip key={l} active={lane === l} onClick={() => set({ status: l })} testId={`job-filter-${l}`}>{LANE_LABEL[l]} <span className="ml-1 opacity-60" data-testid={`job-filter-count-${l}`}>{laneCounts[l] ?? 0}</span></FilterChip>)}
-      </div>
+      </div>}
 
-      {view === 'board' ? <JobBoard jobs={shown} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={shown} /></Card>}
+      {tab !== 'all' ? (view === 'board' ? <JobTabs tab={tab} jobs={byWf} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={byWf.filter((j) => tabOf(j) === tab)} /></Card>) : view === 'board' ? <JobBoard jobs={shown} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={shown} /></Card>}
     </div>
   );
 }
