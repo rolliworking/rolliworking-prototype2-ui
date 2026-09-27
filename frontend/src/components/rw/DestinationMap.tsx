@@ -10,6 +10,8 @@ const ROW: Record<MapNode['row'], number> = { wat: 1, wat_ramp: 2, bra: 3, bra_r
 const HIDDEN = new Set(['pre_approval', 'pre_queue', 'band_pre']);
 // Band flow is a straight inline line here (no off-ramp): Assign band tech → safe → Assign refinisher → safe → QC inspect
 const INLINE_BAND = new Set(['band_safe_in', 'refinish', 'band_safe_out']);
+const SHARED_LABELS: Record<string, string> = { final: 'Final QC / Invoicing', testing: 'Awaiting Payment', finished: 'Awaiting Shipping' };
+const DEST_SHARED = SHARED_NODES.map((n) => ({ ...n, label: SHARED_LABELS[n.id] ?? n.label }));
 const DEST_NODES = NODES.filter((n) => !HIDDEN.has(n.id)).map((n) => (INLINE_BAND.has(n.id) ? { ...n, row: 'bra' as const } : n));
 const TRACKS = [['assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['assign_band', 'band_safe_in', 'refinish', 'band_safe_out', 'band_qc', 'safe_band']];
 const RAMPS = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }];
@@ -57,7 +59,7 @@ export const DestinationMap = ({ selectedId, onSelect, focus = [] }: { selectedI
       <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       <div style={{ gridColumn: 1, gridRow: 3 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-green-300">BRA</div>
       {DEST_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}
-      <div style={{ gridColumn: 13, gridRow: '1 / span 3' }} className="grid grid-rows-3 gap-2">{SHARED_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}</div>
+      <div style={{ gridColumn: 13, gridRow: '1 / span 3' }} className="grid grid-rows-3 gap-2">{DEST_SHARED.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}</div>
     </div>
     <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-dashed border-slate-400" /> track</span><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-amber-400" /> manager-gated polish off-ramp</span><span className="inline-flex items-center gap-1"><img src="/safe.png" alt="" className="h-4 w-4 object-contain" /> = a manager's safe</span></div>
   </div>;
