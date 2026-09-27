@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { StatusPill } from '@/components/ui/Pills';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents } from '@/lib/format';
+import { PurchasingDeep, PoDeepBar, PriceCell } from '@/components/rs/PurchasingDeep';
 
 interface Bundle { vendors: Vendor[]; pos: PurchaseOrderWithRefs[]; parts: Part[]; locations: StockLocation[] }
 const load = async (): Promise<Bundle> => ({ vendors: await api.getVendors(), pos: await api.getPurchaseOrders(), parts: await api.getParts(), locations: await api.getLocations() });
@@ -24,6 +25,7 @@ export default function PurchasingPage() {
   const po = data.pos.find((p) => p.id === open);
   return (
     <div data-testid="purchasing-page" className="space-y-4">
+      <PurchasingDeep vendors={data.vendors} locations={data.locations} onChange={() => run(async () => undefined, 'Updated')} />
       <Head title="Purchasing" sub={<>Vendors · purchase orders · receive against PO — receiving increments inventory with an audited movement <Provisional note="PO send = Outbox stub; no vendor API. Cross-division inventory rules not ruled (MH)" /></>} action={<Button variant="primary" data-testid="po-new" onClick={() => setCreate(true)}>New purchase order</Button>} />
       <Flash error={error} msg={msg} />
       <div className="grid grid-cols-[1fr_380px] gap-4">
@@ -37,7 +39,7 @@ export default function PurchasingPage() {
           <ul className="divide-y divide-line/70">{data.vendors.map((v) => <li key={v.id} data-testid={`vendor-${v.id}`} className={`flex items-center justify-between px-4 py-2 text-xs ${v.active ? '' : 'opacity-50'}`}><div><div className="font-medium text-ink">{v.name}</div><div className="text-[11px] text-ink-400">{v.contact} · {v.email} · {v.terms} · <span className="capitalize">{v.division}</span></div></div><Button size="sm" variant="ghost" data-testid={`vendor-toggle-${v.id}`} onClick={() => run(() => api.setVendorActive(v.id, !v.active), v.active ? 'Vendor retired' : 'Vendor reactivated')}>{v.active ? 'Retire' : 'Restore'}</Button></li>)}</ul>
         </Card>
       </div>
-      {po && <PoModal po={po} onClose={() => setOpen(null)} run={run} />}
+      {po && <PoModal po={po} locations={data.locations} onClose={() => setOpen(null)} run={run} />}
       {create && <CreatePoModal data={data} presetPart={params.get('part') ?? undefined} onClose={() => { setCreate(false); setParams({}); }} run={run} />}
       {vendorForm && <Modal testId="vendor-modal" title="New vendor" onClose={() => setVendorForm(null)}>
         <div className="grid grid-cols-2 gap-2">{(['name', 'contact', 'email', 'phone', 'terms'] as const).map((k) => <label key={k} className="text-xs text-ink-500 capitalize">{k}<input data-testid={`vendor-${k}`} value={vendorForm[k]} onChange={(e) => setVendorForm({ ...vendorForm, [k]: e.target.value })} className={`${field} mt-1 block w-full`} /></label>)}</div>
@@ -47,7 +49,7 @@ export default function PurchasingPage() {
   );
 }
 
-function PoModal({ po, onClose, run }: { po: PurchaseOrderWithRefs; onClose: () => void; run: (a: () => Promise<unknown>, m?: string) => Promise<void> }) {
+function PoModal({ po, locations, onClose, run }: { po: PurchaseOrderWithRefs; locations: StockLocation[]; onClose: () => void; run: (a: () => Promise<unknown>, m?: string) => Promise<void> }) {
   const [qty, setQty] = useState<Record<string, number>>(Object.fromEntries(po.lines.map((l) => [l.id, l.qty - l.receivedQty])));
   const [reason, setReason] = useState('');
   const receivable = po.status === 'sent' || po.status === 'partially_received';
@@ -55,13 +57,14 @@ function PoModal({ po, onClose, run }: { po: PurchaseOrderWithRefs; onClose: () 
     <Modal testId="po-modal" title={`${po.number} · ${po.vendor.name}`} width="w-[680px]" onClose={onClose}>
       <div className="mb-2 flex items-center gap-2 text-xs text-ink-500"><StatusPill status={po.status} /> · to {po.location.name} · created {fmtDate(po.createdAt)} by {po.createdBy} · {po.station}{po.memo && <> · {po.memo}</>}</div>
       <Table><thead><tr><Th>Part</Th><Th className="text-right">Ordered</Th><Th className="text-right">Received</Th><Th className="text-right">Unit</Th>{receivable && <Th className="text-right">Receive now</Th>}</tr></thead><tbody>
-        {po.lines.map((l) => <tr key={l.id} data-testid={`po-line-${l.id}`}><Td><span className="font-mono text-xs">{l.partNumber}</span> <span className="text-xs text-ink-500">{l.description}</span></Td><Td className="tabular text-right text-xs">{l.qty}</Td><Td className="tabular text-right text-xs">{l.receivedQty}</Td><Td className="tabular text-right text-xs">{fmtMoneyCents(l.unitCost)}</Td>{receivable && <Td className="text-right"><input data-testid={`po-receive-${l.id}`} type="number" min={0} max={l.qty - l.receivedQty} value={qty[l.id] ?? 0} onChange={(e) => setQty({ ...qty, [l.id]: Number(e.target.value) })} className={`${field} w-16 text-right`} /></Td>}</tr>)}
+        {po.lines.map((l) => <tr key={l.id} data-testid={`po-line-${l.id}`}><Td><span className="font-mono text-xs">{l.partNumber}</span> <span className="text-xs text-ink-500">{l.description}</span></Td><Td className="tabular text-right text-xs">{l.qty}</Td><Td className="tabular text-right text-xs">{l.receivedQty}</Td><Td className="tabular text-right text-xs"><PriceCell line={l} /></Td>{receivable && <Td className="text-right"><input data-testid={`po-receive-${l.id}`} type="number" min={0} max={l.qty - l.receivedQty} value={qty[l.id] ?? 0} onChange={(e) => setQty({ ...qty, [l.id]: Number(e.target.value) })} className={`${field} w-16 text-right`} /></Td>}</tr>)}
       </tbody></Table>
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="text-xs font-semibold">Total {fmtMoneyCents(po.total)}</div>
         <div className="flex items-center gap-2">
+          <PoDeepBar po={po} locations={locations} run={run} qty={qty} receivable={receivable} />
           {po.status === 'draft' && <Button variant="primary" data-testid="po-send" onClick={() => run(() => api.sendPurchaseOrder(po.id), 'PO sent (stub → Outbox)')}>Send (stub)</Button>}
-          {receivable && <Button variant="primary" data-testid="po-receive" onClick={() => run(() => api.receivePurchaseOrder(po.id, qty), 'Received — stock updated')}>Receive lines</Button>}
+          {receivable && <Button variant="primary" data-testid="po-receive" onClick={() => run(() => api.receivePurchaseOrder(po.id, qty, (document.getElementById('po-putaway') as HTMLSelectElement | null)?.value || undefined), 'Received — stock updated · short lines stay open')}>Receive lines</Button>}
           {po.status !== 'received' && po.status !== 'cancelled' && <><input data-testid="po-cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="cancel reason" className={`${field} w-40`} /><Button data-testid="po-cancel" onClick={() => run(async () => { await api.cancelPurchaseOrder(po.id, reason); onClose(); }, 'PO cancelled')}>Cancel PO</Button></>}
         </div>
       </div>

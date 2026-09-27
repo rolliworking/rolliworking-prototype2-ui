@@ -915,13 +915,23 @@ export interface StaffInboxThread { client: Client; messages: Message[]; unread:
 export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string }
 
 export type POStatus = 'draft' | 'sent' | 'partially_received' | 'received' | 'cancelled';
-export interface POLine { id: string; partId: string; partNumber: string; description: string; qty: number; unitCost: number; receivedQty: number }
+export interface POLine { id: string; partId: string; partNumber: string; description: string; qty: number; unitCost: number; receivedQty: number; requestId?: string; avgAtOrder?: number | null }
 export interface PurchaseOrder {
   id: string; number: string; vendorId: string; status: POStatus; division: Division; locationId: string;
   lines: POLine[]; total: number; memo?: string; createdAt: string; createdBy: string; station: string;
   sentAt?: string; receivedAt?: string; cancelledAt?: string; cancelReason?: string;
+  labelUrl?: string; trackingNumber?: string; labelService?: string; labelSource?: 'parcelpro' | 'upload'; redAcknowledgedBy?: string;
 }
 export type PurchaseOrderWithRefs = PurchaseOrder & { vendor: Vendor; location: StockLocation };
+// ---- Inventory deep session: pricing intelligence, needs-ordering, reorder rules, PO labels, cycle-count queue + variance $ ----
+export interface PurchaseHistoryRow { id: string; at: string; vendorId: string; partId: string; qty: number; unitPrice: number; poNumber?: string }
+export interface PartPricing { partId: string; avgCost: number | null; last?: { price: number; at: string; vendorId: string; vendorName: string }; vendors: { vendorId: string; vendorName: string; lastPrice: number; lastAt: string; buys: number }[] }
+export type PriceColor = 'green' | 'black' | 'red';
+export interface ReorderRule { partId: string; min: number; orderUpTo: number }
+export interface NeedsOrderingRow { id: string; partId: string; part: Part; reason: 'out_of_stock' | 'pick_short' | 'below_min'; qty: number; requestId?: string; jobNumber?: string; onHand: number; onOrder: number; at: string; vendorHint?: string }
+export interface CountQueueRow { location: StockLocation; barcode: string; parts: number; lastCounted?: string; daysSince?: number; overdue: boolean }
+export interface VarianceRow { countId: string; countNumber: string; at: string; by: string; location: string; partId: string; partNumber: string; expected: number; counted: number; qtyVariance: number; unitCost: number; dollarVariance: number }
+export interface VarianceReport { rows: VarianceRow[]; totals: { qty: number; dollars: number; shrink: number; overage: number } }
 
 export interface StockLocation { id: string; name: string; division: Division; kind: 'drawer' | 'cabinet' | 'safe' | 'bench' }
 export interface StockLevel { partId: string; locationId: string; onHand: number; reorderPoint: number }
@@ -930,7 +940,7 @@ export interface StockMovement extends Stamp {
   id: string; kind: MovementKind; partId: string; locationId: string; delta: number; before: number; after: number;
   reason: string; ref?: string; poId?: string; jobId?: string; countId?: string; division: Division;
 }
-export interface CycleCountLine { partId: string; expected: number; counted?: number }
+export interface CycleCountLine { partId: string; expected: number; counted?: number; skipped?: boolean; unitCost?: number }
 export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
@@ -943,7 +953,7 @@ export type EvidenceSlot = 'hidden_serial' | 'timing_sheet' | 'pressure_test' | 
 export type PartsGrade = 'B' | 'Ø/REPL' | 'D/REPL';
 export interface EvidenceItem extends Stamp {
   id: string; jobId: string; watchId: string; slot: EvidenceSlot; photo: PackagePhoto; labelScan: string;
-  grades?: PartsGrade[]; depthRating?: string; note?: string;
+  grades?: PartsGrade[]; depthRating?: string; note?: string; extracted?: unknown;
 }
 export interface ReportRow { label: string; values: Record<string, number | string> }
 export interface Report { key: string; title: string; columns: string[]; rows: ReportRow[]; note: string; generatedAt: string }

@@ -27,7 +27,7 @@ export default function InventoryPage() {
   const shown = tab === 'low' ? low : data.rows;
   return (
     <div data-testid="inventory-page" className="space-y-4">
-      <Head title="Inventory" sub={<>Parts stock by location · movements · adjustments with reason · cycle counts <Provisional note="Cross-division stock visibility not ruled (MH) — all locations shown" /></>} />
+      <Head title="Inventory" sub={<>Parts stock by location · movements · adjustments with reason · cycle counts <Provisional note="Cross-division stock visibility not ruled (MH) — all locations shown" /></>} action={<Link to="/inventory/count" data-testid="inv-count-mode"><Button variant="primary">Count mode (scan)</Button></Link>} />
       <Flash error={error} msg={msg} />
       <Tabs prefix="inv" active={tab} onChange={setTab} tabs={[{ key: 'stock', label: 'Stock', count: data.rows.length }, { key: 'low', label: 'Low stock', count: low.length }, { key: 'moves', label: 'Movements', count: data.moves.length }, { key: 'counts', label: 'Cycle counts', count: data.counts.length }]} />
       {(tab === 'stock' || tab === 'low') && <Card bodyClassName="p-0" testId="stock-table"><Table><thead><tr><Th>Part</Th><Th>Location</Th><Th className="text-right">On hand</Th><Th className="text-right">Reorder at</Th><Th>Flag</Th><Th /></tr></thead><tbody>

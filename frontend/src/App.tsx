@@ -71,6 +71,7 @@ import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from 
 import SetupPage from '@/pages/SetupPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
 import InventoryPage from '@/pages/rs/InventoryPage';
+import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
 import SignInPage from '@/pages/SignInPage';
 import StationSetupPage from '@/pages/StationSetupPage';
@@ -187,6 +188,7 @@ export default function App() {
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/inventory/count" element={<CycleCountPage />} />
               <Route path="/labels" element={<LabelsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/accounting" element={<AccountingPage />} />
