@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, Lock, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { CustodyItem } from '@/api/client';
+import type { CustodyByPerson, CustodyItem } from '@/api/client';
 import { PART_NAME, PartDot } from '@/components/rw/RwBits';
 import { DeptBadge, StatusPill } from '@/components/ui/Pills';
 import { useAsync } from '@/hooks/useAsync';
@@ -31,15 +31,25 @@ const Row = ({ it }: { it: CustodyItem }) => {
   </li>;
 };
 
+// Person section — collapsed by default: name + count only. Header toggles the row list.
+const Person = ({ g }: { g: CustodyByPerson }) => {
+  const [open, setOpen] = useState(false);
+  return <section data-testid={`custody-person-${g.tech}`} data-open={open} className="rounded-md border border-line bg-surface">
+    <button type="button" data-testid={`custody-toggle-${g.tech}`} aria-expanded={open} onClick={() => setOpen(!open)} className="flex h-10 w-full items-center gap-2 px-3 text-left hover:bg-canvas">
+      {open ? <ChevronDown size={14} className="text-ink-400" /> : <ChevronRight size={14} className="text-ink-400" />}<UserRound size={15} className="text-ink-400" />
+      <h2 className="text-base font-semibold text-ink">{g.name}</h2>
+      <span data-testid={`custody-count-${g.tech}`} className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-ink-600 ring-1 ring-line">{g.items.length}</span>
+    </button>
+    {open && <ul data-testid={`custody-list-${g.tech}`} className="space-y-1 border-t border-line bg-canvas/40 p-2">{g.items.map((it) => <Row key={`${it.jobId}-${it.key}`} it={it} />)}</ul>}
+  </section>;
+};
+
 export default function CustodyPage() {
   const { data } = useAsync(() => api.getCustodyByPerson());
   if (!data) return null;
-  return <div data-testid="custody-page" className="space-y-5">
-    <div><h1 className="text-xl font-semibold tracking-tight text-ink">Custody</h1><p className="mt-0.5 text-xs text-ink-500">Who physically holds what right now — every watch head, case and bracelet logged to a person, same data as the Shop Floor board and the custody log, grouped by holder. Tap a row for detail.</p></div>
-    {data.map((g) => <section key={g.tech} data-testid={`custody-person-${g.tech}`} className="space-y-1.5">
-      <h2 className="flex items-center gap-2 text-base font-semibold text-ink"><UserRound size={15} className="text-ink-400" />{g.name}<span data-testid={`custody-count-${g.tech}`} className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-ink-600 ring-1 ring-line">{g.items.length}</span></h2>
-      <ul className="max-w-3xl space-y-1">{g.items.map((it) => <Row key={`${it.jobId}-${it.key}`} it={it} />)}</ul>
-    </section>)}
+  return <div data-testid="custody-page" className="space-y-4">
+    <div><h1 className="text-xl font-semibold tracking-tight text-ink">Custody</h1><p className="mt-0.5 text-xs text-ink-500">Who physically holds what right now — every watch head, case and bracelet logged to a person, same data as the Shop Floor board and the custody log. Counts are scannable closed; click a name to open their list, a row for detail.</p></div>
+    <div data-testid="custody-grid" className="grid items-start gap-3 md:grid-cols-2">{data.map((g) => <Person key={g.tech} g={g} />)}</div>
     {!data.length && <p className="text-sm text-ink-500">Nobody is holding anything right now.</p>}
   </div>;
 }
