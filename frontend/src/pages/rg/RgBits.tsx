@@ -29,7 +29,7 @@ export const PinPad = ({ onSubmit, error, testId = 'rg-pin' }: { onSubmit: (secr
       <input data-testid={testId} type="password" inputMode="numeric" autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder="PIN" className="h-12 w-40 rounded-md border border-line bg-surface text-center font-mono text-2xl tracking-[0.5em]" />
     </form>
     <div className="mx-auto grid w-56 grid-cols-3 gap-2">
-      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((k, i) => k === '' ? <span key={i} /> : <button key={k} type="button" data-testid={`${testId}-key-${k === '⌫' ? 'del' : k}`} onClick={() => setV((x) => (k === '⌫' ? x.slice(0, -1) : x.length < 4 ? x + k : x))} className="h-14 rounded-lg border border-line bg-surface text-xl font-semibold text-ink active:bg-canvas">{k === '⌫' ? <Delete size={18} className="mx-auto" /> : k}</button>)}
+      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((k, i) => k === '' ? <span key={`sp-${i}`} /> : <button key={`k-${k}`} type="button" data-testid={`${testId}-key-${k === '⌫' ? 'del' : k}`} onClick={() => setV((x) => (k === '⌫' ? x.slice(0, -1) : x.length < 4 ? x + k : x))} className="h-14 rounded-lg border border-line bg-surface text-xl font-semibold text-ink active:bg-canvas">{k === '⌫' ? <Delete size={18} className="mx-auto" /> : k}</button>)}
     </div>
     {error && <p data-testid={`${testId}-error`} className="text-center text-xs text-rose-700">{error}</p>}
   </div>;

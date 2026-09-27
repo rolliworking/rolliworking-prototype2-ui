@@ -205,3 +205,8 @@ One entry per build session: what was built · what was decided · what was test
 - Fork fix: `PurchasingPage.PoModal` now receives `locations` (TS2304 build break). Added the Inventory → *Count mode (scan)* entry button (page had no link).
 - Tested iteration_37: backend 6/6, frontend pass. Two flagged items re-verified in-app as non-bugs: cc-confirm enables once every row is zero/skip (tester clicked stale handles); Draft with Claude works from Client 360 → Track (c-05). Concierge blocked from `/inventory/count` is the standing Inventory = MGR tier gate → Q91.
 - Q91: should bench techs (concierge tier, e.g. Rosa) be allowed into `/inventory/count` to count drawers, with only the variance $ hidden? Prototype: no (MGR only).
+
+## RGTime deep session + 4 briefs (2026-09-27)
+- Files: `pages/rg/*` (Shell PIN binding + offline hook, Clock, Home, Week, Manager tabs, Kiosk, Bits), `public/rg-sw.js`, client.ts RG section rewrite (localStorage persistence, queue, flags, corrections, payroll CSV, kiosk); `pages/shipping/BillAuditPage.tsx` + client.ts bill-audit section + `fixtures/bills.ts` + `ai.ts extractShippingBill` + backend `/api/ai/extract-bill` (pypdfium2); `components/sales/SoPrint.tsx` (qrcode.react); `components/LegacyBits.tsx`; Inbox/Requests/EstimateCreate request→estimate wiring.
+- Tested iteration_38 (backend 11/11, frontend ~95%): PinPad key collision fixed; "CLOCK IN after reload" re-verified in-app as persisting correctly (CLOCK OUT shown).
+- Open: real shop coordinates for the geofence (MH picked "here are the coordinates" but left it blank) — Settings → Geofence or "Use my current location" at the shop.
