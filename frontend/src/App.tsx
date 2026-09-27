@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import AppShell from '@/components/layout/AppShell';
 import IntakeLayout from '@/components/intake/IntakeLayout';
@@ -8,7 +8,6 @@ import ClientsPage from '@/pages/clients/ClientsPage';
 import Client360Page from '@/pages/clients/Client360Page';
 import InboxPage from '@/pages/InboxPage';
 import RcShell from '@/rc/RcShell';
-import RtShell from '@/pages/rt/RtShell';
 import RgShell from '@/pages/rg/RgShell';
 import RwShell, { RwRestricted } from '@/pages/rw/RwShell';
 import RwJobsPage from '@/pages/rw/RwJobsPage';
@@ -30,8 +29,8 @@ import RgManagerPage from '@/pages/rg/RgManagerPage';
 import KioskPage from '@/pages/kiosk/KioskPage';
 import PayPage from '@/pages/PayPage';
 import RequestsPage from '@/pages/RequestsPage';
-import RtQueuePage from '@/pages/rt/RtQueuePage';
-import RtTestPage from '@/pages/rt/RtTestPage';
+import RwTestingQueuePage from '@/pages/rw/testing/RwTestingQueuePage';
+import RwTestingTestPage from '@/pages/rw/testing/RwTestingTestPage';
 import RcLoginPage from '@/pages/rc/RcLoginPage';
 import RcAuthPage from '@/pages/rc/RcAuthPage';
 import RcHomePage from '@/pages/rc/RcHomePage';
@@ -54,6 +53,7 @@ import ReceivePackagePage from '@/pages/intake/ReceivePackagePage';
 import ReceiveWatchListPage from '@/pages/intake/ReceiveWatchListPage';
 import ReceiveWatchPage from '@/pages/intake/ReceiveWatchPage';
 import WorkOrderPage from '@/pages/intake/WorkOrderPage';
+import TradeScanInPage from '@/pages/intake/TradeScanInPage';
 import JobsPage from '@/pages/JobsPage';
 import JobCreatePage from '@/pages/jobs/JobCreatePage';
 import JobDetailPage from '@/pages/jobs/JobDetailPage';
@@ -98,6 +98,8 @@ function RwManagerOnly({ label, children }: { label: string; children: JSX.Eleme
   return user?.accessTier === 'manager' ? children : <RwRestricted label={label} />;
 }
 
+const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`/rw/testing/test/${jobId}`} replace />; };
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -123,6 +125,8 @@ export default function App() {
             <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
+            <Route path="testing" element={<RwTestingQueuePage />} />
+            <Route path="testing/test/:jobId" element={<RwTestingTestPage />} />
             <Route path="today" element={<TodayPage />} />
             <Route path="*" element={<Navigate to="/rw" replace />} />
           </Route>
@@ -134,10 +138,6 @@ export default function App() {
           </Route>
           <Route path="/kiosk" element={<KioskPage />} />
           <Route path="/pay/:token" element={<PayPage />} />
-          <Route path="/rt" element={<RtShell />}>
-            <Route index element={<RtQueuePage />} />
-            <Route path="test/:jobId" element={<RtTestPage />} />
-          </Route>
           <Route path="/rc" element={<RcShell />}>
             <Route index element={<RcLoginPage />} />
             <Route path="auth/:token" element={<RcAuthPage />} />
@@ -149,6 +149,9 @@ export default function App() {
             <Route path="messages" element={<RcMessagesPage />} />
             <Route path="*" element={<RcNotFound />} />
           </Route>
+          {/* RolliTime re-homed into RW (2026-09-27) — old /rt routes redirect */}
+          <Route path="/rt" element={<Navigate to="/rw/testing" replace />} />
+          <Route path="/rt/test/:jobId" element={<RtRedirect />} />
           <Route element={<RequireAuth />}>
             <Route element={<TierGate />}>
               <Route index element={<Dashboard />} />
@@ -170,6 +173,7 @@ export default function App() {
                 <Route path="inspection/:id" element={<ReceiveWatchPage />} />
                 <Route path="outbox" element={<OutboxPage />} />
                 <Route path="labels" element={<LabelQueuePage />} />
+                <Route path="trade" element={<TradeScanInPage />} />
               </Route>
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/requests" element={<RequestsPage />} />

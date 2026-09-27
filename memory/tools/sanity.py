@@ -1,0 +1,46 @@
+import asyncio
+from playwright.async_api import async_playwright
+B="http://localhost:3000"
+async def main():
+    async with async_playwright() as p:
+        b=await p.chromium.launch(); page=await (await b.new_context(viewport={"width":1400,"height":900})).new_page()
+        errs=[]; page.on("pageerror", lambda e: errs.append(str(e)))
+        await page.goto(B+"/rw/testing", wait_until="networkidle"); await page.wait_for_timeout(600)
+        if await page.locator('[data-testid="rw-card-u-mm"]').count():
+            await page.click('[data-testid="rw-card-u-mm"]'); await page.fill('[data-testid="rw-secret"]','mm123'); await page.click('[data-testid="rw-sign-in-btn"]'); await page.wait_for_timeout(1000)
+        print("queue rows:", await page.locator('[data-testid^="rt-queue-j"]').count(), "nav testing:", await page.locator('[data-testid="rw-nav-testing"]').count())
+        await page.fill('[data-testid="rt-scan"]','E02026'); await page.click('[data-testid="rt-scan-go"]'); await page.wait_for_timeout(900)
+        print("url:", page.url, "gate ready:", await page.locator('[data-testid="grade-gate"]').get_attribute('data-ready'), "start disabled:", await page.locator('[data-testid="rt-start-test"]').is_disabled(), "blocked:", await page.locator('[data-testid="rt-start-blocked"]').inner_text())
+        await page.click('[data-testid="grade-cleanliness-score-2"]'); await page.click('[data-testid="grade-cleanliness-save"]'); await page.wait_for_timeout(300)
+        print("low-grade err:", await page.locator('[data-testid="grade-cleanliness-error"]').inner_text())
+        await page.fill('[data-testid="grade-cleanliness-note"]','Dust under crystal'); await page.click('[data-testid="grade-cleanliness-save"]'); await page.wait_for_timeout(400)
+        print("clean done:", await page.locator('[data-testid="grade-cleanliness-done"]').count(), "self:", await page.locator('[data-testid="grade-cleanliness-self"]').count())
+        await page.click('[data-testid="grade-case_condition-score-5"]'); await page.click('[data-testid="grade-case_condition-save"]'); await page.wait_for_timeout(400)
+        print("gate ready now:", await page.locator('[data-testid="grade-gate"]').get_attribute('data-ready'), "start disabled:", await page.locator('[data-testid="rt-start-test"]').is_disabled())
+        await page.click('[data-testid="rt-start-test"]'); await page.wait_for_timeout(200); print("started:", await page.locator('[data-testid="rt-test-body"]').get_attribute('data-started'))
+        await page.screenshot(path="/app/memory/tools/sanity_testing.png")
+        await page.goto(B+"/rt", wait_until="networkidle"); await page.wait_for_timeout(500); print("rt redirect:", page.url)
+        await page.goto(B+"/rw/bench", wait_until="networkidle"); await page.wait_for_timeout(800); print("bench quality tiles:", await page.locator('[data-testid^="bench-month-quality-"]').count())
+        # RS: rating + call pop (session shared)
+        await page.goto(B+"/clients/c-30", wait_until="networkidle"); await page.wait_for_timeout(800)
+        print("badge:", await page.locator('[data-testid="client360-rating"]').inner_text(), "title:", await page.locator('[data-testid="client360-rating"]').get_attribute('title'))
+        await page.click('[data-testid="client360-rating"]'); await page.wait_for_timeout(300); await page.click('[data-testid="rating-communication-4"]'); await page.wait_for_timeout(300)
+        print("editor badge:", await page.locator('[data-testid="rating-editor-badge"]').inner_text(), "history rows:", await page.locator('[data-testid="rating-history"] li').count())
+        await page.keyboard.press("Escape"); await page.mouse.click(5,5); await page.wait_for_timeout(200)
+        await page.click('[data-testid="dev-simulate-call"]'); await page.click('[data-testid="dev-call-known"]'); await page.wait_for_timeout(600)
+        print("call pop:", await page.locator('[data-testid="call-pop"]').inner_text())
+        await page.click('[data-testid="call-pop-open"]'); await page.wait_for_timeout(700); print("companion open:", await page.locator('[data-testid="companion-panel"]').count(), page.url)
+        await page.click('[data-testid="dev-simulate-call"]'); await page.click('[data-testid="dev-call-unknown"]'); await page.wait_for_timeout(500); print("unknown pop:", await page.locator('[data-testid="call-pop"]').get_attribute('data-kind'))
+        await page.click('[data-testid="call-pop-new-client"]'); await page.wait_for_timeout(600); print("new client form:", await page.locator('[data-testid="new-client-from-call"]').count(), await page.locator('[data-testid="new-client-phone"]').inner_text())
+        await page.goto(B+"/", wait_until="networkidle"); await page.wait_for_timeout(600)
+        await page.screenshot(path="/app/memory/tools/sanity_dash.png")
+        # rc leak check: sign in Calloway portal & search for badge pattern
+        await page.goto(B+"/rc", wait_until="networkidle"); await page.wait_for_timeout(500)
+        if await page.locator('[data-testid="rc-email-input"]').count():
+            await page.fill('[data-testid="rc-email-input"]','robert.calloway@example.com'); await page.click('[data-testid="rc-send-link"]'); await page.wait_for_timeout(500)
+            href=await page.locator('[data-testid="rc-magic-link"]').get_attribute('href'); await page.goto(B+href, wait_until="networkidle"); await page.wait_for_timeout(1000)
+        html=await page.content(); print("rc url:", page.url, "split strip:", await page.locator('[data-testid^="rc-req-split-"]').count(), "rating leak:", 'rating-badge' in html or '5/4/' in html)
+        await page.goto(B+"/rc/watches/w-42", wait_until="networkidle"); await page.wait_for_timeout(800); print("watch split:", await page.locator('[data-testid="rc-watch-split"]').count(), (await page.locator('[data-testid="rc-watch-split"]').inner_text()).replace("\n"," | ") if await page.locator('[data-testid="rc-watch-split"]').count() else '')
+        print("page errors:", errs[:3])
+        await b.close()
+asyncio.run(main())

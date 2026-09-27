@@ -29,4 +29,7 @@ export const watches: Watch[] = [
   { id: 'w-17', clientId: 'c-16', brand: 'Tudor', model: 'Black Bay 41', reference: 'M79540-0001', serial: 'Q7M3R95T', dial: 'Black', bracelet: 'Steel', status: 'expected', receivedAt: daysAgo(0) },
   { id: 'w-19', clientId: 'c-20', brand: 'Rolex', model: 'Datejust 36', reference: '126234', serial: 'F7C2N81K', dial: 'Mint green', bracelet: 'Jubilee', status: 'expected', receivedAt: daysAgo(0) },
   { id: 'w-18', clientId: 'c-19', brand: 'Rolex', model: 'Yacht-Master 40', reference: '126622', serial: 'S2H6V8D4', dial: 'Rhodium', bracelet: 'Oyster', status: 'expected', receivedAt: daysAgo(0) },
+  // RolliShop (internal) trade stock — scanned in, no inspection report, no estimate
+  { id: 'w-50', clientId: 'c-31', brand: 'Tudor', model: 'Black Bay 58', reference: 'M79030N-0001', serial: 'T8B5K2R7', dial: 'Black', bracelet: 'Steel rivet', status: 'in_service', receivedAt: daysAgo(3) },
+  { id: 'w-51', clientId: 'c-31', brand: 'Rolex', model: 'Oyster Perpetual 36', reference: '126000', serial: 'P3Q9L4M8', dial: 'Turquoise', bracelet: 'Oyster', status: 'qc', receivedAt: daysAgo(6) },
 ];

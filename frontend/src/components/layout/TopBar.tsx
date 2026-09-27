@@ -1,4 +1,5 @@
 import { Bot, MonitorSmartphone, Plus, UserRound } from 'lucide-react';
+import { SimulateCallMenu } from '@/components/layout/CallPop';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { QUICK_ACTIONS } from '@/config/navigation';
@@ -66,6 +67,7 @@ export const TopBar = () => {
         >
           <Plus size={14} />
         </button>
+        <SimulateCallMenu />
         <button
           type="button"
           data-testid="topbar-companion-btn"

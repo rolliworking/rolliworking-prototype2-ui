@@ -1,4 +1,6 @@
 import { SetupRsPanels } from '@/pages/SetupRsPanels';
+import { SetupAuditsCard } from '@/components/rw/SetupAuditsCard';
+import { SetupGradingCard } from '@/components/rw/SetupGradingCard';
 import { ArrowRight, MonitorSmartphone, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -150,6 +152,8 @@ export default function SetupPage() {
           </tbody>
         </Table>
       </Card>
+      {isAdmin && <SetupAuditsCard />}
+      {isAdmin && <SetupGradingCard />}
       <SetupRsPanels />
     </div>
   );

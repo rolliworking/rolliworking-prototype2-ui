@@ -1,10 +1,11 @@
 import { ArrowLeft, FileText, Package, Pin, Receipt, Trash2, Watch as WatchIcon } from 'lucide-react';
+import { RatingBadge } from '@/components/clients/RatingBadge';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { HoldModal, KindPill, OwnerBadge, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
+import { HoldModal, KindPill, OwnerBadge, PriorityPill, Provisional, ReasonModal, StatusWithHold, TradePathStrip, TradeSendBackModal, WorkflowBadges } from '@/components/jobs/JobBits';
 import { MessagesPanel } from '@/components/jobs/JobMessages';
 import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
@@ -24,7 +25,7 @@ import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fullName } from '@/lib/format';
 
-type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | { kind: 'pin' } | null;
+type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | { kind: 'pin' } | { kind: 'trade_back' } | null;
 
 export default function JobDetailPage() {
   const { id = '' } = useParams();
@@ -54,7 +55,7 @@ export default function JobDetailPage() {
   const crGaps = api.qcRequestGaps(j);
   const blocked = (a: JobAction) => (a.key === 'qc_pass' && crGaps.length ? `QC blocked — client request not checked off: “${crGaps[0].text}”` : gaps.join(' · '));
 
-  const act = (a: JobAction) => (a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client email queued' : ''}`));
+  const act = (a: JobAction) => (a.key === 'trade_send_back' ? setModal({ kind: 'trade_back' }) : a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client email queued' : ''}`));
 
   return (
     <div data-testid="job-detail-page" className="space-y-4">
@@ -68,7 +69,7 @@ export default function JobDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="job-number">{j.number}</h1>
             <StatusWithHold job={j} />
-            <KindPill kind={j.kind} testId="job-kind-pill" />
+            <KindPill kind={j.kind} testId="job-kind-pill" client={j.client} />
             <PriorityPill priority={j.priority} testId="job-priority" />
             <WorkflowBadges workflow={j.workflow} />
             <StatusPill status={j.simpleStatus} testId="job-simple-status" />
@@ -76,7 +77,7 @@ export default function JobDetailPage() {
             <TailPill stage={api.tailStage(j)} testId="job-tail" />
             <ClientRequestBadge n={api.openClientRequests(j).length} testId="job-client-requests-badge" />
           </div>
-          <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> · {j.client.email} · {j.client.phone}</div>
+          <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> <RatingBadge clientId={j.clientId} testId="job-client-rating" /> · {j.client.email} · {j.client.phone}</div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="job-actions">
           {actions.map((a) => (
@@ -96,6 +97,7 @@ export default function JobDetailPage() {
 
       {flash && <div data-testid="job-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
       {error && <div data-testid="job-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
+      {j.kind === 'trade' && <TradePathStrip job={j} />}
       <ReviewGate job={j} />
       {api.activeHold(j) && <div data-testid="held-banner" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs text-rose-900">This job is parked on hold — status actions return when the hold is released.</div>}
       {actions.length === 0 && !api.activeHold(j) && j.status === 'closed' && <div data-testid="closed-banner" className="rounded-sm bg-slate-100 px-3 py-1.5 text-xs text-slate-600">Closed — end of the line. Invoice / pickup is the next session.</div>}
@@ -136,6 +138,7 @@ export default function JobDetailPage() {
         </div>
       </div>
 
+      {modal?.kind === 'trade_back' && <TradeSendBackModal testId="trade-send-back-modal" onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, 'trade_send_back', r); setModal(null); await load(); say('Sent back to the bench'); }} />}
       {modal?.kind === 'reason' && <ReasonModal testId={`reason-modal-${modal.action.key}`} title={modal.action.label.replace('…', '')} hint={modal.action.key === 'qc_fail' ? 'Fail moves the job back to service and queues a client email with this reason.' : 'A reason is required; it lands on the timeline.'} confirmLabel={modal.action.label.replace('…', '')} danger={modal.action.tone === 'danger'} onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, modal.action.key, r); setModal(null); await load(); say(`${modal.action.label.replace('…', '')}${modal.action.notifies ? ' · client email queued' : ''}`); }} />}
       {openPr && <PartsRequestModal request={openPr} onClose={() => { setOpenPr(null); void load(); }} onChange={setOpenPr} />}
       {modal?.kind === 'pin' && <PinModal defaultTitle={`${j.number} · ${fullName(j.client)} · ${j.watch.model}`} jobId={j.id} onClose={() => setModal(null)} onPinned={() => { setModal(null); say('Pinned to their hit list'); }} />}

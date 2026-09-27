@@ -76,8 +76,8 @@ Boundary: any link to an RS path is rewritten (`/jobs/:id` → `/rw/jobs/:id`) o
 | `/rc/messages` | threads with staff | client | send → Comms hub |
 | `/rc/*` | not found | — | — |
 
-## D. RolliTime `/rt` (timing bench; standard card + password, no camera)
-`/rt` testing queue + label scan → `/rt/test/:jobId` six-position Witschi-style test → PASS (email, QC flag) / REJECT (reason → qc_fail). mgr/any: any staff of the station division.
+## D. RolliTime — re-homed into RW (2026-09-27)
+`/rt` and `/rt/test/:jobId` **redirect** to `/rw/testing` and `/rw/testing/test/:jobId`. Testing is an RW surface (nav “Testing”, both tiers; PIN switch; no money): queue + label scan (= custody transfer of every part to the **Testing** station) → six-position Witschi-style test → PASS (Q47 flag → RW QC queue lane) / REJECT (reason → qc_fail). Also new in RW: `/rw/station` Audit mode, `/rw/pad` Audit tab; RS: `/intake/trade` trade scan-in, Dashboard Trade review queue, Setup → Audits.
 
 ## E. RGTime `/rg` (phone PWA; remembered per-device login)
 `/rg` status + today's punches + Simulate NFC tap picker → `/rg/clock?tag=<id>` one-button clock in/out (division from tag) → `/rg/manager` card + password, manager tier: week grid. All staff on the card list (a phone is not station-bound).

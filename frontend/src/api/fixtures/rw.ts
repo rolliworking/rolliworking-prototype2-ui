@@ -1,4 +1,4 @@
-import type { ClientRequest, ComponentKey, JobPhotoView, PartStatus, PickTask, RwStation, RwStationKey } from '../types';
+import type { AuditLocation, AuditSession, ClientRequest, ComponentKey, JobPhotoView, PartStatus, PickTask, RwStation, RwStationKey } from '../types';
 import { daysAgo } from './time';
 
 export const RW_STATIONS: RwStation[] = [
@@ -15,7 +15,8 @@ export const RW_STATIONS: RwStation[] = [
   { key: 'into_safe_band', label: 'Into safe', lane: 'band', order: 5 },
   { key: 'safe_await_head', label: 'Safe (await head)', lane: 'band', order: 6 },
   { key: 'final_assembly', label: 'Final assembly', lane: 'shared', order: 7 },
-  { key: 'finished', label: 'Finished', lane: 'shared', order: 8 },
+  { key: 'testing', label: 'Testing', lane: 'shared', order: 8 },
+  { key: 'finished', label: 'Finished', lane: 'shared', order: 9 },
 ];
 
 // Saved part positions (precedence 1). Parts not listed derive from job status + department.
@@ -30,6 +31,9 @@ export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: R
   'j-31': { head: { station: 'safe_await_band', status: 'waiting', tech: 'MM' }, band: { station: 'polish', status: 'in_progress', tech: 'Walter' } },
   'j-32': { head: { station: 'safe_await_band', status: 'waiting', tech: 'Rosa' }, case: { station: 'safe_await_band', status: 'waiting', tech: 'Walter' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Walter' } },
   'j-05': { band: { station: 'final_assembly', status: 'reunited', tech: 'Walter' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
+  'j-r3': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'MM' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Rosa' } },
+  'j-t1': { band: { station: 'refinish', status: 'in_progress', tech: 'Rosa' } },
+  'j-t2': { band: { station: 'final_assembly', status: 'reunited', tech: 'Walter' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
   'j-16': { head: { station: 'final_assembly', status: 'reunited', tech: 'MM' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
 };
 
@@ -81,3 +85,18 @@ export const clientRequestSeeds: Record<string, ClientRequest[]> = {
     cr('cr-04', 'Call before shipping — client wants to collect in person', 11, 'Vienna', { acks: [{ at: daysAgo(3, 9), by: 'MM', via: 'bulk_assign' }] }),
   ],
 };
+
+// ---- Stage / bin audit — locations = every station + the three bins; two seeded sessions (one clean, one with a missing watch)
+export const AUDIT_BINS: AuditLocation[] = [
+  { key: 'orphan_bin', label: 'Orphan bin', group: 'bin' },
+  { key: 'awaiting_payment_bin', label: 'Awaiting-payment bin', group: 'bin' },
+  { key: 'pre_intake_bin', label: 'Concierge / inspection bin', group: 'bin' },
+];
+export const AUDIT_LOCATIONS: AuditLocation[] = [...RW_STATIONS.filter((s) => s.key !== 'pre_approval').map((s): AuditLocation => ({ key: s.key, label: s.label, group: 'station', lane: s.lane })), ...AUDIT_BINS];
+export const AUDIT_STALE_DAYS_DEFAULT = 7;
+export const auditSeeds: AuditSession[] = [
+  { id: 'aud-01', location: 'wm_bench_2', locationLabel: 'WM Bench 2', by: 'MM', station: 'Watchmaker Room', startedAt: daysAgo(3, 17), finishedAt: daysAgo(3, 17.2), expectedCount: 2, matched: 2, missing: [], unexpected: [] },
+  { id: 'aud-02', location: 'safe_await_band', locationLabel: 'Safe (await band)', by: 'MM', station: 'Watchmaker Room', startedAt: daysAgo(1, 18), finishedAt: daysAgo(1, 18.3), expectedCount: 3, matched: 2, pinId: 'pin-audit-01',
+    missing: [{ id: 'j-32-head', jobId: 'j-32', jobNumber: 'E02033', key: 'head', partLabel: 'Watch head', watchLabel: 'Rolex Lady-Datejust', reference: '279174', serial: 'N4K8P2W7', clientId: 'c-18', clientName: 'Victoria Rosenthal', tier: 'mid', lastCustody: { by: 'Rosa', at: daysAgo(8, 9), where: 'Safe (await band)' } }],
+    unexpected: [] },
+];

@@ -4,7 +4,10 @@ import { seedPhoto } from './intake';
 import { daysAgo, daysFromNow } from './time';
 
 // Linear order of the pack's full status list — the shop-floor map reads left to right
-export const JOB_FLOW: JobStatus[] = ['intake', 'in_review', 'awaiting_customer_approval', 'approved', 'in_service', 'testing', 'ready_to_ship', 'closed'];
+export const JOB_FLOW: JobStatus[] = ['intake', 'in_review', 'awaiting_customer_approval', 'approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship', 'closed'];
+// Trade jobs skip the estimate/approval stages and add the division-manager review; every other kind skips manager review
+export const TRADE_SKIP: JobStatus[] = ['in_review', 'awaiting_customer_approval', 'approved'];
+export const flowFor = (kind: JobKind): JobStatus[] => JOB_FLOW.filter((s) => (kind === 'trade' ? !TRADE_SKIP.includes(s) : s !== 'awaiting_manager_review'));
 
 export const DEPT_OF_CODE: Record<DeptCode, Department> = { W: 'watchmaking', B: 'band', P: 'polish', PM: 'watchmaking' };
 
@@ -14,16 +17,17 @@ const line = (description: string, unitPrice: number, dept: DeptCode, qty = 1): 
 const STAFF = ['MM', 'Walter', 'MH'];
 const STATION = ['Bench 1', 'Bench 2', 'Front Desk 1'];
 
-const ACTION_LABEL: Partial<Record<JobStatus, string>> = { in_review: 'start_review', awaiting_customer_approval: 'request_approval', approved: 'approve', in_service: 'start_service', testing: 'to_testing', ready_to_ship: 'qc_pass', closed: 'close' };
+const ACTION_LABEL: Partial<Record<JobStatus, string>> = { in_review: 'start_review', awaiting_customer_approval: 'request_approval', approved: 'approve', in_service: 'start_service', testing: 'to_testing', awaiting_manager_review: 'to_manager_review', ready_to_ship: 'qc_pass', closed: 'close' };
 
 // Walk the machine from intake up to `status`, spacing transitions across the job's age
-const flow = (status: JobStatus, createdDaysAgo: number, by: string): JobTransition[] => {
-  const idx = JOB_FLOW.indexOf(status);
+const flow = (status: JobStatus, createdDaysAgo: number, by: string, kind: JobKind = 'service'): JobTransition[] => {
+  const path = flowFor(kind);
+  const idx = path.indexOf(status);
   const step = Math.max(1, Math.floor(createdDaysAgo / (idx + 1)));
   const out: JobTransition[] = [{ id: `jt-${++seq}`, from: null, to: 'intake', action: 'create', at: daysAgo(createdDaysAgo, 9), by: 'Vienna', station: 'Front Desk 1' }];
   for (let i = 1; i <= idx; i += 1) {
-    const to = JOB_FLOW[i];
-    out.push({ id: `jt-${++seq}`, from: JOB_FLOW[i - 1], to, action: ACTION_LABEL[to] ?? 'update_status', at: daysAgo(createdDaysAgo - i * step, 10 + i), by: i < 3 ? 'Walter' : by, station: i < 3 ? STATION[2] : STATION[STAFF.indexOf(by) % 2], emailQueued: to === 'awaiting_customer_approval' || to === 'ready_to_ship' });
+    const to = path[i];
+    out.push({ id: `jt-${++seq}`, from: path[i - 1], to, action: kind === 'trade' && to === 'in_service' ? 'trade_scan_in' : ACTION_LABEL[to] ?? 'update_status', at: daysAgo(createdDaysAgo - i * step, 10 + i), by: i < 3 ? 'Walter' : by, station: i < 3 ? STATION[2] : STATION[STAFF.indexOf(by) % 2], emailQueued: to === 'awaiting_customer_approval' || to === 'ready_to_ship' });
   }
   return out;
 };
@@ -58,7 +62,7 @@ const build = (s: Seed): Job => {
   const assignees = s.assignees ?? [];
   const by = assignees[0] ?? 'Walter';
   const kind = s.kind ?? 'service';
-  const timeline = flow(s.status, s.createdDaysAgo, by);
+  const timeline = flow(s.status, s.createdDaysAgo, by, kind);
   if (s.qcFail) {
     const i = timeline.findIndex((t) => t.to === 'testing');
     if (i > 0) timeline.splice(i + 1, 0, { id: `jt-${++seq}`, from: 'testing', to: 'in_service', action: 'qc_fail', reason: s.qcFail, at: daysAgo(Math.max(1, s.createdDaysAgo - 4), 15), by, station: 'Bench 1', emailQueued: true }, { id: `jt-${++seq}`, from: 'in_service', to: 'testing', action: 'to_testing', at: daysAgo(Math.max(0, s.createdDaysAgo - 6), 11), by, station: 'Bench 1' });
@@ -134,6 +138,9 @@ export const jobs: Job[] = [
   // Robert Calloway — R1 closed history (a year ago) · R3 mid-service now
   build({ id: 'j-r1', number: 'E01871', estimateId: 'e-r1', clientId: 'c-30', watchId: 'w-40', workflow: ['W', 'P'], status: 'closed', owner: 'manager', assignees: ['MM', 'Walter'], createdDaysAgo: 375, dueInDays: -350, notes: ['Mainspring, gaskets, crown tube replaced under service.'] }),
   build({ id: 'j-r3', number: 'E02041', estimateId: 'e-r3', clientId: 'c-30', watchId: 'w-42', workflow: ['W', 'B'], status: 'in_service', owner: 'manager', assignees: ['MM'], createdDaysAgo: 58, dueInDays: 9, notes: ['Crystal on order — movement service under way meanwhile.'], conditionNotes: 'Light scratch across crystal at 10 o’clock; bracelet stretch 2 mm; caseback unmarked.' }),
+  // Trade lane (RolliShop internal) — scan-in only, no inspection report, no estimate; manager review before invoice
+  build({ id: 'j-t1', number: 'E02050', clientId: 'c-31', watchId: 'w-50', workflow: ['B'], status: 'in_service', kind: 'trade', owner: 'manager', assignees: ['Rosa'], createdDaysAgo: 3, dueInDays: 4, notes: ['RolliShop stock — rivet bracelet restoration, full refinish + re-pin.'], lines: [{ id: 'l-jt1-1', dept: 'B', description: 'Bracelet restoration — rivet Oyster', qty: 1, unitPrice: 185000, type: 'service', taxable: false }, { id: 'l-jt1-2', dept: 'B', description: 'Clasp re-pin + tighten', qty: 1, unitPrice: 45000, type: 'service', taxable: false }] }),
+  build({ id: 'j-t2', number: 'E02051', clientId: 'c-31', watchId: 'w-51', workflow: ['B', 'P'], status: 'awaiting_manager_review', kind: 'trade', owner: 'manager', assignees: ['Walter'], createdDaysAgo: 6, dueInDays: 1, notes: ['RolliShop stock — case + bracelet refinish before it goes on display.'], lines: [{ id: 'l-jt2-1', dept: 'P', description: 'Case refinish — brushed / polished', qty: 1, unitPrice: 130000, type: 'service', taxable: false }, { id: 'l-jt2-2', dept: 'B', description: 'Bracelet refinish', qty: 1, unitPrice: 95000, type: 'service', taxable: false }] }),
   build({ id: 'j-24', number: 'E02007', estimateId: 'e-23', packageId: 'pk-11', clientId: 'c-10', watchId: 'w-20', workflow: ['W'], status: 'in_service', priority: 'high', owner: 'manager', assignees: ['MM'], createdDaysAgo: 19, dueInDays: 5, hold: { type: 'parts', reason: 'Sapphire crystal (OEM) on order from RSC', daysAgo: 12, released: true }, notes: ['Hairline chip found in crystal at inspection — client approved rev 2 adding the crystal.', 'Crystal arrived; fitted and pressure-tested 100m OK.'], conditionNotes: 'Aubergine dial pristine. Light desk wear on clasp.' }),
 ];
 

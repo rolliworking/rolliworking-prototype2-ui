@@ -30,9 +30,12 @@ const rows: Row[] = [
   ['c-24', 'Rebecca', 'Halloran', 'rebecca.halloran@example.com', '(401) 555-0124', 'Newport', 'RI'],
   ['c-30', 'Robert', 'Calloway', 'robert.calloway@example.com', '(203) 555-0130', 'Greenwich', 'CT', undefined],
   ['c-25', 'Sebastian', 'Vidal', 'sebastian.vidal@example.com', '(786) 555-0125', 'Coral Gables', 'FL', 'Vidal Jewelers'],
+  ['c-31', 'RolliShop', '(internal)', 'rollishop@rollisuite.internal', '(212) 555-0131', 'New York', 'NY', 'RolliShop'],
 ];
 
-const tradeIds = new Set(['c-11', 'c-25']);
+const tradeIds = new Set(['c-11', 'c-25', 'c-31']);
+// Trade accounts: the account's division manager reviews finished trade work before it is invoiced (Walter for RolliShop)
+const ACCOUNT_MANAGER: Record<string, string> = { 'c-31': 'Walter', 'c-25': 'MH', 'c-11': 'MH' };
 
 export const clients: Client[] = rows.map(([id, firstName, lastName, email, phone, city, state, company], i) => ({
   id,
@@ -45,5 +48,7 @@ export const clients: Client[] = rows.map(([id, firstName, lastName, email, phon
   company,
   street: `${120 + i * 37} ${['Park Ave', 'Madison Ave', 'Elm St', 'Harbor Rd', 'Lakeview Dr', 'Oak Ln', 'Ocean Blvd'][i % 7]}`,
   type: tradeIds.has(id) ? 'trade' : 'retail',
+  managerShort: ACCOUNT_MANAGER[id],
+  internal: id === 'c-31' ? true : undefined,
   since: daysAgo(120 + i * 37),
 }));

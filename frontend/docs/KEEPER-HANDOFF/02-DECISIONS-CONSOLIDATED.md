@@ -290,3 +290,32 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Built at: estimate Send modal (`estimate_sent`) and the Inbox reply composer (all template keys; the textarea is the inline editor). Seed: Vienna's personal `estimate_sent`. `⚠ DRIFT`: shipping-label / follow-up / invoice emails still hard-code bodies (Q32) — point-of-use Edit lands there once they go through the template renderer.
 
 **Modules touched:** cross-cutting
+
+## Stage / bin audit · Trade job flow · Scan-to-complete · Client split strip — 2026-09-27 (MH briefs)
+- **Audit** (Station Scanner mode toggle + Supervisor Pad 4th tab): pick a location (14 RW stations + 3 derived bins: orphan / awaiting-payment / concierge-inspection) → the system's belief (count + part rows with job · watch · client · value tier) → scan everything present → live ✓ matched (greys) / ? unexpected (one-tap **Correct location** = `PartMove via audit_correction`, or **Investigate**) / ⚠ missing at Finish (identity, client, tier, last custody event = search starting point). Sessions are append-only (`AuditSession`); a missing result pins a summary to the manager hit list. Per-location "last audited" chip on the RW Shop Floor, amber after N days (Setup → Audits, default 7). Value tier derived from SO/job total (high ≥ $5k · mid ≥ $1.5k), never an amount in /rw. Bins are derived from job state, so unexpected items there can only be investigated.
+- **Trade jobs** (`kind: 'trade'`; trade account = `Client.type 'trade'` + `managerShort` + `internal`): intake = **scan-in only** (`/intake/trade`; custody starts; no inspection report, no estimate/approval) → `in_service` → `testing` (post-work inspection) → **`awaiting_manager_review`** (new status; pin on the account manager's list — Walter for RolliShop) → **Inspected/Accepted** converts straight to an SO or **Send back** (reason picker: rework / waiting on part / failed inspection / other → bench, completions cleared as rework). Emails: internal account → none at all; external trade account → invoice email only. Job Story = abbreviated **Trade path strip** on RS/RW job pages. Every other kind skips `awaiting_manager_review`.
+- **Scan-to-complete**: a scan into **Safe (await band)** / **Safe (await head)** writes custody → safe, status → waiting AND the completion credit (once, to the scanning tech) in one event; toast "Band COMPLETE — Rosa ✓ (undo)" with a **10 s full undo** (credit, status, custody move, and any auto-transition to testing). The mid-process "Into safe" station does not complete. Manual complete button stays.
+- **Client split strip** (`/rc` watch page + compact on request cards): one track per component in client words — done = green check + "Refinishing complete — ready and waiting"; active = Received / Awaiting your approval / In service / In final assembly / Ready; merge point "Final assembly — begins when both are ready". Collapses when all tracks merge. No station names, no dot colours.
+
+**Modules touched:** cross-cutting
+
+## RolliTime re-homed into RW — 2026-09-27 (MH brief; re-home, not a redesign)
+- `/rt` → **`/rw/testing`** (queue) and `/rw/testing/test/:jobId` (Witschi-style test, unchanged). Inside the RW access boundary: bench tiers reach it, no RS access needed, MoneyContext hides amounts, PIN user-switch in the header, `.rw-dark` tablet treatment. Old `/rt` and `/rt/test/:jobId` **redirect**.
+- **Testing** is now an RW station (`RwStationKey 'testing'`, shared lane, on the Shop Floor board between Final assembly and Finished, auditable). Scanning a label at the testing bench = standard custody transfer of every part to Testing (scan event), derived status `reunited`, then the test opens.
+- **Q47**: timing PASS flags the job (`timingPassed(j)` — a pass recorded since the last entry into testing); the RW QC queue floats flagged jobs to the top with a "timing pass" badge. The job stays in `testing` until QC.
+
+**Modules touched:** cross-cutting
+
+## Work grading gate at /rw/testing — 2026-09-27 (MH brief)
+- Before a timing test can **Start**, every applicable grading category must be scored 1–5 (5 = flawless) on a touch-first form at the testing bench. Categories live in **Setup → Work grading categories** (lookup, same pattern as photo labels; each applies to head / case / bracelet / whole). Seed: Cleanliness (whole) · Case condition (case, bracelet).
+- Score ≤3 requires a short note **or** a photo (camera flow) — low grades carry their evidence. Score ≤2 pins a "Low work grade" line to the manager hit list.
+- Attribution: grade → JOB + responsible tech per category, resolved from component completion events (cleanliness → watchmaker credited on the head; case condition → whoever completed case/bracelet), editable; grader = PIN'd user; grader = tech ⇒ **self-graded** flag (allowed, visible). Grades are append-only events; the gate looks at grades since the job last entered testing.
+- Reports: Bench Pad Goals month tiles show count **and** ★ avg grade (detail: per-category avg, low count, self-graded count); Reports → Tech completions gains a "— quality (avg grade)" row per tech.
+
+**Modules touched:** cross-cutting
+
+## Client rating badge + incoming-call screen-pop (mock) — 2026-09-27 (MH brief)
+- Badge `A/C/N`: Attitude 1–5 · Communication 1–5 (staff-set, concierge tier and up; tap on Client 360 → two 5-star rows; every change logged who/when/old→new) · N = **derived** count of completed jobs (closed or picked-up/shipped SO), never hand-set, real number. Unrated = `–/–/0`. Tooltip spells it out. Shown on Client 360 header, RW Job lookup rows, Inbox thread header, RS/RW job client chip, call toast. **STRICTLY internal** — `RatingBadge`/`clientRatingSync` are never imported by `/rc` or portal read functions; view-as-client uses the portal functions only.
+- Telephony seam: `src/api/telephony.ts` (`onInboundCall(event)` → `receiveInboundCall` → screen-pop listeners) is the ONE file a real Vonage VIP webhook replaces (Parcel Pro seam pattern). Dev menu 📞: known client (Calloway) → toast "Incoming: Robert Calloway 5/3/2 — 1 in service · 2 needs reply" → tap opens Client 360 + Companion (Job Lookup); unknown number → "Unknown caller (954-555-0182)" → one-tap New client with the number pre-filled. Call events (answered by whom/when/where) land in the client's comms history (Job Story Comms lane) and the audit log. **MOCKED** — no carrier.
+
+**Modules touched:** cross-cutting

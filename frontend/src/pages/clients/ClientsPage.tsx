@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import { IdentifierSearch } from '@/components/clients/IdentifierSearch';
+import { NewClientFromCall } from '@/components/clients/NewClientFromCall';
 import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/Button';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
@@ -14,6 +15,7 @@ export default function ClientsPage() {
   return (
     <div data-testid="clients-page" className="space-y-4">
       <PageHeader title="Clients" subtitle="Type anything the caller gives you — name, email, phone, estimate #, SUB#, tracking, watch ref or serial, invoice #" testId="clients-header" />
+      <NewClientFromCall />
       <div className="max-w-[720px]">
         <IdentifierSearch autoFocus inline testIdPrefix="clients-search" />
       </div>

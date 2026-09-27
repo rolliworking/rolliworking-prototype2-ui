@@ -85,6 +85,8 @@ export interface Client {
   state: string;
   type: ClientType;
   since: string;
+  managerShort?: string;
+  internal?: boolean;
 }
 
 export type WatchStatus =
@@ -200,11 +202,11 @@ export interface QuoteContext {
 
 // ---- Jobs (E4) — enums per PROMPT-PACK-jobs.md (DB enums win over app lists) ----
 
-export type JobStatus = 'intake' | 'in_review' | 'awaiting_customer_approval' | 'approved' | 'in_service' | 'testing' | 'ready_to_ship' | 'closed';
+export type JobStatus = 'intake' | 'in_review' | 'awaiting_customer_approval' | 'approved' | 'in_service' | 'testing' | 'awaiting_manager_review' | 'ready_to_ship' | 'closed';
 export type JobSimpleStatus = 'estimate' | 'on_hand' | 'finished';
 export type JobPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type HoldType = 'parts' | 'outsource';
-export type JobKind = 'service' | 'small_job' | 'warranty';
+export type JobKind = 'service' | 'small_job' | 'warranty' | 'trade';
 
 export interface Stamp {
   at: string;
@@ -306,7 +308,7 @@ export interface JobComponent {
   station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; history?: PartMove[];
 }
 export type PartStatus = 'not_started' | 'in_progress' | 'waiting' | 'reunited' | 'fulfilled';
-export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system'; note?: string }
+export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo'; note?: string }
 export interface TechCompletionRow { tech: string; months: Record<string, { total: number; byDept: Record<DeptCode, number> }>; total: number }
 export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]; generatedAt: string }
 
@@ -846,7 +848,7 @@ export interface PortalSession { clientId: string; email: string; token: string;
 
 // ---- Portal "Your requests" — one card per request across the lifecycle, so a multi-request client never wonders which watch a card is about ----
 export type PortalRequestState = 'in_progress' | 'received' | 'decision' | 'stale_estimate' | 'history';
-export interface PortalRequestCard { id: string; state: PortalRequestState; stateLabel: string; watchName: string; reference: string; title: string; blurb: string; lastUpdate: string; lastUpdateLabel: string; path: string; cta?: { label: string; path: string }; photoCount: number; requestNumber?: string; estimateNumber?: string; jobNumber?: string; amount?: number }
+export interface PortalRequestCard { id: string; state: PortalRequestState; stateLabel: string; watchName: string; reference: string; title: string; blurb: string; lastUpdate: string; lastUpdateLabel: string; path: string; cta?: { label: string; path: string }; photoCount: number; requestNumber?: string; estimateNumber?: string; jobNumber?: string; amount?: number; split?: PortalSplit }
 export interface PortalPhoto { id: string; url: string; label: string; at: string }
 export interface PortalPhotoSections { arrival: PortalPhoto[]; condition: PortalPhoto[]; completed: PortalPhoto[]; jobNumber: string }
 
@@ -873,8 +875,13 @@ export interface PortalDocument { id: string; kind: 'photo' | 'estimate' | 'invo
 
 export interface PortalHistoryRow { id: string; at: string; title: string; detail: string; path?: string }
 
+// Client-language split-flow strip — words first, no station names, no dot colours
+export interface PortalSplitTrack { key: ComponentKey; label: string; done: boolean; text: string }
+export interface PortalSplit { tracks: PortalSplitTrack[]; mergeLabel: string }
+
 export interface PortalWatch {
   watch: Watch;
+  split?: PortalSplit;
   jobIds: string[];
   status: PortalStatus;
   job?: Job;
@@ -1012,10 +1019,10 @@ export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage
 
 // ---- E18 RW deep build — shop floor core ----------------------------------------------------------------
 export type RwLane = 'head' | 'band' | 'shared';
-export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'into_safe_head' | 'safe_await_band' | 'band_pre_queue' | 'refinish' | 'polish' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'finished';
+export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'into_safe_head' | 'safe_await_band' | 'band_pre_queue' | 'refinish' | 'polish' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished';
 export interface RwStation { key: RwStationKey; label: string; lane: RwLane; order: number }
 export type PartColorKey = 'head' | 'case' | 'band';
-export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string }
+export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string; completed?: { by: string; undoToken: string; transitioned: boolean } }
 export interface ShopFloor { stations: RwStation[]; dots: FloorDot[]; counts: Record<RwStationKey, number>; techs: string[] }
 export interface PartHistoryView { job: JobWithRefs; part: JobComponent; moves: PartMove[] }
 export interface ScanSession { tech?: User; rows: { at: string; jobNumber: string; jobId: string; watchLabel: string; part: string; outboxId?: string }[] }
@@ -1038,7 +1045,38 @@ export interface BenchJobRow { job: JobWithRefs; parts: FloorDot[]; idleDays: nu
 export type SplitState = 'split' | 'waiting_band' | 'waiting_head' | 'reunited';
 export interface BenchSplitRow { job: JobWithRefs; parts: FloorDot[]; state: SplitState; bandDoneBy?: string; bandDoneAt?: string }
 export interface BenchOutsourceRow { job: JobWithRefs; vendor: string; reason: string; daysOut: number }
-export interface GoalMonth { key: string; label: string; goal: number; actual: number; hit: boolean; byWeek: { label: string; count: number }[]; byType: Record<ComponentKey, number> }
+export interface GoalMonth { key: string; label: string; goal: number; actual: number; hit: boolean; byWeek: { label: string; count: number }[]; byType: Record<ComponentKey, number>; quality?: TechQuality }
 export interface BenchGoals { current: GoalMonth; paceTarget: number; dayOfMonth: number; daysInMonth: number; history: GoalMonth[] }
 export interface BenchBoard { user: User; inProgress: BenchJobRow[]; attention: BenchJobRow[]; splits: BenchSplitRow[]; outsourced: BenchOutsourceRow[]; completed: { job: JobWithRefs; part: FloorDot; at: string }[]; goals: BenchGoals; messages: MessageInboxRow[]; unread: number; stuckDays: number }
 export interface BenchSettings { benchName: string; idleMinutes: number; simulateOffline: boolean }
+
+// ---- Stage / bin audit (Station Scanner + Supervisor Pad) — append-only sessions ----------------------------------------
+export type AuditBinKey = 'orphan_bin' | 'awaiting_payment_bin' | 'pre_intake_bin';
+export type AuditLocationKey = RwStationKey | AuditBinKey;
+export interface AuditLocation { key: AuditLocationKey; label: string; group: 'station' | 'bin'; lane?: RwLane }
+export type ValueTier = 'high' | 'mid' | 'standard';
+export interface AuditItem { id: string; jobId: string; jobNumber: string; key: ComponentKey; partLabel: string; watchLabel: string; reference: string; serial: string; clientId: string; clientName: string; tier: ValueTier; lastCustody?: { by: string; at: string; where: string } }
+export type AuditResolution = 'corrected' | 'investigate';
+export interface AuditUnexpected extends AuditItem { believedAt: AuditLocationKey; believedLabel: string; resolution?: AuditResolution }
+export type AuditScanResult = 'matched' | 'unexpected' | 'duplicate' | 'unknown';
+export interface AuditLive { location: AuditLocation; startedAt: string; expected: AuditItem[]; matched: string[]; unexpected: AuditUnexpected[]; scans: { code: string; at: string; result: AuditScanResult; label: string }[] }
+export interface AuditSession { id: string; location: AuditLocationKey; locationLabel: string; by: string; station: string; startedAt: string; finishedAt: string; expectedCount: number; matched: number; missing: AuditItem[]; unexpected: AuditUnexpected[]; pinId?: string }
+export interface AuditLocationStatus { location: AuditLocation; expected: number; lastAudited?: string; lastResult?: 'clean' | 'missing'; stale: boolean; daysSince?: number }
+
+// ---- Work grading gate at /rw/testing — Setup lookup categories, 1–5 scores, append-only grade events attributed to job + responsible tech --------
+export type GradeScope = 'head' | 'case' | 'bracelet' | 'whole';
+export interface GradeCategory { id: string; key: string; label: string; hint: string; scopes: GradeScope[]; active: boolean; createdBy: string; createdAt: string }
+export type GradeScore = 1 | 2 | 3 | 4 | 5;
+export interface WorkGrade { id: string; jobId: string; jobNumber: string; categoryId: string; categoryLabel: string; score: GradeScore; note?: string; photoUrl?: string; tech: string; techAuto: string; grader: string; selfGraded: boolean; at: string; station: string }
+export interface GradeGateRow { category: GradeCategory; grade?: WorkGrade; suggestedTech: string; techOptions: string[] }
+export interface GradeGate { rows: GradeGateRow[]; missing: string[]; ready: boolean }
+export interface TechQuality { n: number; avg: number | null; byCategory: Record<string, { label: string; avg: number; n: number }>; low: number; selfGraded: number }
+
+// ---- Client rating (STRICTLY internal — never /rc, never view-as-client, never emails/exports) ----------------------------------------
+export type Star = 1 | 2 | 3 | 4 | 5;
+export interface RatingChange { at: string; by: string; station: string; field: 'attitude' | 'communication'; from?: Star; to: Star }
+export interface ClientRating { clientId: string; attitude?: Star; communication?: Star; completed: number; badge: string; tooltip: string; history: RatingChange[] }
+// ---- Telephony seam (mock of Vonage VIP) — src/api/telephony.ts adapts inbound events into screen-pops + comms history ----------------
+export interface InboundCallEvent { number: string; at: string; direction: 'inbound' }
+export type ScreenPop = { kind: 'known'; client: Client; rating: ClientRating; inService: number; needsReply: number; callId: string } | { kind: 'unknown'; number: string; callId: string };
+export interface CallEvent { id: string; at: string; number: string; clientId?: string; answeredBy: string; station: string; outcome: 'screen_pop' | 'unknown_caller' }

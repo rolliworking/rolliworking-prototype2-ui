@@ -17,6 +17,7 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
   { key: 'parts', label: 'Parts', path: '/rw/parts', tiers: ['manager', 'concierge'] },
   { key: 'wm', label: 'WM Room', path: '/rw/wm', tiers: ['manager', 'concierge'] },
   { key: 'station', label: 'Station Scan', path: '/rw/station', tiers: ['manager', 'concierge'] },
+  { key: 'testing', label: 'Testing', path: '/rw/testing', tiers: ['manager', 'concierge'] },
   { key: 'qc', label: 'QC', path: '/rw/qc', tiers: ['manager'] },
   { key: 'supervisor', label: 'Supervisor', path: '/rw/supervisor', tiers: ['manager'] },
   { key: 'pad', label: 'Pad', path: '/rw/pad', tiers: ['manager'] },

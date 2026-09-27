@@ -1,0 +1,17 @@
+supervisor-pad-screens — RolliWorking Supervisor Pad + workflow · iPad 1180x820 (portrait variants 820x1180) · signed in as MM (WM room supervisor); 11 as Walter
+
+01-jobs-portrait.png — Supervisor Pad · Jobs tab — same board · 820x1180 portrait
+01-jobs.png — Supervisor Pad · Jobs tab — job board (stepper cards) with client-request badges · 1180x820 landscape
+02-detail-portrait.png — Job detail sheet open (j-01) — photos + inspection / condition notes · 820x1180 portrait
+02-detail.png — Job detail sheet open (j-01) — photos + inspection / condition notes · 1180x820 landscape
+03-sendback.png — Send-back reason picker open (Rework / Waiting on part / Failed QC / Other + note)
+04-parts-composer.png — Parts tab — composer with a watch scanned, live suggestions for 'bezel' incl. the learned tag (recent choice for this reference)
+05-parts-history.png — Parts tab — History segment (past requests, status, steps)
+06-review.png — Review tab — pending cards incl. the OUT OF STOCK allocate card
+07-review-generic.png — Review tab — the GENERIC request (PR-0050 'crystal ring for 16610') being priced / resolved to a part number
+08-picking.png — /rw/picking — pick cards with bin locations, incl. the short alert
+09-client-request-popup.png — Client-request scan pop-up (modal up) after scanning E02031 on the Pad
+10-audit.png — Audit mode mid-scan at Safe (await band) — 1 matched (greyed), 1 unexpected (correct / investigate), 2 not yet seen (missing if unscanned)
+11-trade-review-panel.png — same queue, panel crop
+11-trade-review.png — Walter's Dashboard with the Trade review queue (E02051 RolliShop internal · 'Your account' badge · Inspected/Accepted → invoice · Send back) · 1180x820
+12-lightbox.png — Photo lightbox open from the job detail sheet (tap image to zoom)

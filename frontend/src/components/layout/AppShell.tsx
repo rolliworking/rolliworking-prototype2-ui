@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { QuickAddProvider } from '@/components/today/QuickAddOverlay';
 import { CompanionDock, CompanionProvider } from '@/components/companion/CompanionPanel';
+import { CallPopToast } from '@/components/layout/CallPop';
 
 export const PrototypeBanner = () => (
   <div
@@ -28,6 +29,7 @@ export default function AppShell() {
             </main>
           </div>
           <CompanionDock />
+          <CallPopToast />
         </div>
       </div>
     </CompanionProvider>

@@ -3,6 +3,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { DeptPnlStrip, KpiRow } from '@/components/dashboard/KpiCards';
 import { HitListPanel } from '@/components/dashboard/HitListPanel';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { TradeReviewPanel } from '@/components/dashboard/TradeReviewPanel';
 import { PageHeader } from '@/components/ui/Button';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtLongDate } from '@/lib/format';
@@ -21,6 +22,8 @@ export default function Dashboard() {
           <DeptPnlStrip stats={stats} />
         </>
       )}
+
+      {user?.accessTier === 'manager' && <TradeReviewPanel />}
 
       <div className="grid grid-cols-5 gap-4">
         <div className="col-span-3">

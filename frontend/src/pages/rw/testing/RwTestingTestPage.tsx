@@ -4,6 +4,8 @@ import * as api from '@/api/client';
 import type { JobWithRefs, TimingPosition, TimingReading, TimingTest } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
+import { GradeGatePanel } from '@/components/rw/GradeGatePanel';
+import type { GradeGate } from '@/api/client';
 import { fmtDate, fmtTime } from '@/lib/format';
 
 const POS_LABEL: Record<TimingPosition, string> = { DU: 'Dial up', DD: 'Dial down', CD: 'Crown down', CL: 'Crown left', CU: 'Crown up', CR: 'Crown right' };
@@ -17,24 +19,27 @@ export const TimingHistory = ({ tests, compact }: { tests: TimingTest[]; compact
   </li>)}{!tests.length && <li className="text-xs text-ink-400">No timing tests yet.</li>}</ul>
 );
 
-export default function RtTestPage() {
+export default function RwTestingTestPage() {
   const { jobId = '' } = useParams(); const nav = useNavigate();
   const [job, setJob] = useState<JobWithRefs | null>(null); const [history, setHistory] = useState<TimingTest[]>([]); const [err, setErr] = useState<string | null>(null); const [done, setDone] = useState<TimingTest | null>(null);
   const [readings, setReadings] = useState<Record<TimingPosition, { rate: string; beat: string; amp: string }>>(Object.fromEntries(api.TIMING_POSITIONS.map((p) => [p, { rate: '', beat: '', amp: '' }])) as never);
+  const [gate, setGate] = useState<GradeGate | null>(null); const [started, setStarted] = useState(false);
   const [lift, setLift] = useState(''); const [reserve, setReserve] = useState(''); const [reason, setReason] = useState('');
   useEffect(() => { api.getJob(jobId).then((j) => { setJob(j); if (j) { setLift(String(api.toleranceForWatch(j.watch).liftAngle)); api.getTimingTests({ watchId: j.watchId }).then(setHistory); } }); }, [jobId]);
   const tol = job ? api.toleranceForWatch(job.watch) : null;
   const parsed: TimingReading[] = useMemo(() => api.TIMING_POSITIONS.map((p) => ({ position: p, rate: Number(readings[p].rate), beat: Number(readings[p].beat), amp: Number(readings[p].amp) })), [readings]);
-  const complete = api.TIMING_POSITIONS.every((p) => readings[p].rate !== '' && readings[p].beat !== '' && readings[p].amp !== '') && reserve !== '';
+  const complete = started && api.TIMING_POSITIONS.every((p) => readings[p].rate !== '' && readings[p].beat !== '' && readings[p].amp !== '') && reserve !== '';
   const ev = tol && complete ? api.evaluateTiming(tol, { readings: parsed, powerReserve: Number(reserve) }) : null;
   if (!job || !tol) return null;
   const set = (p: TimingPosition, k: 'rate' | 'beat' | 'amp', v: string) => setReadings({ ...readings, [p]: { ...readings[p], [k]: v } });
   const bad = { rate: (v: string) => v !== '' && (Number(v) < tol.crit2Min - tol.crit1MaxDelta / 2 || Number(v) > tol.crit2Max + tol.crit1MaxDelta / 2), beat: (v: string) => v !== '' && Number(v) > tol.beatMax, amp: (v: string) => v !== '' && (Number(v) < tol.ampMin || Number(v) > tol.ampMax) };
   const submit = (verdict: 'pass' | 'reject') => api.recordTimingTest(job.id, { readings: parsed, liftAngle: Number(lift), powerReserve: Number(reserve), verdict, reason }).then((t) => { setDone(t); setErr(null); }).catch((e) => setErr(e.message));
-  if (done) return <div data-testid="rt-done" className="mx-auto max-w-2xl space-y-3 rounded-lg border border-line bg-surface p-5 text-sm"><h2 className="text-lg font-semibold">{done.verdict === 'pass' ? `${job.number} passed — moved to the QC queue` : `${job.number} rejected — back to in progress under ${job.assignees.join(', ') || 'the bench'}`}</h2><p className="text-xs text-ink-500">{done.verdict === 'pass' ? '“Testing complete” email queued to Outbox · test saved to job and watch history.' : '“Back to in progress” email queued to Outbox · rejection logged on the job timeline.'}</p><TimingHistory tests={[done]} /><div className="flex gap-2"><Button variant="primary" data-testid="rt-back-queue" onClick={() => nav('/rt')}>Back to queue</Button><Link to={`/jobs/${job.id}`} className="text-xs text-brand hover:underline">Open job in RolliSuite</Link></div></div>;
+  if (done) return <div data-testid="rt-done" className="mx-auto max-w-2xl space-y-3 rounded-lg border border-line bg-surface p-5 text-sm"><h2 className="text-lg font-semibold">{done.verdict === 'pass' ? `${job.number} passed — moved to the QC queue` : `${job.number} rejected — back to in progress under ${job.assignees.join(', ') || 'the bench'}`}</h2><p className="text-xs text-ink-500">{done.verdict === 'pass' ? '“Testing complete” email queued to Outbox · test saved to job and watch history.' : '“Back to in progress” email queued to Outbox · rejection logged on the job timeline.'}</p><TimingHistory tests={[done]} /><div className="flex gap-2"><Button variant="primary" data-testid="rt-back-queue" onClick={() => nav('/rw/testing')}>Back to queue</Button><Link to={`/jobs/${job.id}`} className="text-xs text-brand hover:underline">Open job in RolliSuite</Link></div></div>;
   return <div data-testid="rt-test-page" className="mx-auto max-w-5xl space-y-4">
     <div data-testid="rt-job-card" className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm"><span className="font-mono text-base font-semibold">{job.number}</span><span>{job.watch.brand} {job.watch.model} <span className="font-mono text-ink-500">{job.watch.reference} / {job.watch.serial}</span></span><span className="text-ink-500">{job.client.firstName} {job.client.lastName}</span><span className="rounded bg-canvas px-2 py-0.5 text-xs">{tol.label}</span><span className="ml-auto text-xs text-ink-400">status {job.status} · {job.assignees.join(', ') || 'unassigned'}</span></div>
-    <div className="grid grid-cols-[1fr_320px] gap-4">
+    <GradeGatePanel jobId={job.id} onChange={setGate} />
+    <div className="flex flex-wrap items-center gap-3"><Button variant="primary" data-testid="rt-start-test" disabled={!gate?.ready || started} title={gate && !gate.ready ? `Score ${gate.missing.join(' and ')} first` : undefined} onClick={() => setStarted(true)}>{started ? 'Test started' : 'Start test'}</Button>{gate && !gate.ready && <span data-testid="rt-start-blocked" className="text-xs text-amber-300">Blocked — missing: {gate.missing.join(', ')}</span>}</div>
+    <div className={`grid grid-cols-[1fr_320px] gap-4 ${started ? '' : 'pointer-events-none opacity-50'}`} data-testid="rt-test-body" data-started={started}>
       <div className="rounded-lg border border-line bg-surface p-4">
         <div className="mb-2 flex items-center justify-between text-xs"><span className="font-semibold">Timing test — Witschi layout</span><span className="text-ink-500">targets: Crit1 Δ &lt; {tol.crit1MaxDelta} s/d · Crit2 {tol.crit2Min}/+{tol.crit2Max} s/d · beat ≤ {tol.beatMax} ms · amp {tol.ampMin}–{tol.ampMax}° · reserve ≥ {tol.reserveHours} h</span></div>
         <table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase tracking-wide text-ink-400"><th className="py-1">Position</th><th>Rate s/d <span className="normal-case text-ink-300">({tol.crit2Min}/+{tol.crit2Max})</span></th><th>Beat ms <span className="normal-case text-ink-300">(≤{tol.beatMax})</span></th><th>Amp ° <span className="normal-case text-ink-300">({tol.ampMin}–{tol.ampMax})</span></th></tr></thead><tbody>

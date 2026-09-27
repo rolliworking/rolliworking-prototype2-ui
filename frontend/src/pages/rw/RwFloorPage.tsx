@@ -2,7 +2,8 @@ import { Lock, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { ComponentKey, FloorDot, JobKind, PartHistoryView, RwStation, RwStationKey, ShopFloor } from '@/api/client';
+import type { AuditLocationStatus, ComponentKey, FloorDot, JobKind, PartHistoryView, RwStation, RwStationKey, ShopFloor } from '@/api/client';
+import { CompleteToast } from '@/components/rw/AuditPanel';
 import { PART_COLOR, PART_NAME, PartDot } from '@/components/rw/RwBits';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { fmtDate, fmtTime } from '@/lib/format';
@@ -13,25 +14,27 @@ const Dot = ({ d, onOpen, onDragStart }: { d: FloorDot; onOpen: () => void; onDr
   </button>
 );
 
-const Station = ({ s, dots, count, onDrop, onOpen, wide }: { s: RwStation; dots: FloorDot[]; count: number; onDrop: (e: React.DragEvent) => void; onOpen: (d: FloorDot) => void; wide?: boolean }) => {
+const AuditChip = ({ a }: { a?: AuditLocationStatus }) => (a ? <span data-testid={`floor-audited-${a.location.key}`} data-stale={a.stale} title={a.lastAudited ? `Last audited ${fmtDate(a.lastAudited)} by audit${a.lastResult === 'missing' ? ' · missing found' : ''}` : 'Never audited'} className={`rounded-sm px-1 font-mono text-[9px] ${a.stale ? 'bg-amber-400/20 text-amber-200' : 'text-slate-500'}`}>{a.lastAudited ? `audit ${a.daysSince}d` : 'no audit'}</span> : null);
+
+const Station = ({ s, dots, count, onDrop, onOpen, wide, audit }: { s: RwStation; dots: FloorDot[]; count: number; onDrop: (e: React.DragEvent) => void; onOpen: (d: FloorDot) => void; wide?: boolean; audit?: AuditLocationStatus }) => {
   const [over, setOver] = useState(false); const safe = s.key.includes('safe');
   return <div data-testid={`floor-station-${s.key}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); onDrop(e); }} className={`flex min-h-[110px] flex-col rounded-md border p-1.5 transition-colors ${over ? 'border-amber-400 bg-amber-400/10' : safe ? 'border-white/20 bg-black/30' : 'border-white/10 bg-black/20'} ${wide ? 'min-h-[240px]' : ''}`}>
-    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400"><span className="inline-flex items-center gap-1">{safe && <Lock size={9} />}{s.label}</span><span data-testid={`floor-count-${s.key}`} className="font-mono">{count}</span></div>
+    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400"><span className="inline-flex items-center gap-1">{safe && <Lock size={9} />}{s.label}</span><span className="inline-flex items-center gap-1"><AuditChip a={audit} /><span data-testid={`floor-count-${s.key}`} className="font-mono">{count}</span></span></div>
     <div className="flex flex-wrap content-start gap-1">{dots.map((d) => <Dot key={`${d.jobId}-${d.key}`} d={d} onOpen={() => onOpen(d)} onDragStart={() => undefined} />)}</div>
   </div>;
 };
 
 export default function RwFloorPage() {
-  const [m, setM] = useState<ShopFloor | null>(null); const [tech, setTech] = useState(''); const [kind, setKind] = useState<'' | JobKind>(''); const [hist, setHist] = useState<PartHistoryView | null>(null); const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const load = useCallback(() => api.getShopFloor({ tech: tech || undefined, kind: kind || undefined }).then(setM), [tech, kind]);
+  const [m, setM] = useState<ShopFloor | null>(null); const [tech, setTech] = useState(''); const [kind, setKind] = useState<'' | JobKind>(''); const [hist, setHist] = useState<PartHistoryView | null>(null); const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null); const [audits, setAudits] = useState<AuditLocationStatus[]>([]); const [done, setDone] = useState<{ label: string; by: string; token: string; transitioned: boolean } | null>(null);
+  const load = useCallback(() => Promise.all([api.getShopFloor({ tech: tech || undefined, kind: kind || undefined }).then(setM), api.getAuditLocations().then(setAudits)]).then(() => undefined), [tech, kind]);
   useEffect(() => { void load(); }, [load]);
   const say = (tone: 'ok' | 'err', text: string) => { setMsg({ tone, text }); window.setTimeout(() => setMsg(null), tone === 'ok' ? 2500 : 6000); };
-  const drop = (to: RwStationKey) => async (e: React.DragEvent) => { const [jobId, key] = e.dataTransfer.getData('text/plain').split('|'); if (!jobId) return; try { const d = await api.movePart(jobId, key as ComponentKey, to, 'drag'); say('ok', `${d.jobNumber} · ${d.label} → ${api.RW_STATIONS.find((s) => s.key === to)!.label}`); await load(); if (hist && hist.job.id === jobId && hist.part.key === key) setHist(await api.getPartHistory(jobId, key as ComponentKey)); } catch (x) { say('err', x instanceof Error ? x.message : 'Move failed'); } };
+  const drop = (to: RwStationKey) => async (e: React.DragEvent) => { const [jobId, key] = e.dataTransfer.getData('text/plain').split('|'); if (!jobId) return; try { const d = await api.movePart(jobId, key as ComponentKey, to, 'drag'); say('ok', `${d.jobNumber} · ${d.label} → ${api.RW_STATIONS.find((s) => s.key === to)!.label}`); if (d.completed) setDone({ label: d.label, by: d.completed.by, token: d.completed.undoToken, transitioned: d.completed.transitioned }); await load(); if (hist && hist.job.id === jobId && hist.part.key === key) setHist(await api.getPartHistory(jobId, key as ComponentKey)); } catch (x) { say('err', x instanceof Error ? x.message : 'Move failed'); } };
   const open = async (d: FloorDot) => setHist(await api.getPartHistory(d.jobId, d.key));
   if (!m) return null;
   const at = (k: RwStationKey) => m.dots.filter((d) => d.station === k); const st = (k: RwStationKey) => m.stations.find((s) => s.key === k)!;
   const head = m.stations.filter((s) => s.lane === 'head'); const band = m.stations.filter((s) => s.lane === 'band');
-  const StationBox = ({ k, wide }: { k: RwStationKey; wide?: boolean }) => <Station s={st(k)} dots={at(k)} count={m.counts[k]} onDrop={(e) => void drop(k)(e)} onOpen={open} wide={wide} />;
+  const StationBox = ({ k, wide }: { k: RwStationKey; wide?: boolean }) => <Station s={st(k)} dots={at(k)} count={m.counts[k]} onDrop={(e) => void drop(k)(e)} onOpen={open} wide={wide} audit={audits.find((a) => a.location.key === k)} />;
   return <div data-testid="rw-floor-page" className="space-y-3">
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div><h1 className="text-lg font-semibold text-white">Shop Floor</h1><p className="text-xs text-slate-400">Live map · dots are physical parts coloured by part, never by status · drag a dot to move it · click a dot for its history <Provisional note="Two-lane (legacy RW) floor vs nine-lane RS map — MH to rule (Q57). Station names/positions to be corrected after the walk." /></p></div>
@@ -41,13 +44,14 @@ export default function RwFloorPage() {
         <select data-testid="floor-filter-kind" value={kind} onChange={(e) => setKind(e.target.value as '' | JobKind)} className="rounded-md border border-white/10 bg-[#0f131a] px-2 py-1.5 text-slate-100"><option value="">All job types</option><option value="service">Service</option><option value="small_job">Small job</option><option value="warranty">Warranty</option></select>
       </div>
     </div>
+    <CompleteToast done={done} onUndone={() => { setDone(null); void load(); }} />
     {msg && <div data-testid="floor-message" className={`rounded-md px-3 py-2 text-sm ${msg.tone === 'ok' ? 'bg-emerald-950/60 text-emerald-300' : 'bg-rose-950/60 text-rose-200'}`}>{msg.text}</div>}
     <div className="grid grid-cols-[1fr_200px] gap-3">
       <div className="space-y-3">
         <section data-testid="floor-lane-head" className="rounded-md border border-blue-400/30 bg-blue-950/10 p-2"><header className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-200">Head lane — watch head · case</header><div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${head.length}, minmax(0, 1fr))` }}>{head.map((s) => <StationBox key={s.key} k={s.key} />)}</div></section>
         <section data-testid="floor-lane-band" className="rounded-md border border-green-400/30 bg-green-950/10 p-2"><header className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-green-200">Band lane — bracelet</header><div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${band.length}, minmax(0, 1fr))` }}>{band.map((s) => <StationBox key={s.key} k={s.key} />)}</div></section>
       </div>
-      <div className="grid grid-rows-2 gap-3"><StationBox k="final_assembly" wide /><StationBox k="finished" wide /></div>
+      <div className="grid grid-rows-3 gap-3"><StationBox k="final_assembly" wide /><StationBox k="testing" wide /><StationBox k="finished" wide /></div>
     </div>
     {hist && <aside data-testid="floor-history" className="fixed inset-y-0 right-0 z-40 flex w-[380px] flex-col border-l border-white/10 bg-[#1f2630] text-slate-100 shadow-2xl">
       <div className="flex items-start justify-between border-b border-white/10 p-4"><div><div className="flex items-center gap-2 text-base font-semibold"><PartDot k={hist.part.key} /> {PART_NAME[hist.part.key]} · <Link to={`/rw/jobs/${hist.job.id}`} className="font-mono text-amber-300 hover:underline">{hist.job.number}</Link></div><div className="text-xs text-slate-400">{hist.job.watch.brand} {hist.job.watch.model} · {hist.job.client.lastName} · custody {hist.part.custodyTech ?? '—'} · {hist.part.partStatus ?? 'derived'}</div></div><button data-testid="floor-history-close" onClick={() => setHist(null)} className="p-1 text-slate-400 hover:text-white"><X size={16} /></button></div>

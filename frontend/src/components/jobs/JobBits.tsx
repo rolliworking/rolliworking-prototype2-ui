@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import * as api from '@/api/client';
 import { ComponentChips } from '@/components/jobs/ComponentBits';
-import type { HoldType, JobKind, JobPriority, JobWithRefs, Role } from '@/api/client';
+import type { Client, HoldType, Job, JobKind, JobPriority, JobWithRefs, Role } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -27,10 +27,40 @@ export const PriorityPill = ({ priority, testId }: { priority: JobPriority; test
   </span>
 );
 
-const KIND_TONE: Record<JobKind, string> = { service: 'bg-canvas text-ink-500', small_job: 'bg-teal-50 text-teal-800', warranty: 'bg-violet-50 text-violet-700' };
-export const KindPill = ({ kind, testId }: { kind: JobKind; testId?: string }) => (
-  <span data-testid={testId} className={clsx('inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', KIND_TONE[kind])}>{api.JOB_KIND_CONFIG[kind].label}</span>
+const KIND_TONE: Record<JobKind, string> = { service: 'bg-canvas text-ink-500', small_job: 'bg-teal-50 text-teal-800', warranty: 'bg-violet-50 text-violet-700', trade: 'bg-amber-100 text-amber-900' };
+export const KindPill = ({ kind, testId, client }: { kind: JobKind; testId?: string; client?: Client }) => (
+  <span data-testid={testId} className={clsx('inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', KIND_TONE[kind])}>{api.JOB_KIND_CONFIG[kind].label}{kind === 'trade' && client && ` · ${client.company ?? fullName(client)}${client.internal ? ' (internal)' : ''}`}</span>
 );
+
+// Trade lane path strip — the abbreviated Job Story: Scan-in → Work → Inspection → Manager review → Invoice
+export const TradePathStrip = ({ job, dark, testId = 'trade-path' }: { job: Job; dark?: boolean; testId?: string }) => {
+  const idx = api.tradePathIndex(job);
+  return <ol data-testid={testId} data-stage={api.TRADE_PATH[idx].key} className={clsx('flex flex-wrap items-center gap-1 rounded-md border px-3 py-2 text-[11px]', dark ? 'border-amber-400/30 bg-amber-400/5' : 'border-amber-200 bg-amber-50/60')}>
+    <span className={clsx('mr-1 font-semibold uppercase tracking-wide', dark ? 'text-amber-300' : 'text-amber-800')}>Trade path</span>
+    {api.TRADE_PATH.map((p, i) => <li key={p.key} data-testid={`${testId}-${p.key}`} data-state={i < idx ? 'done' : i === idx ? 'current' : 'next'} className="inline-flex items-center gap-1">
+      <span className={clsx('rounded-full px-2 py-0.5 font-medium', i === idx ? 'bg-amber-400 text-[#161b22]' : i < idx ? (dark ? 'bg-emerald-500/20 text-emerald-200' : 'bg-moss-50 text-moss-700') : (dark ? 'bg-white/5 text-slate-500' : 'bg-canvas text-ink-400'))}>{i < idx ? '✓ ' : ''}{p.label}</span>
+      {i < api.TRADE_PATH.length - 1 && <span className={dark ? 'text-slate-600' : 'text-ink-300'}>→</span>}
+    </li>)}
+    <span className={clsx('ml-auto', dark ? 'text-slate-400' : 'text-ink-500')}>no inspection report · no estimate · {api.isInternalTrade(job.clientId) ? 'no client emails' : 'invoice email only'}</span>
+  </ol>;
+};
+
+// Trade send-back: reason picker (supervisor send-back pattern) + optional note → back to the bench
+export const TradeSendBackModal = ({ testId, onClose, onConfirm }: { testId: string; onClose: () => void; onConfirm: (reason: string) => Promise<void> }) => {
+  const [key, setKey] = useState('rework'); const [note, setNote] = useState(''); const [err, setErr] = useState<string | null>(null);
+  const label = api.TRADE_SEND_BACK.find((r) => r.key === key)!.label;
+  const go = async () => { if (key === 'other' && !note.trim()) return setErr('Add a note for "Other"'); try { await onConfirm(`${label}${note.trim() ? ` — ${note.trim()}` : ''}`); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } };
+  return <Modal onClose={onClose} testId={testId} width="w-[460px]">
+    <div className="p-5">
+      <div className="text-[14px] font-semibold text-ink">Send back to the bench</div>
+      <p className="mt-1 text-xs text-ink-500">Returns the job to In service; parts go back to their benches; completions are cleared and logged as rework.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">{api.TRADE_SEND_BACK.map((r) => <button key={r.key} data-testid={`${testId}-reason-${r.key}`} onClick={() => setKey(r.key)} className={clsx('rounded-sm border px-3 py-2 text-left text-[13px]', key === r.key ? 'border-ink bg-ink text-white' : 'border-line hover:bg-canvas')}>{r.label}</button>)}</div>
+      <textarea data-testid={`${testId}-note`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={key === 'other' ? 'Note (required)' : 'Note (optional)'} className="mt-3 w-full rounded-sm border border-line bg-canvas px-3 py-2 text-[13px] outline-none focus:border-ink" />
+      {err && <p data-testid={`${testId}-error`} className="mt-2 text-xs text-rose-700">{err}</p>}
+      <div className="mt-4 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button data-testid={`${testId}-confirm`} className="!border-rose-200 !text-rose-700 hover:!bg-rose-50" onClick={() => void go()}>Send back · {label}</Button></div>
+    </div>
+  </Modal>;
+};
 
 // Owner = accountable ROLE (never "PM" — that code is precious metals); shows current holders
 export const OwnerBadge = ({ owner, testId, compact }: { owner?: Role; testId?: string; compact?: boolean }) => {

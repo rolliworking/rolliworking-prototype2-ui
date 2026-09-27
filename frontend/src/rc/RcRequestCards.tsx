@@ -2,6 +2,7 @@ import { ArrowRight, Camera } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { PortalRequestCard, PortalRequestState } from '@/api/client';
 import { rcDate } from '@/rc/RcBits';
+import { RcSplitStrip } from '@/rc/RcSplitStrip';
 
 const TONE: Record<PortalRequestState, string> = {
   in_progress: 'border-rc-accent bg-rc-accentSoft/40 text-rc-ink',
@@ -23,6 +24,7 @@ export const RcRequestCards = ({ cards }: { cards: PortalRequestCard[] }) => {
       </div>
       <div className="mt-3 text-[17px] font-medium">{c.title}</div>
       <p className="mt-1 text-[15px] leading-relaxed text-rc-muted">{c.blurb}</p>
+      {c.split && <RcSplitStrip split={c.split} compact testId={`rc-req-split-${c.id}`} />}
       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
         <span className="text-rc-muted">{c.lastUpdateLabel} <span className="text-rc-ink">{rcDate(c.lastUpdate)}</span></span>
         {c.photoCount > 0 && <span className="inline-flex items-center gap-1 text-rc-muted"><Camera size={13} /> {c.photoCount} photos</span>}

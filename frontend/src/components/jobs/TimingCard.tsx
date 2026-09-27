@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { TimingTest } from '@/api/client';
 import { Card } from '@/components/ui/Card';
-import { TimingHistory } from '@/pages/rt/RtTestPage';
+import { TimingHistory } from '@/pages/rw/testing/RwTestingTestPage';
 
 export const TimingCard = ({ jobId, watchId, status }: { jobId: string; watchId: string; status: string }) => {
   const [tests, setTests] = useState<TimingTest[]>([]);

@@ -1,9 +1,10 @@
 import { ArrowLeft, Watch as WatchIcon, Wrench } from 'lucide-react';
+import { RatingBadge } from '@/components/clients/RatingBadge';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs, PartsRequestWithRefs } from '@/api/client';
-import { HoldModal, KindPill, PriorityPill, Provisional, ReasonModal, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
+import { HoldModal, KindPill, PriorityPill, Provisional, ReasonModal, StatusWithHold, TradePathStrip, TradeSendBackModal, WorkflowBadges } from '@/components/jobs/JobBits';
 import { MessagesPanel } from '@/components/jobs/JobMessages';
 import { AssignmentPanel, HoldPanel, JobTasksPanel, LinesTable, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
 import { JobTimeline } from '@/components/jobs/JobTimeline';
@@ -18,7 +19,7 @@ import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fullName } from '@/lib/format';
 
-type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | null;
+type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | { kind: 'trade_back' } | null;
 
 // Bench-side job page: same panels as RS, minus money / invoice / estimate / client links / delete
 export default function RwJobPage() {
@@ -33,11 +34,11 @@ export default function RwJobPage() {
   if (!job) return <div className="text-slate-400">Job not found. <Link to="/rw/jobs" className="underline">Back to lookup</Link></div>;
   const j = job; const actions = api.legalJobActions(j); const gaps = api.reviewGaps(j); const crGaps = api.qcRequestGaps(j);
   const blocked = (a: JobAction) => (a.key === 'qc_pass' && crGaps.length ? `QC blocked — client request not checked off: “${crGaps[0].text}”` : gaps.join(' · '));
-  const act = (a: JobAction) => (a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client notified' : ''}`));
+  const act = (a: JobAction) => (a.key === 'trade_send_back' ? setModal({ kind: 'trade_back' }) : a.needsReason ? setModal({ kind: 'reason', action: a }) : run(() => api.transitionJob(j.id, a.key), `${a.label} → ${a.to.replace(/_/g, ' ')}${a.notifies ? ' · client notified' : ''}`));
   return <div data-testid="rw-job-page" className="space-y-3">
     <div className="flex items-center justify-between text-xs"><Link to="/rw/jobs" className="inline-flex items-center gap-1 text-slate-400 hover:text-white"><ArrowLeft size={12} /> Jobs</Link><span className="text-slate-500">Created {fmtDate(j.createdAt)} by {j.createdBy}{j.intakeDate && ` · on hand since ${fmtDate(j.intakeDate)}`}</span></div>
     <div className="flex items-start justify-between gap-4">
-      <div><div className="flex flex-wrap items-center gap-2"><h1 data-testid="rw-job-number" className="font-mono text-xl font-semibold text-white">{j.number}</h1><StatusWithHold job={j} /><KindPill kind={j.kind} /><PriorityPill priority={j.priority} /><WorkflowBadges workflow={j.workflow} /><ClientRequestBadge n={api.openClientRequests(j).length} testId="rw-job-client-requests-badge" /></div><div className="mt-0.5 text-xs text-slate-400">{fullName(j.client)} · owner {j.owner ?? '—'} · assignees {j.assignees.join(', ') || 'none'}</div></div>
+      <div><div className="flex flex-wrap items-center gap-2"><h1 data-testid="rw-job-number" className="font-mono text-xl font-semibold text-white">{j.number}</h1><StatusWithHold job={j} /><KindPill kind={j.kind} client={j.client} /><PriorityPill priority={j.priority} /><WorkflowBadges workflow={j.workflow} /><ClientRequestBadge n={api.openClientRequests(j).length} testId="rw-job-client-requests-badge" /></div><div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">{fullName(j.client)} <RatingBadge clientId={j.clientId} testId="rw-job-client-rating" /> · owner {j.owner ?? '—'} · assignees {j.assignees.join(', ') || 'none'}</div></div>
       <div data-testid="rw-job-actions" className="flex flex-wrap items-center justify-end gap-1.5">
         {actions.map((a) => <span key={a.key} className="inline-flex items-center gap-1"><Button data-testid={`rw-act-${a.key}`} disabled={!!blocked(a)} title={blocked(a) || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-400/40 !text-rose-300' : undefined} onClick={() => act(a)}>{a.label}</Button>{a.provisional && <Provisional note={a.provisional} />}</span>)}
         {j.status !== 'closed' && <Button data-testid="rw-act-parts-request" onClick={async () => { try { setOpenPr(await api.openPartsRequest(j.id)); } catch (er) { setError(er instanceof Error ? er.message : 'Failed'); } }}><Wrench size={13} /> Parts request</Button>}
@@ -46,6 +47,7 @@ export default function RwJobPage() {
     {flash && <div data-testid="rw-job-flash" className="rounded-sm bg-emerald-950/50 px-3 py-1.5 text-xs font-medium text-emerald-300">{flash}</div>}
     {error && <div data-testid="rw-job-error" className="rounded-sm bg-rose-950/50 px-3 py-1.5 text-xs font-medium text-rose-300">{error}</div>}
     <ReviewGate job={j} />
+    {j.kind === 'trade' && <TradePathStrip job={j} dark testId="rw-trade-path" />}
     {api.activeHold(j) && <div data-testid="rw-held-banner" className="rounded-sm bg-rose-950/50 px-3 py-1.5 text-xs text-rose-200">Parked on hold — status actions return when the hold is released.</div>}
     <div className="grid grid-cols-[1fr_360px] gap-3">
       <div className="space-y-3">
@@ -67,6 +69,7 @@ export default function RwJobPage() {
         <Card title="Holds" testId="rw-job-holds"><HoldPanel job={j} onPlace={() => setModal({ kind: 'hold' })} onRelease={() => setModal({ kind: 'release' })} /></Card>
       </div>
     </div>
+    {modal?.kind === 'trade_back' && <TradeSendBackModal testId="rw-trade-send-back" onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, 'trade_send_back', r); setModal(null); await load(); say('Sent back to the bench'); }} />}
     {modal?.kind === 'reason' && <ReasonModal testId={`rw-reason-${modal.action.key}`} title={modal.action.label.replace('…', '')} hint="A reason is required; it lands on the timeline." confirmLabel={modal.action.label.replace('…', '')} danger={modal.action.tone === 'danger'} onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, modal.action.key, r); setModal(null); await load(); say(modal.action.label.replace('…', '')); }} />}
     {modal?.kind === 'hold' && <HoldModal onClose={() => setModal(null)} onConfirm={async (t, r) => { await api.placeHold(j.id, t, r); setModal(null); await load(); say('Hold placed'); }} />}
     {modal?.kind === 'release' && <ReasonModal testId="rw-release-modal" title="Release hold" hint={`Returns the job to ${api.activeHold(j)?.priorStatus.replace(/_/g, ' ')}.`} confirmLabel="Release" optional onClose={() => setModal(null)} onConfirm={async (r) => { await api.releaseHold(j.id, r); setModal(null); await load(); say('Hold released'); }} />}

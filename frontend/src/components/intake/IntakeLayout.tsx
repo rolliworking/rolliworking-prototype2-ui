@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Mail, Tags } from 'lucide-react';
+import { Briefcase, Mail, Tags } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -37,6 +37,9 @@ export default function IntakeLayout() {
           <div className="flex items-center gap-1">
             <NavLink to="/intake/outbox" data-testid="intake-tab-outbox" className={({ isActive }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink')}>
               <Mail size={13} /> Outbox
+            </NavLink>
+            <NavLink to="/intake/trade" data-testid="intake-tab-trade" className={({ isActive }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink')}>
+              <Briefcase size={13} /> Trade scan-in
             </NavLink>
             <NavLink to="/intake/labels" data-testid="intake-tab-labels" className={({ isActive }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink')}>
               <Tags size={13} /> Label Queue

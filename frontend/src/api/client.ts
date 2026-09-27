@@ -38,6 +38,8 @@ import type {
   PortalPhoto,
   PortalPhotoSections,
   PortalRequestCard,
+  PortalSplit,
+  PortalSplitTrack,
   PortalRequestState,
   Part,
   PartsKnowledgeEntry,
@@ -1041,9 +1043,21 @@ const JOB_ACTIONS: Record<JobStatus, JobAction[]> = {
     { key: 'qc_pass', label: 'QC pass → ready to ship', to: 'ready_to_ship', tone: 'primary', notifies: true },
     { key: 'qc_fail', label: 'QC fail → back to service…', to: 'in_service', needsReason: true, notifies: true, tone: 'danger' },
   ],
+  awaiting_manager_review: [
+    { key: 'trade_accept', label: 'Inspected / Accepted → invoice', to: 'ready_to_ship', tone: 'primary' },
+    { key: 'trade_send_back', label: 'Send back…', to: 'in_service', needsReason: true, tone: 'danger' },
+  ],
   ready_to_ship: [{ key: 'close', label: 'Close job', to: 'closed', tone: 'primary' }],
   closed: [],
 };
+// Trade lane (B2B / internal): post-work inspection hands off to the account's division manager instead of straight to invoice
+const TRADE_TESTING_ACTIONS: JobAction[] = [
+  { key: 'to_manager_review', label: 'Inspection passed → manager review', to: 'awaiting_manager_review', tone: 'primary' },
+  { key: 'qc_fail', label: 'Inspection failed → back to bench…', to: 'in_service', needsReason: true, tone: 'danger' },
+];
+export const isTradeJob = (j: Job) => j.kind === 'trade';
+export const isInternalTrade = (clientId: string) => !!byId(fx.clients, clientId).internal;
+export const TRADE_SEND_BACK: { key: string; label: string }[] = [{ key: 'rework', label: 'Rework' }, { key: 'waiting_on_part', label: 'Waiting on part' }, { key: 'failed_inspection', label: 'Failed inspection' }, { key: 'other', label: 'Other' }];
 
 export const activeHold = (j: Job): JobHold | undefined => j.holds.find((h) => !h.releasedAt);
 
@@ -1057,6 +1071,8 @@ const skipForward = (kind: JobKind, to: JobStatus): JobStatus => {
 
 export function legalJobActions(j: Job): JobAction[] {
   if (activeHold(j)) return [];
+  if (isTradeJob(j) && j.status === 'testing') return TRADE_TESTING_ACTIONS;
+  if (isTradeJob(j) && j.status === 'intake') return [{ key: 'trade_scan_in', label: 'Scan in → work queue', to: 'in_service', tone: 'primary' }];
   const redirected = JOB_ACTIONS[j.status].map((a) => {
     const to = skipForward(j.kind, a.to);
     return to === a.to ? a : { ...a, to, provisional: `${JOB_KIND_CONFIG[j.kind].label} skips ${a.to.replace(/_/g, ' ')} — per-kind stage-skip config (provisional)` };
@@ -1071,7 +1087,7 @@ export function legalJobActions(j: Job): JobAction[] {
 const HOLDABLE: JobStatus[] = ['approved', 'in_service', 'testing'];
 export const canHold = (j: Job) => !activeHold(j) && j.simpleStatus === 'on_hand' && HOLDABLE.includes(j.status);
 
-const WATCH_STATUS_FOR: Partial<Record<JobStatus, Watch['status']>> = { in_service: 'in_service', testing: 'qc', ready_to_ship: 'awaiting_pickup', closed: 'released', awaiting_customer_approval: 'awaiting_approval' };
+const WATCH_STATUS_FOR: Partial<Record<JobStatus, Watch['status']>> = { in_service: 'in_service', testing: 'qc', awaiting_manager_review: 'qc', ready_to_ship: 'awaiting_pickup', closed: 'released', awaiting_customer_approval: 'awaiting_approval' };
 
 const getJobRow = (id: string) => byId(store.jobs, id);
 const nextJobNumber = () => `E${String(++store.counters.job).padStart(5, '0')}`; // pack: `E` + digits from a next-job-id sequence
@@ -1082,9 +1098,10 @@ const jobStamp = (j: Job, detail: string) => {
   appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} · ${detail}` });
 };
 
-const queueJobEmail = (j: Job, subject: string, body: string) => {
+const queueJobEmail = (j: Job, subject: string, body: string): OutboxEmail | undefined => {
   const a = actor();
   const c = byId(fx.clients, j.clientId);
+  if (c.type === 'trade' && isTradeJob(j)) { jobStamp(j, `Email suppressed (trade account${c.internal ? ', internal' : ''}) · ${subject}`); return undefined; }
   const w = byId(store.watches, j.watchId);
   const email: OutboxEmail = {
     id: `ob-${Date.now().toString(36)}`,
@@ -1134,8 +1151,30 @@ export async function transitionJob(id: string, actionKey: string, reason?: stri
   if (mail) { const [s, b] = mail(j, reason?.trim()); queueJobEmail(j, s, b); queued = true; }
   pushTransition(j, action.key, action.to, reason?.trim(), queued);
   jobStamp(j, `${action.label.replace('…', '')} · ${humanizeStatus(action.to)}${reason ? ` · ${reason.trim()}` : ''}${queued ? ' · client email queued' : ''}`);
+  if (action.key === 'to_manager_review') tradeHandoff(j);
+  if (action.key === 'trade_accept') tradeAccept(j);
+  if (action.key === 'trade_send_back') { ensureParts(j).forEach((c) => { c.completedAt = undefined; c.completedBy = undefined; c.rework.push({ at: new Date().toISOString(), reason: reason!.trim(), by: actor().by }); recordMove(j, c, laneOfPart(c.key) === 'band' ? 'refinish' : 'wm_bench_1', 'in_progress', 'pad', `sent back by ${actor().by} · ${reason!.trim()}`); }); store.pinned.filter((p) => p.jobId === j.id && p.title.startsWith('Trade review') && !p.dismissedAt).forEach((p) => { p.dismissedAt = new Date().toISOString(); p.dismissedBy = actor().by; }); }
   return resolve(jobRefs(j));
 }
+// Manager review hand-off: pin lands on the account manager's list (his division), no client email on trade work
+const tradeHandoff = (j: Job) => {
+  const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const a = actor();
+  const mgr = c.managerShort ? fx.users.find((u) => u.shortName === c.managerShort) : undefined;
+  const division: Division = mgr && mgr.division !== 'both' ? mgr.division : j.division;
+  store.pinned.unshift({ id: newId('pin'), title: `Trade review · ${j.number} ${w.brand} ${w.model} (${c.company ?? fullNameOf(c)}) — inspected, awaiting your acceptance`, assignedTo: mgr ? { type: 'user', shortName: mgr.shortName } : { type: 'role', role: 'manager' }, createdBy: a.by, jobId: j.id, createdAt: new Date().toISOString(), station: a.station, division });
+  jobStamp(j, `Trade review queued for ${mgr?.shortName ?? 'a manager'} · pinned`);
+};
+// Accept = convert to invoice in one step; external trade accounts get the invoice email only, internal gets nothing
+const tradeAccept = (j: Job) => {
+  const a = actor(); const c = byId(fx.clients, j.clientId);
+  const existing = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled');
+  const o = existing ?? buildSO({ clientId: j.clientId, jobId: j.id, lines: j.lines.map((l) => ({ description: l.description, partNumber: l.partNumber, qty: l.qty, rate: l.unitPrice, dept: l.dept })), status: 'open' });
+  if (!existing) soStamp(o, `Created from trade job ${j.number} · accepted by ${a.by}`);
+  jobStamp(j, `Trade accepted by ${a.by} → invoice ${o.number} · ${fmtMoney(o.total)}`);
+  store.pinned.filter((p) => p.jobId === j.id && p.title.startsWith('Trade review') && !p.dismissedAt).forEach((p) => { p.dismissedAt = new Date().toISOString(); p.dismissedBy = a.by; });
+  if (!c.internal) { const w = byId(store.watches, j.watchId); store.outbox.unshift({ id: newId('ob'), to: c.email, toName: c.company ?? fullNameOf(c), relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Invoice ${o.number} — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nWork on ${w.brand} ${w.model} ${w.reference} (${j.number}) is complete and has been accepted by ${a.by}. Your invoice ${o.number} for ${fmtMoney(o.total)} is attached.\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }); soStamp(o, 'Invoice email queued (external trade account)'); }
+  else soStamp(o, 'No email — internal trade account');
+};
 
 const humanizeStatus = (s: string) => s.replace(/_/g, ' ');
 export async function completeComponent(jobId: string, key: ComponentKey): Promise<JobWithRefs> {
@@ -1180,9 +1219,10 @@ export async function toggleAssignee(id: string, shortName: string): Promise<Job
 // MH ruling 2026-06: inspectionReport (multiple-choice form) only for service; inspection PHOTOS are required for every kind.
 // skipStages for small_job stays PROVISIONAL (amber tag).
 export const JOB_KIND_CONFIG: Record<JobKind, { label: string; defaultOwnerRole: Role | null; skipStages: JobStatus[]; inspectionReport: boolean; inspectionPhotos: true }> = {
-  service: { label: 'Service', defaultOwnerRole: null, skipStages: [], inspectionReport: true, inspectionPhotos: true },
-  small_job: { label: 'Small job', defaultOwnerRole: 'concierge', skipStages: ['awaiting_customer_approval'], inspectionReport: false, inspectionPhotos: true },
-  warranty: { label: 'Warranty', defaultOwnerRole: 'concierge', skipStages: [], inspectionReport: false, inspectionPhotos: true },
+  service: { label: 'Service', defaultOwnerRole: null, skipStages: ['awaiting_manager_review'], inspectionReport: true, inspectionPhotos: true },
+  small_job: { label: 'Small job', defaultOwnerRole: 'concierge', skipStages: ['awaiting_customer_approval', 'awaiting_manager_review'], inspectionReport: false, inspectionPhotos: true },
+  warranty: { label: 'Warranty', defaultOwnerRole: 'concierge', skipStages: ['awaiting_manager_review'], inspectionReport: false, inspectionPhotos: true },
+  trade: { label: 'Trade', defaultOwnerRole: 'manager', skipStages: fx.TRADE_SKIP, inspectionReport: false, inspectionPhotos: true },
 };
 
 // Multiple-choice inspection form (service kind). Lookup table — add a row to add a question.
@@ -2012,6 +2052,7 @@ const floorLane = (j: Job): FloorLane => {
     case 'approved': return 'bench';
     case 'in_service': return j.workflow.every((d) => d === 'P' || d === 'PM') ? 'case_cleaning' : 'bench';
     case 'testing': return 'qc';
+    case 'awaiting_manager_review': return 'qc';
     case 'ready_to_ship': return 'ready';
     default: return 'out';
   }
@@ -2237,7 +2278,9 @@ const custodyOf = (clientId: string): CustodyEvent[] => {
     if (p.status === 'discrepancy_hold' && p.inspectedAt) out.push({ id: `cu-${p.id}-dis`, kind: 'discrepancy', at: p.inspectedAt, by: p.inspectedBy ?? 'Unknown', station: 'Front Desk 1', detail: `Discrepancy hold on ${p.subNumber}: ${p.discrepancyReason ?? ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/inspection/${p.id}` });
   });
   store.jobs.filter((j) => j.clientId === clientId).forEach((j) => {
-    if (!j.packageId && j.intakeDate) out.push({ id: `cu-${j.id}-in`, kind: 'watch_received', at: j.intakeDate, by: j.timeline[0]?.by ?? j.createdBy, station: j.timeline[0]?.station ?? 'Front Desk 1', detail: `${watchLabel(j.watchId)} received on hand · ${j.number}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
+    const scanIn = isTradeJob(j) ? j.timeline.find((t) => t.action === 'trade_scan_in') : undefined;
+    if (scanIn) out.push({ id: `cu-${j.id}-tsi`, kind: 'watch_received', at: scanIn.at, by: scanIn.by, station: scanIn.station, detail: `${watchLabel(j.watchId)} scanned in — trade job ${j.number} (no inspection report, no estimate)`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
+    else if (!j.packageId && j.intakeDate) out.push({ id: `cu-${j.id}-in`, kind: 'watch_received', at: j.intakeDate, by: j.timeline[0]?.by ?? j.createdBy, station: j.timeline[0]?.station ?? 'Front Desk 1', detail: `${watchLabel(j.watchId)} received on hand · ${j.number}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
     j.holds.forEach((h) => {
       out.push({ id: `cu-${h.id}-p`, kind: 'hold_placed', at: h.placedAt, by: h.placedBy, station: h.station, detail: `${h.type === 'outsource' ? 'Left the building — outsource' : 'Parts hold'} on ${j.number}: ${h.reason}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
       if (h.releasedAt) out.push({ id: `cu-${h.id}-r`, kind: 'hold_released', at: h.releasedAt, by: h.releasedBy ?? 'Unknown', station: h.station, detail: `Hold released on ${j.number}${h.releaseNote ? ` · ${h.releaseNote}` : ''}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
@@ -2438,7 +2481,7 @@ const portalRequestCards = (clientId: string): PortalRequestCard[] => {
   store.jobs.filter((j) => j.clientId === clientId).forEach((j) => {
     const w = store.watches.find((x) => x.id === j.watchId); const last = [...j.timeline].sort((a, b) => b.at.localeCompare(a.at))[0]; const so = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled'); const est = store.estimates.find((e) => e.id === j.estimateId);
     if (j.status === 'closed' || (so && (so.status === 'picked_up' || so.status === 'shipped'))) cards.push({ id: `card-${j.id}`, state: 'history', stateLabel: so?.status === 'shipped' ? 'Shipped · complete' : 'Collected · complete', watchName: wname(w), reference: wref(w), title: `Service completed`, blurb: `${j.lines.map((l) => l.description).slice(0, 2).join(' · ')}${so ? ` · ${fmtMoney(so.total)} paid` : ''}`, lastUpdate: so?.pickedUpAt ?? so?.shipDate ?? last?.at ?? j.createdAt, lastUpdateLabel: so?.pickedUpAt ? 'Collected' : 'Closed', path: `/rc/watches/${j.watchId}`, photoCount: photos(j.id), estimateNumber: est?.number, jobNumber: j.number, amount: so?.total });
-    else cards.push({ id: `card-${j.id}`, state: 'in_progress', stateLabel: statusLabel(j.status), watchName: wname(w), reference: wref(w), title: j.status === 'ready_to_ship' ? 'Ready — awaiting hand-back' : j.status === 'testing' ? 'Final testing & QC' : 'In the workshop now', blurb: `${j.lines.map((l) => l.description).slice(0, 2).join(' · ')}${j.dueAt ? ` · expected ready around ${new Date(j.dueAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : ''}`, lastUpdate: last?.at ?? j.createdAt, lastUpdateLabel: 'Last update', path: `/rc/watches/${j.watchId}`, photoCount: photos(j.id), estimateNumber: est?.number, jobNumber: j.number, cta: so && so.balanceDue > 0 && so.status !== 'draft' ? { label: `Pay ${fmtMoney(so.balanceDue)}`, path: `/rc/invoices/${so.id}` } : undefined });
+    else cards.push({ id: `card-${j.id}`, state: 'in_progress', split: portalSplitFor(j), stateLabel: statusLabel(j.status), watchName: wname(w), reference: wref(w), title: j.status === 'ready_to_ship' ? 'Ready — awaiting hand-back' : j.status === 'testing' ? 'Final testing & QC' : 'In the workshop now', blurb: `${j.lines.map((l) => l.description).slice(0, 2).join(' · ')}${j.dueAt ? ` · expected ready around ${new Date(j.dueAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : ''}`, lastUpdate: last?.at ?? j.createdAt, lastUpdateLabel: 'Last update', path: `/rc/watches/${j.watchId}`, photoCount: photos(j.id), estimateNumber: est?.number, jobNumber: j.number, cta: so && so.balanceDue > 0 && so.status !== 'draft' ? { label: `Pay ${fmtMoney(so.balanceDue)}`, path: `/rc/invoices/${so.id}` } : undefined });
   });
   store.estimates.filter((e) => e.clientId === clientId && !e.jobId && (e.status === 'sent' || e.status === 'expired' || e.status === 'declined')).forEach((e) => {
     const w = store.watches.find((x) => x.id === e.watchId);
@@ -2485,6 +2528,7 @@ const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefin
       case 'approved': return hold ? (hold.type === 'parts' ? 'awaiting_part' : 'with_specialist') : 'queued';
       case 'in_service': return hold ? (hold.type === 'parts' ? 'awaiting_part' : 'with_specialist') : 'on_bench';
       case 'testing': return 'final_checks';
+      case 'awaiting_manager_review': return 'finishing';
       case 'ready_to_ship': return so?.status === 'fulfilled' || so?.status === 'partial_fulfilled' ? (so.channel === 'ship' ? 'preparing_ship' : 'ready_pickup') : 'finishing';
       case 'closed': return 'back_with_you';
     }
@@ -2540,7 +2584,25 @@ const portalWatchFor = (clientId: string, w: Watch): PortalWatch => {
   const invoice = sos.find((o) => o.status !== 'cancelled' && o.status !== 'draft' && (o.jobId === job?.id || !job));
   const status = portalStatusFor(w, job && job.status !== 'closed' ? job : invoice && (invoice.status === 'shipped' || invoice.status === 'picked_up') ? job : undefined, openEstimate, invoice && (invoice.jobId === job?.id) ? invoice : undefined);
   const issued = rp.reports.find((r) => r.watchId === w.id && r.clientId === clientId && r.status === 'issued');
-  return { watch: w, jobIds: jobs.map((j) => j.id), status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
+  return { watch: w, jobIds: jobs.map((j) => j.id), split: job ? portalSplitFor(job) : undefined, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
+};
+
+// Split-flow strip in client language: one track per component; done tracks read "complete — ready and waiting"; collapses when the tracks merge
+const SPLIT_TRACK_LABEL: Record<ComponentKey, string> = { head: 'Watch head', band: 'Bracelet', case: 'Case' };
+const SPLIT_DONE_TEXT: Record<ComponentKey, string> = { head: 'Service complete — ready and waiting', band: 'Refinishing complete — ready and waiting', case: 'Refinishing complete — ready and waiting' };
+const splitStageText = (j: Job, st: RwStationKey): string => {
+  if (j.status === 'awaiting_customer_approval') return 'Awaiting your approval';
+  if (st === 'pre_approval' || st.endsWith('pre_queue')) return 'Received';
+  if (st === 'final_assembly') return 'In final assembly';
+  if (st === 'finished') return 'Ready';
+  return 'In service';
+};
+const portalSplitFor = (j: Job): PortalSplit | undefined => {
+  if (j.status !== 'in_service' || activeHold(j)) return undefined;
+  const parts = ensureParts(j); if (parts.length < 2) return undefined;
+  const tracks: PortalSplitTrack[] = parts.map((c) => { const p = derivePlacement(j, c); const done = !!c.completedAt || p.status === 'waiting'; return { key: c.key, label: SPLIT_TRACK_LABEL[c.key], done, text: done ? SPLIT_DONE_TEXT[c.key] : splitStageText(j, p.station) }; });
+  if (tracks.every((t) => t.done) || tracks.every((t) => !t.done && t.text === 'Received')) return undefined;
+  return { tracks, mergeLabel: 'Final assembly — begins when both are ready' };
 };
 
 const needsYouFor = (clientId: string, watches: PortalWatch[]): NeedsYouItem[] => {
@@ -2872,7 +2934,7 @@ export async function getReport(key: 'funnel' | 'throughput' | 'aging' | 'pnl' |
   const now = new Date().toISOString(); const es = store.estimates; const js = store.jobs;
   if (key === 'completions') { const c = await getCompletionsReport(); const cell = (x?: { total: number; byDept: Record<DeptCode, number> }) => (x ? `${x.total} (${(['W', 'B', 'P', 'PM'] as DeptCode[]).filter((d) => x.byDept[d]).map((d) => `${d}${x.byDept[d]}`).join(' ') || '—'})` : '');
     return resolve({ key, title: 'Component completions by tech × month', columns: ['tech', ...c.months, 'total'], note: 'Credits each tech in the month their component completed (head / band / case), regardless of when the job invoices — MH ruling. Cell = count (by department). Invoicing is untouched.', generatedAt: now,
-      rows: [...c.rows.map((r) => ({ label: r.tech, values: Object.fromEntries([['tech', r.tech], ...c.months.map((m) => [m, cell(r.months[m])]), ['total', r.total]]) })), { label: 'total', values: { tech: 'Total completions', total: c.rows.reduce((t, r) => t + r.total, 0) } }] }); }
+      rows: [...c.rows.map((r) => ({ label: r.tech, values: Object.fromEntries([['tech', r.tech], ...c.months.map((m) => [m, cell(r.months[m])]), ['total', r.total]]) })), ...c.rows.map((r) => { const qs = c.months.map((m) => techQuality(r.tech, m)); const all = qs.filter((q) => q.n); return { label: `quality-${r.tech}`, values: Object.fromEntries([['tech', `${r.tech} — quality (avg grade)`], ...c.months.map((m, i) => { const q = qs[i]; return [m, q.n ? `${q.avg} avg · ${Object.values(q.byCategory).map((b) => `${b.label.toLowerCase()} ${b.avg}`).join(' · ')} · n=${q.n}${q.low ? ` · ${q.low} low` : ''}${q.selfGraded ? ` · ${q.selfGraded} self` : ''}` : '—']; }), ['total', all.length ? `${Math.round((all.reduce((t, q) => t + (q.avg ?? 0) * q.n, 0) / all.reduce((t, q) => t + q.n, 0)) * 10) / 10} avg` : '—']]) }; }), { label: 'total', values: { tech: 'Total completions', total: c.rows.reduce((t, r) => t + r.total, 0) } }] }); }
   if (key === 'funnel') return resolve({ key, title: 'Estimate funnel', columns: ['stage', 'count', 'value'], note: 'created = all estimates · sent = ever sent (status ≥ sent) · approved = approved or converted · converted = has a job. "Awaiting approval" on the dashboard = status sent.', generatedAt: now, rows: [
     { label: 'created', values: { stage: 'Created', count: es.length, value: es.reduce((t, e) => t + e.total, 0) } },
     { label: 'sent', values: { stage: 'Sent', count: es.filter((e) => e.status !== 'draft').length, value: es.filter((e) => e.status !== 'draft').reduce((t, e) => t + e.total, 0) } },
@@ -2955,7 +3017,7 @@ export const EVIDENCE_SLOTS: { key: EvidenceSlot; label: string; hint: string }[
 ];
 export const PARTS_GRADES: PartsGrade[] = ['B', 'Ø/REPL', 'D/REPL'];
 // Per-kind expected slots — service expects all four; small_job / warranty fewer (PROVISIONAL)
-export const EVIDENCE_REQUIRED: Record<JobKind, EvidenceSlot[]> = { service: ['hidden_serial', 'timing_sheet', 'pressure_test', 'parts_grading'], small_job: ['hidden_serial'], warranty: ['hidden_serial', 'timing_sheet'] };
+export const EVIDENCE_REQUIRED: Record<JobKind, EvidenceSlot[]> = { service: ['hidden_serial', 'timing_sheet', 'pressure_test', 'parts_grading'], small_job: ['hidden_serial'], warranty: ['hidden_serial', 'timing_sheet'], trade: ['hidden_serial'] };
 export const evidenceGaps = (j: Job): EvidenceSlot[] => (j.status !== 'testing' ? [] : EVIDENCE_REQUIRED[j.kind].filter((s) => !rs.evidence.some((e) => e.jobId === j.id && e.slot === s)));
 export async function getEvidenceForJob(jobId: string): Promise<EvidenceItem[]> { return resolve(rs.evidence.filter((e) => e.jobId === jobId).sort((a, b) => b.at.localeCompare(a.at))); }
 export async function getEvidenceForWatch(watchId: string): Promise<(EvidenceItem & { jobNumber: string; serviceDate: string })[]> {
@@ -3273,6 +3335,15 @@ export const evaluateTiming = (tol: CaliberTolerance, input: Pick<TimingInput, '
   const reserve = input.powerReserve >= tol.reserveHours; if (!reserve) flags.push(`reserve ${input.powerReserve} h < ${tol.reserveHours}`);
   return { crit1, crit2, beat, amp, reserve, suggested: crit1 && crit2 && beat && amp && reserve ? 'pass' : 'reject', flags, avgRate, avgBeat, avgAmp, delta };
 };
+// Q47 — timing PASS flags the job (stays in testing) and feeds the RW QC queue lane; a later send-back / qc_fail clears it
+export const timingPassed = (j: Job): TimingTest | undefined => { const since = [...j.timeline].reverse().find((t) => t.to === 'testing')?.at ?? ''; return rt.tests.find((t) => t.jobId === j.id && t.verdict === 'pass' && t.at >= since); };
+// Testing station scan = standard custody transfer of every part to Testing (scan event), then the bench opens
+export async function testingStationScan(label: string): Promise<JobWithRefs> {
+  const j = await findJobByLabel(label); if (!j) throw new Error('No job matches that label');
+  if (j.status !== 'testing') throw new Error(`${j.number} is ${j.status.replace(/_/g, ' ')} — only jobs in testing can be timed`);
+  const row = getJobRow(j.id); for (const c of ensureParts(row)) { if (derivePlacement(row, c).station !== 'testing') await movePart(row.id, c.key, 'testing', 'station'); }
+  rw18.stationMemory = 'testing'; return resolve(jobRefs(row));
+}
 export async function getTestingQueue(): Promise<JobWithRefs[]> { return resolve(store.jobs.filter((j) => j.status === 'testing' && j.division === getSessionDivision()).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map(jobRefs)); }
 export async function findJobByLabel(scan: string): Promise<JobWithRefs | null> {
   const q = scan.trim().toUpperCase(); if (!q) return resolve(null); const head = q.split('|')[0];
@@ -3281,7 +3352,7 @@ export async function findJobByLabel(scan: string): Promise<JobWithRefs | null> 
 }
 export async function getTimingTests(filter: { jobId?: string; watchId?: string }): Promise<TimingTest[]> { return resolve(rt.tests.filter((t) => (!filter.jobId || t.jobId === filter.jobId) && (!filter.watchId || t.watchId === filter.watchId)).sort((a, b) => b.at.localeCompare(a.at))); }
 export async function recordTimingTest(jobId: string, input: TimingInput): Promise<TimingTest> {
-  const j = getJobRow(jobId); if (j.status !== 'testing') throw new Error('Only jobs in testing can be timed'); const w = byId(store.watches, j.watchId); const tol = toleranceForWatch(w); const a = actor();
+  const j = getJobRow(jobId); if (j.status !== 'testing') throw new Error('Only jobs in testing can be timed'); const gate = gradeGateFor(j); if (!gate.ready) throw new Error(`Work grading gate — score ${gate.missing.join(' and ')} before the timing test can start`); const w = byId(store.watches, j.watchId); const tol = toleranceForWatch(w); const a = actor();
   if (input.readings.length !== 6 || input.readings.some((r) => [r.rate, r.beat, r.amp].some((v) => !Number.isFinite(v)))) throw new Error('Enter rate, beat error and amplitude for all six positions');
   if (!(input.powerReserve > 0) || !(input.liftAngle > 0)) throw new Error('Lift angle and power reserve are required');
   if (input.verdict === 'reject' && !input.reason?.trim()) throw new Error('A rejection reason is required');
@@ -3447,7 +3518,7 @@ export async function getRwFloorMap(): Promise<RwFloorMap> {
 // ---- E18 RW deep build — shop floor core (parts = components with station/status/custody/history) --------------------
 import type { FloorDot, JobPhotoView, PadCard, PartHistoryView, PartMove, PartStatus, PartSuggestion, PickTask, PickTaskView, RoomSummary, RwStation, RwStationKey, ScanSession, SendBackReason, WorkQueueRow } from './types';
 export { RW_STATIONS } from './fixtures';
-const rw18 = { picks: fx.pickTasks.map((p): PickTask => ({ ...p })), recent: fx.recentPartChoices.map((r) => ({ ...r })), replied: new Set<string>(), scanSession: { rows: [] } as ScanSession, stationMemory: null as RwStationKey | null };
+const rw18 = { picks: fx.pickTasks.map((p): PickTask => ({ ...p })), recent: fx.recentPartChoices.map((r) => ({ ...r })), replied: new Set<string>(), scanSession: { rows: [] } as ScanSession, stationMemory: null as RwStationKey | null, undos: new Map<string, { jobId: string; key: ComponentKey; before: { station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; historyLen: number; timelineLen: number; status: JobStatus }; transitioned: boolean; expiresAt: number }>() };
 const PART_LABEL: Record<ComponentKey, string> = { head: 'Watch head', case: 'Case', band: 'Bracelet' };
 const PRE = new Set<JobStatus>(['intake', 'in_review', 'awaiting_customer_approval']);
 const stationOf = (k: RwStationKey): RwStation => fx.RW_STATIONS.find((s) => s.key === k)!;
@@ -3459,7 +3530,7 @@ const derivePlacement = (j: Job, c: JobComponent): { station: RwStationKey; stat
   if (PRE.has(j.status)) return { station: 'pre_approval', status: 'not_started' };
   if (j.status === 'approved') return { station: lane === 'band' ? 'band_pre_queue' : 'pre_queue', status: 'not_started' };
   if (j.status === 'ready_to_ship' || j.status === 'closed') return { station: 'finished', status: 'fulfilled' };
-  if (j.status === 'testing') return { station: 'final_assembly', status: 'reunited' };
+  if (j.status === 'testing' || j.status === 'awaiting_manager_review') return { station: 'final_assembly', status: 'reunited' };
   if (c.completedAt) return { station: lane === 'band' ? 'safe_await_head' : 'safe_await_band', status: 'waiting' };
   return { station: lane === 'band' ? 'refinish' : 'wm_bench_1', status: 'in_progress' };
 };
@@ -3478,7 +3549,7 @@ export async function getShopFloor(filter?: { tech?: string; kind?: JobKind }): 
   return resolve({ stations: fx.RW_STATIONS, dots, counts, techs: [...new Set(roomJobs().flatMap((j) => ensureParts(j).map((c) => c.custodyTech ?? '')).filter(Boolean))].sort() });
 }
 type ShopFloorT = import('./types').ShopFloor;
-const statusForStation = (s: RwStationKey, prev: PartStatus): PartStatus => (s === 'finished' ? 'fulfilled' : s === 'final_assembly' ? 'reunited' : s.startsWith('safe_') || s.startsWith('into_safe') ? 'waiting' : s === 'pre_approval' || s.endsWith('pre_queue') ? 'not_started' : prev === 'fulfilled' ? 'fulfilled' : 'in_progress');
+const statusForStation = (s: RwStationKey, prev: PartStatus): PartStatus => (s === 'finished' ? 'fulfilled' : s === 'final_assembly' || s === 'testing' ? 'reunited' : s.startsWith('safe_') || s.startsWith('into_safe') ? 'waiting' : s === 'pre_approval' || s.endsWith('pre_queue') ? 'not_started' : prev === 'fulfilled' ? 'fulfilled' : 'in_progress');
 const partOf = (jobId: string, key: ComponentKey) => { const j = getJobRow(jobId); const c = ensureParts(j).find((x) => x.key === key); if (!c) throw new Error(`${PART_LABEL[key]} is not a part of ${j.number}`); return { j, c }; };
 const recordMove = (j: Job, c: JobComponent, to: RwStationKey | undefined, status: PartStatus, via: PartMove['via'], note?: string, tech?: string) => {
   const a = actor(); const from = derivePlacement(j, c).station;
@@ -3490,8 +3561,33 @@ export async function movePart(jobId: string, key: ComponentKey, to: RwStationKe
   const { j, c } = partOf(jobId, key); const lane = stationOf(to).lane;
   if (lane !== 'shared' && lane !== laneOfPart(key)) throw new Error(`${PART_LABEL[key]} belongs in the ${laneOfPart(key)} lane — ${stationOf(to).label} is a ${lane}-lane station`);
   if (to === 'finished') { const out = finishBlockers(j); if (out.length) throw new Error(`Cannot finish ${j.number}: ${out.join(', ')}`); }
+  const before = { station: c.station, partStatus: c.partStatus, custodyTech: c.custodyTech, historyLen: (c.history ?? []).length, timelineLen: j.timeline.length, status: j.status };
   recordMove(j, c, to, statusForStation(to, c.partStatus ?? 'in_progress'), via);
   if (to === 'final_assembly' && ensureParts(j).every((x) => derivePlacement(j, x).station === 'final_assembly') && j.status === 'in_service' && !activeHold(j)) { ensureParts(j).forEach((x) => { if (!x.completedAt) { x.completedAt = new Date().toISOString(); x.completedBy = x.custodyTech ?? actor().by; x.completedStation = actor().station; } }); pushTransition(j, 'to_testing', 'testing', 'All parts reunited at Final assembly'); }
+  // Scan-to-complete: the two await-reunification safes carry completion meaning — one scan = custody + waiting + completion credit (once, to the scanning tech)
+  const dot = dotOf(j, c);
+  if (AWAIT_SAFES.has(to) && !c.completedAt && j.status === 'in_service' && !activeHold(j)) {
+    const a = actor(); c.completedAt = new Date().toISOString(); c.completedBy = a.by; c.completedStation = a.station;
+    const out = componentsOutstanding(j); let transitioned = false;
+    jobStamp(j, `Component complete · ${c.label} · by ${a.by} · via scan into ${stationOf(to).label}${out.length ? ` · still out: ${out.map((x) => x.label).join(', ')}` : ' · all components in'}`);
+    if (!out.length) { pushTransition(j, 'to_testing', skipForward(j.kind, 'testing'), 'All components complete — reunified (scan)'); transitioned = true; }
+    const undoToken = newId('undo'); rw18.undos.set(undoToken, { jobId: j.id, key: c.key, before, transitioned, expiresAt: Date.now() + SCAN_UNDO_MS });
+    dot.completed = { by: a.by, undoToken, transitioned };
+  }
+  return resolve(dot);
+}
+const AWAIT_SAFES = new Set<RwStationKey>(['safe_await_band', 'safe_await_head']);
+export const SCAN_UNDO_MS = 10_000;
+// Full revert of a scan-to-complete within the undo window: credit, status, custody move and any auto-transition
+export async function undoScanComplete(token: string): Promise<FloorDot> {
+  const u = rw18.undos.get(token); if (!u) throw new Error('Nothing to undo'); if (Date.now() > u.expiresAt) { rw18.undos.delete(token); throw new Error('Undo window has passed — use Amend on the job instead'); }
+  const { j, c } = partOf(u.jobId, u.key);
+  c.completedAt = undefined; c.completedBy = undefined; c.completedStation = undefined;
+  c.history!.splice(u.before.historyLen); c.station = u.before.station; c.partStatus = u.before.partStatus; c.custodyTech = u.before.custodyTech;
+  if (u.transitioned) { j.timeline.splice(u.before.timelineLen); j.status = u.before.status; const ws = WATCH_STATUS_FOR[j.status]; const w = store.watches.find((x) => x.id === j.watchId); if (ws && w) w.status = ws; }
+  c.history!.push({ at: new Date().toISOString(), by: actor().by, to: derivePlacement(j, c).station, status: derivePlacement(j, c).status, via: 'undo', note: 'scan-to-complete undone' });
+  jobStamp(j, `Undo · ${c.label} scan-to-complete reverted by ${actor().by}${u.transitioned ? ' · testing transition reverted' : ''}`);
+  rw18.undos.delete(token);
   return resolve(dotOf(j, c));
 }
 export async function markReunited(jobId: string, key: ComponentKey): Promise<FloorDot> { return movePart(jobId, key, 'final_assembly', 'pad'); }
@@ -3501,7 +3597,7 @@ export async function finishJob(jobId: string): Promise<JobWithRefs> {
   const j = getJobRow(jobId); const out = finishBlockers(j); if (out.length) throw new Error(`Finish gate — ${j.number} cannot be marked Finished: ${out.join('; ')}`);
   if (j.status === 'testing') { const cr = qcRequestGaps(j); if (cr.length) throw new Error(`QC blocked — client request not checked off: “${cr[0].text}”${cr.length > 1 ? ` (+${cr.length - 1} more)` : ''}`); }
   ensureParts(j).forEach((c) => recordMove(j, c, 'finished', 'fulfilled', 'pad'));
-  if (j.status === 'testing') pushTransition(j, 'qc_pass', 'ready_to_ship', 'Finished on the shop floor');
+  if (j.status === 'testing') { if (isTradeJob(j)) { pushTransition(j, 'to_manager_review', 'awaiting_manager_review', 'Finished on the shop floor — trade lane'); tradeHandoff(j); } else pushTransition(j, 'qc_pass', 'ready_to_ship', 'Finished on the shop floor'); }
   return resolve(jobRefs(j));
 }
 export async function getPartHistory(jobId: string, key: ComponentKey): Promise<PartHistoryView> { const { j, c } = partOf(jobId, key); return resolve({ job: jobRefs(j), part: { ...c }, moves: [...(c.history ?? [])].reverse() }); }
@@ -3523,7 +3619,7 @@ export async function scanLabelAssign(label: string): Promise<ScanSession> {
   recordMove(row, target, to, 'in_progress', 'bulk_assign', `custody → ${s.tech.shortName}`, s.tech.shortName);
   const email = queueJobEmail(row, 'Work has started', `${s.tech.displayName.split(' — ')[0]} has started work on your watch today. We'll be in touch as it progresses — track it any time in RolliConnect.`);
   const w = byId(store.watches, row.watchId);
-  s.rows.unshift({ at: new Date().toISOString(), jobNumber: row.number, jobId: row.id, watchLabel: `${w.brand} ${w.model} · ${w.reference}`, part: PART_LABEL[target.key], outboxId: email.id });
+  s.rows.unshift({ at: new Date().toISOString(), jobNumber: row.number, jobId: row.id, watchLabel: `${w.brand} ${w.model} · ${w.reference}`, part: PART_LABEL[target.key], outboxId: email?.id });
   return resolve(s);
 }
 export async function undoOutbox(id: string): Promise<void> { const i = store.outbox.findIndex((e) => e.id === id); if (i >= 0) { store.outbox.splice(i, 1); appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Outbox item ${id} withdrawn (undo)` }); } rw18.scanSession.rows.forEach((r) => { if (r.outboxId === id) r.outboxId = undefined; }); return resolve(undefined); }
@@ -3567,8 +3663,8 @@ export async function stationScan(station: RwStationKey, label: string): Promise
 }
 
 // -- Supervisor pad
-const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'ready_to_ship'];
-const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', ready_to_ship: 'Finished' };
+const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship'];
+const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', awaiting_manager_review: 'Manager review', ready_to_ship: 'Finished' };
 export async function getPadBoard(): Promise<PadCard[]> {
   return resolve(roomJobs().filter((j) => STAGE_ORDER.includes(j.status)).sort((a, b) => STAGE_ORDER.indexOf(a.status) - STAGE_ORDER.indexOf(b.status) || a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), stage: j.status, stageLabel: STAGE_LABEL[j.status], canAdvance: j.status !== 'ready_to_ship' && !activeHold(j), canSendBack: j.status !== 'approved' && !activeHold(j), parts: ensureParts(j).map((c) => dotOf(j, c)), photos: fx.jobPhotos.filter((p) => p.jobId === j.id).length + j.photos.length, pendingParts: store.partsRequests.filter((r) => r.jobId === j.id && (r.status === 'pending' || r.status === 'on_order')).length })));
 }
@@ -3576,7 +3672,8 @@ export async function padAdvance(jobId: string): Promise<JobWithRefs> {
   const j = getJobRow(jobId); if (activeHold(j)) throw new Error('On hold — release first');
   if (j.status === 'approved') { pushTransition(j, 'start_service', 'in_service', 'Pad · advance'); ensureParts(j).forEach((c) => { if (!c.station) recordMove(j, c, laneOfPart(c.key) === 'band' ? 'refinish' : 'wm_bench_1', 'in_progress', 'pad'); }); }
   else if (j.status === 'in_service') { const out = finishBlockers(j); if (out.length) throw new Error(`Cannot advance ${j.number} to Final assembly: ${out.join('; ')}`); ensureParts(j).forEach((c) => recordMove(j, c, 'final_assembly', 'reunited', 'pad')); ensureParts(j).forEach((c) => { if (!c.completedAt) { c.completedAt = new Date().toISOString(); c.completedBy = c.custodyTech ?? actor().by; c.completedStation = actor().station; } }); pushTransition(j, 'to_testing', 'testing', 'Pad · advance (reunified)'); }
-  else if (j.status === 'testing') { return finishJob(jobId); }
+  else if (j.status === 'testing') { if (isTradeJob(j)) return transitionJob(jobId, 'to_manager_review'); return finishJob(jobId); }
+  else if (j.status === 'awaiting_manager_review') throw new Error('Awaiting division manager review — accept or send back from the Trade review queue');
   else throw new Error('Already finished');
   return resolve(jobRefs(j));
 }
@@ -3901,9 +3998,9 @@ const weeksOf = (year: number, month: number) => Math.ceil(new Date(year, month 
 const goalMonth = (tech: string, monthsAgo: number): GoalMonth => {
   const now = new Date(); const d = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; const goal = fx.techGoals[tech] ?? 18;
   const seed = (fx.goalHistorySeeds[tech] ?? []).find((s) => s.monthsAgo === monthsAgo); const wk = weeksOf(d.getFullYear(), d.getMonth());
-  if (!seed) return { key, label: MONTH_LABEL(key), goal, actual: 0, hit: false, byWeek: Array.from({ length: wk }, (_, i) => ({ label: `Wk ${i + 1}`, count: 0 })), byType: { head: 0, case: 0, band: 0 } };
+  if (!seed) return { key, label: MONTH_LABEL(key), goal, actual: 0, hit: false, byWeek: Array.from({ length: wk }, (_, i) => ({ label: `Wk ${i + 1}`, count: 0 })), byType: { head: 0, case: 0, band: 0 }, quality: techQuality(tech, key) };
   const shape = seed.weekShape.slice(0, wk); while (shape.length < wk) shape.push(0); const raw = shape.map((f) => Math.floor(f * seed.actual)); let rem = seed.actual - raw.reduce((a, b) => a + b, 0); for (let i = raw.length - 1; rem > 0 && i >= 0; i--, rem--) raw[i] += 1;
-  return { key, label: MONTH_LABEL(key), goal, actual: seed.actual, hit: seed.actual >= goal, byWeek: raw.map((c, i) => ({ label: `Wk ${i + 1}`, count: c })), byType: { ...seed.byType } };
+  return { key, label: MONTH_LABEL(key), goal, actual: seed.actual, hit: seed.actual >= goal, byWeek: raw.map((c, i) => ({ label: `Wk ${i + 1}`, count: c })), byType: { ...seed.byType } , quality: techQuality(tech, key) };
 };
 const benchGoals = (tech: string): BenchGoals => {
   const now = new Date(); const m = monthKey(now.toISOString()); const goal = fx.techGoals[tech] ?? 18; const base = fx.currentMonthBase[tech] ?? { actual: 0, byType: { head: 0, case: 0, band: 0 } };
@@ -3912,7 +4009,7 @@ const benchGoals = (tech: string): BenchGoals => {
   for (let i = 0; i < base.actual; i++) byWeek[i % curWk].count += 1; live.forEach((c) => { byWeek[Math.min(wk, Math.ceil(new Date(c.completedAt!).getDate() / 7)) - 1].count += 1; });
   const byType: Record<ComponentKey, number> = { ...base.byType }; live.forEach((c) => { byType[c.key] += 1; });
   const actual = base.actual + live.length; const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return { current: { key: m, label: MONTH_LABEL(m), goal, actual, hit: actual >= goal, byWeek, byType }, paceTarget: Math.round((goal * now.getDate()) / daysInMonth), dayOfMonth: now.getDate(), daysInMonth, history: [6, 5, 4, 3, 2, 1].map((n) => goalMonth(tech, n)) };
+  return { current: { key: m, label: MONTH_LABEL(m), goal, actual, hit: actual >= goal, byWeek, byType, quality: techQuality(tech, m) }, paceTarget: Math.round((goal * now.getDate()) / daysInMonth), dayOfMonth: now.getDate(), daysInMonth, history: [6, 5, 4, 3, 2, 1].map((n) => goalMonth(tech, n)) };
 };
 const splitState = (dots: FloorDot[]): SplitState => {
   const st = (k: ComponentKey) => dots.find((d) => d.key === k)?.station; const head = st('head'); const band = st('band');
@@ -3933,5 +4030,173 @@ export async function getBenchBoard(userId: string): Promise<BenchBoard> {
   const messages = inboxFor(me);
   return resolve({ user: u, inProgress, attention, splits, outsourced, completed, goals: benchGoals(me), messages, unread: messages.filter((r) => r.unread).length, stuckDays: STUCK_WORKING_DAYS });
 }
+
+
+// ---- Trade lane — scan-in intake (custody starts; no inspection report, no estimate) + division-manager review queue ----------------------
+export interface TradeScanInInput { clientId: string; watchId?: string; newWatch?: NewWatchInput; workflow: DeptCode[]; lines: { description: string; unitPrice: number; dept: DeptCode }[]; dueAt?: string; note?: string }
+export async function getTradeAccounts(): Promise<Client[]> { return resolve(fx.clients.filter((c) => c.type === 'trade')); }
+export async function tradeScanIn(input: TradeScanInInput): Promise<JobWithRefs> {
+  const c = byId(fx.clients, input.clientId); if (c.type !== 'trade') throw new Error('Scan-in is for trade accounts only');
+  if (!input.workflow.length) throw new Error('Pick at least one department');
+  const w = input.watchId ? byId(store.watches, input.watchId) : input.newWatch ? await createWatch(c.id, input.newWatch) : undefined; if (!w) throw new Error('Scan or pick the watch');
+  if (store.jobs.some((j) => j.watchId === w.id && j.status !== 'closed')) throw new Error(`${w.brand} ${w.model} already has an open job`);
+  const lines: EstimateLine[] = input.lines.filter((l) => l.description.trim()).map((l) => ({ id: newLineId(), description: l.description.trim(), qty: 1, unitPrice: Math.round(l.unitPrice), dept: l.dept, taxable: false, type: 'service' }));
+  const j = buildJob({ clientId: c.id, watchId: w.id, kind: 'trade', onHand: true, workflow: input.workflow, lines, dueAt: input.dueAt, intakeNotes: input.note?.trim() || undefined });
+  pushTransition(j, 'trade_scan_in', 'in_service', `Trade scan-in · ${c.company ?? fullNameOf(c)}${c.internal ? ' (internal)' : ''} — straight to the work queue`);
+  w.status = 'in_service'; w.receivedAt = new Date().toISOString();
+  ensureParts(j).forEach((x) => recordMove(j, x, laneOfPart(x.key) === 'band' ? 'band_pre_queue' : 'pre_queue', 'not_started', 'scan', 'trade scan-in'));
+  jobStamp(j, `Trade scan-in · ${w.brand} ${w.model} · ${input.workflow.join('+')} · custody starts · no inspection report / no estimate`);
+  return resolve(jobRefs(j));
+}
+export interface TradeReviewRow { job: JobWithRefs; account: Client; mine: boolean; waitingSince: string; inspectedBy: string; internal: boolean }
+export async function getTradeReviewQueue(): Promise<TradeReviewRow[]> {
+  const me = currentUserSync();
+  return resolve(store.jobs.filter((j) => isTradeJob(j) && j.status === 'awaiting_manager_review').map((j) => { const t = [...j.timeline].reverse().find((x) => x.to === 'awaiting_manager_review'); const account = byId(fx.clients, j.clientId); return { job: jobRefs(j), account, mine: !!me && account.managerShort === me.shortName, waitingSince: t?.at ?? j.createdAt, inspectedBy: t?.by ?? '—', internal: !!account.internal }; }).sort((a, b) => Number(b.mine) - Number(a.mine) || a.waitingSince.localeCompare(b.waitingSince)));
+}
+export const TRADE_PATH: { key: string; label: string }[] = [{ key: 'scan_in', label: 'Scan-in' }, { key: 'work', label: 'Work' }, { key: 'inspection', label: 'Inspection' }, { key: 'review', label: 'Manager review' }, { key: 'invoice', label: 'Invoice' }];
+export const tradePathIndex = (j: Job): number => (j.status === 'intake' ? 0 : j.status === 'in_service' ? 1 : j.status === 'testing' ? 2 : j.status === 'awaiting_manager_review' ? 3 : 4);
+
+// ---- Stage / bin audit — what the system believes is at a location vs what is physically scanned ------------------------------------------
+import type { AuditItem, AuditLive, AuditLocation, AuditLocationKey, AuditLocationStatus, AuditResolution, AuditScanResult, AuditSession, ValueTier } from './types';
+export { AUDIT_LOCATIONS } from './fixtures';
+const auditStore = { sessions: fx.auditSeeds.map((a): AuditSession => ({ ...a, missing: [...a.missing], unexpected: [...a.unexpected] })), live: null as AuditLive | null, staleDays: fx.AUDIT_STALE_DAYS_DEFAULT };
+const auditLoc = (k: AuditLocationKey): AuditLocation => fx.AUDIT_LOCATIONS.find((l) => l.key === k)!;
+export const valueTierOf = (j: Job): ValueTier => { const est = j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined; const so = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled'); const cents = so?.total ?? j.total ?? est?.total ?? 0; return cents >= 500_000 ? 'high' : cents >= 150_000 ? 'mid' : 'standard'; };
+// Belief: bins are derived from job state (awaiting payment, orphaned after close, pre-inspection); everything else is the part's station
+const believedLocation = (j: Job, c: JobComponent): AuditLocationKey => {
+  const so = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled');
+  if (j.status === 'closed') return so && (so.status === 'picked_up' || so.status === 'shipped') ? 'finished' : 'orphan_bin';
+  if (j.status === 'ready_to_ship' && (!so || !so.isPaid)) return 'awaiting_payment_bin';
+  if (j.status === 'intake' || j.status === 'in_review') return 'pre_intake_bin';
+  return derivePlacement(j, c).station;
+};
+const auditItemOf = (j: Job, c: JobComponent): AuditItem => {
+  const w = byId(store.watches, j.watchId); const cl = byId(fx.clients, j.clientId); const last = c.history?.length ? c.history[c.history.length - 1] : undefined; const t0 = j.timeline[j.timeline.length - 1];
+  return { id: `${j.id}-${c.key}`, jobId: j.id, jobNumber: j.number, key: c.key, partLabel: PART_LABEL[c.key], watchLabel: `${w.brand} ${w.model}`, reference: w.reference, serial: w.serial, clientId: cl.id, clientName: cl.company ?? fullNameOf(cl), tier: valueTierOf(j), lastCustody: last ? { by: last.by, at: last.at, where: last.to ? stationOf(last.to).label : last.status } : t0 ? { by: t0.by, at: t0.at, where: t0.station } : undefined };
+};
+const auditableJobs = () => store.jobs.filter((j) => j.division === getSessionDivision() && (j.status !== 'closed' || (j.finishedAt && Date.now() - new Date(j.finishedAt).getTime() < 30 * 86_400_000)));
+const expectedAt = (k: AuditLocationKey): AuditItem[] => auditableJobs().flatMap((j) => ensureParts(j).filter((c) => believedLocation(j, c) === k).map((c) => auditItemOf(j, c)));
+export async function getAuditLocations(): Promise<AuditLocationStatus[]> {
+  return resolve(fx.AUDIT_LOCATIONS.map((location) => { const last = auditStore.sessions.filter((a) => a.location === location.key).sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0]; const daysSince = last ? Math.floor((Date.now() - new Date(last.finishedAt).getTime()) / 86_400_000) : undefined; return { location, expected: expectedAt(location.key).length, lastAudited: last?.finishedAt, lastResult: last ? (last.missing.length ? 'missing' : 'clean') : undefined, stale: daysSince === undefined || daysSince > auditStore.staleDays, daysSince }; }));
+}
+export const getAuditStaleDays = () => auditStore.staleDays;
+export async function setAuditStaleDays(n: number): Promise<number> { if (!Number.isFinite(n) || n < 1 || n > 90) throw new Error('Pick 1–90 days'); auditStore.staleDays = Math.round(n); appendAudit({ type: 'setup', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Audit stale threshold → ${auditStore.staleDays} days` }); return resolve(auditStore.staleDays); }
+export const getAuditLive = (): AuditLive | null => auditStore.live;
+export async function startAudit(k: AuditLocationKey): Promise<AuditLive> {
+  auditStore.live = { location: auditLoc(k), startedAt: new Date().toISOString(), expected: expectedAt(k), matched: [], unexpected: [], scans: [] };
+  appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Audit started · ${auditLoc(k).label} · ${auditStore.live.expected.length} expected` });
+  return resolve(auditStore.live);
+}
+export async function cancelAudit(): Promise<void> { auditStore.live = null; return resolve(undefined); }
+// One label per scan; `|B` / BAND- picks the bracelet, otherwise the head (or the case when there is no head). Match against belief, never against the floor map alone.
+export async function auditScan(code: string): Promise<{ live: AuditLive; result: AuditScanResult; item?: AuditItem }> {
+  const live = auditStore.live; if (!live) throw new Error('Start an audit first');
+  const bandOnly = /\|B$|^BAND-/i.test(code.trim()); const clean = code.trim().replace(/^BAND-/i, '').split('|')[0];
+  const j = store.jobs.find((x) => x.number === clean.toUpperCase()) ?? (await findJobByLabel(clean)); const at = new Date().toISOString();
+  const push = (result: AuditScanResult, label: string, item?: AuditItem) => { live.scans.unshift({ code, at, result, label }); return resolve({ live, result, item }); };
+  if (!j) return push('unknown', `No job matches ${code}`);
+  const row = getJobRow(j.id); const comps = ensureParts(row); const c = bandOnly ? comps.find((x) => x.key === 'band') : live.location.lane === 'band' ? comps.find((x) => x.key === 'band') ?? comps.find((x) => x.key === 'case') : comps.find((x) => x.key === 'head') ?? comps.find((x) => x.key === 'case') ?? comps[0];
+  if (!c) return push('unknown', `${row.number} has no ${bandOnly ? 'bracelet' : 'matching'} part`);
+  const item = auditItemOf(row, c);
+  if (live.matched.includes(item.id) || live.unexpected.some((u) => u.id === item.id)) return push('duplicate', `${item.jobNumber} · ${item.partLabel} already scanned`, item);
+  if (live.expected.some((e) => e.id === item.id)) { live.matched.push(item.id); return push('matched', `${item.jobNumber} · ${item.partLabel} ✓`, item); }
+  const believedAt = believedLocation(row, c); live.unexpected.push({ ...item, believedAt, believedLabel: auditLoc(believedAt)?.label ?? believedAt });
+  return push('unexpected', `${item.jobNumber} · ${item.partLabel} — system says ${auditLoc(believedAt)?.label ?? believedAt}`, item);
+}
+export async function auditResolve(itemId: string, resolution: AuditResolution): Promise<AuditLive> {
+  const live = auditStore.live; if (!live) throw new Error('No audit running'); const u = live.unexpected.find((x) => x.id === itemId); if (!u) throw new Error('Not an unexpected item');
+  if (resolution === 'corrected') {
+    if (live.location.group === 'bin') throw new Error(`${live.location.label} is derived from job state — investigate instead of correcting`);
+    const { j, c } = partOf(u.jobId, u.key); const to = live.location.key as RwStationKey;
+    if (stationOf(to).lane !== 'shared' && stationOf(to).lane !== laneOfPart(c.key)) throw new Error(`${PART_LABEL[c.key]} cannot live in a ${stationOf(to).lane}-lane station — investigate`);
+    recordMove(j, c, to, statusForStation(to, c.partStatus ?? 'in_progress'), 'audit_correction', `audit at ${live.location.label} · was ${u.believedLabel}`);
+  }
+  u.resolution = resolution; return resolve(live);
+}
+export async function finishAudit(): Promise<AuditSession> {
+  const live = auditStore.live; if (!live) throw new Error('No audit running'); const a = actor();
+  const missing = live.expected.filter((e) => !live.matched.includes(e.id));
+  const session: AuditSession = { id: newId('aud'), location: live.location.key, locationLabel: live.location.label, by: a.by, station: a.station, startedAt: live.startedAt, finishedAt: new Date().toISOString(), expectedCount: live.expected.length, matched: live.matched.length, missing, unexpected: live.unexpected.map((u) => ({ ...u, resolution: u.resolution ?? 'investigate' })) };
+  if (missing.length) { const first = missing[0]; const pin = { id: newId('pin'), title: `Audit · ${live.location.label}: ${missing.length} MISSING — ${first.jobNumber} ${first.watchLabel} (${first.partLabel.toLowerCase()})${missing.length > 1 ? ` +${missing.length - 1} more` : ''}${first.lastCustody ? ` · last seen ${first.lastCustody.by}` : ''}`, assignedTo: { type: 'role' as const, role: 'manager' as Role }, createdBy: a.by, jobId: first.jobId, createdAt: session.finishedAt, station: a.station, division: getSessionDivision() }; store.pinned.unshift(pin); session.pinId = pin.id; }
+  auditStore.sessions.unshift(session); auditStore.live = null;
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Audit finished · ${live.location.label} · ${session.matched}/${session.expectedCount} matched · ${missing.length} missing · ${session.unexpected.length} unexpected (${session.unexpected.filter((u) => u.resolution === 'corrected').length} corrected)` });
+  return resolve(session);
+}
+export async function getAuditSessions(): Promise<AuditSession[]> { return resolve([...auditStore.sessions].sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))); }
+
+
+// ---- Work grading gate — categories from a Setup lookup; grades are append-only events attributed to job + responsible tech ----------------------
+import type { GradeCategory, GradeGate, GradeGateRow, GradeScope, GradeScore, TechQuality, WorkGrade } from './types';
+const wg = { categories: fx.gradeCategories.map((c): GradeCategory => ({ ...c, scopes: [...c.scopes] })), grades: fx.gradeSeeds.map((g): WorkGrade => ({ ...g })) };
+export async function getGradeCategories(): Promise<GradeCategory[]> { return resolve([...wg.categories]); }
+export async function addGradeCategory(label: string, hint: string, scopes: GradeScope[]): Promise<GradeCategory> {
+  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Managers add grading categories'); if (!label.trim()) throw new Error('Name the category'); if (!scopes.length) throw new Error('Pick what it applies to');
+  const c: GradeCategory = { id: newId('gc'), key: label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'), label: label.trim(), hint: hint.trim(), scopes, active: true, createdBy: a.by, createdAt: new Date().toISOString() };
+  wg.categories.push(c); appendAudit({ type: 'setup', stationName: a.station, userShortName: a.user?.shortName, detail: `Grading category added · ${c.label} · ${scopes.join('/')}` }); return resolve(c);
+}
+export async function toggleGradeCategory(id: string): Promise<GradeCategory> { const c = wg.categories.find((x) => x.id === id); if (!c) throw new Error('No such category'); c.active = !c.active; appendAudit({ type: 'setup', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Grading category ${c.active ? 'enabled' : 'disabled'} · ${c.label}` }); return resolve(c); }
+const SCOPE_OF: Record<ComponentKey, GradeScope> = { head: 'head', case: 'case', band: 'bracelet' };
+const categoryApplies = (c: GradeCategory, j: Job) => c.active && (c.scopes.includes('whole') || ensureComponents(j).some((k) => c.scopes.includes(SCOPE_OF[k.key])));
+// Responsible tech resolves from the component completion events: head → watchmaker credited on the movement; case/bracelet → whoever did the case/polish work
+const responsibleTech = (c: GradeCategory, j: Job): string => {
+  const comps = ensureComponents(j); const by = (k: ComponentKey) => { const x = comps.find((q) => q.key === k); return x?.completedBy ?? x?.custodyTech; };
+  if (c.scopes.includes('case') || c.scopes.includes('bracelet')) return by('case') ?? by('band') ?? j.assignees.find((a) => a === 'Walter') ?? j.assignees[0] ?? '—';
+  return by('head') ?? j.assignees.find((a) => fx.users.find((u) => u.shortName === a)?.roles.includes('watchmaker')) ?? j.assignees[0] ?? '—';
+};
+const gradesForCycle = (j: Job) => { const since = [...j.timeline].reverse().find((t) => t.to === 'testing')?.at ?? ''; return wg.grades.filter((g) => g.jobId === j.id && g.at >= since); };
+export const gradeGateFor = (j: Job): GradeGate => {
+  const techOptions = fx.users.filter((u) => u.division !== 'rollishop').map((u) => u.shortName);
+  const rows: GradeGateRow[] = wg.categories.filter((c) => categoryApplies(c, j)).map((category) => ({ category, grade: [...gradesForCycle(j)].reverse().find((g) => g.categoryId === category.id), suggestedTech: responsibleTech(category, j), techOptions }));
+  const missing = rows.filter((r) => !r.grade).map((r) => r.category.label); return { rows, missing, ready: rows.length > 0 && missing.length === 0 };
+};
+export async function getGradeGate(jobId: string): Promise<GradeGate> { return resolve(gradeGateFor(getJobRow(jobId))); }
+export async function recordWorkGrade(jobId: string, categoryId: string, score: GradeScore, opts: { note?: string; photoUrl?: string; tech?: string } = {}): Promise<WorkGrade> {
+  const j = getJobRow(jobId); const c = wg.categories.find((x) => x.id === categoryId); if (!c || !categoryApplies(c, j)) throw new Error('That category does not apply to this job'); if (![1, 2, 3, 4, 5].includes(score)) throw new Error('Score 1–5');
+  if (score <= 3 && !opts.note?.trim() && !opts.photoUrl) throw new Error(`A grade of ${score} needs a short note or a photo — low grades carry their evidence`);
+  const a = actor(); const auto = responsibleTech(c, j); const tech = opts.tech?.trim() || auto;
+  const g: WorkGrade = { id: newId('wg'), jobId: j.id, jobNumber: j.number, categoryId: c.id, categoryLabel: c.label, score, note: opts.note?.trim() || undefined, photoUrl: opts.photoUrl, tech, techAuto: auto, grader: a.by, selfGraded: tech === a.by, at: new Date().toISOString(), station: a.station };
+  wg.grades.push(g); jobStamp(j, `Work grade · ${c.label} ${score}/5 · tech ${tech}${tech !== auto ? ` (auto ${auto}, edited)` : ''} · by ${a.by}${g.selfGraded ? ' · SELF-GRADED' : ''}${g.note ? ` · ${g.note}` : ''}`);
+  if (score <= 2) store.pinned.unshift({ id: newId('pin'), title: `Low work grade · ${j.number} ${c.label} ${score}/5 — ${tech}${g.note ? ` · “${g.note}”` : ''} · graded by ${a.by}`, assignedTo: { type: 'role', role: 'manager' }, createdBy: a.by, jobId: j.id, createdAt: g.at, station: a.station, division: j.division });
+  return resolve(g);
+}
+export async function getWorkGrades(filter: { jobId?: string; tech?: string } = {}): Promise<WorkGrade[]> { return resolve(wg.grades.filter((g) => (!filter.jobId || g.jobId === filter.jobId) && (!filter.tech || g.tech === filter.tech)).sort((a, b) => b.at.localeCompare(a.at))); }
+export const techQuality = (tech: string, month: string): TechQuality => {
+  const gs = wg.grades.filter((g) => g.tech === tech && monthKey(g.at) === month); const byCategory: TechQuality['byCategory'] = {};
+  gs.forEach((g) => { const b = (byCategory[g.categoryId] ??= { label: g.categoryLabel, avg: 0, n: 0 }); b.avg = (b.avg * b.n + g.score) / (b.n + 1); b.n += 1; });
+  Object.values(byCategory).forEach((b) => { b.avg = Math.round(b.avg * 10) / 10; });
+  return { n: gs.length, avg: gs.length ? Math.round((gs.reduce((t, g) => t + g.score, 0) / gs.length) * 10) / 10 : null, byCategory, low: gs.filter((g) => g.score <= 2).length, selfGraded: gs.filter((g) => g.selfGraded).length };
+};
+
+
+// ---- Client rating — Attitude / Communication staff-set (concierge+), completed jobs DERIVED; logged old→new. Internal only: no portal read function touches this. ----
+import type { CallEvent, ClientRating, InboundCallEvent, RatingChange, ScreenPop, Star } from './types';
+const ratings = { rows: new Map<string, { attitude?: Star; communication?: Star; history: RatingChange[] }>([
+  ['c-30', { attitude: 5, communication: 3, history: [{ at: new Date(Date.now() - 40 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'attitude', to: 5 }, { at: new Date(Date.now() - 40 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'communication', to: 3 }] }],
+  ['c-05', { attitude: 4, communication: 4, history: [{ at: new Date(Date.now() - 90 * 86_400_000).toISOString(), by: 'MH', station: 'Front Desk 1', field: 'attitude', to: 4 }, { at: new Date(Date.now() - 90 * 86_400_000).toISOString(), by: 'MH', station: 'Front Desk 1', field: 'communication', to: 4 }] }],
+  ['c-10', { attitude: 2, communication: 4, history: [{ at: new Date(Date.now() - 12 * 86_400_000).toISOString(), by: 'Walter', station: 'Front Desk 2', field: 'attitude', from: 3, to: 2 }, { at: new Date(Date.now() - 60 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'attitude', to: 3 }, { at: new Date(Date.now() - 60 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'communication', to: 4 }] }],
+]), calls: [] as CallEvent[] };
+const completedJobsFor = (clientId: string) => store.jobs.filter((j) => j.clientId === clientId && (j.status === 'closed' || store.salesOrders.some((o) => o.jobId === j.id && (o.status === 'picked_up' || o.status === 'shipped')))).length;
+export const clientRatingSync = (clientId: string): ClientRating => {
+  const r = ratings.rows.get(clientId); const completed = completedJobsFor(clientId); const a = r?.attitude; const c = r?.communication;
+  return { clientId, attitude: a, communication: c, completed, badge: `${a ?? '–'}/${c ?? '–'}/${completed}`, tooltip: `Attitude ${a ?? 'unrated'} · Communication ${c ?? 'unrated'} · ${completed} completed job${completed === 1 ? '' : 's'}`, history: [...(r?.history ?? [])].sort((x, y) => y.at.localeCompare(x.at)) };
+};
+export async function getClientRating(clientId: string): Promise<ClientRating> { return resolve(clientRatingSync(clientId)); }
+export async function setClientRating(clientId: string, input: { attitude?: Star; communication?: Star }): Promise<ClientRating> {
+  const a = actor(); if (!a.user) throw new Error('Sign in to rate a client'); byId(fx.clients, clientId);
+  const r = ratings.rows.get(clientId) ?? { history: [] }; const now = new Date().toISOString();
+  (['attitude', 'communication'] as const).forEach((f) => { const to = input[f]; if (to && to !== r[f]) { r.history.push({ at: now, by: a.by, station: a.station, field: f, from: r[f], to }); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Client rating · ${fullNameOf(byId(fx.clients, clientId))} · ${f} ${r[f] ?? '–'} → ${to}` }); r[f] = to; } });
+  ratings.rows.set(clientId, r); return resolve(clientRatingSync(clientId));
+}
+// Telephony receiver (mock of Vonage VIP). The adapter in ./telephony.ts calls this; a real webhook later replaces that one file.
+export async function receiveInboundCall(ev: InboundCallEvent): Promise<ScreenPop> {
+  const a = actor(); const digits = (p: string) => p.replace(/\D/g, '').slice(-10); const client = fx.clients.find((c) => digits(c.phone) === digits(ev.number)); const callId = newId('call');
+  ratings.calls.unshift({ id: callId, at: ev.at, number: ev.number, clientId: client?.id, answeredBy: a.by, station: a.station, outcome: client ? 'screen_pop' : 'unknown_caller' });
+  if (!client) { appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inbound call · unknown caller ${ev.number} · answered by ${a.by}` }); return resolve({ kind: 'unknown', number: ev.number, callId }); }
+  threadEvent(client.id, undefined, 'note', a.by, `Inbound call from ${ev.number} · answered by ${a.by} at ${a.station} (screen-pop)`, undefined);
+  const inService = store.jobs.filter((j) => j.clientId === client.id && j.status !== 'closed' && j.simpleStatus === 'on_hand').length;
+  const needsReply = clientNeedsReplyCount(client.id);
+  return resolve({ kind: 'known', client, rating: clientRatingSync(client.id), inService, needsReply, callId });
+}
+export async function getCallEvents(clientId?: string): Promise<CallEvent[]> { return resolve(ratings.calls.filter((c) => !clientId || c.clientId === clientId)); }
 
 replayRcEvents();

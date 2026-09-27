@@ -35,3 +35,23 @@ export const jobMessages: JobMessage[] = [
   // Unrouted ambient note on another job — sits on the job, notifies nobody
   { id: 'jm-03', jobId: 'j-24', text: 'Caseback gasket left on the tray — reuse if it grades B, otherwise it is on the parts list already.', mentions: [], notify: [], at: daysAgo(1, 15), by: 'Rosa', station: 'Bench 3', readBy: ['Rosa'] },
 ];
+
+// ---- Work grading (gate at /rw/testing). Categories = Setup lookup (same pattern as photo labels); grades append-only.
+import type { GradeCategory, WorkGrade } from '../types';
+export const gradeCategories: GradeCategory[] = [
+  { id: 'gc-clean', key: 'cleanliness', label: 'Cleanliness', hint: 'Movement, dial, case interior — no debris, fingerprints or residue', scopes: ['whole'], active: true, createdBy: 'MH', createdAt: daysAgo(120) },
+  { id: 'gc-case', key: 'case_condition', label: 'Case condition', hint: 'Defects post-polish — scratches, rounded edges, hairlines, uneven brushing', scopes: ['case', 'bracelet'], active: true, createdBy: 'MH', createdAt: daysAgo(120) },
+];
+const G = (id: string, jobId: string, jobNumber: string, cat: 'gc-clean' | 'gc-case', score: 1 | 2 | 3 | 4 | 5, tech: string, grader: string, d: number, note?: string): WorkGrade => ({ id, jobId, jobNumber, categoryId: cat, categoryLabel: cat === 'gc-clean' ? 'Cleanliness' : 'Case condition', score, note, tech, techAuto: tech, grader, selfGraded: tech === grader, at: daysAgo(d, 15), station: 'Testing' });
+// History across the seeded jobs — Rosa and MM show believable averages; one self-grade (MM grading his own movement); one low grade (≤2) already pinned
+export const gradeSeeds: WorkGrade[] = [
+  G('wg-01', 'j-r1', 'E01871', 'gc-clean', 5, 'MM', 'Walter', 352), G('wg-02', 'j-r1', 'E01871', 'gc-case', 4, 'Walter', 'MM', 352),
+  G('wg-03', 'j-10', 'E02020', 'gc-clean', 4, 'MM', 'Walter', 40), G('wg-04', 'j-10', 'E02020', 'gc-case', 5, 'Walter', 'MM', 40),
+  G('wg-05', 'j-03', 'E02013', 'gc-clean', 4, 'MM', 'Rosa', 27), G('wg-06', 'j-03', 'E02013', 'gc-case', 3, 'Walter', 'Rosa', 27, 'Hairline at 4 o’clock lug, re-brushed'),
+  G('wg-07', 'j-06', 'E02016', 'gc-clean', 5, 'MM', 'MM', 20), // self-graded — allowed, visible in reports
+  G('wg-08', 'j-06', 'E02016', 'gc-case', 4, 'Walter', 'MM', 20),
+  G('wg-09', 'j-24', 'E02007', 'gc-clean', 4, 'Rosa', 'MM', 14), G('wg-10', 'j-24', 'E02007', 'gc-case', 4, 'Rosa', 'MM', 14),
+  G('wg-11', 'j-05', 'E02015', 'gc-clean', 5, 'Rosa', 'MM', 5), G('wg-12', 'j-05', 'E02015', 'gc-case', 2, 'Walter', 'Rosa', 5, 'Rounded bevel on the 6 o’clock lug after polish — flagged'),
+  G('wg-13', 'j-01', 'E02011', 'gc-clean', 3, 'Rosa', 'MM', 9, 'Dust under crystal at 2 o’clock — recased'),
+  G('wg-14', 'j-01', 'E02011', 'gc-case', 5, 'Walter', 'MM', 9),
+];

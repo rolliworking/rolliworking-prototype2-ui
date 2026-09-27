@@ -5,6 +5,7 @@ import * as api from '@/api/client';
 import type { PortalDocument } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
+import { RcSplitStrip } from '@/rc/RcSplitStrip';
 import { useRcSession } from '@/rc/RcSession';
 import { RcPhotoSections } from '@/rc/RcPhotoSections';
 
@@ -59,6 +60,7 @@ export default function RcWatchPage() {
         </div>
       </div>
 
+      {pw.split && <RcSplitStrip split={pw.split} testId="rc-watch-split" />}
       {pw.jobIds.map((jid) => <RcPhotoSections key={jid} clientId={client!.id} jobId={jid} />)}
       <RcCard eyebrow="Documents" title={`${papers.length} item${papers.length === 1 ? '' : 's'}`} testId="rc-watch-documents">
         {papers.length > 0 && <div className="grid gap-2 sm:grid-cols-2">{papers.map((d) => <DocTile key={d.id} d={d} />)}</div>}

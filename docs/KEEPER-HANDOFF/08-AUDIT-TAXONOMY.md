@@ -31,7 +31,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `station_reset` | `actor` | All only |
 | `intake` | `a` | Intake |
 | `estimate` | `a` | Estimates |
-| `job` | `a`, `i`, `prev`, `u`, `why` | Jobs (with task, pin, parts) |
+| `job` | `a`, `i`, `pin`, `prev`, `startAudit`, `u`, `why` | Jobs (with task, pin, parts) |
 | `task` | `a` | All only |
 | `pin` | `a`, `p` | All only |
 | `sales` | `a` | Sales |
@@ -39,12 +39,12 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `portal` | `c`, `m` | RolliConnect |
 | `purchasing` | `rsStamp` | All only |
 | `inventory` | `j` | All only |
-| `setup` | (stamp helper — see below) | All only |
+| `setup` | `c`, `setAuditStaleDays` | All only |
 | `evidence` | (stamp helper — see below) | All only |
 | `labels` | (stamp helper — see below) | All only |
 | `accounting` | (stamp helper — see below) | All only |
 | `companion` | `a` | All only |
-| `comms` | `a`, `c`, `i`, `session` | All only |
+| `comms` | `a`, `c`, `callId`, `i`, `session`, `to` | All only |
 | `rollitime` | `a` | All only |
 | `rgtime` | `rgAudit` | RGTime |
 | `kiosk` | `c`, `kioskAudit`, `saveBenchSettings` | Kiosk |
