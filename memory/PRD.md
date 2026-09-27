@@ -357,3 +357,7 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 ### Shop Floor reachable from the desktop app (2026-09-27; self-tested)
 - Desktop `/floor` now renders the station map (`RwFloorPage` in a dark wrapper `desktop-shop-floor`) inside the RS shell; sidebar RW group item renamed **Shop Floor** (manager tier). Legacy 9-lane chip board moved to `/floor/lanes` (not in nav).
 - Links added: desktop Supervisor board header → `sup-shop-floor-link` (/floor); Supervisor Pad (`/rw/pad`, manager only) header pill `pad-shop-floor-link` + bottom tab `pad-tab-floor` (/rw/floor). Kiosk path `/rw/floor` unchanged.
+
+### Sidebar restructure — Part 1 (2026-09-27; self-tested; more groups to come)
+- `config/navigation.ts`: `NavGroupKey = 'intake'|'clients'|'rw'`, `NAV_GROUPS` (header may itself be a page via `path`). Items carry `group`. **Intake** ▸ Requests · Inbox · **Shipping** (renamed from Inbound; page h1 now "Shipping") · Estimates · Bill Audit (header → /intake). **Clients** ▸ Jobs · All Jobs · Sales (header → /clients). RW folder unchanged (Bench · Supervisor · Shop Floor).
+- `components/layout/Sidebar.tsx` rewritten around a generic `Group` (header NavLink + chevron toggle `nav-<group>-toggle`, children `nav-<group>-items`, auto-open when a child route is active). Routes untouched. Test ids: `nav-intake`, `nav-clients`, `nav-rw`, children keep `nav-<key>` (e.g. `nav-inbound` = Shipping).
