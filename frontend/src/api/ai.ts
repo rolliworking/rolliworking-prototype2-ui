@@ -48,3 +48,25 @@ export async function extractInspectionSheet(file: File): Promise<SheetSuggestio
   const dataUrl = await readAs(file, 'dataUrl'); const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
   return post<SheetSuggestionWire>('extract-inspection-sheet', { fileBase64: dataUrl, mime, fileName: file.name });
 }
+
+// 5. Client-update summary — TEMPLATE FILL, not prose. Claude returns discrete fields; the template below is assembled in code so the voice never drifts. Always a draft; never sent.
+import type { JobSummaryContext } from './client';
+export interface SummaryFields { job_status: string; per_component_status_line: string | null; target_date: string; variant: 'queue' | 'progress' | 'finished_qc' | 'approval' | 'parts' | 'hold' | 'ready' | string }
+export const fillSummaryTemplate = (ctx: JobSummaryContext, f: SummaryFields): string => {
+  const line2 = f.per_component_status_line?.trim(); const close = f.variant === 'ready' ? 'Let us know a good time for pickup or we can arrange return shipping.' : f.variant === 'approval' ? 'Once you approve the estimate we will get started right away.' : "We'll reach out if we need more time. Thanks for your patience!";
+  return [`Hi ${ctx.clientFirstName}, wanted to give you a quick update — your job is currently ${f.job_status.trim().replace(/\.$/, '')}.`, line2 ? line2 : null, f.variant === 'ready' ? null : `Target completion date: ${f.target_date}.`, close].filter(Boolean).join('\n');
+};
+// Deterministic fallback when the model is unavailable — same template, rule-based fields
+export const localSummaryFields = (ctx: JobSummaryContext): SummaryFields => {
+  const target = ctx.dueAt ? new Date(ctx.dueAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'to be confirmed';
+  const allDone = ctx.components.every((c) => c.partStatus === 'fulfilled' || c.plainLocation === 'finished'); const anyStarted = ctx.components.some((c) => c.partStatus === 'in_progress' || c.partStatus === 'waiting' || c.partStatus === 'reunited');
+  const variant = ctx.status === 'ready_to_ship' ? 'ready' : ctx.openItems.some((o) => o.startsWith('on hold')) ? 'hold' : ctx.status === 'awaiting_customer_approval' ? 'approval' : ctx.openItems.some((o) => o.includes('on order')) ? 'parts' : ctx.status === 'testing' || ctx.components.some((c) => c.plainLocation.startsWith('in final')) ? 'finished_qc' : !anyStarted ? 'queue' : 'progress';
+  const status = { ready: 'finished and ready', hold: 'on hold', approval: 'awaiting your approval', parts: 'waiting on a part we have ordered', finished_qc: 'in final assembly and quality control', queue: 'in queue, awaiting work to begin', progress: ctx.components.some((c) => c.plainLocation.includes('polish')) && ctx.components.length === 1 ? 'being polished and refinished' : 'in progress' }[variant];
+  const done = ctx.components.filter((c) => c.plainLocation === 'finished').map((c) => c.part.toLowerCase()); const wip = ctx.components.filter((c) => c.plainLocation !== 'finished');
+  const line = ctx.components.length > 1 && !allDone && done.length ? `The ${done.join(' and ')} ${done.length > 1 ? 'are' : 'is'} finished; the ${wip.map((c) => c.part.toLowerCase()).join(' and ')} ${wip.length > 1 ? 'are' : 'is'} still in progress.` : ctx.components.length > 1 && wip.some((c) => c.plainLocation.includes('polish')) ? `The ${wip.filter((c) => c.plainLocation.includes('polish')).map((c) => c.part.toLowerCase()).join(' and ')} is being polished and refinished; the rest is with the watchmaker.` : null;
+  return { job_status: status, per_component_status_line: line, target_date: target, variant };
+};
+export async function draftJobSummary(ctx: JobSummaryContext): Promise<{ text: string; fields: SummaryFields; source: 'claude' | 'local' }> {
+  try { const { fields } = await post<{ fields: SummaryFields }>('job-summary', { context: ctx }); if (!fields?.job_status) throw new Error('empty'); const f: SummaryFields = { ...fields, target_date: fields.target_date || 'to be confirmed' }; return { text: fillSummaryTemplate(ctx, f), fields: f, source: 'claude' }; }
+  catch { const f = localSummaryFields(ctx); return { text: fillSummaryTemplate(ctx, f), fields: f, source: 'local' }; }
+}

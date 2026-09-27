@@ -11,7 +11,9 @@ const HIDDEN = new Set(['pre_approval', 'pre_queue', 'band_pre']);
 const DEST_NODES = NODES.filter((n) => !HIDDEN.has(n.id));
 const TRACKS = [['assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['assign_band', 'band_qc', 'safe_band']];
 const RAMPS = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }, { from: 'assign_band', leg: ['band_safe_in', 'refinish', 'band_safe_out'], to: 'band_qc' }];
-const pt = (r: DOMRect, h: DOMRect, side: 'l' | 'r' | 'b') => ({ x: side === 'l' ? r.left - h.left : side === 'r' ? r.right - h.left : r.left - h.left + r.width / 2, y: side === 'b' ? r.bottom - h.top : r.top - h.top + r.height / 2 });
+// Layout-unit geometry (offset*, not getBoundingClientRect) so the overlay stays aligned when the map is embedded zoomed/scaled (corner widget)
+interface Box { left: number; top: number; width: number; height: number }
+const pt = (r: Box, side: 'l' | 'r' | 'b') => ({ x: side === 'l' ? r.left : side === 'r' ? r.left + r.width : r.left + r.width / 2, y: side === 'b' ? r.top + r.height : r.top + r.height / 2 });
 
 // Single-job lookup is the ONLY time job data appears here: that job's own parts, nothing else
 const Node = ({ n, selected, onSelect, marks = [] }: { n: MapNode; selected: boolean; onSelect: (n: MapNode) => void; marks?: FloorDot[] }) => (
@@ -30,10 +32,10 @@ export const DestinationMap = ({ selectedId, onSelect, focus = [] }: { selectedI
   useLayoutEffect(() => {
     const el = host.current; if (!el) return;
     const draw = () => {
-      const hb = el.getBoundingClientRect(); const rect = (id: string) => el.querySelector<HTMLElement>(`[data-node="${id}"]`)?.getBoundingClientRect(); const out: typeof paths = [];
-      TRACKS.forEach((line) => line.forEach((id, i) => { const a = rect(id); const b = rect(line[i + 1]); if (!a || !b) return; const p = pt(a, hb, 'r'); const q = pt(b, hb, 'l'); out.push({ ramp: false, d: `M${p.x},${p.y} L${q.x},${q.y}` }); }));
-      RAMPS.forEach((r) => { const f = rect(r.from); const t = rect(r.to); const legs = r.leg.map(rect); if (!f || !t || legs.some((x) => !x)) return; const p = pt(f, hb, 'b'); const s0 = pt(legs[0]!, hb, 'l'); out.push({ ramp: true, d: `M${p.x},${p.y} C${p.x},${s0.y} ${p.x + 10},${s0.y} ${s0.x},${s0.y}` }); legs.forEach((lg, i) => { const nx = legs[i + 1]; if (!lg || !nx) return; const a = pt(lg, hb, 'r'); const b = pt(nx, hb, 'l'); out.push({ ramp: true, d: `M${a.x},${a.y} L${b.x},${b.y}` }); }); const e = pt(legs[legs.length - 1]!, hb, 'r'); const q = pt(t, hb, 'b'); out.push({ ramp: true, d: `M${e.x},${e.y} C${q.x - 10},${e.y} ${q.x},${e.y} ${q.x},${q.y}` }); });
-      const fa = rect('final'); ['safe_head', 'safe_band'].forEach((id) => { const a = rect(id); if (!a || !fa) return; const p = pt(a, hb, 'r'); const q = pt(fa, hb, 'l'); out.push({ ramp: false, d: `M${p.x},${p.y} C${p.x + 30},${p.y} ${q.x - 30},${q.y} ${q.x},${q.y}` }); });
+      const rect = (id: string): Box | undefined => { const n = el.querySelector<HTMLElement>(`[data-node="${id}"]`); if (!n) return undefined; let left = 0, top = 0; for (let o: HTMLElement | null = n; o && o !== el; o = o.offsetParent as HTMLElement | null) { left += o.offsetLeft; top += o.offsetTop; } return { left, top, width: n.offsetWidth, height: n.offsetHeight }; }; const out: typeof paths = [];
+      TRACKS.forEach((line) => line.forEach((id, i) => { const a = rect(id); const b = rect(line[i + 1]); if (!a || !b) return; const p = pt(a, 'r'); const q = pt(b, 'l'); out.push({ ramp: false, d: `M${p.x},${p.y} L${q.x},${q.y}` }); }));
+      RAMPS.forEach((r) => { const f = rect(r.from); const t = rect(r.to); const legs = r.leg.map(rect); if (!f || !t || legs.some((x) => !x)) return; const p = pt(f, 'b'); const s0 = pt(legs[0]!, 'l'); out.push({ ramp: true, d: `M${p.x},${p.y} C${p.x},${s0.y} ${p.x + 10},${s0.y} ${s0.x},${s0.y}` }); legs.forEach((lg, i) => { const nx = legs[i + 1]; if (!lg || !nx) return; const a = pt(lg, 'r'); const b = pt(nx, 'l'); out.push({ ramp: true, d: `M${a.x},${a.y} L${b.x},${b.y}` }); }); const e = pt(legs[legs.length - 1]!, 'r'); const q = pt(t, 'b'); out.push({ ramp: true, d: `M${e.x},${e.y} C${q.x - 10},${e.y} ${q.x},${e.y} ${q.x},${q.y}` }); });
+      const fa = rect('final'); ['safe_head', 'safe_band'].forEach((id) => { const a = rect(id); if (!a || !fa) return; const p = pt(a, 'r'); const q = pt(fa, 'l'); out.push({ ramp: false, d: `M${p.x},${p.y} C${p.x + 30},${p.y} ${q.x - 30},${q.y} ${q.x},${q.y}` }); });
       setPaths(out); setSize({ w: el.scrollWidth, h: el.scrollHeight });
     };
     draw(); const ro = new ResizeObserver(draw); ro.observe(el); return () => ro.disconnect();

@@ -26,6 +26,7 @@ import { Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { PackageCustodyCard } from '@/components/intake/TwoScanBits';
+import { JobSummaryDraft } from '@/components/jobs/JobSummaryDraft';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fullName } from '@/lib/format';
 
@@ -141,6 +142,7 @@ export default function JobDetailPage() {
           <Card title="Owner" subtitle="Accountable shepherd — role-based" testId="job-owner-card"><OwnerPanel job={j} run={run} /></Card>
           <Card title="Assignees" subtitle="Working techs" testId="job-assignment-card"><AssignmentPanel job={j} run={run} /></Card>
           <Card title="Holds" testId="job-holds-card"><HoldPanel job={j} onPlace={() => setModal({ kind: 'hold' })} onRelease={() => setModal({ kind: 'release' })} /></Card>
+          <Card title="Client update · summary draft" subtitle="For phone / email replies — AI fills a fixed template from this job's live data; you review and paste" testId="job-summary-card"><JobSummaryDraft jobId={j.id} /></Card>
           <Card title="Details" testId="job-details-card"><DetailsPanel job={j} run={run} /></Card>
           {j.packageId && <PackageCustodyCard packageId={j.packageId} />}
         </div>
