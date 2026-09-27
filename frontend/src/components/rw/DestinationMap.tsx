@@ -1,4 +1,4 @@
-import { Lock, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import type { FloorDot } from '@/api/client';
 import { PART_NAME, PartDot } from '@/components/rw/RwBits';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -16,15 +16,23 @@ interface Box { left: number; top: number; width: number; height: number }
 const pt = (r: Box, side: 'l' | 'r' | 'b') => ({ x: side === 'l' ? r.left : side === 'r' ? r.left + r.width : r.left + r.width / 2, y: side === 'b' ? r.top + r.height : r.top + r.height / 2 });
 
 // Single-job lookup is the ONLY time job data appears here: that job's own parts, nothing else
-const Node = ({ n, selected, onSelect, marks = [] }: { n: MapNode; selected: boolean; onSelect: (n: MapNode) => void; marks?: FloorDot[] }) => (
+const Node = ({ n, selected, onSelect, marks = [] }: { n: MapNode; selected: boolean; onSelect: (n: MapNode) => void; marks?: FloorDot[] }) => (n.lock ? (
+  // Manager safe = just the safe image, no labels. Still a clickable destination.
+  <button type="button" data-node={n.id} data-testid={`dest-node-${n.id}`} data-lock="true" aria-pressed={selected} aria-label="Manager safe" title="Manager safe" onClick={() => onSelect(n)} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW[n.row] }}
+    className={`relative z-10 flex min-h-[72px] flex-col items-center justify-center rounded-md p-1 transition-transform hover:scale-105 ${selected ? 'rounded-md bg-amber-400/15 ring-2 ring-amber-400' : ''}`}>
+    <img src="/safe.png" alt="Manager safe" data-testid="safe-icon" className="h-16 w-16 object-contain drop-shadow-[0_0_6px_rgba(245,158,11,0.45)]" />
+    {marks.length > 0 && <span data-testid={`dest-mark-${n.id}`} className="mt-1 flex flex-wrap justify-center gap-1">{marks.map((d) => <span key={d.key} data-testid={`dest-mark-${d.jobId}-${d.key}`} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-400/60 bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-100"><PartDot k={d.key} size={8} /> {PART_NAME[d.key]}{d.tech ? <span className="text-amber-200/70">· {d.tech}</span> : null}</span>)}</span>}
+    {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
+  </button>
+) : (
   <button type="button" data-node={n.id} data-testid={`dest-node-${n.id}`} data-lock={!!n.lock} aria-pressed={selected} onClick={() => onSelect(n)} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW[n.row] }}
     className={`relative z-10 flex min-h-[72px] flex-col items-start rounded-md border p-2 text-left transition-colors ${selected ? 'border-amber-400 bg-amber-400/15 ring-2 ring-amber-400' : n.lock ? 'border-white/25 bg-black/50 hover:border-amber-300/60' : 'border-white/15 bg-[#0b0e13] hover:border-amber-300/60'}`}>
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-200">{n.lock ? <Lock size={11} className="text-amber-300" /> : n.assign ? <UserPlus size={11} className="text-slate-400" /> : null}{n.label}</span>
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-200">{n.assign ? <UserPlus size={11} className="text-slate-400" /> : null}{n.label}</span>
     {n.sub && <span className="mt-0.5 text-[9px] leading-tight text-slate-500">{n.sub}</span>}
     {marks.length > 0 && <span data-testid={`dest-mark-${n.id}`} className="mt-1 flex flex-wrap gap-1">{marks.map((d) => <span key={d.key} data-testid={`dest-mark-${d.jobId}-${d.key}`} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-400/60 bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-100"><PartDot k={d.key} size={8} /> {PART_NAME[d.key]}{d.tech ? <span className="text-amber-200/70">· {d.tech}</span> : null}</span>)}</span>}
     {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
   </button>
-);
+));
 
 export const DestinationMap = ({ selectedId, onSelect, focus = [] }: { selectedId?: string; onSelect: (n: MapNode) => void; focus?: FloorDot[] }) => {
   const marksFor = (n: MapNode) => focus.filter((d) => n.keys.includes(d.station));
@@ -50,6 +58,6 @@ export const DestinationMap = ({ selectedId, onSelect, focus = [] }: { selectedI
       {DEST_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}
       <div style={{ gridColumn: 13, gridRow: '1 / span 4' }} className="grid grid-rows-3 gap-2">{SHARED_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} marks={marksFor(n)} />)}</div>
     </div>
-    <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-dashed border-slate-400" /> track</span><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-amber-400" /> manager-gated polish off-ramp</span><span className="inline-flex items-center gap-1"><Lock size={10} className="text-amber-300" /> = a manager's safe</span></div>
+    <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-dashed border-slate-400" /> track</span><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-amber-400" /> manager-gated polish off-ramp</span><span className="inline-flex items-center gap-1"><img src="/safe.png" alt="" className="h-4 w-4 object-contain" /> = a manager's safe</span></div>
   </div>;
 };
