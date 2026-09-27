@@ -27,3 +27,17 @@ export async function draftClientStatusLine(s: ShipmentWithRefs, fallback: strin
     return (await post<{ text: string }>('status-line', { context: ctx })).text || fallback;
   } catch { return fallback; }
 }
+
+// 3. Carrier / Parcel Pro bill → line items. CSV/text parses locally (deterministic, no model); PDF/image goes to Claude. Both render for a human eye before matching.
+import type { BillLine } from './types';
+import { parseBillCsv } from './client';
+export interface BillExtraction { lines: BillLine[]; source: 'csv' | 'claude'; carrier?: string; invoiceNumber?: string; confidence?: number | null; fileName: string }
+const readAs = (file: File, mode: 'text' | 'dataUrl') => new Promise<string>((res, rej) => { const r = new FileReader(); r.onerror = () => rej(new Error('Could not read file')); r.onload = () => res(String(r.result)); if (mode === 'text') r.readAsText(file); else r.readAsDataURL(file); });
+export async function extractShippingBill(file: File): Promise<BillExtraction> {
+  const isCsv = /\.(csv|txt)$/i.test(file.name) || file.type.includes('csv') || file.type.startsWith('text/');
+  if (isCsv) { const text = await readAs(file, 'text'); return { lines: parseBillCsv(text), source: 'csv', fileName: file.name }; }
+  const dataUrl = await readAs(file, 'dataUrl'); const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+  const out = await post<{ lines: Partial<BillLine>[]; carrier?: string; invoiceNumber?: string; confidence?: number | null }>('extract-bill', { fileBase64: dataUrl, mime, fileName: file.name });
+  const lines: BillLine[] = (out.lines ?? []).map((l, i) => ({ id: `bl-${i + 1}`, trackingNumber: String(l.trackingNumber ?? '').trim(), shipDate: String(l.shipDate ?? ''), service: String(l.service ?? ''), billed: Number(l.billed ?? 0), surcharges: (l.surcharges ?? []).map((s) => ({ kind: String(s.kind), amount: Number(s.amount) })).filter((s) => s.amount), declaredValue: l.declaredValue == null ? null : Number(l.declaredValue), carrier: out.carrier ?? undefined })).filter((l) => l.trackingNumber);
+  return { lines, source: 'claude', carrier: out.carrier, invoiceNumber: out.invoiceNumber, confidence: out.confidence, fileName: file.name };
+}

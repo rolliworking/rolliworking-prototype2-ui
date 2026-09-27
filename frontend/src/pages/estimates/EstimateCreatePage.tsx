@@ -1,8 +1,8 @@
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { Address, Client, EstimateLine, QuoteContext, Watch } from '@/api/client';
+import type { Address, Client, EstimateLine, QuoteContext, RequestPrefill, Watch } from '@/api/client';
 import { Provisional, QuoteContextStrip } from '@/components/estimates/EstimateBits';
 import { ClientPicker, EstimateMeta, ShippingCalculator, WatchPicker } from '@/components/estimates/EstimateForm';
 import { blankLine, LineEditor } from '@/components/estimates/LineEditor';
@@ -14,7 +14,8 @@ const EMPTY: Address = { name: '', street: '', city: '', state: '' };
 const plus30 = () => new Date(Date.now() + 30 * 86_400_000).toISOString();
 
 export default function EstimateCreatePage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); const [params] = useSearchParams(); const requestId = params.get('request') ?? undefined;
+  const [prefill, setPrefill] = useState<RequestPrefill | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [watch, setWatch] = useState<Watch | null>(null);
   const [lines, setLines] = useState<EstimateLine[]>([blankLine(false)]);
@@ -35,6 +36,13 @@ export default function EstimateCreatePage() {
     if (client) api.getQuoteContext(client.id, watch?.id).then(setCtx);
   }, [client, watch]);
 
+  // Origin request → client, watch/description from their message, request linked on save (Q6: request flips to quoted)
+  useEffect(() => {
+    if (!requestId) return;
+    api.getRequestPrefill(requestId).then((p) => { if (p.existingEstimate) { navigate(`/estimates/${p.existingEstimate.id}`, { replace: true }); return; } setPrefill(p); setClient(p.client); setLines([{ ...blankLine(false), description: p.description, dept: 'B' }, blankLine(false)]); setMeta((m) => ({ ...m, clientNotes: p.description, internalNotes: `Origin: request ${p.request.number} (${p.request.source})` })); });
+  }, [requestId, navigate]);
+  useEffect(() => { if (prefill?.watch && client?.id === prefill.client.id) setWatch(prefill.watch); }, [prefill, client]);
+
   const save = async (thenSend: boolean) => {
     if (!client) {
       setError('No customer — nothing saved');
@@ -43,7 +51,7 @@ export default function EstimateCreatePage() {
     setBusy(true);
     setError(null);
     try {
-      const e = await api.createEstimate({ clientId: client.id, watchId: watch?.id, lines, validUntil: meta.validUntil, clientNotes: meta.clientNotes, messageNotes: meta.messageNotes, internalNotes: meta.internalNotes, billingAddress: meta.billing, shippingAddress: meta.shipping, shippingMirrorsBilling: meta.mirror });
+      const e = await api.createEstimate({ clientId: client.id, watchId: watch?.id, requestId, lines, validUntil: meta.validUntil, clientNotes: meta.clientNotes, messageNotes: meta.messageNotes, internalNotes: meta.internalNotes, billingAddress: meta.billing, shippingAddress: meta.shipping, shippingMirrorsBilling: meta.mirror });
       navigate(`/estimates/${e.id}${thenSend ? '?send=1' : ''}`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -54,6 +62,7 @@ export default function EstimateCreatePage() {
   return (
     <div data-testid="estimate-create-page" className="space-y-4">
       <Link to="/estimates" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Estimates</Link>
+      {prefill && <div data-testid="estimate-origin-request" className="rounded-md border border-moss-200 bg-moss-50 px-3 py-2 text-xs text-moss-800">Creating from request <span className="font-mono font-semibold">{prefill.request.number}</span> · {prefill.client.firstName} {prefill.client.lastName}{prefill.watch && <> · {prefill.watch.brand} {prefill.watch.model}</>} — “{prefill.description}”. Saving links the estimate to the request and marks it quoted.</div>}
       <PageHeader title="New estimate" subtitle="Number is assigned on save · new estimates start as draft" action={<span className="inline-flex items-center gap-1 text-[11px] text-ink-400">Lead link <Provisional note="Optional lead link — no leads module in this prototype" /></span>} />
 
       <div className="grid grid-cols-[1fr_360px] gap-4">

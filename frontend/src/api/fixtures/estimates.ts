@@ -56,6 +56,7 @@ interface Seed {
   revision?: number;
   revisions?: EstimateRevision[];
   createdBy?: string;
+  legacy?: Estimate['legacy'];
 }
 
 const build = (s: Seed): Estimate => {
@@ -81,6 +82,7 @@ const build = (s: Seed): Estimate => {
     shippingAddress: addr,
     shippingMirrorsBilling: true,
     historical: s.historical ?? false,
+    legacy: s.legacy,
     createdAt: daysAgo(s.createdDaysAgo),
     createdBy: s.createdBy ?? 'Walter',
     updatedAt: daysAgo(s.sentDaysAgo ?? s.createdDaysAgo),
@@ -182,4 +184,7 @@ export const estimates: Estimate[] = [
     clientNotes: 'Rivet bracelet stretched — quote new bracelet vs. re-pin.',
     internalNotes: 'From call RQ-26-0041. Waiting on bracelet price from Tudor.',
     lines: [line('Bracelet tighten & re-pin (Oyster)', 380, 'B', { catalogId: 'svc-12' })] }),
+  // Legacy archive (display mock): imported from the old shop system, read-only; MH may "Convert to editable"
+  build({ id: 'e-leg-1', number: 'E-8842', clientId: 'c-30', watchId: 'w-40', status: 'approved', historical: true, createdDaysAgo: 1460, sentDaysAgo: 1459, approvedDaysAgo: 1455, createdBy: 'Legacy import', clientNotes: 'Full service + pressure test (legacy record).', lines: [line('Movement overhaul — cal. 3135', 1150, 'W'), line('Gaskets + pressure test 300m', 180, 'W')], legacy: { source: 'RolliWorks legacy DB', number: 'E-8842', importedAt: daysAgo(400, 10) } }),
+  build({ id: 'e-leg-2', number: 'E-7710', clientId: 'c-05', watchId: 'w-05', status: 'declined', historical: true, createdDaysAgo: 1900, sentDaysAgo: 1899, declinedDaysAgo: 1880, declineReason: 'Client declined (legacy)', createdBy: 'Legacy import', clientNotes: 'Crystal + bezel quote (legacy record).', lines: [line('Replace crystal', 320, 'W'), line('Bezel refinish', 240, 'P')], legacy: { source: 'RolliWorks legacy DB', number: 'E-7710', importedAt: daysAgo(400, 10) } }),
 ];

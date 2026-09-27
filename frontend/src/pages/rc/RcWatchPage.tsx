@@ -31,7 +31,7 @@ const DocTile = ({ d }: { d: PortalDocument }) => {
   return (
     <Link to={d.path ?? '#'} data-testid={`rc-doc-${d.id}`} className="flex items-center gap-3 rounded-md border border-rc-line bg-white px-3 py-3 hover:border-rc-accent/60">
       <Icon size={18} className="text-rc-accent" />
-      <span className="min-w-0"><span className="block truncate text-sm font-medium">{d.title}</span><span className="block text-[11px] text-rc-muted">{rcDate(d.at)}</span></span>
+      <span className="min-w-0"><span className="block truncate text-sm font-medium">{d.title}{d.legacy && <span data-testid={`rc-doc-legacy-${d.id}`} className="ml-2 rounded-sm border border-rc-line bg-rc-bg px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-rc-muted">Archive · read-only</span>}</span><span className="block text-[11px] text-rc-muted">{rcDate(d.at)}</span></span>
       <ArrowRight size={14} className="ml-auto text-rc-muted" />
     </Link>
   );

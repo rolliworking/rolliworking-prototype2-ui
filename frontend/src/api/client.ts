@@ -805,6 +805,7 @@ export async function createWatch(clientId: string, input: NewWatchInput): Promi
 export interface EstimateInput {
   clientId: string;
   watchId?: string;
+  requestId?: string;
   lines: EstimateLine[];
   validUntil: string;
   clientNotes: string;
@@ -847,6 +848,7 @@ export async function createEstimate(input: EstimateInput): Promise<EstimateWith
   recalc(e);
   store.estimates.unshift(e);
   estStamp(e, `Draft created · ${lines.length} line${lines.length === 1 ? '' : 's'} · ${e.total.toFixed(2)}`);
+  if (input.requestId) linkEstimateToRequest(e, input.requestId);
   return resolve(withRefs(e));
 }
 
@@ -1764,7 +1766,7 @@ export async function sendInvoice(id: string): Promise<SalesOrderWithRefs> {
   if (o.lines.length === 0) throw new Error('Nothing to invoice');
   const a = actor(); const url = payLinkUrl(o); const emailId = `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
   const c = byId(fx.clients, o.clientId);
-  store.outbox.unshift({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  store.outbox.unshift({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nYour watch's service records: ${window.location.origin}${soRecordsLink(o)}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
   o.invoiceSentAt = new Date().toISOString(); o.invoiceSends.push({ at: o.invoiceSentAt, by: a.by, total: o.total, balanceDue: o.balanceDue, emailId }); soTotals(o);
   soStamp(o, `Invoice sent · ${fmtMoney(o.total)} · balance ${fmtMoney(o.balanceDue)} · pay link ${payLinkPath(o)} (send #${o.invoiceSends.length})`);
   if (o.jobId) jobStamp(byId(store.jobs, o.jobId), `Invoice ${o.number} sent · pay link emailed`);
@@ -2238,7 +2240,7 @@ export async function resolveIdentifier(query: string): Promise<SearchResults> {
 
   if (estD.length >= 2 || q.length >= 2) {
     store.estimates.forEach((e) => {
-      if ((estD && estimateDigits(e.number).startsWith(estD)) || e.number.toLowerCase() === q) hits.push({ kind: 'estimate', id: e.id, hitKey: `est-${e.id}`, label: `${e.number}${e.revision > 1 ? ` · rev ${e.revision}` : ''}`, detail: `${statusLabel(e.status)} · ${moneyLabel(e.total)}`, matched: e.number, clientId: e.clientId, clientName: clientName(e.clientId), path: clientPath(e.clientId, `est-${e.id}`, `/estimates/${e.id}`) });
+      if ((estD && estimateDigits(e.number).startsWith(estD)) || e.number.toLowerCase() === q) hits.push({ kind: 'estimate', id: e.id, hitKey: `est-${e.id}`, label: `${e.number}${e.revision > 1 ? ` · rev ${e.revision}` : ''}`, detail: `${e.legacy ? 'LEGACY · read-only · ' : ''}${statusLabel(e.status)} · ${moneyLabel(e.total)}`, matched: e.number, clientId: e.clientId, clientName: clientName(e.clientId), path: clientPath(e.clientId, `est-${e.id}`, `/estimates/${e.id}`) });
     });
     store.jobs.forEach((j) => {
       if ((estD && estimateDigits(j.number).startsWith(estD)) || j.number.toLowerCase() === q) {
@@ -2251,7 +2253,7 @@ export async function resolveIdentifier(query: string): Promise<SearchResults> {
   if (q.length >= 3) {
     store.salesOrders.forEach((o) => {
       const matched = norm(o.number).includes(nq) || (digits.length >= 3 && o.number.replace(/\D/g, '').endsWith(digits)) ? o.number : o.tracking && norm(o.tracking).includes(nq) ? o.tracking : o.pickupCode && norm(o.pickupCode).startsWith(nq) ? `pickup code ${o.pickupCode}` : null;
-      if (matched) hits.push({ kind: 'sales_order', id: o.id, hitKey: `so-${o.id}`, label: o.number, detail: `${statusLabel(o.status)} · ${moneyLabel(o.total)} · ${o.isPaid ? 'paid' : `balance ${moneyLabel(o.balanceDue)}`}`, matched, clientId: o.clientId, clientName: clientName(o.clientId), path: clientPath(o.clientId, `so-${o.id}`, `/sales/${o.id}`) });
+      if (matched) hits.push({ kind: 'sales_order', id: o.id, hitKey: `so-${o.id}`, label: o.number, detail: `${o.legacy ? 'LEGACY · read-only · ' : ''}${statusLabel(o.status)} · ${moneyLabel(o.total)} · ${o.isPaid ? 'paid' : `balance ${moneyLabel(o.balanceDue)}`}`, matched, clientId: o.clientId, clientName: clientName(o.clientId), path: clientPath(o.clientId, `so-${o.id}`, `/sales/${o.id}`) });
     });
     store.packages.forEach((p) => {
       const matched = norm(p.subNumber).includes(nq) || (digits.length >= 3 && p.subNumber.replace(/\D/g, '').endsWith(digits)) ? p.subNumber : p.trackingNumber && norm(p.trackingNumber).includes(nq) ? p.trackingNumber : null;
@@ -2318,9 +2320,9 @@ export async function getClient360(clientId: string): Promise<Client360 | null> 
 
   const watches: WatchGroup[] = newest(store.watches.filter((w) => w.clientId === clientId), (w) => w.receivedAt).map((watch) => {
     const history: WatchHistoryRow[] = [
-      ...estimates.filter((e) => e.watchId === watch.id).map((e): WatchHistoryRow => ({ kind: 'estimate', id: e.id, hitKey: `est-${e.id}`, number: e.number + (e.revision > 1 ? ` r${e.revision}` : ''), status: e.status, title: e.lines[0]?.description ?? 'Estimate', amount: e.total, at: e.createdAt, path: `/estimates/${e.id}` })),
+      ...estimates.filter((e) => e.watchId === watch.id).map((e): WatchHistoryRow => ({ kind: 'estimate', legacy: !!e.legacy, id: e.id, hitKey: `est-${e.id}`, number: e.number + (e.revision > 1 ? ` r${e.revision}` : ''), status: e.status, title: e.lines[0]?.description ?? 'Estimate', amount: e.total, at: e.createdAt, path: `/estimates/${e.id}` })),
       ...jobs.filter((j) => j.watchId === watch.id).map((j): WatchHistoryRow => ({ kind: 'job', id: j.id, hitKey: `job-${j.id}`, number: j.number, status: j.status, title: `${j.workflow.join('·')} · ${j.lines[0]?.description ?? 'Job'}`, amount: j.total, at: j.createdAt, path: `/jobs/${j.id}` })),
-      ...salesOrders.filter((o) => o.job?.watchId === watch.id).map((o): WatchHistoryRow => ({ kind: 'sales_order', id: o.id, hitKey: `so-${o.id}`, number: o.number, status: o.isPaid ? 'paid' : 'unpaid', title: `Invoice · ${o.status.replace(/_/g, ' ')}`, amount: o.total, at: o.orderDate, path: `/sales/${o.id}` })),
+      ...salesOrders.filter((o) => o.job?.watchId === watch.id).map((o): WatchHistoryRow => ({ kind: 'sales_order', legacy: !!o.legacy, id: o.id, hitKey: `so-${o.id}`, number: o.number, status: o.isPaid ? 'paid' : 'unpaid', title: `Invoice · ${o.status.replace(/_/g, ' ')}`, amount: o.total, at: o.orderDate, path: `/sales/${o.id}` })),
       ...requests.filter((r) => r.watchId === watch.id).map((r): WatchHistoryRow => ({ kind: 'request', id: r.id, hitKey: `req-${r.id}`, number: r.number, status: r.status, title: r.summary, at: r.createdAt, path: `/clients/${clientId}?hit=req-${r.id}` })),
     ].sort((a, b) => b.at.localeCompare(a.at));
     const paidHere = salesOrders.filter((o) => o.job?.watchId === watch.id).reduce((t, o) => t + o.payments.reduce((a, p) => a + p.amount, 0), 0);
@@ -2553,9 +2555,9 @@ const portalDocs = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalDoc
   jobs.forEach((j) => j.photos.filter((p) => p.clientVisible !== false).forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
   jobs.forEach((j) => rs.evidence.filter((e) => e.jobId === j.id).forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'photo', title: `Service evidence · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label}${e.depthRating ? ` · ${e.depthRating}` : ''}${e.grades ? ` · ${e.grades.join(', ')}` : ''} · ${j.number}`, at: e.at, dataUrl: e.photo.dataUrl })));
   store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => p.photos.forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
-  ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
+  ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', legacy: !!e.legacy, title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
   sos.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').forEach((o) => {
-    docs.push({ id: `doc-${o.id}`, kind: 'invoice', title: `Invoice ${o.number}`, at: o.orderDate, path: `/rc/invoices/${o.id}` });
+    docs.push({ id: `doc-${o.id}`, kind: 'invoice', legacy: !!o.legacy, title: `Invoice ${o.number}`, at: o.orderDate, path: `/rc/invoices/${o.id}` });
     if (o.shipment) docs.push({ id: `doc-${o.id}-lbl`, kind: 'label', title: `Shipping label · ${o.shipment.tracking}`, at: o.shipment.at, dataUrl: o.shipment.labelDataUrl });
     o.pickupSession?.photos.forEach((ph, i) => docs.push({ id: `doc-${o.id}-pu${i}`, kind: 'receipt', title: `Hand-back photo · ${o.number}`, at: o.pickupSession!.at, dataUrl: ph.dataUrl }));
   });
@@ -3209,7 +3211,7 @@ const anchorRef = (a?: ConversationAnchor): { label?: string; path?: string } =>
   if (a.kind === 'estimate') { const e = store.estimates.find((x) => x.id === a.id); return e ? { label: `Estimate ${e.number}`, path: `/estimates/${e.id}` } : {}; }
   const r = store.requests.find((x) => x.id === a.id); return r ? { label: `Request ${r.number}`, path: `/clients/${r.clientId}?hit=req-${r.id}` } : {};
 };
-const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined }; };
+const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined, linkedEstimate: linkedEstimateFor(c.anchor) }; };
 const convOf = (id: string) => byId(cx.conversations, id);
 const ensureConversation = (clientId: string, subject: string, anchor?: ConversationAnchor, division?: Division): Conversation => {
   const found = cx.conversations.find((c) => c.clientId === clientId && c.status !== 'closed' && (anchor ? c.anchor?.kind === anchor.kind && c.anchor.id === anchor.id : !c.anchor));
@@ -3258,7 +3260,7 @@ export async function createConversation(clientId: string, subject: string, anch
 // Merge-field rendering with real values for the thread's client / anchor
 const mergeValues = (c: { clientId: string; anchor?: ConversationAnchor }): Record<string, string> => {
   const client = byId(fx.clients, c.clientId); const job = c.anchor?.kind === 'job' ? store.jobs.find((j) => j.id === c.anchor!.id) : undefined;
-  const est = c.anchor?.kind === 'estimate' ? store.estimates.find((e) => e.id === c.anchor!.id) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
+  const est = c.anchor?.kind === 'estimate' ? store.estimates.find((e) => e.id === c.anchor!.id) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : c.anchor?.kind === 'request' ? store.estimates.find((e) => e.id === store.requests.find((r) => r.id === c.anchor!.id)?.estimateId) : undefined;
   const watch = store.watches.find((w) => w.id === (job?.watchId ?? est?.watchId)) ?? store.watches.find((w) => w.clientId === c.clientId);
   const so = job ? store.salesOrders.find((o) => o.jobId === job.id && o.status !== 'cancelled') : undefined; const pkg = job?.packageId ? store.packages.find((p) => p.id === job.packageId) : undefined;
   const rep = job ? rp.reports.find((r) => r.jobId === job.id && r.status === 'issued') : undefined;
@@ -3426,9 +3428,18 @@ export async function recordTimingTest(jobId: string, input: TimingInput): Promi
 }
 
 // ---- E13 RGTime `/rg` — NFC-tap time-clock (phone PWA). In Keeper RGTime owns staff identity (D-026); here it reads the same `users` fixture. ------
-import type { ClockState, KioskDetails, KioskResult, KioskSubmission, NfcTag, Punch, RequestRow, WeekDay, WeekRow, WeekView } from './types';
+import type { ClockState, KioskDetails, KioskResult, KioskSubmission, NfcTag, Punch, PunchFlag, PunchKind, RequestRow, RgFlagRow, RgSettings, WeekDay, WeekRow, WeekView } from './types';
 export { KIOSK_SERVICES, KIOSK_BRANDS, RG_DIVISION_LABEL } from './fixtures';
-const rg = { punches: fx.punches.map((p): Punch => ({ ...p })) };
+// /rg persists locally (device-bound punches, offline queue, settings) so a real NFC tap — a fresh page load every time — toggles in/out correctly. The rest of the app stays in-memory.
+const RG_KEYS = { punches: 'rollisuite.rg.punches', settings: 'rollisuite.rg.settings', queue: 'rollisuite.rg.queue', kioskStation: 'rollisuite.rg.kioskStation' };
+export const RG_DEFAULT_SETTINGS: RgSettings = { shopLat: 40.759, shopLng: -73.9845, radiusM: 150, simulateOffsite: false, simulateOffline: false };
+const rgSeedIds = new Set(fx.punches.map((p) => p.id));
+const rg = {
+  punches: [...fx.punches.map((p): Punch => ({ ...p })), ...readJson<Punch[]>(RG_KEYS.punches, []).filter((p) => !rgSeedIds.has(p.id))],
+  queue: readJson<Punch[]>(RG_KEYS.queue, []),
+  settings: { ...RG_DEFAULT_SETTINGS, ...readJson<Partial<RgSettings>>(RG_KEYS.settings, {}) } as RgSettings,
+};
+const rgPersist = () => { writeJson(RG_KEYS.punches, rg.punches.filter((p) => !rgSeedIds.has(p.id))); writeJson(RG_KEYS.queue, rg.queue); };
 const RG_STATION = 'Phone (RGTime PWA)';
 const rgAudit = (u: User | undefined, detail: string, type: 'rgtime' | 'sign_in' | 'sign_in_failed' | 'sign_out' = 'rgtime') => appendAudit({ type, stationName: RG_STATION, userShortName: u?.shortName, userDisplayName: u?.displayName, method: type === 'sign_in' || type === 'sign_in_failed' ? 'password_photo' : undefined, detail });
 const dayKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -3440,56 +3451,159 @@ const summarizeDay = (rows: Punch[], isToday: boolean): { hours: number; open: b
   if (openAt && isToday) ms += Date.now() - new Date(openAt).getTime();
   return { hours: round2(ms / 3_600_000), open: !!openAt };
 };
+// Effective ledger = every row minus originals that a correction row supersedes (append-only: the original is never edited), plus punches still queued offline
+const rgSuperseded = () => new Set(rg.punches.filter((p) => p.correctionOf).map((p) => p.correctionOf!));
+export const rgEffectivePunches = (): Punch[] => { const sup = rgSuperseded(); return [...rg.punches.filter((p) => !sup.has(p.id)), ...rg.queue.map((p) => ({ ...p, queued: true }))]; };
+export const rgAllPunches = (): Punch[] => [...rg.punches];
+const rgLast = (userId: string) => rgEffectivePunches().filter((p) => p.userId === userId).sort((a, b) => b.at.localeCompare(a.at))[0];
 
 export const rgGetSession = (): User | null => { const id = localStorage.getItem(KEYS.rgSession); return id ? fx.users.find((u) => u.id === id) ?? null : null; };
 export const rgAllStaff = (): User[] => [...fx.users];
-export async function rgSignIn(userId: string, password: string): Promise<User> {
+const rgSecretOk = (u: User, secret: string) => secret === u.password || (secret.length === 4 && secret === u.pin);
+// Device ↔ employee binding: name + PIN (or password) once; every later visit already knows who you are
+export async function rgSignIn(userId: string, secret: string): Promise<User> {
   const u = byId(fx.users, userId);
-  if (u.password !== password) { rgAudit(u, 'RGTime sign-in failed · incorrect password', 'sign_in_failed'); throw new Error('Incorrect password'); }
-  localStorage.setItem(KEYS.rgSession, u.id); rgAudit(u, 'RGTime sign-in · remembered on this phone', 'sign_in'); return resolve(u);
+  if (!rgSecretOk(u, secret)) { rgAudit(u, 'RGTime device binding failed · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
+  localStorage.setItem(KEYS.rgSession, u.id); rgAudit(u, 'RGTime · this phone now remembers ' + u.shortName, 'sign_in'); return resolve(u);
 }
 export async function rgSignOut(): Promise<void> { const u = rgGetSession(); localStorage.removeItem(KEYS.rgSession); if (u) rgAudit(u, 'RGTime sign-out · phone forgotten', 'sign_out'); return resolve(undefined); }
-export async function rgVerifyManager(userId: string, password: string): Promise<User> {
+// Manager view is concierge+ (Q56): card + PIN/password, even on a remembered phone
+export async function rgVerifyManager(userId: string, secret: string): Promise<User> {
   const u = byId(fx.users, userId);
-  if (u.accessTier !== 'manager') throw new Error('Manager access only');
-  if (u.password !== password) { rgAudit(u, 'RGTime manager view · incorrect password', 'sign_in_failed'); throw new Error('Incorrect password'); }
+  if (!rgSecretOk(u, secret)) { rgAudit(u, 'RGTime manager view · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
   rgAudit(u, 'RGTime manager view opened'); return resolve(u);
 }
 export const getNfcTags = (): NfcTag[] => fx.nfcTags.map((t) => ({ ...t }));
 export const getNfcTag = (id: string): NfcTag | undefined => fx.nfcTags.find((t) => t.id === id);
+export const rgGetSettings = (): RgSettings => ({ ...rg.settings });
+export async function rgSaveSettings(patch: Partial<RgSettings>, by?: string): Promise<RgSettings> {
+  rg.settings = { ...rg.settings, ...patch }; writeJson(RG_KEYS.settings, rg.settings);
+  if (patch.shopLat !== undefined || patch.shopLng !== undefined || patch.radiusM !== undefined) rgAudit(fx.users.find((u) => u.shortName === by), `RGTime geofence set · ${rg.settings.shopLat.toFixed(5)}, ${rg.settings.shopLng.toFixed(5)} · ${rg.settings.radiusM} m`);
+  return resolve({ ...rg.settings });
+}
+export const rgIsOffline = () => (typeof navigator !== 'undefined' && !navigator.onLine) || rg.settings.simulateOffline;
+export const rgDistanceM = (lat: number, lng: number): number => {
+  const R = 6_371_000, toRad = (d: number) => (d * Math.PI) / 180, dLat = toRad(lat - rg.settings.shopLat), dLng = toRad(lng - rg.settings.shopLng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(rg.settings.shopLat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)));
+};
+export const rgQueueCount = () => rg.queue.length;
 export async function getClockState(userId: string): Promise<ClockState> {
-  const user = byId(fx.users, userId); const tk = todayKey();
-  const todayPunches = rg.punches.filter((p) => p.userId === userId && dayKey(p.at) === tk).sort((a, b) => b.at.localeCompare(a.at));
-  const last = rg.punches.filter((p) => p.userId === userId).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const user = byId(fx.users, userId); const tk = todayKey(); const all = rgEffectivePunches();
+  const todayPunches = all.filter((p) => p.userId === userId && dayKey(p.at) === tk).sort((a, b) => b.at.localeCompare(a.at));
+  const last = rgLast(userId);
   const onClock = last?.kind === 'in'; const { hours } = summarizeDay(todayPunches, true);
   return resolve({ user, onClock, since: onClock ? last.at : undefined, sinceLocation: onClock ? last.location : undefined, todayPunches, todayHours: hours });
 }
-export async function punchClock(tagId: string, simulated: boolean): Promise<Punch> {
-  const u = rgGetSession(); if (!u) throw new Error('Sign in to RGTime on this phone first');
-  const tag = getNfcTag(tagId); if (!tag) throw new Error('Unknown tag — this NFC tag is not registered');
+export interface PunchOptions { simulated?: boolean; geo?: { lat: number; lng: number } | null; source?: 'nfc' | 'kiosk'; userId?: string }
+// The whole product: tag → one button → punch. Geofence flags (never rejects); no signal → queued locally with the true timestamp
+export async function punchClock(stationId: string, opts: PunchOptions | boolean = {}): Promise<Punch> {
+  const o: PunchOptions = typeof opts === 'boolean' ? { simulated: opts } : opts;
+  const u = o.userId ? byId(fx.users, o.userId) : rgGetSession(); if (!u) throw new Error('Sign in to RGTime on this phone first');
+  const tag = getNfcTag(stationId); if (!tag) throw new Error('Unknown station — this NFC tag is not registered');
   if (u.division !== 'both' && u.division !== tag.division) throw new Error(`${u.shortName} is ${fx.RG_DIVISION_LABEL[u.division]} staff — this tag belongs to ${fx.RG_DIVISION_LABEL[tag.division]}`);
-  const last = rg.punches.filter((p) => p.userId === u.id).sort((a, b) => b.at.localeCompare(a.at))[0];
-  const kind: Punch['kind'] = last?.kind === 'in' ? 'out' : 'in';
-  const p: Punch = { id: newId('pu'), userId: u.id, kind, at: new Date().toISOString(), tagId: tag.id, location: tag.label, division: tag.division, simulated };
-  rg.punches.push(p);
-  rgAudit(u, `Clock ${kind.toUpperCase()} · ${tag.label} · ${fx.RG_DIVISION_LABEL[tag.division]}${simulated ? ' · simulated tap (prototype)' : ' · NFC tap'}`);
-  return resolve({ ...p });
+  const last = rgLast(u.id); const kind: PunchKind = last?.kind === 'in' ? 'out' : 'in';
+  const flags: PunchFlag[] = []; let geo: Punch['geo'] = null;
+  if (o.source === 'kiosk') flags.push('kiosk');
+  else if (o.geo) { const distanceM = rg.settings.simulateOffsite ? 2_340 : rgDistanceM(o.geo.lat, o.geo.lng); geo = { ...o.geo, distanceM }; if (distanceM > rg.settings.radiusM) flags.push('offsite'); }
+  else if (rg.settings.simulateOffsite) { geo = { lat: 40.7794, lng: -73.9632, distanceM: 2_340 }; flags.push('offsite'); }
+  else flags.push('no_gps');
+  const p: Punch = { id: newId('pu'), userId: u.id, kind, at: new Date().toISOString(), tagId: tag.id, location: tag.label, division: tag.division, simulated: !!o.simulated, source: o.source ?? 'nfc', flags: flags.length ? flags : undefined, geo };
+  if (rgIsOffline()) { rg.queue.push(p); rgPersist(); return { ...p, queued: true }; }
+  p.recordedAt = p.at; rg.punches.push(p); rgPersist();
+  rgAudit(u, `Clock ${kind.toUpperCase()} · ${tag.label} · ${fx.RG_DIVISION_LABEL[tag.division]}${flags.includes('offsite') ? ` · OFFSITE ${geo?.distanceM} m` : ''}${flags.includes('kiosk') ? ' · kiosk' : ''}${o.simulated ? ' · simulated tap (prototype)' : ' · NFC tap'}`);
+  return { ...p };
 }
+// Connectivity back → queued punches land with their true `at`, marked synced-late (recordedAt = now)
+export async function rgSyncQueue(): Promise<Punch[]> {
+  if (rgIsOffline() || !rg.queue.length) return [];
+  const now = new Date().toISOString(); const synced = rg.queue.map((p): Punch => ({ ...p, recordedAt: now, flags: [...(p.flags ?? []), 'synced_late'] }));
+  rg.punches.push(...synced); rg.queue = []; rgPersist();
+  synced.forEach((p) => rgAudit(fx.users.find((u) => u.id === p.userId), `Clock ${p.kind.toUpperCase()} · ${p.location} · synced late (punched ${new Date(p.at).toLocaleTimeString()})`));
+  return synced;
+}
+// Kiosk fallback: wall iPad locked to a station; anyone taps their name + PIN
+export const rgKioskStation = (): NfcTag | undefined => getNfcTag(localStorage.getItem(RG_KEYS.kioskStation) ?? '');
+export const rgSetKioskStation = (id: string) => localStorage.setItem(RG_KEYS.kioskStation, id);
+export async function rgKioskPunch(userId: string, pin: string, stationId: string): Promise<Punch> {
+  const u = byId(fx.users, userId); if (pin !== u.pin) { rgAudit(u, 'Kiosk punch · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
+  return punchClock(stationId, { source: 'kiosk', userId });
+}
+const rgStaffFor = (division: Division | 'all') => (division === 'all' ? [...fx.users] : getDivisionStaff(division));
+const weekDays = (weekOffset: number) => { const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + weekOffset * 7); const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return dayKey(d.toISOString()); }); const end = new Date(start); end.setDate(start.getDate() + 6); return { start, end, days }; };
+const weekRowFor = (user: User, mine: Punch[], days: string[]): WeekRow => {
+  const tk = todayKey();
+  const dayRows: WeekDay[] = days.map((date) => { const punches = mine.filter((p) => dayKey(p.at) === date).sort((a, b) => a.at.localeCompare(b.at)); const s = summarizeDay(punches, date === tk); return { date, punches, hours: s.hours, open: s.open, flagged: punches.some((p) => p.flags?.length) }; });
+  return { user, days: dayRows, total: round2(dayRows.reduce((t, d) => t + d.hours, 0)), openNow: dayRows.some((d) => d.date === tk && d.open) };
+};
 export async function getTodayBoard(division: Division): Promise<ClockState[]> {
   const rows = await Promise.all(getDivisionStaff(division).map((u) => getClockState(u.id)));
   return resolve(rows.filter((r) => r.todayPunches.some((p) => p.division === division) || r.onClock).map((r) => ({ ...r, todayPunches: r.todayPunches.filter((p) => p.division === division) })));
 }
-export async function getWeekHours(division: Division, weekOffset: number): Promise<WeekView> {
-  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + weekOffset * 7);
-  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return dayKey(d.toISOString()); });
-  const tk = todayKey();
-  const rows: WeekRow[] = getDivisionStaff(division).map((user) => {
-    const mine = rg.punches.filter((p) => p.userId === user.id && p.division === division);
-    const dayRows: WeekDay[] = days.map((date) => { const punches = mine.filter((p) => dayKey(p.at) === date).sort((a, b) => a.at.localeCompare(b.at)); const s = summarizeDay(punches, date === tk); return { date, punches, hours: s.hours, open: s.open }; });
-    return { user, days: dayRows, total: round2(dayRows.reduce((t, d) => t + d.hours, 0)), openNow: dayRows.some((d) => d.date === tk && d.open) };
-  });
-  const end = new Date(start); end.setDate(start.getDate() + 6);
+export async function getWeekHours(division: Division | 'all', weekOffset: number): Promise<WeekView> {
+  const { start, end, days } = weekDays(weekOffset); const all = rgEffectivePunches();
+  const rows = rgStaffFor(division).map((user) => weekRowFor(user, all.filter((p) => p.userId === user.id && (division === 'all' || p.division === division)), days));
   return resolve({ start: start.toISOString(), end: end.toISOString(), division, rows, weekOffset });
+}
+// Employee's own week — every station, every division they punched at
+export async function getMyWeek(userId: string, weekOffset: number): Promise<WeekView> {
+  const { start, end, days } = weekDays(weekOffset); const user = byId(fx.users, userId);
+  return resolve({ start: start.toISOString(), end: end.toISOString(), division: 'all', rows: [weekRowFor(user, rgEffectivePunches().filter((p) => p.userId === userId), days)], weekOffset });
+}
+// Manager attention list: offsite · synced late · missed clock-out (open punch on a past day) · corrections (audit trail)
+export async function rgGetFlags(division: Division | 'all'): Promise<RgFlagRow[]> {
+  const tk = todayKey(); const staffIds = new Set(rgStaffFor(division).map((u) => u.id)); const rows: RgFlagRow[] = [];
+  const all = rgEffectivePunches().filter((p) => staffIds.has(p.userId) && (division === 'all' || p.division === division));
+  for (const p of all) {
+    const user = byId(fx.users, p.userId);
+    if (p.flags?.includes('offsite')) rows.push({ punch: p, user, kind: 'offsite' });
+    if (p.flags?.includes('synced_late')) rows.push({ punch: p, user, kind: 'synced_late' });
+    if (p.correctionOf) rows.push({ punch: p, user, kind: 'correction', original: rg.punches.find((x) => x.id === p.correctionOf) });
+  }
+  for (const uid of staffIds) { const byDay = new Map<string, Punch[]>(); all.filter((p) => p.userId === uid && dayKey(p.at) < tk).forEach((p) => byDay.set(dayKey(p.at), [...(byDay.get(dayKey(p.at)) ?? []), p])); for (const [, ps] of byDay) { const s = summarizeDay(ps, false); if (s.open) { const open = [...ps].sort((a, b) => b.at.localeCompare(a.at)).find((p) => p.kind === 'in')!; rows.push({ punch: open, user: byId(fx.users, uid), kind: 'missed_out' }); } } }
+  return resolve(rows.sort((a, b) => b.punch.at.localeCompare(a.punch.at)));
+}
+// Corrections are append-only (Q52): a new row points at the original; the original is never edited, only superseded
+export async function rgCorrectPunch(punchId: string, patch: { at?: string; kind?: PunchKind }, reason: string, by: string): Promise<Punch> {
+  const orig = rg.punches.find((p) => p.id === punchId); if (!orig) throw new Error('Punch not found');
+  if (!reason.trim()) throw new Error('A reason is required for every correction');
+  if (rgSuperseded().has(orig.id)) throw new Error('This punch was already corrected — correct the newest row');
+  const c: Punch = { ...orig, id: newId('pu'), at: patch.at ?? orig.at, kind: patch.kind ?? orig.kind, flags: ['correction'], geo: null, source: 'manager', correctionOf: orig.id, reason: reason.trim(), by, recordedAt: new Date().toISOString(), simulated: false };
+  rg.punches.push(c); rgPersist();
+  rgAudit(fx.users.find((u) => u.shortName === by), `Punch corrected · ${byId(fx.users, orig.userId).shortName} · ${orig.kind.toUpperCase()} ${new Date(orig.at).toLocaleString()} → ${c.kind.toUpperCase()} ${new Date(c.at).toLocaleString()} · ${c.reason}`);
+  return resolve({ ...c });
+}
+// Missed clock-out resolution (or any missing punch): a manager-added row, flagged as a correction, with reason
+export async function rgAddPunch(userId: string, kind: PunchKind, at: string, stationId: string, reason: string, by: string): Promise<Punch> {
+  const u = byId(fx.users, userId); const tag = getNfcTag(stationId); if (!tag) throw new Error('Pick a station');
+  if (!reason.trim()) throw new Error('A reason is required');
+  const p: Punch = { id: newId('pu'), userId: u.id, kind, at, tagId: tag.id, location: tag.label, division: tag.division, simulated: false, source: 'manager', flags: ['correction'], geo: null, reason: reason.trim(), by, recordedAt: new Date().toISOString() };
+  rg.punches.push(p); rgPersist();
+  rgAudit(fx.users.find((x) => x.shortName === by), `Punch added · ${u.shortName} · ${kind.toUpperCase()} ${new Date(at).toLocaleString()} · ${tag.label} · ${p.reason}`);
+  return resolve({ ...p });
+}
+// Payroll CSV for a pay-period range: one row per paired shift, corrections included and marked, per-person totals at the end
+export function rgPayrollCsv(from: string, to: string, division: Division | 'all'): string {
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = ['person,date,clock_in,clock_out,hours,station,flags,correction,corrected_by'];
+  const totals: string[] = [];
+  for (const user of rgStaffFor(division)) {
+    const mine = rgEffectivePunches().filter((p) => p.userId === user.id && (division === 'all' || p.division === division) && dayKey(p.at) >= from && dayKey(p.at) <= to);
+    const byDay = new Map<string, Punch[]>(); mine.forEach((p) => byDay.set(dayKey(p.at), [...(byDay.get(dayKey(p.at)) ?? []), p]));
+    let total = 0; let corrections = 0;
+    for (const [date, ps] of [...byDay.entries()].sort()) {
+      const sorted = [...ps].sort((a, b) => a.at.localeCompare(b.at)); let openIn: Punch | null = null;
+      for (const p of sorted) {
+        if (p.kind === 'in') { if (openIn) lines.push([user.shortName, date, new Date(openIn.at).toLocaleTimeString(), '', '0', openIn.location, [...(openIn.flags ?? []), 'missing_out'].join('|'), openIn.reason ?? '', openIn.by ?? ''].map(esc).join(',')); openIn = p; continue; }
+        const hrs = openIn ? round2((new Date(p.at).getTime() - new Date(openIn.at).getTime()) / 3_600_000) : 0; total += hrs;
+        const flags = [...new Set([...(openIn?.flags ?? []), ...(p.flags ?? [])])]; if (flags.includes('correction')) corrections++;
+        lines.push([user.shortName, date, openIn ? new Date(openIn.at).toLocaleTimeString() : '', new Date(p.at).toLocaleTimeString(), hrs.toFixed(2), p.location, flags.join('|'), p.reason ?? openIn?.reason ?? '', p.by ?? openIn?.by ?? ''].map(esc).join(',')); openIn = null;
+      }
+      if (openIn) lines.push([user.shortName, date, new Date(openIn.at).toLocaleTimeString(), '', '0', openIn.location, [...(openIn.flags ?? []), 'missing_out'].join('|'), openIn.reason ?? '', openIn.by ?? ''].map(esc).join(','));
+    }
+    totals.push(['TOTAL ' + user.shortName, `${from}..${to}`, '', '', total.toFixed(2), '', corrections ? `${corrections} corrected shift(s)` : '', '', ''].map(esc).join(','));
+  }
+  return [...lines, ...totals].join('\n');
 }
 
 // ---- E13 Kiosk `/kiosk` — public walk-in check-in (legacy kiosk, improved: match existing clients instead of duplicating) ------
@@ -3966,7 +4080,7 @@ export async function createInboundLabel(id: string, recipient: ShipAddress, dec
 const queueShipEmail = (s: InboundShipment, subject: string, extra = '') => { const e = byId(store.estimates, s.estimateId); const c = byId(fx.clients, s.clientId); const a = actor(); const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e.number} · ${s.trackingNumber ?? 'label'}`, status: 'pending', subject: `${subject} — ${e.number}`, body: `Hello ${c.firstName},\n\n${extra || `Your prepaid, fully insured ${s.carrier} label for estimate ${e.number} is attached (insured value $${s.declaredValue.toLocaleString()}). Print it, pack the watch securely, and drop it at any ${s.carrier} location.`}\n\nLabel: ${s.labelUrl}\nTracking: ${s.trackingNumber}\nTrack it any time in RolliConnect: ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }; store.outbox.unshift(email); return email; };
 export async function resendLabelEmail(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label (resent)').id); shipStamp(s, 'label email re-queued'); return resolve(shipRefs(s)); }
 export async function followUpLabel(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Still planning to send your watch in?', `We sent you a prepaid ${s.carrier} label ${dayDiff(s.labelSentAt!)} days ago and haven't seen the package move yet. No rush — just let us know if you need a new label or a different date.`).id); shipStamp(s, 'follow-up reminder queued'); return resolve(shipRefs(s)); }
-export async function voidAndReissue(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (s.stage !== 'label_sent') throw new Error('Only outstanding labels can be voided'); await parcelpro.voidLabel(s.trackingNumber!); shipStamp(s, `label ${s.trackingNumber} voided · back to Label Requests (reissue)`); s.trackingNumber = undefined; s.labelUrl = undefined; s.cost = undefined; s.labelSentAt = undefined; s.stage = 'label_requested'; s.reissued = true; s.requestedAt = new Date().toISOString(); return resolve(shipRefs(s)); }
+export async function voidAndReissue(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (s.stage !== 'label_sent') throw new Error('Only outstanding labels can be voided'); await parcelpro.voidLabel(s.trackingNumber!); ba.voided.push({ trackingNumber: s.trackingNumber!, ref: byId(store.estimates, s.estimateId).number, kind: 'inbound', carrier: s.carrier, service: s.service, cost: s.cost ?? 0, createdAt: s.labelSentAt ?? s.requestedAt, voided: true, voidedAt: new Date().toISOString(), who: actor().by, path: `/shipping/inbound?track=${s.trackingNumber}` }); shipStamp(s, `label ${s.trackingNumber} voided · back to Label Requests (reissue)`); s.trackingNumber = undefined; s.labelUrl = undefined; s.cost = undefined; s.labelSentAt = undefined; s.stage = 'label_requested'; s.reissued = true; s.requestedAt = new Date().toISOString(); return resolve(shipRefs(s)); }
 const SIM_STEPS: [RegExp | null, string, string, string?][] = [[null, 'Picked up', 'Origin facility'], [/picked up/i, 'In transit', 'Louisville, KY', 'Arrived at hub'], [/in transit/i, 'Out for delivery', 'New York, NY'], [/out for delivery/i, 'Delivered', 'New York, NY', 'Signed: FRONT DESK']];
 export async function simulateTrackingEvent(id: string): Promise<ShipmentWithRefs> {
   const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label to track'); if (s.stage === 'delivered_unscanned' || s.stage === 'arrived') throw new Error('Already delivered');
@@ -4385,3 +4499,117 @@ export async function getVarianceReport(f: { from?: string; to?: string; locatio
 }
 
 replayRcEvents();
+
+// ---- Watch Records link on the sales order (print QR + invoice email). One tokened portal deep link per SO, reused so the printed QR and the email agree. ----
+const soRecordsLinks: Record<string, string> = {};
+export const soRecordsLink = (o: SalesOrder): string => {
+  if (!soRecordsLinks[o.id]) { const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) : undefined; const next = job?.watchId ? `/rc/watches/${job.watchId}` : `/rc/invoices/${o.id}`; soRecordsLinks[o.id] = portalDeepLink(o.clientId, next); }
+  return soRecordsLinks[o.id];
+};
+export const soRecordsLinkFor = (id: string): string => soRecordsLink(getSO(id));
+
+// ---- Create estimate from a request (Q6 auto-quote rule): request → quoted, estimate carries requestId, thread shows the estimate chip ----
+const linkedEstimateFor = (a?: ConversationAnchor) => { if (a?.kind !== 'request') return undefined; const r = store.requests.find((x) => x.id === a.id); const e = r?.estimateId ? store.estimates.find((x) => x.id === r.estimateId) : undefined; return e ? { id: e.id, number: e.number, status: e.status } : undefined; };
+const linkEstimateToRequest = (e: Estimate, requestId: string) => {
+  const r = store.requests.find((x) => x.id === requestId); if (!r) return;
+  r.estimateId = e.id; if (r.status === 'new') r.status = 'quoted'; e.requestId = r.id;
+  estStamp(e, `Created from request ${r.number}`);
+  const conv = cx.conversations.find((c) => c.anchor?.kind === 'request' && c.anchor.id === r.id);
+  if (conv) { const a = actor(); pushConv(conv, { direction: 'internal', source: 'staff', by: a.by, station: a.station, text: `Estimate ${e.number} created from this request · ${fmtMoney(e.total)} · reply with the quote when ready`, at: new Date().toISOString() }); }
+};
+export interface RequestPrefill { request: ServiceRequest; client: Client; watch?: Watch; description: string; existingEstimate?: Estimate }
+export async function getRequestPrefill(requestId: string): Promise<RequestPrefill> {
+  const r = byId(store.requests, requestId); const client = byId(fx.clients, r.clientId); const watch = store.watches.find((w) => w.id === r.watchId);
+  const msg = cx.messages.filter((m) => m.direction === 'in' && cx.conversations.some((c) => c.id === m.conversationId && c.anchor?.kind === 'request' && c.anchor.id === r.id)).sort((a, b) => a.at.localeCompare(b.at))[0];
+  const text = (msg?.text ?? r.summary).replace(/^Web request RQ-\d+-\d+:\s*/i, '');
+  return resolve({ request: { ...r }, client, watch, description: text.length > 90 ? `${text.slice(0, 87).trim()}…` : text, existingEstimate: r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined });
+}
+
+// ---- Legacy archive records: read-only display; manager "Convert to editable" duplicates into a native record, original untouched ----
+export async function convertLegacy(kind: 'estimate' | 'sales_order', id: string): Promise<{ id: string; number: string }> {
+  const a = managerOnly();
+  if (kind === 'estimate') {
+    const src = getEst(id); if (!src.legacy) throw new Error('Not a legacy record'); if (src.legacy.convertedToId) throw new Error(`Already converted → ${store.estimates.find((e) => e.id === src.legacy!.convertedToId)?.number}`);
+    const e: Estimate = { ...src, id: `e-${Date.now().toString(36)}`, number: nextEstimateNumber(), revision: 1, revisions: [], status: 'draft', historical: false, legacy: undefined, convertedFromLegacy: { id: src.id, number: src.legacy.number }, lines: src.lines.map((l) => ({ ...l, id: newLineId() })), internalNotes: `Converted from legacy ${src.legacy.number}${src.internalNotes ? `\n${src.internalNotes}` : ''}`, createdAt: new Date().toISOString(), createdBy: a.by, updatedAt: new Date().toISOString(), sentAt: undefined, approvedAt: undefined, declinedAt: undefined, convertedAt: undefined, jobId: undefined, engagement: [], supersededById: undefined };
+    recalc(e); store.estimates.unshift(e); src.legacy.convertedToId = e.id;
+    estStamp(e, `Converted from legacy ${src.legacy.number} by ${a.by} · original kept read-only`);
+    appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Legacy ${src.legacy.number} → ${e.number} (converted to editable)` });
+    return resolve({ id: e.id, number: e.number });
+  }
+  const src = getSO(id); if (!src.legacy) throw new Error('Not a legacy record'); if (src.legacy.convertedToId) throw new Error(`Already converted → ${store.salesOrders.find((o) => o.id === src.legacy!.convertedToId)?.number}`);
+  const o: SalesOrder = { ...src, id: `so-${Date.now().toString(36)}`, number: nextSONumber(), status: 'draft', legacy: undefined, convertedFromLegacy: { id: src.id, number: src.legacy.number }, lines: src.lines.map((l) => ({ ...l, id: `sol-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, pickedUpQty: 0, shippedQty: 0 })), payments: [], invoiceSends: [], invoiceSentAt: undefined, payLinkToken: `pl-${Date.now().toString(36)}`, memo: `Converted from legacy ${src.legacy.number}${src.memo ? ` · ${src.memo}` : ''}`, orderDate: new Date().toISOString(), fulfilledAt: undefined, pickedUpAt: undefined, shipDate: undefined, pickupCode: undefined, pickupCodeIssuedAt: undefined, pickupSession: undefined, shipment: undefined, qboInvoiceId: undefined, qboStatus: 'not_queued', createdAt: new Date().toISOString(), createdBy: a.by, updatedAt: new Date().toISOString() };
+  soTotals(o); store.salesOrders.unshift(o); src.legacy.convertedToId = o.id;
+  soStamp(o, `Converted from legacy ${src.legacy.number} by ${a.by} · original kept read-only`);
+  appendAudit({ type: 'sales', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Legacy ${src.legacy.number} → ${o.number} (converted to editable)` });
+  return resolve({ id: o.id, number: o.number });
+}
+
+// ---- Shipping bill audit: carrier bill lines (suggest → verify) matched by tracking # against every label we ever generated ----
+import type { BillAudit, BillAuditLine, BillAuditTotals, BillBucket, BillDecision, BillLine, LedgerLabel } from './types';
+export { MOCK_BILL_CSV, MOCK_BILL_FILENAME } from './fixtures';
+const BILL_TOLERANCE = 0.5;
+const ba = { audits: [] as BillAudit[], voided: fx.VOIDED_LABEL_SEED.map((v): LedgerLabel => ({ ...v, voided: true, path: '/shipping/inbound' })), counter: 0 };
+const baStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'accounting', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Bill audit · ${detail}` }); };
+// The ledger: inbound labels (Parcel Pro seam), PO labels, outbound job shipments, plus voided labels (kept so a billed-after-void charge is caught)
+export function getLabelLedger(): LedgerLabel[] {
+  const rows: LedgerLabel[] = [];
+  shp.rows.filter((s) => s.trackingNumber).forEach((s) => rows.push({ trackingNumber: s.trackingNumber!, ref: byId(store.estimates, s.estimateId).number, kind: s.direction, carrier: s.carrier, service: s.service, cost: s.cost ?? 0, createdAt: s.labelSentAt ?? s.requestedAt, voided: false, who: s.stamps.find((x) => x.action.includes('label created'))?.by, path: `/shipping/inbound?track=${s.trackingNumber}` }));
+  rs.pos.filter((p) => p.trackingNumber).forEach((p) => rows.push({ trackingNumber: p.trackingNumber!, ref: p.number, kind: 'po', carrier: p.labelService?.startsWith('FedEx') ? 'FedEx' : 'UPS', service: p.labelService ?? 'UPS 2nd Day Air', cost: Math.round(p.total * 0.012 + 2400) / 100, createdAt: p.createdAt, voided: false, who: p.createdBy, path: '/purchasing' }));
+  store.salesOrders.filter((o) => o.shipment).forEach((o) => rows.push({ trackingNumber: o.shipment!.tracking, ref: o.number, kind: 'outbound', carrier: o.shipment!.carrier, service: o.shipment!.service, cost: o.shippingAmount || 0, createdAt: o.shipment!.at, voided: false, who: o.shipment!.by, path: `/sales/${o.id}` }));
+  fx.EXTRA_LEDGER_SEED.forEach((x) => rows.push({ ...x, voided: false, path: '/shipping/inbound' }));
+  rows.push(...ba.voided);
+  return rows;
+}
+export const parseBillCsv = (text: string, carrier?: string): BillLine[] => {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean); if (lines.length < 2) return [];
+  const header = lines[0].split(',').map((h) => h.trim().toLowerCase()); const col = (...names: string[]) => header.findIndex((h) => names.some((n) => h.includes(n)));
+  const iT = col('tracking'), iD = col('ship date', 'date'), iS = col('service'), iV = col('declared'), iTot = col('total'); const money = (v?: string) => { const n = Number((v ?? '').replace(/[$,]/g, '')); return Number.isFinite(n) ? n : 0; };
+  const surchargeCols = header.map((h, i) => ({ h, i })).filter(({ h, i }) => i !== iTot && /fuel|correction|insurance|residential|surcharge|fee|adjust/.test(h));
+  return lines.slice(1).map((l, n) => { const c = l.split(','); const surcharges = surchargeCols.map(({ h, i }) => ({ kind: header[i].replace(/\b\w/g, (m) => m.toUpperCase()) || h, amount: money(c[i]) })).filter((s) => s.amount !== 0); return { id: `bl-${n + 1}`, trackingNumber: (c[iT] ?? '').trim(), shipDate: (c[iD] ?? '').trim(), service: (c[iS] ?? '').trim(), billed: money(c[iTot]), surcharges, declaredValue: iV >= 0 && c[iV] ? money(c[iV]) : null, carrier }; }).filter((b) => b.trackingNumber);
+};
+const bucketOf = (bill: BillLine, label?: LedgerLabel): BillBucket => !label ? 'unknown' : label.voided ? 'voided_billed' : Math.abs(bill.billed - label.cost) <= BILL_TOLERANCE ? 'matched' : 'variance';
+const BUCKET_ORDER: Record<BillBucket, number> = { voided_billed: 0, unknown: 1, variance: 2, matched: 3, unbilled: 4 };
+const baTotals = (lines: BillAuditLine[], recovered = 0): BillAuditTotals => ({ billed: lines.filter((l) => l.bill).reduce((t, l) => t + l.bill!.billed, 0), matchedClean: lines.filter((l) => l.bucket === 'matched').length, variance: lines.filter((l) => l.bucket === 'variance').reduce((t, l) => t + l.delta, 0), disputed: lines.filter((l) => l.decision?.action === 'dispute').reduce((t, l) => t + Math.abs(l.bucket === 'unknown' ? l.bill!.billed : l.delta), 0), recovered, lines: lines.length });
+const baRefs = (b: BillAudit): BillAudit => ({ ...b, lines: [...b.lines].sort((x, y) => BUCKET_ORDER[x.bucket] - BUCKET_ORDER[y.bucket] || Math.abs(y.delta) - Math.abs(x.delta)), totals: baTotals(b.lines, b.totals.recovered) });
+export async function getBillAudits(): Promise<BillAudit[]> { return resolve(ba.audits.map(baRefs)); }
+export async function getBillAudit(id: string): Promise<BillAudit> { return resolve(baRefs(byId(ba.audits, id))); }
+// Runs after the human has eyeballed (and possibly corrected) the parsed lines
+export async function createBillAudit(lines: BillLine[], fileName: string, vendor = 'Parcel Pro'): Promise<BillAudit> {
+  const a = managerOnly(); if (!lines.length) throw new Error('No bill lines to match');
+  const ledger = getLabelLedger(); const norm = (t: string) => t.replace(/\s/g, '').toUpperCase();
+  const rows: BillAuditLine[] = lines.map((bill, i) => { const label = ledger.filter((l) => norm(l.trackingNumber) === norm(bill.trackingNumber)).sort((x, y) => Number(x.voided) - Number(y.voided))[0]; const bucket = bucketOf(bill, label); return { id: `bal-${i + 1}`, bucket, bill, label, delta: label ? Math.round((bill.billed - (bucket === 'voided_billed' ? 0 : label.cost)) * 100) / 100 : bill.billed }; });
+  const billed = new Set(lines.map((l) => norm(l.trackingNumber)));
+  ledger.filter((l) => !l.voided && !billed.has(norm(l.trackingNumber))).forEach((label, i) => rows.push({ id: `bal-u${i + 1}`, bucket: 'unbilled', label, delta: 0 }));
+  const b: BillAudit = { id: newId('ba'), number: `BA-26-${String(++ba.counter).padStart(3, '0')}`, vendor, fileName, uploadedAt: new Date().toISOString(), by: a.by, station: a.station, lines: rows, totals: baTotals(rows), events: [{ at: new Date().toISOString(), by: a.by, text: `Bill uploaded (${fileName}) · ${lines.length} lines matched against ${ledger.length} ledger labels` }] };
+  ba.audits.unshift(b); baStamp(`${b.number} · ${fileName} · ${rows.filter((r) => r.bucket === 'voided_billed').length} voided-but-billed · ${rows.filter((r) => r.bucket === 'unknown').length} unknown · ${rows.filter((r) => r.bucket === 'variance').length} variance`);
+  return resolve(baRefs(b));
+}
+export async function decideBillLine(auditId: string, lineId: string, action: BillDecision['action'], reason: string): Promise<BillAudit> {
+  const a = managerOnly(); const b = byId(ba.audits, auditId); const l = byId(b.lines, lineId);
+  if (l.bucket === 'matched' || l.bucket === 'unbilled') throw new Error('Only flagged lines take a decision'); if (!reason.trim()) throw new Error('Pick a reason');
+  l.decision = { action, reason: reason.trim(), by: a.by, at: new Date().toISOString() };
+  b.events.push({ at: l.decision.at, by: a.by, text: `${action === 'accept' ? 'Accepted' : 'Disputed'} ${l.bill?.trackingNumber ?? l.label?.trackingNumber} · ${fmtMoney(Math.abs(l.bucket === 'unknown' ? l.bill!.billed : l.delta))} · ${l.decision.reason}` });
+  return resolve(baRefs(b));
+}
+export interface DisputeDraft { subject: string; body: string; to: string; disputed: number; count: number }
+export async function draftDisputeReport(auditId: string): Promise<DisputeDraft> {
+  const b = byId(ba.audits, auditId); const rows = b.lines.filter((l) => l.decision?.action === 'dispute'); if (!rows.length) throw new Error('Nothing disputed yet — mark lines as Dispute first');
+  const disputed = rows.reduce((t, l) => t + Math.abs(l.bucket === 'unknown' ? l.bill!.billed : l.delta), 0);
+  const detail = rows.map((l) => `• ${l.bill!.trackingNumber} · ${l.bill!.shipDate} · ${l.bill!.service}\n   Billed ${fmtMoney(l.bill!.billed)}${l.bill!.surcharges.length ? ` (${l.bill!.surcharges.map((s) => `${s.kind} ${fmtMoney(s.amount)}`).join(', ')})` : ''} · our record: ${l.bucket === 'voided_billed' ? `label VOIDED ${l.label?.voidedAt ? new Date(l.label.voidedAt).toLocaleString() : ''} (ref ${l.label?.ref})` : l.bucket === 'unknown' ? 'no label ever created under this tracking #' : `${fmtMoney(l.label!.cost)} at label creation (ref ${l.label!.ref})`} · disputed ${fmtMoney(Math.abs(l.bucket === 'unknown' ? l.bill!.billed : l.delta))} · ${l.decision!.reason}`).join('\n');
+  const t = rs.templates.find((x) => x.key === 'shipping_dispute')!; const p = personalTemplateFor('shipping_dispute'); const src = p ?? t;
+  const vals: Record<string, string> = { '{{bill.number}}': b.fileName.replace(/\.[a-z]+$/i, ''), '{{bill.disputed_total}}': fmtMoney(disputed), '{{bill.dispute_lines}}': detail, '{{vendor.name}}': b.vendor, '{{shop.name}}': 'Rolliworks', '{{staff.name}}': actor().by };
+  const fill = (x: string) => x.replace(/\{\{[a-z_.]+\}\}/g, (f) => vals[f] ?? f);
+  return resolve({ subject: fill(src.subject), body: fill(src.body), to: 'billing@parcelpro.example', disputed, count: rows.length });
+}
+export async function sendDisputeReport(auditId: string, subject: string, body: string): Promise<BillAudit> {
+  const a = managerOnly(); const b = byId(ba.audits, auditId); if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required');
+  const emailId = `ob-${Date.now().toString(36)}`; store.outbox.unshift({ id: emailId, to: 'billing@parcelpro.example', toName: `${b.vendor} billing`, relatedRef: b.number, status: 'pending', subject: subject.trim(), body: body.trim(), createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  b.disputeEmailId = emailId; b.disputeSentAt = new Date().toISOString(); b.events.push({ at: b.disputeSentAt, by: a.by, text: `Dispute report queued to Outbox · ${fmtMoney(baTotals(b.lines).disputed)}` }); baStamp(`${b.number} dispute report → Outbox`);
+  return resolve(baRefs(b));
+}
+// Vendor credit arrives → recovered-to-date (prototype: one tap marks every disputed line recovered)
+export async function markBillRecovered(auditId: string, amount: number): Promise<BillAudit> {
+  const a = managerOnly(); const b = byId(ba.audits, auditId); if (!(amount > 0)) throw new Error('Enter the credited amount');
+  b.totals = { ...b.totals, recovered: Math.round((b.totals.recovered + amount) * 100) / 100 }; b.recoveredAt = new Date().toISOString(); b.events.push({ at: b.recoveredAt, by: a.by, text: `Credit received · ${fmtMoney(amount)} · recovered to date ${fmtMoney(b.totals.recovered)}` }); baStamp(`${b.number} credit ${fmtMoney(amount)}`);
+  return resolve(baRefs(b));
+}

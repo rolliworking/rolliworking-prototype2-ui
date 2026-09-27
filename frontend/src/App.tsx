@@ -26,6 +26,8 @@ import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
 import RgManagerPage from '@/pages/rg/RgManagerPage';
+import RgWeekPage from '@/pages/rg/RgWeekPage';
+import RgKioskPage from '@/pages/rg/RgKioskPage';
 import KioskPage from '@/pages/kiosk/KioskPage';
 import PayPage from '@/pages/PayPage';
 import RequestsPage from '@/pages/RequestsPage';
@@ -63,6 +65,7 @@ import SalesOrderDetailPage from '@/pages/sales/SalesOrderDetailPage';
 import PickupStationPage from '@/pages/sales/PickupStationPage';
 import ShipStationPage from '@/pages/sales/ShipStationPage';
 import InboundShippingPage from '@/pages/shipping/InboundShippingPage';
+import BillAuditPage from '@/pages/shipping/BillAuditPage';
 import BenchPage from '@/pages/workshop/BenchPage';
 import SupervisorPage from '@/pages/workshop/SupervisorPage';
 import FloorMapPage from '@/pages/workshop/FloorMapPage';
@@ -132,9 +135,11 @@ export default function App() {
             <Route path="*" element={<Navigate to="/rw" replace />} />
           </Route>
           {/* E13 — RGTime phone time-clock (own remembered session) and the public walk-in kiosk (no session, no chrome) */}
+          <Route path="/rg/kiosk" element={<RgKioskPage />} />
           <Route path="/rg" element={<RgShell />}>
             <Route index element={<RgHomePage />} />
             <Route path="clock" element={<RgClockPage />} />
+            <Route path="week" element={<RgWeekPage />} />
             <Route path="manager" element={<RgManagerPage />} />
           </Route>
           <Route path="/kiosk" element={<KioskPage />} />
@@ -199,6 +204,7 @@ export default function App() {
               <Route path="/sales/pickup" element={<PickupStationPage />} />
               <Route path="/sales/ship" element={<ShipStationPage />} />
               <Route path="/shipping/inbound" element={<InboundShippingPage />} />
+              <Route path="/shipping/bill-audit" element={<BillAuditPage />} />
               <Route path="/sales/:id" element={<SalesOrderDetailPage />} />
               <Route path="/actions/ship" element={<Navigate to="/sales/ship" replace />} />
               <Route path="/actions/pickup" element={<Navigate to="/sales/pickup" replace />} />

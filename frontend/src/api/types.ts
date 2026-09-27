@@ -196,7 +196,12 @@ export interface Estimate {
   declineReason?: string;
   approvedVia?: 'staff' | 'portal';
   jobId?: string;
+  requestId?: string;
+  legacy?: LegacyMeta;
+  convertedFromLegacy?: { id: string; number: string };
 }
+// Legacy archive records (display mock): read-only everywhere; a manager may convert into a native record, original untouched
+export interface LegacyMeta { source: string; number: string; importedAt: string; convertedToId?: string }
 
 export interface CatalogService {
   id: string;
@@ -586,6 +591,8 @@ export interface SalesOrder {
   clientId: string;
   jobId?: string;
   estimateId?: string;
+  legacy?: LegacyMeta;
+  convertedFromLegacy?: { id: string; number: string };
   status: SOStatus;
   channel?: FulfillmentChannel;
   orderDate: string;
@@ -786,6 +793,7 @@ export interface CustodyEvent {
 
 export interface WatchHistoryRow {
   kind: 'estimate' | 'job' | 'sales_order' | 'request';
+  legacy?: boolean;
   id: string;
   hitKey: string;
   number: string;
@@ -882,7 +890,7 @@ export interface PortalStatus { key: PortalStatusKey; label: string; blurb: stri
 export type NeedsYouKind = 'approve_estimate' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply' | 'review_inspection';
 export interface NeedsYouItem { id: string; kind: NeedsYouKind; title: string; detail: string; path: string; at: string; watchId?: string }
 
-export interface PortalDocument { id: string; kind: 'photo' | 'estimate' | 'invoice' | 'receipt' | 'label'; title: string; at: string; dataUrl?: string; path?: string }
+export interface PortalDocument { id: string; kind: 'photo' | 'estimate' | 'invoice' | 'receipt' | 'label'; title: string; at: string; dataUrl?: string; path?: string; legacy?: boolean }
 
 export interface PortalHistoryRow { id: string; at: string; title: string; detail: string; path?: string }
 
@@ -944,7 +952,7 @@ export interface CycleCountLine { partId: string; expected: number; counted?: nu
 export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
-export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available';
+export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute';
 export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string }
 
 export interface UserAdminInput { firstName: string; shortName: string; dutyLabel: string; accessTier: AccessTier; roles: Role[]; division: Division | 'both'; password: string; pin: string }
@@ -990,7 +998,7 @@ export interface ConvMessage {
   event?: { kind: 'estimate_approved' | 'estimate_declined' | 'parts_approved' | 'parts_rejected' | 'pickup_window' | 'photo_submitted'; refId: string; label: string };
 }
 export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
-export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string }
+export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string; linkedEstimate?: { id: string; number: string; status: string } }
 export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
 export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[]; source: 'shop' | 'personal'; owner?: string }
 // A staff member's own version of a shop template — used automatically for THEIR point-of-use sends; system/automated sends always use the shop default
@@ -1024,11 +1032,20 @@ export interface TimingInput { readings: TimingReading[]; liftAngle: number; pow
 // ---- E13 RGTime `/rg` (NFC tap time-clock, phone PWA) + public Kiosk `/kiosk` --------------------
 export interface NfcTag { id: string; label: string; division: Division; url: string }
 export type PunchKind = 'in' | 'out';
-export interface Punch { id: string; userId: string; kind: PunchKind; at: string; tagId: string; location: string; division: Division; simulated: boolean }
+export type PunchFlag = 'offsite' | 'no_gps' | 'synced_late' | 'kiosk' | 'correction';
+export type PunchSource = 'nfc' | 'kiosk' | 'manager' | 'seed';
+export interface Punch {
+  id: string; userId: string; kind: PunchKind; at: string; tagId: string; location: string; division: Division; simulated: boolean;
+  source?: PunchSource; flags?: PunchFlag[]; geo?: { lat: number; lng: number; distanceM: number } | null; recordedAt?: string;
+  correctionOf?: string; reason?: string; by?: string; queued?: boolean;
+}
 export interface ClockState { user: User; onClock: boolean; since?: string; sinceLocation?: string; todayPunches: Punch[]; todayHours: number }
-export interface WeekDay { date: string; hours: number; punches: Punch[]; open: boolean }
+export interface WeekDay { date: string; hours: number; punches: Punch[]; open: boolean; flagged: boolean }
 export interface WeekRow { user: User; days: WeekDay[]; total: number; openNow: boolean }
-export interface WeekView { start: string; end: string; division: Division; rows: WeekRow[]; weekOffset: number }
+export interface WeekView { start: string; end: string; division: Division | 'all'; rows: WeekRow[]; weekOffset: number }
+export interface RgSettings { shopLat: number; shopLng: number; radiusM: number; simulateOffsite: boolean; simulateOffline: boolean }
+export type RgFlagKind = 'offsite' | 'synced_late' | 'missed_out' | 'correction' | 'no_gps';
+export interface RgFlagRow { punch: Punch; user: User; kind: RgFlagKind; original?: Punch }
 
 export type KioskService = 'mov_service' | 'case_work' | 'band_repair' | 'band_polish' | 'recut_bezel';
 export type KioskMatchState = 'none' | 'possible' | 'confirmed' | 'split';
@@ -1109,3 +1126,14 @@ export interface CallNote { at: string; by: string; text: string }
 export interface CallEvent { id: string; at: string; direction: 'in' | 'out'; number: string; clientId?: string; answeredBy?: string; station: string; outcome: CallOutcome; durationSec?: number; jobId?: string; notes: CallNote[]; afterHours: boolean; resolvedAt?: string; resolvedBy?: string; resolution?: 'called_back' | 'handled' }
 export interface CallCounts { total: number; thisMonth: number; missed: number; openMissed: number }
 export interface MissedCallRow { call: CallEvent; client?: Client; badge?: string }
+
+// ---- Shipping bill audit (AI-assisted reconciliation of the carrier / Parcel Pro invoice against our label ledger) ----
+export interface BillSurcharge { kind: string; amount: number }
+export interface BillLine { id: string; trackingNumber: string; shipDate: string; service: string; billed: number; surcharges: BillSurcharge[]; declaredValue: number | null; carrier?: string }
+export type BillBucket = 'voided_billed' | 'unknown' | 'variance' | 'matched' | 'unbilled';
+export interface LedgerLabel { trackingNumber: string; ref: string; kind: 'inbound' | 'outbound' | 'po'; carrier: string; service: string; cost: number; createdAt: string; voided: boolean; voidedAt?: string; who?: string; path: string }
+export interface BillDecision { action: 'accept' | 'dispute'; reason: string; by: string; at: string }
+export interface BillAuditLine { id: string; bucket: BillBucket; bill?: BillLine; label?: LedgerLabel; delta: number; decision?: BillDecision }
+export interface BillAuditTotals { billed: number; matchedClean: number; variance: number; disputed: number; recovered: number; lines: number }
+export interface BillAuditEvent { at: string; by: string; text: string }
+export interface BillAudit { id: string; number: string; vendor: string; fileName: string; uploadedAt: string; by: string; station: string; lines: BillAuditLine[]; totals: BillAuditTotals; disputeEmailId?: string; disputeSentAt?: string; recoveredAt?: string; events: BillAuditEvent[] }

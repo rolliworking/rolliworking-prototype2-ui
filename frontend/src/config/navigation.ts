@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Boxes,
+  Receipt,
   Camera,
   FilePlus2,
   FileText,
@@ -61,6 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
   { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, built: true, blurb: 'Purchase orders, vendors and receiving.' },
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, built: true, blurb: 'Parts, stock levels and reorder alerts.' },
+  { key: 'bill-audit', label: 'Bill audit', path: '/shipping/bill-audit', icon: Receipt, tiers: MGR, built: true, blurb: 'Carrier bill vs our label ledger — variances, voided-but-billed, disputes.' },
   { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, built: true, blurb: 'Bag tags, shipping labels and QR codes.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },

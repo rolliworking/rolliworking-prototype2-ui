@@ -2,6 +2,7 @@ import { ArrowLeft, Briefcase, Check, Copy, Lock, Mail, PackageCheck, PenLine, P
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import { LegacyBadge, LegacyBanner } from '@/components/LegacyBits';
 import type { Address, EstimateLine, EstimateWithRefs, Watch } from '@/api/client';
 import { EstimateStatusPill, Provisional } from '@/components/estimates/EstimateBits';
 import { EstimateMeta, WatchPicker } from '@/components/estimates/EstimateForm';
@@ -106,7 +107,7 @@ export default function EstimateDetailPage() {
           {e.status === 'declined' && e.declineReason && <p data-testid="decline-reason-shown" className="mt-1 text-xs text-rose-700">Declined {e.declinedAt && fmtDate(e.declinedAt)}: {e.declineReason}</p>}
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="estimate-actions">
+        {e.legacy ? <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="estimate-actions"><LegacyBadge testId="estimate-legacy-badge" /></div> : <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="estimate-actions">
           {isDraft && <><Button data-testid="act-mark-sent" onClick={() => run(() => api.markEstimateSent(e.id), 'Marked as sent (no email, no sent-at)')}><Mail size={13} /> Mark as sent</Button><Button variant="primary" data-testid="act-send" onClick={() => setModal('send')}><Send size={13} /> Send…</Button></>}
           {e.status === 'sent' && !e.historical && !revising && <>
             <Button data-testid="act-revise" onClick={() => setRevising(true)}><PenLine size={13} /> Revise</Button>
@@ -127,8 +128,9 @@ export default function EstimateDetailPage() {
           <Button data-testid="act-print" onClick={() => setModal('print')}><Printer size={13} /> Print</Button>
           <Button data-testid="act-duplicate" onClick={async () => { const c = await api.duplicateEstimate(e.id); navigate(`/estimates/${c.id}`); }}><Copy size={13} /> Duplicate</Button>
           {e.status !== 'converted' && <Button data-testid="act-delete" onClick={() => { if (window.confirm(`Delete ${e.number}?`)) run(() => api.deleteEstimate(e.id), '').then(() => navigate('/estimates')); }}><Trash2 size={13} className="text-rose-700" /></Button>}
-        </div>
+        </div>}
       </div>
+      <LegacyBanner kind="estimate" id={e.id} legacy={e.legacy} convertedFrom={e.convertedFromLegacy} />
 
       {flash && <div data-testid="estimate-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
       {error && <div data-testid="estimate-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}

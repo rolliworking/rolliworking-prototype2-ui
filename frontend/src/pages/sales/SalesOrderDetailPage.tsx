@@ -2,6 +2,8 @@ import { ArrowLeft, Ban, CheckCircle2, CreditCard, ExternalLink, Link2, Mail, Ma
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import { LegacyBanner } from '@/components/LegacyBits';
+import { SoPrintButton } from '@/components/sales/SoPrint';
 import type { Address, Client, SOLineInput, SalesOrderWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { Provisional } from '@/components/estimates/EstimateBits';
@@ -69,8 +71,11 @@ export default function SalesOrderDetailPage() {
         <SalesSubNav />
       </div>
 
-      {o && (
+      {o && <LegacyBanner kind="sales_order" id={o.id} legacy={o.legacy} convertedFrom={o.convertedFromLegacy} />}
+      {o && o.legacy && <div className="flex flex-wrap items-center gap-1.5" data-testid="so-actions"><SoPrintButton order={o} /></div>}
+      {o && !o.legacy && (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="so-actions">
+          <SoPrintButton order={o} />
           {o.status === 'draft' && <Button variant="primary" data-testid="act-open-so" onClick={() => run(() => api.openSalesOrder(o.id), 'Opened · email queued')}>Open order</Button>}
           {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <Button variant={o.invoiceSentAt ? 'secondary' : 'primary'} data-testid="act-send-invoice" onClick={() => run(() => api.sendInvoice(o.id), o.invoiceSentAt ? 'Invoice re-sent · same pay link · Outbox' : 'Invoice sent · pay link queued to Outbox')}><Send size={13} /> {o.invoiceSentAt ? 'Re-send invoice' : 'Send invoice'}</Button>}
           {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.balanceDue > 0 && <Button data-testid="act-payment" onClick={() => setModal('payment')}><CreditCard size={13} /> Record payment</Button>}

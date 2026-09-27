@@ -1,5 +1,6 @@
 import { ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { LegacyBadge } from '@/components/LegacyBits';
 import type { WatchGroup, WatchHistoryRow } from '@/api/client';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
@@ -14,7 +15,7 @@ const HistoryRow = ({ r, showYear }: { r: WatchHistoryRow; showYear: boolean }) 
   <li data-hit={r.hitKey} data-testid={`watch-history-${r.kind}-${r.id}`} className="grid grid-cols-[38px_88px_1fr_auto_auto] items-center gap-x-2 px-3 py-1 text-xs transition-colors hover:bg-canvas">
     <span className={`font-mono text-[10px] font-semibold ${KIND_TONE[r.kind]}`}>{KIND_LABEL[r.kind]}</span>
     <Link to={r.path} className="truncate font-mono text-xs font-medium text-ink hover:underline">{r.number}</Link>
-    <span className="truncate text-ink-700" title={r.title}>{r.title}</span>
+    <span className="flex min-w-0 items-center gap-1.5 text-ink-700" title={r.title}>{r.legacy && <LegacyBadge testId={`legacy-${r.kind}-${r.id}`} small />}<span className="truncate">{r.title}</span></span>
     <StatusPill status={r.status} />
     <span className="tabular w-[132px] text-right text-ink-500">
       {r.amount !== undefined && <span className="mr-2 font-medium text-ink-700">{fmtMoneyCents(r.amount)}</span>}
