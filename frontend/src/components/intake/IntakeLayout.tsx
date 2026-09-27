@@ -3,24 +3,27 @@ import { Briefcase, Mail, Tags } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { PackageStatus } from '@/api/client';
+import type { IntakeCountKey } from '@/api/client';
 
 const STAGES = [
-  { key: 'arrival', label: '1 · Arrival', path: '/intake', end: true, count: 'arrived' as PackageStatus },
-  { key: 'receive', label: '2 · Receive Package', path: '/intake/receive', end: false, count: 'processed' as PackageStatus },
-  { key: 'work-order', label: '3 · Work Order', path: '/intake/work-order', end: false, count: 'awaiting_inspection' as PackageStatus },
-  { key: 'inspection', label: '4 · Receive Watch', path: '/intake/inspection', end: false, count: 'received' as PackageStatus },
+  { key: 'arrival', label: '1 · Arrival', path: '/intake', end: true, count: 'arrived' as IntakeCountKey },
+  { key: 'receive', label: '2 · Receive Package', path: '/intake/receive', end: false, count: 'processed' as IntakeCountKey },
+  { key: 'work-order', label: '3 · Work Order', path: '/intake/work-order', end: false, count: 'awaiting_inspection' as IntakeCountKey },
+  { key: 'inspection', label: '4 · Receive Watch', path: '/intake/inspection', end: false, count: 'received' as IntakeCountKey },
+  { key: 'photos', label: '5 · Photos', path: '/intake/photos', end: false, count: 'photos' as IntakeCountKey },
+  { key: 'inspect', label: '6 · Inspection', path: '/intake/inspect', end: false, count: 'inspection' as IntakeCountKey },
+  { key: 'awaiting', label: '7 · Awaiting Approval', path: '/intake/awaiting-approval', end: false, count: 'awaiting_approval' as IntakeCountKey },
 ];
 
 interface IntakeCtx {
-  counts: Record<PackageStatus, number> | null;
+  counts: Record<IntakeCountKey, number> | null;
   refreshCounts: () => void;
 }
 const Ctx = createContext<IntakeCtx>({ counts: null, refreshCounts: () => undefined });
 export const useIntakeCounts = () => useContext(Ctx);
 
 export default function IntakeLayout() {
-  const [counts, setCounts] = useState<Record<PackageStatus, number> | null>(null);
+  const [counts, setCounts] = useState<Record<IntakeCountKey, number> | null>(null);
   const refreshCounts = useCallback(() => {
     api.getIntakeCounts().then(setCounts);
   }, []);

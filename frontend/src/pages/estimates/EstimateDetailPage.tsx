@@ -32,6 +32,7 @@ export default function EstimateDetailPage() {
   const timer = useRef<number | null>(null);
   const dirty = useRef(false);
 
+  const [deselected, setDeselected] = useState<Set<string>>(new Set()); // default: every open line checked
   const load = useCallback(async () => {
     const e = await api.getEstimate(id);
     setEst(e);
@@ -78,6 +79,7 @@ export default function EstimateDetailPage() {
   if (est === undefined || !form) return null;
   if (!est) return <div className="text-ink-500">Estimate not found. <Link to="/estimates" className="underline">Back</Link></div>;
   const e = est;
+  const pickedIds = () => e.lines.filter((l) => !deselected.has(l.id)).map((l) => l.id);
 
   const saveRevision = () => run(() => api.reviseEstimate(e.id, toPatch(form)), `Revision ${e.revision + 1} saved — rev ${e.revision} kept`).then(() => setRevising(false));
 
@@ -119,11 +121,11 @@ export default function EstimateDetailPage() {
           {revising && <><Button variant="primary" data-testid="act-save-revision" onClick={saveRevision}><Check size={13} /> Save as rev {e.revision + 1}</Button><Button data-testid="act-cancel-revision" onClick={() => { setRevising(false); setForm(toForm(e)); }}>Cancel</Button></>}
           {(e.status === 'declined' || e.status === 'expired') && <Button variant="primary" data-testid="act-reopen" onClick={() => run(() => api.reopenEstimate(e.id), 'Reopened → draft')}><RotateCcw size={13} /> Reopen → draft</Button>}
           {e.status === 'approved' && <>
-            <Button variant="primary" data-testid="act-create-job" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'job'); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Create job failed'); } }}><Briefcase size={13} /> Create job</Button>
-            <Button data-testid="act-convert-so" onClick={async () => { try { const o = await api.convertEstimateToSalesOrder(e.id); navigate(`/sales/${o.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}>Convert to SO</Button>
+            <Button variant="primary" data-testid="act-create-job" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'job', pickedIds()); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Create job failed'); } }}><Briefcase size={13} /> Create job</Button>
+            <Button data-testid="act-convert-so" onClick={async () => { try { const o = await api.convertEstimateToSalesOrder(e.id, pickedIds()); navigate(`/sales/${o.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}>Convert to SO</Button>
           </>}
           {(e.status === 'sent' || e.status === 'approved' || (e.status === 'converted' && e.jobId)) && !e.historical && (
-            <Button data-testid="act-convert-intake" title="Pack: job goes on hand + intake date; estimate converted" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'intake'); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}><PackageCheck size={13} /> Convert to intake</Button>
+            <Button data-testid="act-convert-intake" title="Pack: job goes on hand + intake date; estimate converted" onClick={async () => { try { const j = await api.convertEstimate(e.id, 'intake', pickedIds()); navigate(`/jobs/${j.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Convert failed'); } }}><PackageCheck size={13} /> Convert to intake</Button>
           )}
           {e.status === 'converted' && e.jobId && <Link to={`/jobs/${e.jobId}`} data-testid="act-open-job" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:border-ink-300 hover:bg-canvas"><Briefcase size={13} /> Open job</Link>}
           <Button data-testid="act-print" onClick={() => setModal('print')}><Printer size={13} /> Print</Button>
@@ -142,7 +144,8 @@ export default function EstimateDetailPage() {
       </Card>
 
       <Card title="Lines" subtitle={editing ? 'Drag or use arrows to reorder · edit amount to back-calc rate · ≥2 blank rows kept' : 'Read-only in this status'} testId="detail-lines-card">
-        <LineEditor lines={form.lines} onChange={(ls) => change({ lines: ls })} readOnly={!editing} blankTaxableDefault minBlank={editing ? 2 : 0} />
+        <LineEditor lines={form.lines} onChange={(ls) => change({ lines: ls })} readOnly={!editing} blankTaxableDefault minBlank={editing ? 2 : 0} selection={!editing && !e.legacy ? { selected: new Set(e.lines.filter((l) => !deselected.has(l.id)).map((l) => l.id)), onToggle: (id) => setDeselected((d) => { const n = new Set(d); if (n.has(id)) n.delete(id); else n.add(id); return n; }), onCloseOut: (id) => { const reason = window.prompt('Close this line out without converting — reason?'); if (reason) void run(() => api.closeOutEstimateLine(e.id, id, reason), 'Line closed out'); } } : undefined} />
+        {!editing && !e.legacy && e.lines.some((l) => l.conversions?.length) && <p data-testid="lines-convert-summary" className="mt-2 text-[11px] text-ink-500">{e.lines.filter((l) => l.conversions?.length).length} line{e.lines.filter((l) => l.conversions?.length).length === 1 ? '' : 's'} converted · {e.lines.filter((l) => !l.conversions?.length && !l.closedOut && (l.description.trim() || l.unitPrice)).length} still open · {e.lines.filter((l) => l.closedOut).length} closed out. Open lines can be converted separately or closed out.</p>}
       </Card>
 
       <Card title="Components · trickle-down chain" subtitle="Expected (these chips) → Received at Scan 1 → Verified at Scan 2 · toggling a chip is an explicit override, logged" testId="detail-chain-card">

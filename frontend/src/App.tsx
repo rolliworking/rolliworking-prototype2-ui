@@ -26,7 +26,7 @@ import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RwHistoryPage from '@/pages/rw/RwHistoryPage';
 import RwReportsPage from '@/pages/rw/RwReportsPage';
 import AllJobsPage from '@/pages/jobs/AllJobsPage';
-import InspectionFormPage from '@/pages/inspection/InspectionFormPage';
+import { IntakeAwaitingApprovalPage, IntakeInspectionFormStep, IntakeInspectionListPage, IntakePhotosPage } from '@/pages/intake/IntakeStepPages';
 import RcInspectionFormPage from '@/pages/rc/RcInspectionFormPage';
 import QboSetupPage from '@/pages/rs/QboSetupPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
@@ -101,13 +101,14 @@ function TierGate() {
   return <Outlet />;
 }
 
-const PLACEHOLDER_PATHS = ['/inspection-photos'];
+const PLACEHOLDER_PATHS: string[] = [];
 
 function RwManagerOnly({ label, children }: { label: string; children: JSX.Element }) {
   const { user } = useAuth();
   return user?.accessTier === 'manager' ? children : <RwRestricted label={label} />;
 }
 
+const InspectionRedirect = () => { const { id } = useParams(); return <Navigate to={`/intake/inspect/${id}`} replace />; };
 const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`/rw/testing/test/${jobId}`} replace />; };
 
 export default function App() {
@@ -179,8 +180,9 @@ export default function App() {
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/jobs/new" element={<JobCreatePage />} />
               <Route path="/jobs/all" element={<AllJobsPage />} />
-              <Route path="/inspection/new" element={<InspectionFormPage />} />
-              <Route path="/inspection/:id" element={<InspectionFormPage />} />
+              <Route path="/inspection/new" element={<Navigate to="/intake/inspect/new" replace />} />
+              <Route path="/inspection/:id" element={<InspectionRedirect />} />
+              <Route path="/inspection-photos" element={<Navigate to="/intake/photos" replace />} />
               <Route path="/jobs/shop-time" element={<ShopTimePage />} />
               <Route path="/jobs/:id" element={<JobDetailPage />} />
               <Route path="/intake" element={<IntakeLayout />}>
@@ -190,6 +192,11 @@ export default function App() {
                 <Route path="work-order" element={<WorkOrderPage />} />
                 <Route path="inspection" element={<ReceiveWatchListPage />} />
                 <Route path="inspection/:id" element={<ReceiveWatchPage />} />
+                <Route path="photos" element={<IntakePhotosPage />} />
+                <Route path="inspect" element={<IntakeInspectionListPage />} />
+                <Route path="inspect/new" element={<IntakeInspectionFormStep />} />
+                <Route path="inspect/:id" element={<IntakeInspectionFormStep />} />
+                <Route path="awaiting-approval" element={<IntakeAwaitingApprovalPage />} />
                 <Route path="outbox" element={<OutboxPage />} />
                 <Route path="labels" element={<LabelQueuePage />} />
                 <Route path="trade" element={<TradeScanInPage />} />

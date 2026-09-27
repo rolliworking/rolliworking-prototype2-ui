@@ -124,6 +124,8 @@ export type LineType = 'service' | 'part' | 'shipping';
 
 export interface EstimateLine {
   id: string;
+  conversions?: { kind: 'sales_order' | 'job' | 'intake'; number: string; id: string; at: string; by: string }[];
+  closedOut?: { at: string; by: string; reason: string };
   description: string;
   qty: number;
   unitPrice: number;
@@ -284,6 +286,7 @@ export interface Job {
   kind: JobKind;
   status: JobStatus;
   simpleStatus: JobSimpleStatus;
+  wireWarnings?: string[];
   priority: JobPriority;
   division: Division;
   lines: EstimateLine[];

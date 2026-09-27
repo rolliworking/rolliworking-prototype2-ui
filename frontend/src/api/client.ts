@@ -507,11 +507,21 @@ export async function getPackage(id: string): Promise<PackageWithRefs | null> {
   return resolve(p ? pkgWithRefs(p) : null);
 }
 
-export async function getIntakeCounts(): Promise<Record<PackageStatus, number>> {
-  const counts: Record<PackageStatus, number> = { arrived: 0, processed: 0, awaiting_inspection: 0, received: 0, discrepancy_hold: 0 };
+export type IntakeCountKey = PackageStatus | 'photos' | 'inspection' | 'awaiting_approval';
+const photoCount = (j: Job, kind: 'intake' | 'inspection') => fx.jobPhotos.filter((p) => p.jobId === j.id && p.kind === kind).length + (kind === 'inspection' ? j.photos.length : 0);
+export async function getIntakeCounts(): Promise<Record<IntakeCountKey, number>> {
+  const counts: Record<IntakeCountKey, number> = { arrived: 0, processed: 0, awaiting_inspection: 0, received: 0, discrepancy_hold: 0, photos: 0, inspection: 0, awaiting_approval: 0 };
   store.packages.forEach((p) => (counts[p.status] += 1));
+  // Steps 5–7: on-hand jobs still in intake/in_review without inspection photos → Photos; with photos but no saved inspection form → Inspection; awaiting client approval → step 7
+  const onHand = store.jobs.filter((j) => j.simpleStatus === 'on_hand' && (j.status === 'intake' || j.status === 'in_review'));
+  counts.photos = onHand.filter((j) => !photoCount(j, 'inspection')).length;
+  counts.inspection = onHand.filter((j) => photoCount(j, 'inspection') > 0).length + intakeDraftForms();
+  counts.awaiting_approval = store.jobs.filter((j) => j.status === 'awaiting_customer_approval').length;
   return resolve(counts);
 }
+export interface IntakeStepJob { job: JobWithRefs; intakePhotos: number; inspectionPhotos: number; form?: { id: string; status: 'draft' | 'saved'; token: string; total: number } }
+export async function getIntakePhotoQueue(): Promise<IntakeStepJob[]> { return resolve(store.jobs.filter((j) => j.simpleStatus === 'on_hand' && (j.status === 'intake' || j.status === 'in_review')).map((j) => ({ job: jobRefs(j), intakePhotos: photoCount(j, 'intake'), inspectionPhotos: photoCount(j, 'inspection'), form: formForJob(j.id) }))); }
+export async function getAwaitingApprovalQueue(): Promise<IntakeStepJob[]> { return resolve(store.jobs.filter((j) => j.status === 'awaiting_customer_approval').map((j) => ({ job: jobRefs(j), intakePhotos: photoCount(j, 'intake'), inspectionPhotos: photoCount(j, 'inspection'), form: formForJob(j.id) }))); }
 
 export interface ArrivalInput {
   source: PackageSource;
@@ -985,9 +995,9 @@ export async function reopenEstimate(id: string): Promise<EstimateWithRefs> {
   return resolve(withRefs(e));
 }
 
-export async function convertEstimate(id: string, target: 'job' | 'sales_order' | 'intake'): Promise<JobWithRefs> {
-  if (target === 'job') return createJobFromEstimate(id);
-  if (target === 'intake') return convertEstimateToIntake(id);
+export async function convertEstimate(id: string, target: 'job' | 'sales_order' | 'intake', lineIds?: string[]): Promise<JobWithRefs> {
+  if (target === 'job') return createJobFromEstimate(id, lineIds);
+  if (target === 'intake') return convertEstimateToIntake(id, lineIds);
   throw new Error('Use convertEstimateToSalesOrder for sales orders');
 }
 
@@ -1407,15 +1417,23 @@ export async function createJob(input: CreateJobInput): Promise<JobWithRefs> {
 // Received package for an estimate = routing authority for workflow, and proof the watch is on hand
 const receivedPkgFor = (estimateId: string) => store.packages.find((p) => p.estimateId === estimateId && (p.status === 'received' || p.status === 'discrepancy_hold'));
 
-const jobFromEstimate = (e: Estimate, onHand: boolean): Job => {
+const jobFromEstimate = (e: Estimate, onHand: boolean, lines: EstimateLine[] = e.lines): Job => {
   if (!e.watchId) throw new Error('Estimate has no watch — add one before creating a job');
   const pkg = receivedPkgFor(e.id);
-  const j = buildJob({ clientId: e.clientId, watchId: e.watchId, estimateId: e.id, onHand: onHand || !!pkg, lines: e.lines, workflow: pkg?.workflow, intakeNotes: pkg?.notes });
+  const j = buildJob({ clientId: e.clientId, watchId: e.watchId, estimateId: e.id, onHand: onHand || !!pkg, lines, workflow: pkg?.workflow, intakeNotes: pkg?.notes });
   j.packageId = pkg?.id;
   e.jobId = j.id;
   return j;
 };
 
+// Partial convert (RULING 2026-09-27): only the checked lines convert; unchecked lines stay OPEN on the estimate with a per-line record. Estimate flips to `converted` only when no convertible line is left open.
+type ConvFamily = 'so' | 'job';
+const famOf = (k: 'sales_order' | 'job' | 'intake'): ConvFamily => (k === 'sales_order' ? 'so' : 'job');
+const openLines = (e: Estimate, fam: ConvFamily) => e.lines.filter((l) => !l.closedOut && (l.description.trim() || l.unitPrice) && !(l.conversions ?? []).some((c) => famOf(c.kind) === fam));
+const pickLines = (e: Estimate, fam: ConvFamily, lineIds?: string[]) => { const open = openLines(e, fam); const chosen = lineIds ? open.filter((l) => lineIds.includes(l.id)) : open; if (!chosen.length) throw new Error('No open lines selected to convert'); return chosen; };
+const recordLineConvert = (e: Estimate, lines: EstimateLine[], to: { kind: 'sales_order' | 'job' | 'intake'; number: string; id: string; at: string }) => { const a = actor(); const fam = famOf(to.kind); lines.forEach((l) => { l.conversions = [...(l.conversions ?? []), { ...to, by: a.by }]; }); const left = openLines(e, fam).length; if (!left && fam === 'job') markConverted(e); else e.updatedAt = new Date().toISOString(); estStamp(e, `${lines.length} of ${lines.length + left} open line${lines.length + left === 1 ? '' : 's'} converted → ${to.kind.replace('_', ' ')} ${to.number}${left ? ` · ${left} line${left === 1 ? '' : 's'} left open on the estimate` : ''}`); };
+export const lineOpenFor = (l: EstimateLine, kind: 'sales_order' | 'job' | 'intake') => !l.closedOut && !(l.conversions ?? []).some((c) => famOf(c.kind) === famOf(kind));
+export async function closeOutEstimateLine(estimateId: string, lineId: string, reason: string): Promise<EstimateWithRefs> { const e = getEst(estimateId); const l = e.lines.find((x) => x.id === lineId); if (!l || l.closedOut) throw new Error('Line not open'); if (!reason.trim()) throw new Error('Reason required'); l.closedOut = { at: new Date().toISOString(), by: actor().by, reason: reason.trim() }; if (!openLines(e, 'job').length && e.lines.some((x) => x.conversions?.length)) markConverted(e); estStamp(e, `Line “${l.description}” closed out without converting · ${reason.trim()}`); return resolve(withRefs(e)); }
 const markConverted = (e: Estimate) => {
   e.status = 'converted';
   e.convertedAt = new Date().toISOString();
@@ -1423,34 +1441,39 @@ const markConverted = (e: Estimate) => {
 };
 
 // E3 "Create job": born from an approved estimate, carrying its lines and watch
-export async function createJobFromEstimate(estimateId: string): Promise<JobWithRefs> {
+export async function createJobFromEstimate(estimateId: string, lineIds?: string[]): Promise<JobWithRefs> {
   const e = getEst(estimateId);
   if (e.jobId) throw new Error(`Estimate already has job ${byId(store.jobs, e.jobId).number}`);
   if (e.status !== 'approved') throw new Error('Only an approved estimate can create a job');
-  const j = jobFromEstimate(e, false);
-  markConverted(e);
-  estStamp(e, `Converted → job ${j.number}`);
+  const chosen = pickLines(e, 'job', lineIds);
+  const j = jobFromEstimate(e, false, chosen);
+  recordLineConvert(e, chosen, { kind: 'job', number: j.number, id: j.id, at: j.createdAt });
   jobStamp(j, `Created from estimate ${e.number} · ${j.lines.length} line${j.lines.length === 1 ? '' : 's'} · ${j.workflow.join('+')}${j.packageId ? ' · on hand (received package)' : ''}`);
   return resolve(jobRefs(j));
 }
 
 // Pack: if the estimate already has a job → that job goes on_hand + intake_date; else insert a job and link it
-export async function convertEstimateToIntake(estimateId: string): Promise<JobWithRefs> {
+export async function convertEstimateToIntake(estimateId: string, lineIds?: string[]): Promise<JobWithRefs> {
   const e = getEst(estimateId);
   if (!['sent', 'approved', 'converted'].includes(e.status)) throw new Error('Only a sent, approved or converted estimate can be converted to intake');
   let j: Job;
+  const chosen = e.jobId ? [] : pickLines(e, 'job', lineIds);
   if (e.jobId) {
     j = byId(store.jobs, e.jobId);
+    // Leftover lines from an earlier partial convert join the existing job (append-only), then the estimate closes if nothing is left open
+    const extra = openLines(e, 'job').filter((l) => !lineIds || lineIds.includes(l.id));
+    if (extra.length) { j.lines.push(...extra.map((l) => ({ ...l, conversions: undefined, closedOut: undefined, id: newLineId() }))); j.total = j.lines.reduce((t, l) => t + l.qty * l.unitPrice, 0); jobStamp(j, `${extra.length} leftover estimate line${extra.length === 1 ? '' : 's'} added from ${e.number}`); recordLineConvert(e, extra, { kind: 'intake', number: j.number, id: j.id, at: new Date().toISOString() }); return resolve(jobRefs(j)); }
     if (j.simpleStatus === 'on_hand') throw new Error(`Job ${j.number} is already on hand`);
     if (j.simpleStatus === 'finished') throw new Error(`Job ${j.number} is finished`);
     j.simpleStatus = 'on_hand';
     j.intakeDate = new Date().toISOString();
     jobStamp(j, `Converted to intake · now on hand`);
   } else {
-    j = jobFromEstimate(e, true);
-    jobStamp(j, `Created on hand via convert-to-intake from ${e.number}`);
+    j = jobFromEstimate(e, true, chosen);
+    jobStamp(j, `Created on hand via convert-to-intake from ${e.number} · ${chosen.length} line${chosen.length === 1 ? '' : 's'}`);
+    recordLineConvert(e, chosen, { kind: 'intake', number: j.number, id: j.id, at: j.createdAt });
   }
-  if (e.status !== 'converted') markConverted(e);
+  if (e.jobId && e.status !== 'converted') markConverted(e);
   estStamp(e, `Convert to intake → job ${j.number} on hand`);
   return resolve(jobRefs(j));
 }
@@ -1732,14 +1755,15 @@ export async function createSalesOrder(input: SalesOrderInput): Promise<SalesOrd
   return resolve(soRefs(o));
 }
 
-export async function convertEstimateToSalesOrder(estimateId: string): Promise<SalesOrderWithRefs> {
+export async function convertEstimateToSalesOrder(estimateId: string, lineIds?: string[]): Promise<SalesOrderWithRefs> {
   const e = getEst(estimateId);
+  const chosen = pickLines(e, 'so', lineIds);
   const existing = store.salesOrders.find((o) => o.estimateId === e.id && o.status !== 'cancelled');
-  if (existing) throw new Error(`Estimate already has ${existing.number}`);
-  const shipping = e.lines.filter((l) => l.type === 'shipping').reduce((t, l) => t + l.qty * l.unitPrice, 0);
-  const o = buildSO({ clientId: e.clientId, estimateId: e.id, lines: e.lines.filter((l) => l.type !== 'shipping').map((l) => ({ description: l.description, partNumber: l.partNumber, qty: l.qty, rate: l.unitPrice, dept: l.dept })), shippingAmount: shipping, memo: e.clientNotes });
-  estStamp(e, `Converted → sales order ${o.number} (draft)`);
-  soStamp(o, `Created from estimate ${e.number} · draft`);
+  if (existing && !e.lines.some((l) => l.conversions?.some((c) => c.kind === 'sales_order'))) throw new Error(`Estimate already has ${existing.number}`);
+  const shipping = chosen.filter((l) => l.type === 'shipping').reduce((t, l) => t + l.qty * l.unitPrice, 0);
+  const o = buildSO({ clientId: e.clientId, estimateId: e.id, lines: chosen.filter((l) => l.type !== 'shipping').map((l) => ({ description: l.description, partNumber: l.partNumber, qty: l.qty, rate: l.unitPrice, dept: l.dept })), shippingAmount: shipping, memo: e.clientNotes });
+  recordLineConvert(e, chosen, { kind: 'sales_order', number: o.number, id: o.id, at: o.createdAt });
+  soStamp(o, `Created from estimate ${e.number} · draft · ${chosen.length} line${chosen.length === 1 ? '' : 's'}`);
   return resolve(soRefs(o));
 }
 
@@ -4913,6 +4937,8 @@ export const inspectionTotal = (f: InspectionForm): number => {
   const br = f.bracelet.reduce((t, l) => t + (l.mode === 'qty_price' ? (l.qty || 0) * (l.price || 0) : l.mode === 'hours_rate' ? (l.hours || 0) * (l.rate || 0) : 0), 0);
   return Math.round((comp + br + (f.overall.price || 0)) * 100) / 100;
 };
+const formForJob = (jobId: string) => { const f = insp.forms.filter((x) => x.jobId === jobId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; return f ? { id: f.id, status: f.status, token: f.token, total: inspectionTotal(f) } : undefined; };
+const intakeDraftForms = () => insp.forms.filter((f) => f.status === 'draft' && !f.jobId).length;
 export async function listInspectionForms(): Promise<InspectionForm[]> { return resolve(insp.forms.map((f) => ({ ...f, total: inspectionTotal(f) })).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); }
 export async function getInspectionForm(id: string): Promise<InspectionForm | null> { const f = insp.forms.find((x) => x.id === id); return resolve(f ? { ...f, total: inspectionTotal(f) } : null); }
 export async function getInspectionFormByToken(token: string): Promise<(InspectionForm & { notesText: (c: InspComponentEntry) => string[] }) | null> { const f = insp.forms.find((x) => x.token === token && x.status === 'saved'); return resolve(f ? { ...f, total: inspectionTotal(f), notesText: (c) => c.notes.map((n) => insp.notes[c.component][n]).filter(Boolean) } : null); }
@@ -4928,7 +4954,7 @@ export async function saveInspectionForm(form: InspectionForm, commit: boolean):
   const i = insp.forms.findIndex((x) => x.id === form.id); if (i < 0) throw new Error('Form not found'); const a = actor();
   if (commit && !form.customer.name.trim()) throw new Error('Customer is required'); if (commit && form.components.every((c) => !c.condition)) throw new Error('Grade at least one component');
   const next: InspectionForm = { ...form, total: inspectionTotal(form), status: commit ? 'saved' : form.status, savedAt: commit ? new Date().toISOString() : form.savedAt, savedBy: commit ? a.by : form.savedBy, station: commit ? a.station : form.station };
-  insp.forms[i] = next; if (commit) { appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inspection form saved · ${next.estimateNumber || next.id} · ${fmtMoney(next.total)} · report ${next.token}` }); const j = next.jobId ? store.jobs.find((x) => x.id === next.jobId) : undefined; if (j) jobStamp(j, `Inspection form saved → client report ${next.token} · ${fmtMoney(next.total)}`); }
+  insp.forms[i] = next; if (commit) { appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inspection form saved · ${next.estimateNumber || next.id} · ${fmtMoney(next.total)} · report ${next.token}` }); const j = next.jobId ? store.jobs.find((x) => x.id === next.jobId) : undefined; if (j) { jobStamp(j, `Inspection form saved → client report ${next.token} · ${fmtMoney(next.total)}`); if (j.status === 'intake' || j.status === 'in_review') { j.timeline.push({ id: newId('tl'), from: j.status, to: 'awaiting_customer_approval', action: 'request_approval', at: new Date().toISOString(), by: a.by, station: a.station } as Job['timeline'][number]); j.status = 'awaiting_customer_approval'; jobStamp(j, 'Inspection submitted → awaiting client approval (step 7)'); } } }
   return resolve({ ...next });
 }
 export async function addInspectionPhoto(id: string, p: { source: 'ipevo' | 'microscope'; dataUrl: string }): Promise<InspectionForm> { const f = insp.forms.find((x) => x.id === id); if (!f) throw new Error('Form not found'); f.photos.push({ id: newId('ip'), source: p.source, dataUrl: p.dataUrl, at: new Date().toISOString() }); return resolve({ ...f }); }
@@ -4940,3 +4966,4 @@ export const applySheetSuggestion = (f: InspectionForm, s: SheetSuggestion, acce
   return { ...f, components, bracelet, overall: accepted.has('additional') && s.additionalNotes ? { ...f.overall, notes: [f.overall.notes, s.additionalNotes].filter(Boolean).join('\n') } : f.overall, sheetScan: { at: new Date().toISOString(), by: actor().by, confidence: s.confidence } };
 };
 void AUTHENTICITY; void BRACELET_LINES; void INSPECTION_COMPONENTS;
+export const shortNameOf = (userId: string) => fx.users.find((u) => u.id === userId)?.shortName ?? userId;

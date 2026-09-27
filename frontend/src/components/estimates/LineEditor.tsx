@@ -20,6 +20,7 @@ interface Props {
   readOnly?: boolean;
   blankTaxableDefault: boolean; // create: false, detail: true (per pack)
   minBlank?: number; // detail keeps ≥2 blank rows
+  selection?: { selected: Set<string>; onToggle: (id: string) => void; onCloseOut?: (id: string) => void }; // partial convert: checkbox per line (read-only mode)
 }
 
 const CatalogPicker = ({ onPick }: { onPick: (s: CatalogService) => void }) => {
@@ -83,7 +84,7 @@ const CatalogPicker = ({ onPick }: { onPick: (s: CatalogService) => void }) => {
   );
 };
 
-export const LineEditor = ({ lines, onChange, readOnly, blankTaxableDefault, minBlank = 0 }: Props) => {
+export const LineEditor = ({ lines, onChange, readOnly, blankTaxableDefault, minBlank = 0, selection }: Props) => {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   const padded = useMemo(() => {
@@ -142,6 +143,7 @@ export const LineEditor = ({ lines, onChange, readOnly, blankTaxableDefault, min
             <th className="w-28 py-1.5 pr-2 text-right">Amount</th>
             <th className="w-12 py-1.5 text-center" title="Taxable (tax is never applied — provisional)">Tax</th>
             {!readOnly && <th className="w-20" />}
+            {readOnly && selection && <th className="w-36 py-1.5 text-right" title="Checked lines convert; unchecked stay open on the estimate">Convert</th>}
           </tr>
         </thead>
         <tbody>
@@ -191,6 +193,7 @@ export const LineEditor = ({ lines, onChange, readOnly, blankTaxableDefault, min
                 )}
               </td>
               <td className="py-1 text-center"><input type="checkbox" data-testid={`line-taxable-${i}`} checked={l.taxable} disabled={readOnly} onChange={(e) => set(i, { taxable: e.target.checked })} className="accent-ink" /></td>
+              {readOnly && selection && <td className="py-1 text-right text-[11px]">{l.closedOut ? <span data-testid={`line-closed-${i}`} className="rounded bg-canvas px-1.5 py-0.5 text-ink-500" title={l.closedOut.reason}>closed out · {l.closedOut.by}</span> : l.conversions?.length ? <span data-testid={`line-converted-${i}`} className="inline-flex flex-wrap justify-end gap-1">{l.conversions.map((c) => <span key={c.id} className="rounded bg-moss-50 px-1.5 py-0.5 font-mono text-moss-700" title={`${c.kind.replace('_', ' ')} · ${c.by}`}>→ {c.number}</span>)}</span> : (l.description.trim() || l.unitPrice) ? <span className="inline-flex items-center gap-2"><span data-testid={`line-open-${i}`} className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">open</span><input type="checkbox" data-testid={`line-select-${i}`} checked={selection.selected.has(l.id)} onChange={() => selection.onToggle(l.id)} className="h-4 w-4 accent-ink" />{selection.onCloseOut && <button data-testid={`line-closeout-${i}`} onClick={() => selection.onCloseOut!(l.id)} className="text-ink-400 hover:text-ink" title="Close out without converting">×</button>}</span> : null}</td>}
               {!readOnly && (
                 <td className="py-1 text-right">
                   <span className="inline-flex items-center gap-0.5 text-ink-400">
