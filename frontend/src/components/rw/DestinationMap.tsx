@@ -1,0 +1,45 @@
+import { Lock, UserPlus } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { NODES, SHARED_NODES, type MapNode } from '@/components/rw/StationMap';
+
+// Destination-only map: same station structure as the Shop Floor board, but NO job badges / counts — just clickable generic nodes.
+const ROW: Record<MapNode['row'], number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4 };
+const TRACKS = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band']];
+const RAMPS = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }, { from: 'assign_band', leg: ['band_safe_in', 'refinish', 'band_safe_out'], to: 'band_qc' }];
+const pt = (r: DOMRect, h: DOMRect, side: 'l' | 'r' | 'b') => ({ x: side === 'l' ? r.left - h.left : side === 'r' ? r.right - h.left : r.left - h.left + r.width / 2, y: side === 'b' ? r.bottom - h.top : r.top - h.top + r.height / 2 });
+
+const Node = ({ n, selected, onSelect }: { n: MapNode; selected: boolean; onSelect: (n: MapNode) => void }) => (
+  <button type="button" data-node={n.id} data-testid={`dest-node-${n.id}`} data-lock={!!n.lock} aria-pressed={selected} onClick={() => onSelect(n)} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW[n.row] }}
+    className={`relative z-10 flex min-h-[72px] flex-col items-start rounded-md border p-2 text-left transition-colors ${selected ? 'border-amber-400 bg-amber-400/15 ring-2 ring-amber-400' : n.lock ? 'border-white/25 bg-black/50 hover:border-amber-300/60' : 'border-white/15 bg-[#0b0e13] hover:border-amber-300/60'}`}>
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-200">{n.lock ? <Lock size={11} className="text-amber-300" /> : n.assign ? <UserPlus size={11} className="text-slate-400" /> : null}{n.label}</span>
+    {n.sub && <span className="mt-0.5 text-[9px] leading-tight text-slate-500">{n.sub}</span>}
+    {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
+  </button>
+);
+
+export const DestinationMap = ({ selectedId, onSelect }: { selectedId?: string; onSelect: (n: MapNode) => void }) => {
+  const host = useRef<HTMLDivElement>(null); const [paths, setPaths] = useState<{ d: string; ramp: boolean }[]>([]); const [size, setSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = host.current; if (!el) return;
+    const draw = () => {
+      const hb = el.getBoundingClientRect(); const rect = (id: string) => el.querySelector<HTMLElement>(`[data-node="${id}"]`)?.getBoundingClientRect(); const out: typeof paths = [];
+      TRACKS.forEach((line) => line.forEach((id, i) => { const a = rect(id); const b = rect(line[i + 1]); if (!a || !b) return; const p = pt(a, hb, 'r'); const q = pt(b, hb, 'l'); out.push({ ramp: false, d: `M${p.x},${p.y} L${q.x},${q.y}` }); }));
+      RAMPS.forEach((r) => { const f = rect(r.from); const t = rect(r.to); const legs = r.leg.map(rect); if (!f || !t || legs.some((x) => !x)) return; const p = pt(f, hb, 'b'); const s0 = pt(legs[0]!, hb, 'l'); out.push({ ramp: true, d: `M${p.x},${p.y} C${p.x},${s0.y} ${p.x + 10},${s0.y} ${s0.x},${s0.y}` }); legs.forEach((lg, i) => { const nx = legs[i + 1]; if (!lg || !nx) return; const a = pt(lg, hb, 'r'); const b = pt(nx, hb, 'l'); out.push({ ramp: true, d: `M${a.x},${a.y} L${b.x},${b.y}` }); }); const e = pt(legs[legs.length - 1]!, hb, 'r'); const q = pt(t, hb, 'b'); out.push({ ramp: true, d: `M${e.x},${e.y} C${q.x - 10},${e.y} ${q.x},${e.y} ${q.x},${q.y}` }); });
+      const fa = rect('final'); ['safe_head', 'safe_band'].forEach((id) => { const a = rect(id); if (!a || !fa) return; const p = pt(a, hb, 'r'); const q = pt(fa, hb, 'l'); out.push({ ramp: false, d: `M${p.x},${p.y} C${p.x + 30},${p.y} ${q.x - 30},${q.y} ${q.x},${q.y}` }); });
+      setPaths(out); setSize({ w: el.scrollWidth, h: el.scrollHeight });
+    };
+    draw(); const ro = new ResizeObserver(draw); ro.observe(el); return () => ro.disconnect();
+  }, []);
+  return <div data-testid="destination-map" ref={host} className="relative rounded-md border border-white/10 bg-[#141920] p-3">
+    <svg className="pointer-events-none absolute inset-0 z-0" width={size.w} height={size.h}>{paths.map((p, i) => <path key={i} d={p.d} fill="none" stroke={p.ramp ? '#f59e0b' : '#64748b'} strokeWidth={p.ramp ? 2 : 1.5} strokeDasharray={p.ramp ? undefined : '5 5'} opacity={0.8} />)}</svg>
+    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(4, auto)' }}>
+      <div style={{ gridColumn: 1, gridRow: 1 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-blue-300">WAT</div>
+      <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
+      <div style={{ gridColumn: 1, gridRow: 3 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-green-300">BRA</div>
+      <div style={{ gridColumn: 1, gridRow: 4 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
+      {NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} />)}
+      <div style={{ gridColumn: 13, gridRow: '1 / span 4' }} className="grid grid-rows-3 gap-2">{SHARED_NODES.map((n) => <Node key={n.id} n={n} selected={selectedId === n.id} onSelect={onSelect} />)}</div>
+    </div>
+    <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-dashed border-slate-400" /> track</span><span className="inline-flex items-center gap-1"><span className="inline-block h-0 w-6 border-t-2 border-amber-400" /> manager-gated polish off-ramp</span><span className="inline-flex items-center gap-1"><Lock size={10} className="text-amber-300" /> = a manager's safe</span></div>
+  </div>;
+};

@@ -13,6 +13,7 @@ import { CornerLookup } from '@/components/layout/CornerLookup';
 export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTier[]; end?: boolean }[] = [
   { key: 'bench', label: 'Bench', path: '/rw', tiers: ['manager', 'concierge'], end: true },
   { key: 'floor', label: 'Shop Floor', path: '/rw/floor', tiers: ['manager', 'concierge'] },
+  { key: 'assign', label: 'Assign / Move', path: '/rw/assign', tiers: ['manager', 'concierge'] },
   { key: 'queue', label: 'Work Queue', path: '/rw/queue', tiers: ['manager', 'concierge'] },
   { key: 'bulk', label: 'Bulk Assign', path: '/rw/bulk', tiers: ['manager'] },
   { key: 'jobs', label: 'Jobs', path: '/rw/jobs', tiers: ['manager', 'concierge'] },

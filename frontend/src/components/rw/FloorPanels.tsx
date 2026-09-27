@@ -12,7 +12,7 @@ const stationLabel = (k?: RwStationKey) => (k ? api.RW_STATIONS.find((s) => s.ke
 const GATE_DEST = new Set<RwStationKey>(['polish_room', 'movement_service', 'refinish', 'band_qc']);
 
 // Bulk assign — destination = a card clicked on the map; scan many; review; Commit once. Gate destinations obey the manager-gate rules per item.
-export const BulkPanel = ({ node, target, onClear, onCommitted }: { node: MapNode | null; target?: RwStationKey; onClear: () => void; onCommitted: (m: string) => void }) => {
+export const BulkPanel = ({ node, target, onClear, onCommitted, showHandout = true }: { node: MapNode | null; target?: RwStationKey; onClear: () => void; onCommitted: (m: string) => void; showHandout?: boolean }) => {
   const [rows, setRows] = useState<BulkRow[]>([]); const [results, setResults] = useState<BulkResult[] | null>(null); const [handTo, setHandTo] = useState(''); const [busy, setBusy] = useState(false); const [mode, setMode] = useState<'map' | 'handout'>('map');
   useEffect(() => { setRows([]); setResults(null); }, [node?.id]);
   if (mode === 'handout') return <div data-testid="bulk-handout" className="space-y-2"><div className="flex items-center justify-between text-xs"><span className="text-slate-400">Narrow mode: Morning handout — distribute heads to several watchmakers by scanning TECH-codes (auto-commits per label).</span><button data-testid="bulk-mode-map" onClick={() => setMode('map')} className="rounded-full border border-white/15 px-3 py-1 text-slate-200 hover:bg-white/10">← Back to Bulk assign</button></div><div className="rounded-md border border-white/10 p-2"><RwBulkAssignPage /></div></div>;
@@ -23,7 +23,7 @@ export const BulkPanel = ({ node, target, onClear, onCommitted }: { node: MapNod
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
       {node ? <div data-testid="bulk-destination" className="inline-flex items-center gap-2 rounded-md border border-amber-400/60 bg-amber-400/10 px-3 py-1.5 text-amber-100"><MousePointerClick size={13} /> Assigning to <b>{node.label}</b>{node.owner && <span className="text-amber-200/70">· {node.owner}'s safe</span>}{stationLabel(target) !== node.label && <span className="font-mono text-amber-200/70">{stationLabel(target)}</span>}{gate && <span className="rounded bg-amber-400/20 px-1.5 text-[10px] font-semibold uppercase">manager gate rules</span>}<button data-testid="bulk-clear" onClick={onClear} className="ml-1 text-amber-200/70 hover:text-white"><X size={12} /></button></div>
         : <div data-testid="bulk-pick-hint" className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-1.5 text-slate-300"><MousePointerClick size={13} className="text-amber-300" /> Click a station or safe card on the map to choose the destination, then scan labels.</div>}
-      <button data-testid="bulk-mode-handout" onClick={() => setMode('handout')} className="text-slate-400 underline-offset-2 hover:text-white hover:underline">Morning handout (TECH-code mode) →</button>
+      {showHandout && <button data-testid="bulk-mode-handout" onClick={() => setMode('handout')} className="text-slate-400 underline-offset-2 hover:text-white hover:underline">Morning handout (TECH-code mode) →</button>}
     </div>
     {node && <>
       <div className="grid gap-3 md:grid-cols-[1fr_260px]">

@@ -25,8 +25,7 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare,
-} from 'lucide-react';
+  MessagesSquare, MousePointerClick } from 'lucide-react';
 import type { AccessTier } from '@/api/client';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw';
@@ -67,6 +66,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'bench', label: 'Bench', path: '/bench', icon: Hammer, tiers: ALL, group: 'rw', built: true, blurb: 'My day — assigned jobs, next actions, holds, pull-next.' },
   { key: 'supervisor', label: 'Supervisor', path: '/supervisor', icon: ClipboardCheck, tiers: MGR, group: 'rw', built: true, blurb: 'Assign watchmakers, approve parts, park holds, QC queue.' },
   { key: 'floor', label: 'Shop Floor', path: '/floor', icon: Map, tiers: MGR, group: 'rw', built: true, blurb: 'Station map — WATCH / BRACELET tracks, manager safes, gate scans, Bulk assign, Component lookup.' },
+  { key: 'assign-move', label: 'Assign / Move', path: '/assign', icon: MousePointerClick, tiers: MGR, built: true, blurb: 'Click a destination on the map, scan labels, commit — moves jobs without the detail board.' },
   { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, group: 'clients', built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
   { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, built: true, blurb: 'Purchase orders, vendors and receiving.' },

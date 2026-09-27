@@ -16,6 +16,7 @@ import RwPartsPage from '@/pages/rw/RwPartsPage';
 import RwQcPage from '@/pages/rw/RwQcPage';
 import RwEvidencePage from '@/pages/rw/RwEvidencePage';
 import RwFloorPage from '@/pages/rw/RwFloorPage';
+import AssignMovePage from '@/pages/rw/AssignMovePage';
 import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
 import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
 import RwWmPage from '@/pages/rw/RwWmPage';
@@ -128,6 +129,7 @@ export default function App() {
             <Route path="qc" element={<RwManagerOnly label="QC"><RwQcPage /></RwManagerOnly>} />
             <Route path="supervisor" element={<RwManagerOnly label="Supervisor board"><SupervisorPage /></RwManagerOnly>} />
             <Route path="floor" element={<RwFloorPage />} />
+            <Route path="assign" element={<div className="mx-6 my-5"><AssignMovePage /></div>} />
             <Route path="queue" element={<RwWorkQueuePage />} />
             <Route path="bulk" element={<RwManagerOnly label="Bulk Assign"><RwBulkAssignPage /></RwManagerOnly>} />
             <Route path="wm" element={<RwWmPage />} />
@@ -209,8 +211,9 @@ export default function App() {
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />
               <Route path="/supervisor" element={<SupervisorPage />} />
-              <Route path="/floor" element={<div data-testid="desktop-shop-floor" className="-mx-6 -my-5 min-h-full bg-[#161b22] px-6 py-5 text-slate-100"><RwFloorPage /></div>} />
+              <Route path="/floor" element={<div data-testid="desktop-shop-floor" className="-mx-6 -my-5 min-h-[calc(100%+2.5rem)] bg-[#161b22] px-6 py-5 text-slate-100"><RwFloorPage /></div>} />
               <Route path="/floor/lanes" element={<FloorMapPage />} />
+              <Route path="/assign" element={<AssignMovePage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
