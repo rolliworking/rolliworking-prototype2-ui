@@ -109,3 +109,19 @@ body {
 .rw-dark .text-violet-700 { color: #c4b5fd; }
 .rw-dark .text-teal-800 { color: #5eead4; }
 .rw-dark .text-indigo-700 { color: #a5b4fc; }
+
+/* Printable reports — US Letter, no app chrome, table paginates across pages */
+@media print {
+  @page { size: letter; margin: 0.6in 0.5in; }
+  body { background: #fff !important; }
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; background: #fff !important; color: #000 !important; border: 0 !important; border-radius: 0 !important; }
+  .print-area table { width: 100%; border-collapse: collapse; font-size: 9.5pt; page-break-inside: auto; }
+  .print-area thead { display: table-header-group; }
+  .print-area tr { page-break-inside: avoid; }
+  .print-area th, .print-area td { border-bottom: 1px solid #bbb; padding: 4px 6px; color: #000 !important; }
+  .print-header { padding: 0 6px 10px; border-bottom: 2px solid #000; margin-bottom: 8px; }
+  .print-header h1 { font-size: 16pt; font-weight: 700; margin: 0 0 2px; }
+  .print-header p { font-size: 9.5pt; margin: 0; color: #333 !important; }
+}

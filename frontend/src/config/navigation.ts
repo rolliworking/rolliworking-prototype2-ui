@@ -37,6 +37,7 @@ export interface NavItem {
   icon: LucideIcon;
   tiers: AccessTier[];
   pinned?: boolean;
+  group?: 'rw';
   built?: boolean;
   blurb: string;
 }
@@ -54,9 +55,10 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, built: true, blurb: 'Quotes awaiting approval and approved work.' },
   { key: 'jobs', label: 'Jobs', path: '/jobs', icon: Wrench, tiers: MGR, built: true, blurb: 'Bench work in progress across departments.' },
-  { key: 'bench', label: 'Bench', path: '/bench', icon: Hammer, tiers: ALL, built: true, blurb: 'My day — assigned jobs, next actions, holds, pull-next.' },
-  { key: 'supervisor', label: 'Supervisor', path: '/supervisor', icon: ClipboardCheck, tiers: MGR, built: true, blurb: 'Assign watchmakers, approve parts, park holds, QC queue.' },
-  { key: 'floor', label: 'Floor Map', path: '/floor', icon: Map, tiers: ALL, built: true, blurb: 'Where every job sits on the floor, left to right.' },
+  { key: 'all-jobs', label: 'All Jobs', path: '/jobs/all', icon: ListChecks, tiers: MGR, built: true, blurb: 'Every job across the shop with combinable quick filters.' },
+  { key: 'bench', label: 'Bench', path: '/bench', icon: Hammer, tiers: ALL, group: 'rw', built: true, blurb: 'My day — assigned jobs, next actions, holds, pull-next.' },
+  { key: 'supervisor', label: 'Supervisor', path: '/supervisor', icon: ClipboardCheck, tiers: MGR, group: 'rw', built: true, blurb: 'Assign watchmakers, approve parts, park holds, QC queue.' },
+  { key: 'floor', label: 'Floor Map', path: '/floor', icon: Map, tiers: ALL, group: 'rw', built: true, blurb: 'Where every job sits on the floor, left to right.' },
   { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
   { key: 'inspection-photos', label: 'Inspection Photos', path: '/inspection-photos', icon: Camera, tiers: MGR, blurb: 'Before / after photo sets per watch.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },

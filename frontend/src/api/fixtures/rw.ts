@@ -23,16 +23,16 @@ export const RW_STATIONS: RwStation[] = [
 export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: RwStationKey; status: PartStatus; tech?: string }>>> = {
   'j-01': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'MM' } },
   'j-04': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'MM' } },
-  'j-24': { head: { station: 'wm_bench_3', status: 'in_progress', tech: 'Rosa' } },
+  'j-24': { head: { station: 'wm_bench_3', status: 'in_progress', tech: 'Leo' } },
   'j-03': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'MM' }, case: { station: 'safe_await_head', status: 'waiting', tech: 'Walter' } },
   'j-06': { head: { station: 'into_safe_head', status: 'waiting', tech: 'MM' }, case: { station: 'refinish', status: 'in_progress', tech: 'Walter' } },
   'j-17': { case: { station: 'polish', status: 'in_progress', tech: 'Walter' } },
-  'j-30': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'Rosa' }, case: { station: 'refinish', status: 'in_progress', tech: 'Walter' }, band: { station: 'band_pre_queue', status: 'not_started' } },
+  'j-30': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'Leo' }, case: { station: 'refinish', status: 'in_progress', tech: 'Walter' }, band: { station: 'band_pre_queue', status: 'not_started' } },
   'j-31': { head: { station: 'safe_await_band', status: 'waiting', tech: 'MM' }, band: { station: 'polish', status: 'in_progress', tech: 'Walter' } },
-  'j-32': { head: { station: 'safe_await_band', status: 'waiting', tech: 'Rosa' }, case: { station: 'safe_await_band', status: 'waiting', tech: 'Walter' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Walter' } },
+  'j-32': { head: { station: 'safe_await_band', status: 'waiting', tech: 'Leo' }, case: { station: 'safe_await_band', status: 'waiting', tech: 'Walter' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Walter' } },
   'j-05': { band: { station: 'final_assembly', status: 'reunited', tech: 'Walter' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
-  'j-r3': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'MM' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Rosa' } },
-  'j-t1': { band: { station: 'refinish', status: 'in_progress', tech: 'Rosa' } },
+  'j-r3': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'MM' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Leo' } },
+  'j-t1': { band: { station: 'refinish', status: 'in_progress', tech: 'Leo' } },
   'j-t2': { band: { station: 'final_assembly', status: 'reunited', tech: 'Walter' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
   'j-16': { head: { station: 'final_assembly', status: 'reunited', tech: 'MM' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
 };
@@ -69,7 +69,7 @@ export const jobPhotos: (JobPhotoView & { jobId: string })[] = [
   ph('ph-06', 'j-06', 'Intake — full watch', 'intake', 'rw-dj-1', 7, 'Vienna'),
   ph('ph-07', 'j-06', 'Bracelet stretch', 'inspection', 'rw-dj-2', 6, 'Walter'),
   ph('ph-08', 'j-30', 'Intake — full watch', 'intake', 'rw-exp-1', 4, 'Vienna'),
-  ph('ph-09', 'j-30', 'Crystal scratch', 'inspection', 'rw-exp-2', 3, 'Rosa'),
+  ph('ph-09', 'j-30', 'Crystal scratch', 'inspection', 'rw-exp-2', 3, 'Leo'),
   ph('ph-10', 'j-31', 'Intake — full watch', 'intake', 'rw-dd-1', 5, 'Vienna'),
 ];
 
@@ -91,12 +91,13 @@ export const AUDIT_BINS: AuditLocation[] = [
   { key: 'orphan_bin', label: 'Orphan bin', group: 'bin' },
   { key: 'awaiting_payment_bin', label: 'Awaiting-payment bin', group: 'bin' },
   { key: 'pre_intake_bin', label: 'Concierge / inspection bin', group: 'bin' },
+  { key: 'stuck_parts_bin', label: 'Stuck bin · waiting on parts', group: 'bin' },
 ];
 export const AUDIT_LOCATIONS: AuditLocation[] = [...RW_STATIONS.filter((s) => s.key !== 'pre_approval').map((s): AuditLocation => ({ key: s.key, label: s.label, group: 'station', lane: s.lane })), ...AUDIT_BINS];
 export const AUDIT_STALE_DAYS_DEFAULT = 7;
 export const auditSeeds: AuditSession[] = [
   { id: 'aud-01', location: 'wm_bench_2', locationLabel: 'WM Bench 2', by: 'MM', station: 'Watchmaker Room', startedAt: daysAgo(3, 17), finishedAt: daysAgo(3, 17.2), expectedCount: 2, matched: 2, missing: [], unexpected: [] },
   { id: 'aud-02', location: 'safe_await_band', locationLabel: 'Safe (await band)', by: 'MM', station: 'Watchmaker Room', startedAt: daysAgo(1, 18), finishedAt: daysAgo(1, 18.3), expectedCount: 3, matched: 2, pinId: 'pin-audit-01',
-    missing: [{ id: 'j-32-head', jobId: 'j-32', jobNumber: 'E02033', key: 'head', partLabel: 'Watch head', watchLabel: 'Rolex Lady-Datejust', reference: '279174', serial: 'N4K8P2W7', clientId: 'c-18', clientName: 'Victoria Rosenthal', tier: 'mid', lastCustody: { by: 'Rosa', at: daysAgo(8, 9), where: 'Safe (await band)' } }],
+    missing: [{ id: 'j-32-head', jobId: 'j-32', jobNumber: 'E02033', key: 'head', partLabel: 'Watch head', watchLabel: 'Rolex Lady-Datejust', reference: '279174', serial: 'N4K8P2W7', clientId: 'c-18', clientName: 'Victoria Rosenthal', tier: 'mid', lastCustody: { by: 'Leo', at: daysAgo(8, 9), where: 'Safe (await band)' } }],
     unexpected: [] },
 ];

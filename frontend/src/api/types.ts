@@ -1096,7 +1096,8 @@ export interface BenchBoard { user: User; inProgress: BenchJobRow[]; attention: 
 export interface BenchSettings { benchName: string; idleMinutes: number; simulateOffline: boolean }
 
 // ---- Stage / bin audit (Station Scanner + Supervisor Pad) — append-only sessions ----------------------------------------
-export type AuditBinKey = 'orphan_bin' | 'awaiting_payment_bin' | 'pre_intake_bin';
+export type AuditBinKey = 'orphan_bin' | 'awaiting_payment_bin' | 'pre_intake_bin' | 'stuck_parts_bin';
+export type AuditScope = 'full' | 'wm' | 'band';
 export type AuditLocationKey = RwStationKey | AuditBinKey;
 export interface AuditLocation { key: AuditLocationKey; label: string; group: 'station' | 'bin'; lane?: RwLane }
 export type ValueTier = 'high' | 'mid' | 'standard';

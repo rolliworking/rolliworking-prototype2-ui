@@ -90,8 +90,8 @@ export const partsRequests: PartsRequest[] = [
   ...([
     ['pr-h01', 'PR-0030', 'j-01', 'received', 'pt-11', 1, 'MM', 21, 'pad'], ['pr-h02', 'PR-0031', 'j-03', 'approved', 'pt-17', 1, 'Walter', 19, 'wm'], ['pr-h03', 'PR-0032', 'j-04', 'declined', 'pt-08', 1, 'MM', 18, 'pad'],
     ['pr-h04', 'PR-0033', 'j-06', 'received', 'pt-05', 1, 'MM', 17, 'pad'], ['pr-h05', 'PR-0034', 'j-06', 'approved', 'pt-02', 1, 'MM', 16, 'pad'], ['pr-h06', 'PR-0035', 'j-16', 'on_order', 'pt-22', 1, 'MM', 14, 'wm'],
-    ['pr-h07', 'PR-0036', 'j-24', 'received', 'pt-31', 1, 'Rosa', 12, 'wm'], ['pr-h08', 'PR-0037', 'j-30', 'awaiting_client', 'pt-26', 1, 'MM', 11, 'pad'], ['pr-h09', 'PR-0038', 'j-31', 'approved', 'pt-16', 2, 'Walter', 9, 'wm'],
-    ['pr-h10', 'PR-0039', 'j-32', 'declined', 'pt-14', 1, 'Rosa', 8, 'pad'], ['pr-h11', 'PR-0040', 'j-05', 'received', 'pt-13', 1, 'Walter', 7, 'wm'], ['pr-h12', 'PR-0049', 'j-01', 'pending_review', 'pt-40', 1, 'MM', 2, 'pad'],
+    ['pr-h07', 'PR-0036', 'j-24', 'received', 'pt-31', 1, 'Leo', 12, 'wm'], ['pr-h08', 'PR-0037', 'j-30', 'awaiting_client', 'pt-26', 1, 'MM', 11, 'pad'], ['pr-h09', 'PR-0038', 'j-31', 'approved', 'pt-16', 2, 'Walter', 9, 'wm'],
+    ['pr-h10', 'PR-0039', 'j-32', 'declined', 'pt-14', 1, 'Leo', 8, 'pad'], ['pr-h11', 'PR-0040', 'j-05', 'received', 'pt-13', 1, 'Walter', 7, 'wm'], ['pr-h12', 'PR-0049', 'j-01', 'pending_review', 'pt-40', 1, 'MM', 2, 'pad'],
   ] as [string, string, string, PartsRequest['status'], string, number, string, number, PartsRequest['source']][]).map(([id, number, jobId, status, partId, qty, by, d, source]): PartsRequest => {
     const p = parts.find((x) => x.id === partId)!; const hist = [{ at: daysAgo(d, 9), by, station: 'Watchmaker Room', action: `requested · ${p.name} ×${qty}` }];
     if (status !== 'pending_review') hist.push({ at: daysAgo(d, 11), by: 'MH', station: 'Front Desk 1', action: status === 'declined' ? 'declined at review' : 'priced + sent for client approval' });
@@ -103,16 +103,16 @@ export const partsRequests: PartsRequest[] = [
   { id: 'pr-20', number: 'PR-0050', jobId: 'j-06', status: 'pending_review', qty: 1, note: 'crystal ring for 16610', searchTerms: ['crystal ring for 16610'], requestedBy: 'MM', requestedAt: daysAgo(0, 7), station: 'Watchmaker Room', source: 'pad', reference: '16610', caliber: '3135',
     items: [{ description: 'crystal ring for 16610', qty: 1, generic: true }, { partId: 'pt-11', partNumber: '29-210-64', description: 'Case back gasket, 40mm Oyster', qty: 1, price: 18 }], chat: [] },
   // E18 — approvals queue (pending) + approved picks
-  { id: 'pr-14', number: 'PR-0054', jobId: 'j-30', status: 'pending', partId: 'pt-26', qty: 1, note: 'Insert chipped at 12', searchTerms: ['black/blue gmt insert'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', source: 'wm', chat: [] },
+  { id: 'pr-14', number: 'PR-0054', jobId: 'j-30', status: 'pending', partId: 'pt-26', qty: 1, note: 'Insert chipped at 12', searchTerms: ['black/blue gmt insert'], requestedBy: 'Leo', requestedAt: daysAgo(0, 8), station: 'Bench 3', source: 'wm', chat: [] },
   { id: 'pr-05', number: 'PR-0045', jobId: 'j-06', status: 'pending', partId: 'pt-27', qty: 1, searchTerms: ['pepsi insert'], requestedBy: 'MM', requestedAt: daysAgo(0, 8), station: 'Bench 1', source: 'wm', chat: [] },
   { id: 'pr-06', number: 'PR-0046', jobId: 'j-31', status: 'pending', partId: 'pt-15', qty: 4, searchTerms: ['bracelet screw'], requestedBy: 'Walter', requestedAt: daysAgo(0, 7), station: 'Refinishing', source: 'wm', chat: [] },
-  { id: 'pr-07', number: 'PR-0047', jobId: 'j-24', status: 'pending', partId: 'pt-31', qty: 1, note: 'Balance staff bent', searchTerms: ['balance complete'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 7), station: 'Bench 3', source: 'wm', chat: [] },
+  { id: 'pr-07', number: 'PR-0047', jobId: 'j-24', status: 'pending', partId: 'pt-31', qty: 1, note: 'Balance staff bent', searchTerms: ['balance complete'], requestedBy: 'Leo', requestedAt: daysAgo(0, 7), station: 'Bench 3', source: 'wm', chat: [] },
   { id: 'pr-08', number: 'PR-0048', jobId: 'j-03', status: 'pending', partId: 'pt-12', qty: 1, searchTerms: ['crystal gasket'], requestedBy: 'MM', requestedAt: daysAgo(0, 6), station: 'Bench 1', source: 'wm', chat: [] },
   { id: 'pr-09', number: 'PR-0049', jobId: 'j-32', status: 'pending', qty: 1, items: [{ description: 'Caseback sticker set (free-typed)', qty: 1 }], searchTerms: ['caseback sticker'], requestedBy: 'Walter', requestedAt: daysAgo(0, 6), station: 'Refinishing', source: 'pad', chat: [] },
   { id: 'pr-10', number: 'PR-0055', jobId: 'j-01', status: 'approved', partId: 'pt-11', qty: 1, searchTerms: ['gasket'], requestedBy: 'MM', requestedAt: daysAgo(0, 7), station: 'Bench 1', decidedBy: 'MM', decidedAt: daysAgo(0, 8), source: 'wm', chat: [] },
   { id: 'pr-11', number: 'PR-0051', jobId: 'j-04', status: 'approved', partId: 'pt-17', qty: 1, searchTerms: ['bezel insert'], requestedBy: 'MM', requestedAt: daysAgo(0, 7), station: 'Bench 2', decidedBy: 'MM', decidedAt: daysAgo(0, 8), source: 'wm', chat: [] },
-  { id: 'pr-12', number: 'PR-0052', jobId: 'j-24', status: 'approved', partId: 'pt-06', qty: 1, searchTerms: ['barrel'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', decidedBy: 'MM', decidedAt: daysAgo(0, 9), source: 'wm', chat: [] },
-  { id: 'pr-13', number: 'PR-0053', jobId: 'j-30', status: 'approved', partId: 'pt-16', qty: 2, searchTerms: ['spring bar'], requestedBy: 'Rosa', requestedAt: daysAgo(0, 8), station: 'Bench 3', decidedBy: 'MM', decidedAt: daysAgo(0, 9), source: 'wm', chat: [] },
+  { id: 'pr-12', number: 'PR-0052', jobId: 'j-24', status: 'approved', partId: 'pt-06', qty: 1, searchTerms: ['barrel'], requestedBy: 'Leo', requestedAt: daysAgo(0, 8), station: 'Bench 3', decidedBy: 'MM', decidedAt: daysAgo(0, 9), source: 'wm', chat: [] },
+  { id: 'pr-13', number: 'PR-0053', jobId: 'j-30', status: 'approved', partId: 'pt-16', qty: 2, searchTerms: ['spring bar'], requestedBy: 'Leo', requestedAt: daysAgo(0, 8), station: 'Bench 3', decidedBy: 'MM', decidedAt: daysAgo(0, 9), source: 'wm', chat: [] },
 ];
 
 export const partsKnowledge: PartsKnowledgeEntry[] = [

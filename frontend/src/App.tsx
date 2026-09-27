@@ -24,6 +24,8 @@ import RwPadPage from '@/pages/rw/RwPadPage';
 import RwBenchPage from '@/pages/rw/RwBenchPage';
 import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RwHistoryPage from '@/pages/rw/RwHistoryPage';
+import RwReportsPage from '@/pages/rw/RwReportsPage';
+import AllJobsPage from '@/pages/jobs/AllJobsPage';
 import QboSetupPage from '@/pages/rs/QboSetupPage';
 import RgHomePage from '@/pages/rg/RgHomePage';
 import RgClockPage from '@/pages/rg/RgClockPage';
@@ -130,6 +132,7 @@ export default function App() {
             <Route path="pad" element={<RwPadPage room="wm" />} />
             <Route path="band" element={<RwPadPage room="band" />} />
             <Route path="history" element={<RwHistoryPage />} />
+            <Route path="reports" element={<RwReportsPage />} />
             <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
@@ -172,6 +175,7 @@ export default function App() {
               <Route path="/estimates/:id" element={<EstimateDetailPage />} />
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/jobs/new" element={<JobCreatePage />} />
+              <Route path="/jobs/all" element={<AllJobsPage />} />
               <Route path="/jobs/shop-time" element={<ShopTimePage />} />
               <Route path="/jobs/:id" element={<JobDetailPage />} />
               <Route path="/intake" element={<IntakeLayout />}>

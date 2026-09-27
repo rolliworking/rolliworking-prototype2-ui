@@ -78,7 +78,14 @@ async def main():
             await page.wait_for_timeout(1500)
         await shot(page, "04-wm-pad-parts-scan-to-narrow", None, parts_scan, note="Parts · scan-to-narrow, per-job allowance, Quick Add, returns")
         await shot(page, "05-wm-pad-parts-request-history", None, lambda: click(page, "[data-testid='pad-tab-review']"), note="Parts Request History (renamed from Review)")
-        await shot(page, "06-wm-pad-audit", None, lambda: click(page, "[data-testid='pad-tab-audit']"), note="Audit tab")
+        await shot(page, "06-wm-pad-audit-scoped", None, lambda: click(page, "[data-testid='pad-tab-audit']"), note="Audit · WM Supervisor scope (MM) — safes, benches, stuck bin, testing, MM Inspection, pre-queue, refinish/polish")
+        await shot(page, "06b-wm-pad-team-goals", None, lambda: click(page, "[data-testid='pad-tab-team']"), note="NEW · Team tab: per-staff goals, department goal = sum")
+        async def open_detail():
+            await click(page, "[data-testid='pad-tab-jobs']")
+            await click(page, "[data-testid='pad-open-j-30']")
+            await page.wait_for_timeout(1200)
+        await shot(page, "06c-wm-pad-job-detail-photos-report-emails", None, open_detail, note="NEW · job card detail: intake/inspection photos, inspection report, sent emails (parts approval)")
+        await page.keyboard.press("Escape"); await page.wait_for_timeout(400)
         await shot(page, "07-rw-supervisor-view", "/rw/supervisor")
         await shot(page, "08-wm-room-goals", "/rw/wm")
         await shot(page, "09-rw-work-queue", "/rw/queue")
@@ -90,6 +97,7 @@ async def main():
         await shot(page, "11-rw-client-job-history-lookup", "/rw/history", hist, note="NEW · client / job history lookup inside RW")
         await shot(page, "12-rw-picking", "/rw/picking")
         await shot(page, "13-rw-today", "/rw/today")
+        await shot(page, "13b-rw-reports-quick-overdue", "/rw/reports", lambda: click(page, "[data-testid='quick-overdue']"), note="NEW · RW Reports: quick reports, filters, results, Print (US Letter)")
         await shot(page, "14-rw-intercom-paging", "/rw/jobs", lambda: click(page, "[data-testid='intercom-btn']"), note="NEW · station intercom + storewide paging (mock)")
 
         # ---- Band / Polish Room Manager Pad (Joseph) ----
@@ -99,15 +107,16 @@ async def main():
         await shot(page, "16-band-pad-jobs", None, lambda: click(page, "[data-testid='pad-tab-jobs']"), note="Band room jobs (B / P / PM workflows only)")
         await shot(page, "17-band-pad-parts", None, lambda: click(page, "[data-testid='pad-tab-parts']"))
 
-        # ---- Rosa · read-only Requests on the pad ----
+        # ---- Chyna · read-only Requests on the pad ----
         await page.evaluate("localStorage.removeItem('rollisuite.prototype.currentUserId')")
-        await rw_sign_in(page, "u-rosa", "rosa123", "/rw/pad")
-        await shot(page, "18-rosa-pad-requests-readonly", "/rw/pad", note="Bench tier (Rosa) lands on read-only Parts Request History")
+        await rw_sign_in(page, "u-chyna", "chyna123", "/rw/pad")
+        await shot(page, "18-chyna-pad-requests-readonly", "/rw/pad", note="Concierge (Chyna) lands on read-only Parts Request History")
 
         # ---- RolliSuite (front desk) ----
         await page.evaluate("localStorage.removeItem('rollisuite.prototype.currentUserId')")
         await rs_sign_in(page)
-        await shot(page, "19-jobs-board-all-lanes", "/jobs?view=board", note="Jobs board · card density fix")
+        await shot(page, "19-jobs-board-all-lanes", "/jobs?view=board", note="Jobs board · card density fix · sidebar RW group")
+        await shot(page, "19b-all-jobs-filterable", "/jobs/all", lambda: click(page, "[data-testid='all-jobs-filter-past_due']"), note="NEW · All Jobs management view with combinable quick filters")
         await shot(page, "20-jobs-tab-queue", "/jobs?tab=queue", note="NEW · Queue tab")
         await shot(page, "21-jobs-tab-in-progress-by-tech", "/jobs?tab=progress", note="NEW · In progress grouped by tech with chip filters")
         await shot(page, "22-jobs-tab-finished", "/jobs?tab=finished", note="NEW · Finished tab")

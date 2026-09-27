@@ -24,6 +24,7 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
   { key: 'pad', label: 'Pad', path: '/rw/pad', tiers: ['manager', 'concierge'] },
   { key: 'band', label: 'Band Pad', path: '/rw/band', tiers: ['manager'] },
   { key: 'history', label: 'History', path: '/rw/history', tiers: ['manager', 'concierge'] },
+  { key: 'reports', label: 'Reports', path: '/rw/reports', tiers: ['manager'] },
   { key: 'bench-pad', label: 'Bench Pad', path: '/rw/bench', tiers: ['manager', 'concierge'] },
   { key: 'picking', label: 'Picking', path: '/rw/picking', tiers: ['manager', 'concierge'] },
   { key: 'evidence', label: 'Evidence', path: '/rw/evidence', tiers: ['manager', 'concierge'] },

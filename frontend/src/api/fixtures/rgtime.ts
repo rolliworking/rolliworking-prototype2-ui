@@ -29,8 +29,8 @@ for (let back = 14; back >= 1; back--) {
   push(back, ['u-vienna', 'door-main', 8, 40 + (jitter % 9), 17, 5 + jitter]);
   // MM: one punch that reached the server 40 minutes late (no signal at the door)
   push(back, ['u-mm', 'door-main', 8, 2 + (jitter % 6), 17, 30 + (jitter % 15)], back === 5 ? { inFlags: ['synced_late'], inRecordedAt: stamp(5, 8, 42 + (jitter % 6)) } : {});
-  // Rosa: one clock-in from 2.3 km away (flagged offsite, never rejected)
-  push(back, ['u-rosa', 'door-main', 8, 12 + (jitter % 7), 17, 0 + (jitter % 9)], back === 3 ? { inFlags: ['offsite'], inGeo: { lat: 40.7794, lng: -73.9632, distanceM: 2_340 } } : {});
+  // Leo: one clock-in from 2.3 km away (flagged offsite, never rejected)
+  push(back, ['u-leo', 'door-main', 8, 12 + (jitter % 7), 17, 0 + (jitter % 9)], back === 3 ? { inFlags: ['offsite'], inGeo: { lat: 40.7794, lng: -73.9632, distanceM: 2_340 } } : {});
   // Walter: forgot to clock out two days ago (missed clock-out → manager resolves)
   if (dow !== 6) push(back, ['u-walter', 'tag-rs-counter', 9, 55 + (jitter % 5), back === 2 ? null : 18, 0 + jitter]);
   // michael splits his week: RS Counter on Tue/Thu, Front Desk otherwise; lunch punch-out on Fridays

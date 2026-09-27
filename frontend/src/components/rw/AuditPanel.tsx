@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, CircleHelp, ClipboardCheck, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
-import type { AuditItem, AuditLive, AuditLocationKey, AuditLocationStatus, AuditSession, AuditUnexpected } from '@/api/client';
+import type { AuditItem, AuditLive, AuditLocationKey, AuditLocationStatus, AuditScope, AuditSession, AuditUnexpected } from '@/api/client';
 import { PartDot, ScanInput } from '@/components/rw/RwBits';
 import { fmtDate, fmtTime } from '@/lib/format';
 
@@ -47,9 +47,9 @@ const Results = ({ s, big }: { s: AuditSession; big?: boolean }) => <div data-te
 </div>;
 
 // Audit: pick a location → what the system believes is there → scan everything physically present → live ✓ / ? / ⚠ → Finish writes the session
-export const AuditPanel = ({ big, onFinished }: { big?: boolean; onFinished?: (s: AuditSession) => void }) => {
+export const AuditPanel = ({ big, onFinished, scope = 'full' }: { big?: boolean; onFinished?: (s: AuditSession) => void; scope?: AuditScope }) => {
   const [locs, setLocs] = useState<AuditLocationStatus[]>([]); const [live, setLive] = useState<AuditLive | null>(api.getAuditLive()); const [done, setDone] = useState<AuditSession | null>(null); const [recent, setRecent] = useState<AuditSession[]>([]); const [open, setOpen] = useState<AuditSession | null>(null);
-  const load = () => { void api.getAuditLocations().then(setLocs); void api.getAuditSessions().then(setRecent); };
+  const load = () => { void api.getAuditLocations(scope).then(setLocs); void api.getAuditSessions().then(setRecent); };
   useEffect(load, [done]);
   const start = async (k: AuditLocationKey) => { setDone(null); setLive(await api.startAudit(k)); };
   const finish = async () => { const s = await api.finishAudit(); setLive(null); setDone(s); onFinished?.(s); };
@@ -74,7 +74,8 @@ export const AuditPanel = ({ big, onFinished }: { big?: boolean; onFinished?: (s
       {live.scans.length > 0 && <ul data-testid="audit-scan-log" className="space-y-1 text-xs">{live.scans.slice(0, 6).map((s, i) => <li key={i} className={`flex items-center gap-2 ${s.result === 'matched' ? 'text-emerald-300' : s.result === 'unexpected' ? 'text-amber-300' : s.result === 'duplicate' ? 'text-slate-400' : 'text-rose-300'}`}><span className="font-mono text-slate-500">{fmtTime(s.at)}</span><span className="font-mono">{s.code}</span><span>· {s.label}</span></li>)}</ul>}
     </div>;
   }
-  return <div data-testid="audit-panel" className="space-y-4">
+  return <div data-testid="audit-panel" data-scope={scope} className="space-y-4">
+    {scope !== 'full' && <div data-testid="audit-scope-banner" className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">{scope === 'wm' ? 'Watchmaker Room scope' : 'Band / Polish Room scope'} · {locs.length} locations — your safes, benches, stuck bin, testing, inspection hand-off. MH sees the full shop grid.</div>}
     {done && <Results s={done} big={big} />}
     <div><div className="mb-2 flex items-center justify-between"><h2 className={`${big ? 'text-xl' : 'text-sm'} font-semibold text-white`}>Pick a location to audit</h2><span className="text-xs text-slate-500">amber = not audited in {api.getAuditStaleDays()} days</span></div><LocationPicker locs={locs} onPick={(k) => void start(k)} big={big} /></div>
     <section><div className="mb-1.5 text-[10px] uppercase tracking-wide text-slate-400">Recent audits</div>
@@ -82,7 +83,7 @@ export const AuditPanel = ({ big, onFinished }: { big?: boolean; onFinished?: (s
   </div>;
 };
 
-// Scan-to-complete toast: "Band COMPLETE — Rosa ✓ (undo)" with a 10-second undo that reverts everything the scan did
+// Scan-to-complete toast: "Band COMPLETE — Leo ✓ (undo)" with a 10-second undo that reverts everything the scan did
 export const CompleteToast = ({ done, onUndone }: { done: { label: string; by: string; token: string; transitioned: boolean } | null; onUndone: () => void }) => {
   const [left, setLeft] = useState(10); const [gone, setGone] = useState(false);
   useEffect(() => { setLeft(Math.round(api.SCAN_UNDO_MS / 1000)); setGone(false); if (!done) return; const i = setInterval(() => setLeft((n) => n - 1), 1000); const t = setTimeout(() => setGone(true), api.SCAN_UNDO_MS); return () => { clearInterval(i); clearTimeout(t); }; }, [done?.token]);

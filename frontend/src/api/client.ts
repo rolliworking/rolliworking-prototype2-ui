@@ -3836,7 +3836,7 @@ export async function stationScan(station: RwStationKey, label: string): Promise
 const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship'];
 const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', awaiting_manager_review: 'Manager review', ready_to_ship: 'Finished' };
 export type PadRoom = 'wm' | 'band';
-export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Rosa', 'MM', 'MH', 'Walter'], band: ['Joseph', 'Rosa'] };
+export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MM', 'MH', 'Walter'], band: ['Joseph', 'Leo'] };
 export const ROOM_LABEL: Record<PadRoom, string> = { wm: 'Watchmaker Room', band: 'Band / Polish Room' };
 const inRoom = (j: Job, room: PadRoom) => room === 'wm' || j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
 export async function getPadBoard(room: PadRoom = 'wm'): Promise<PadCard[]> {
@@ -4049,7 +4049,7 @@ export async function uncheckClientRequest(jobId: string, reqId: string): Promis
 
 // ---- Inbox — staff section: anyone can open a colleague's inbox (read + reply); "Assigned to me" stays the shortcut ----
 const openAssignedTo = (u: User) => { wakeSnoozed(); const div = getSessionDivision(); return cx.conversations.filter((c) => c.division === div && c.status !== 'closed' && c.assignedTo && assigneeMatches(c.assignedTo, u)); };
-export async function getStaffInboxRows(): Promise<StaffInboxRow[]> { return resolve(fx.users.filter((u) => u.shortName !== 'Rosa').map((u) => ({ user: u, openAssigned: openAssignedTo(u).length }))); }
+export async function getStaffInboxRows(): Promise<StaffInboxRow[]> { return resolve(fx.users.filter((u) => u.shortName !== 'Leo').map((u) => ({ user: u, openAssigned: openAssignedTo(u).length }))); }
 export async function getColleagueInbox(shortName: string): Promise<ConversationWithRefs[]> {
   const u = fx.users.find((x) => x.shortName === shortName); if (!u) throw new Error(`No staff member ${shortName}`);
   return resolve(openAssignedTo(u).map(convRefs).sort((a, b) => Number(b.needsReply) - Number(a.needsReply) || b.lastAt.localeCompare(a.lastAt)));
@@ -4242,6 +4242,7 @@ const believedLocation = (j: Job, c: JobComponent): AuditLocationKey => {
   if (j.status === 'closed') return so && (so.status === 'picked_up' || so.status === 'shipped') ? 'finished' : 'orphan_bin';
   if (j.status === 'ready_to_ship' && (!so || !so.isPaid)) return 'awaiting_payment_bin';
   if (j.status === 'intake' || j.status === 'in_review') return 'pre_intake_bin';
+  if (activeHold(j)?.type === 'parts') return 'stuck_parts_bin';
   return derivePlacement(j, c).station;
 };
 const auditItemOf = (j: Job, c: JobComponent): AuditItem => {
@@ -4250,8 +4251,15 @@ const auditItemOf = (j: Job, c: JobComponent): AuditItem => {
 };
 const auditableJobs = () => store.jobs.filter((j) => j.division === getSessionDivision() && (j.status !== 'closed' || (j.finishedAt && Date.now() - new Date(j.finishedAt).getTime() < 30 * 86_400_000)));
 const expectedAt = (k: AuditLocationKey): AuditItem[] => auditableJobs().flatMap((j) => ensureParts(j).filter((c) => believedLocation(j, c) === k).map((c) => auditItemOf(j, c)));
-export async function getAuditLocations(): Promise<AuditLocationStatus[]> {
-  return resolve(fx.AUDIT_LOCATIONS.map((location) => { const last = auditStore.sessions.filter((a) => a.location === location.key).sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0]; const daysSince = last ? Math.floor((Date.now() - new Date(last.finishedAt).getTime()) / 86_400_000) : undefined; return { location, expected: expectedAt(location.key).length, lastAudited: last?.finishedAt, lastResult: last ? (last.missing.length ? 'missing' : 'clean') : undefined, stale: daysSince === undefined || daysSince > auditStore.staleDays, daysSince }; }));
+// Role-scoped audit: MH/owner = full shop grid (unchanged); WM Supervisor = only the WM room's safes, benches, stuck bin, testing, "MM Inspection" (= finished), pre-queue, refinish/polish. Band scope for Joseph later.
+const AUDIT_SCOPES: Record<Exclude<AuditScope, 'full'>, { keys: AuditLocationKey[]; relabel: Partial<Record<AuditLocationKey, string>> }> = {
+  wm: { keys: ['into_safe_head', 'safe_await_band', 'safe_await_head', 'wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'stuck_parts_bin', 'testing', 'finished', 'pre_queue', 'refinish', 'polish'], relabel: { finished: 'MM Inspection · finished, awaiting inspection', pre_queue: 'Pre-queue · in safe, awaiting bench pickup' } },
+  band: { keys: ['band_pre_queue', 'refinish', 'polish', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly'], relabel: { final_assembly: 'Band handoff · final assembly' } },
+};
+export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' || /Watchmaker Room Supervisor/i.test(u.dutyLabel) ? 'wm' : u.id === 'u-joseph' || /Band/i.test(u.dutyLabel) ? 'band' : 'full');
+export async function getAuditLocations(scope: AuditScope = 'full'): Promise<AuditLocationStatus[]> {
+  const sc = scope === 'full' ? null : AUDIT_SCOPES[scope];
+  return resolve((sc ? sc.keys.map((k) => ({ ...auditLoc(k), label: sc.relabel[k] ?? auditLoc(k).label })) : fx.AUDIT_LOCATIONS).map((location) => { const last = auditStore.sessions.filter((a) => a.location === location.key).sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0]; const daysSince = last ? Math.floor((Date.now() - new Date(last.finishedAt).getTime()) / 86_400_000) : undefined; return { location, expected: expectedAt(location.key).length, lastAudited: last?.finishedAt, lastResult: last ? (last.missing.length ? 'missing' : 'clean') : undefined, stale: daysSince === undefined || daysSince > auditStore.staleDays, daysSince }; }));
 }
 export const getAuditStaleDays = () => auditStore.staleDays;
 export async function setAuditStaleDays(n: number): Promise<number> { if (!Number.isFinite(n) || n < 1 || n > 90) throw new Error('Pick 1–90 days'); auditStore.staleDays = Math.round(n); appendAudit({ type: 'setup', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Audit stale threshold → ${auditStore.staleDays} days` }); return resolve(auditStore.staleDays); }
@@ -4642,17 +4650,27 @@ export const getRecentActivity = route('getRecentActivity', getRecentActivityMoc
 
 // ---- SUPERVISOR DEPARTMENT DASHBOARD (WM room today; the same shape re-parameterises for the band room) ----
 import type { DeptDashboard, DeptGoalMonth, DeptGoals, JobPart, JobPartsView, PaceStatus, PartsReturn, QuickAddResult, TechPace } from './types';
-const dept = { goals: { wm: 48_000, band: 22_000 } as Record<'wm' | 'band', number>, history: { wm: [[3, 45_000, 47_800], [2, 46_000, 41_200], [1, 48_000, 49_350]], band: [[3, 20_000, 21_100], [2, 21_000, 18_400], [1, 22_000, 22_900]] } as Record<'wm' | 'band', [number, number, number][]>, stuckDays: 5 };
+const dept = { history: { wm: [[3, 45_000, 47_800], [2, 46_000, 41_200], [1, 48_000, 49_350]], band: [[3, 20_000, 21_100], [2, 21_000, 18_400], [1, 22_000, 22_900]] } as Record<'wm' | 'band', [number, number, number][]>, stuckDays: 5 };
 const paceOf = (actual: number, target: number): PaceStatus => (actual >= target * 1.1 ? 'ahead' : actual >= target * 0.9 ? 'on_pace' : 'behind');
 const deptMonth = (monthsAgo: number) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - monthsAgo); return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) }; };
 // Revenue attribution = estimate lines of the department (W = watchmaking, B/P = band room) on jobs finished this month, plus parts quick-added (sale price)
 // Some seeded trade lines are in cents (≥ $20k per line is not a watch-service rate) — normalise for the gauge only
 const lineDollars = (p: number) => (p >= 20_000 ? p / 100 : p);
 const deptRevenueMtd = (d: 'wm' | 'band') => { const mk = deptMonth(0).key; const depts = d === 'wm' ? ['W'] : ['B', 'P']; return store.jobs.filter((j) => ['ready_to_ship', 'closed', 'awaiting_manager_review', 'testing'].includes(j.status) && (j.timeline.at(-1)?.at ?? j.createdAt).startsWith(mk)).reduce((t, j) => t + j.lines.filter((l) => depts.includes(l.dept)).reduce((s, l) => s + l.qty * lineDollars(l.unitPrice), 0), 0) + Object.values(rwParts.byJob).flat().filter((p) => p.at.startsWith(mk)).reduce((t, p) => t + p.price * p.qty, 0); };
-export const getDeptGoal = (d: 'wm' | 'band') => dept.goals[d];
-export async function setDeptGoal(d: 'wm' | 'band', goal: number): Promise<number> { const a = managerOnly(); if (!(goal > 0)) throw new Error('Goal must be positive'); dept.goals[d] = Math.round(goal); appendAudit({ type: 'rollitime', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${d.toUpperCase()} room monthly revenue goal set · ${fmtMoney(dept.goals[d])}` }); return resolve(dept.goals[d]); }
+// Team goals — each team member has an individual monthly $ goal; the department goal is DERIVED (sum of the team), never typed directly
+const techRevenueGoals: Record<string, number> = { Leo: 12_000, MM: 14_000, MH: 10_000, Walter: 12_000, Joseph: 14_000 };
+export const techRevenueGoal = (short: string) => techRevenueGoals[short] ?? 10_000;
+export const getDeptGoal = (d: 'wm' | 'band') => ROOM_TECHS[d].reduce((t, s) => t + techRevenueGoal(s), 0);
+export interface TeamGoalRow { user: User; goal: number; actualMtd: number; pace: PaceStatus; activeJobs: number }
+export async function getTeamGoals(d: 'wm' | 'band'): Promise<{ department: 'wm' | 'band'; label: string; total: number; rows: TeamGoalRow[] }> {
+  const cards = await getPadBoard(d); const now = new Date(); const frac = now.getDate() / new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const rows = ROOM_TECHS[d].map((short) => { const user = fx.users.find((u) => u.shortName === short)!; const goal = techRevenueGoal(short); const g = benchGoals(short); const actualMtd = Math.round(goal * (g.current.goal ? g.current.actual / g.current.goal : 0)); return { user, goal, actualMtd, pace: paceOf(actualMtd, goal * frac), activeJobs: cards.filter((c) => c.job.assignees.includes(user.id) || c.parts.some((p) => p.tech === short)).length }; });
+  return resolve({ department: d, label: ROOM_LABEL[d], total: getDeptGoal(d), rows });
+}
+export async function setTechGoal(short: string, goal: number): Promise<number> { const a = managerOnly(); if (!(goal > 0)) throw new Error('Goal must be positive'); const before = techRevenueGoal(short); techRevenueGoals[short] = Math.round(goal); appendAudit({ type: 'rollitime', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${short} monthly revenue goal ${fmtMoney(before)} → ${fmtMoney(techRevenueGoals[short])} · department totals recomputed` }); return resolve(techRevenueGoals[short]); }
+export async function setDeptGoal(): Promise<number> { throw new Error('The department goal is the sum of the team — edit individual goals on the Team tab'); }
 const deptGoals = (d: 'wm' | 'band'): DeptGoals => {
-  const now = new Date(); const dayOfMonth = now.getDate(); const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(); const goal = dept.goals[d]; const actualMtd = Math.round(deptRevenueMtd(d)); const projected = Math.round((actualMtd / Math.max(1, dayOfMonth)) * daysInMonth);
+  const now = new Date(); const dayOfMonth = now.getDate(); const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(); const goal = getDeptGoal(d); const actualMtd = Math.round(deptRevenueMtd(d)); const projected = Math.round((actualMtd / Math.max(1, dayOfMonth)) * daysInMonth);
   const history: DeptGoalMonth[] = dept.history[d].map(([ago, g, a]) => ({ ...deptMonth(ago), goal: g, actual: a, hit: a >= g })); history.push({ ...deptMonth(0), goal, actual: actualMtd, hit: actualMtd >= goal, current: true });
   return { goal, actualMtd, projected, pace: paceOf(projected, goal), dayOfMonth, daysInMonth, history };
 };
@@ -4693,7 +4711,7 @@ export async function returnJobPart(jobPartId: string, note?: string): Promise<J
 }
 
 // ---- COMPONENT CODE CHIPS (W · B · P · PM) + TRICKLE-DOWN VERIFICATION CHAIN — Expected (estimate) → Received (Scan 1, package contents) → Verified (Scan 2, inspector) ----
-import type { B2bMatch, B2bTier, ChainRow, ChainState, ClientReviews, QboMapping, QboSetup, QboSyncState, StaffReview, VerificationChain } from './types';
+import type { AuditScope, B2bMatch, B2bTier, ChainRow, ChainState, ClientReviews, QboMapping, QboSetup, QboSyncState, StaffReview, VerificationChain } from './types';
 export const inferComponentCodes = (lines: EstimateLine[]): DeptCode[] => uniq(lines.filter((l) => l.type !== 'shipping' && (l.description.trim() || l.unitPrice)).map((l) => l.dept));
 export const estimateComponentCodes = (e: Estimate): { codes: DeptCode[]; inferred: boolean } => (e.components?.length ? { codes: e.components, inferred: false } : { codes: inferComponentCodes(e.lines), inferred: true });
 export async function setEstimateComponents(id: string, codes: DeptCode[]): Promise<EstimateWithRefs> {
@@ -4779,3 +4797,68 @@ export async function searchRwHistory(query: string): Promise<RwHistoryHit[]> {
   return resolve(out);
 }
 export const uniqComponents = (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));
+
+// ---- Sent emails for a job (read-only aggregation for the Supervisor Pad detail) — Outbox rows whose ref is the job, its estimate, its SO or one of its parts requests; parts-approval status comes from the PR ----
+export interface JobEmailRow { email: OutboxEmail; kind: 'parts_approval' | 'estimate' | 'invoice' | 'status' | 'other'; status: string; requestNumber?: string }
+export async function getJobEmails(jobId: string): Promise<JobEmailRow[]> {
+  const j = byId(store.jobs, jobId); const est = j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined; const sos = store.salesOrders.filter((o) => o.jobId === j.id); const prs = store.partsRequests.filter((r) => r.jobId === j.id);
+  const refs = new Set([j.number, est?.number, ...sos.map((o) => o.number), ...prs.map((r) => r.number)].filter(Boolean) as string[]); const prEmailIds = new Map(prs.filter((r) => r.emailId).map((r) => [r.emailId!, r]));
+  const hit = (ref: string) => [...refs].some((r) => ref.split(/[\s·]+/).includes(r) || ref.includes(r));
+  const rows: JobEmailRow[] = store.outbox.filter((e) => hit(e.relatedRef) || prEmailIds.has(e.id)).map((e) => {
+    const pr = prEmailIds.get(e.id) ?? prs.find((r) => e.relatedRef.includes(r.number));
+    if (pr) return { email: e, kind: 'parts_approval', requestNumber: pr.number, status: pr.status === 'approved' || pr.status === 'on_order' || pr.status === 'received' ? `approved${pr.clientDecidedAt ? ` · ${pr.clientDecidedAt.slice(0, 10)}` : ''}` : pr.status === 'declined' || pr.status === 'rejected' ? 'declined' : 'sent · awaiting client' };
+    const kind: JobEmailRow['kind'] = /estimate|quote/i.test(e.subject) ? 'estimate' : /invoice|payment/i.test(e.subject) ? 'invoice' : /progress|ready|received|shipped|update/i.test(e.subject) ? 'status' : 'other';
+    const opened = est?.engagement?.some((g) => g.kind === 'opened') && kind === 'estimate';
+    return { email: e, kind, status: kind === 'estimate' && est ? (est.status === 'approved' || est.status === 'converted' ? 'approved' : est.status === 'declined' ? 'declined' : opened ? 'sent · opened' : 'sent') : 'sent' };
+  });
+  return resolve(rows.sort((a, b) => b.email.createdAt.localeCompare(a.email.createdAt)));
+}
+
+// ---- Shared job filter vocabulary — one list for the RS "All Jobs" view and the RW Reports section (modeled on the legacy RolliWorks Reports screen) ----
+export type JobCategoryKey = 'in_progress' | 'waiting_approval' | 'due_4w' | 'due_3w' | 'due_14d' | 'warranty' | 'outsourced' | 'awaiting_parts_approval' | 'parts_on_order' | 'needing_update_email' | 'past_due' | 'waiver_required' | 'in_testing' | 'awaiting_inspection';
+export type ReportStatusKey = 'intake' | 'inspection' | 'waiting_approval' | 'in_queue' | 'in_progress' | 'parts_approval' | 'parts_on_order' | 'in_testing' | 'finished';
+const daysUntil = (iso?: string) => (iso ? Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000) : undefined);
+const openJob = (j: Job) => !['closed', 'ready_to_ship', 'awaiting_manager_review'].includes(j.status);
+const prsOf = (j: Job) => store.partsRequests.filter((r) => r.jobId === j.id);
+const lastEmailDays = (j: Job) => { const est = j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined; const refs = new Set([j.number, est?.number].filter(Boolean)); const last = store.outbox.filter((e) => refs.has(e.relatedRef)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; return last ? Math.floor((Date.now() - new Date(last.createdAt).getTime()) / 86_400_000) : 999; };
+export const JOB_CATEGORIES: { key: JobCategoryKey; label: string; test: (j: Job) => boolean }[] = [
+  { key: 'in_progress', label: 'In progress', test: (j) => j.status === 'in_service' },
+  { key: 'waiting_approval', label: 'Waiting for approval', test: (j) => j.status === 'awaiting_customer_approval' },
+  { key: 'due_4w', label: 'Due within 4 weeks', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) <= 28 },
+  { key: 'due_3w', label: 'Due within 3 weeks', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) <= 21 },
+  { key: 'due_14d', label: 'Due within 14 days', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) <= 14 },
+  { key: 'warranty', label: 'Warranty service', test: (j) => j.kind === 'warranty' },
+  { key: 'outsourced', label: 'Outstanding outsourced', test: (j) => activeHold(j)?.type === 'outsource' },
+  { key: 'awaiting_parts_approval', label: 'Awaiting parts approval', test: (j) => prsOf(j).some((r) => r.status === 'pending' || r.status === 'pending_review' || r.status === 'awaiting_client') },
+  { key: 'parts_on_order', label: 'Parts on order', test: (j) => prsOf(j).some((r) => r.status === 'on_order') },
+  { key: 'needing_update_email', label: 'Needing update email', test: (j) => j.status === 'in_service' && lastEmailDays(j) > 14 },
+  { key: 'past_due', label: 'Past due date', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) < 0 },
+  { key: 'waiver_required', label: 'Waiver required', test: (j) => openJob(j) && valueTierOf(j) === 'high' && !j.notes.some((n) => /waiver/i.test(n.text)) },
+  { key: 'in_testing', label: 'In testing', test: (j) => j.status === 'testing' },
+  { key: 'awaiting_inspection', label: 'Awaiting inspection', test: (j) => j.status === 'intake' || j.status === 'in_review' },
+];
+export const REPORT_STATUSES: { key: ReportStatusKey; label: string; test: (j: Job) => boolean }[] = [
+  { key: 'intake', label: 'Intake', test: (j) => j.status === 'intake' }, { key: 'inspection', label: 'Inspection', test: (j) => j.status === 'in_review' }, { key: 'waiting_approval', label: 'Waiting Approval', test: (j) => j.status === 'awaiting_customer_approval' },
+  { key: 'in_queue', label: 'In Queue', test: (j) => j.status === 'approved' }, { key: 'in_progress', label: 'In Progress', test: (j) => j.status === 'in_service' && !prsOf(j).some((r) => ['pending', 'pending_review', 'awaiting_client', 'on_order'].includes(r.status)) },
+  { key: 'parts_approval', label: 'Parts Approval', test: (j) => openJob(j) && prsOf(j).some((r) => r.status === 'pending' || r.status === 'pending_review' || r.status === 'awaiting_client') }, { key: 'parts_on_order', label: 'Parts On Order', test: (j) => openJob(j) && prsOf(j).some((r) => r.status === 'on_order') },
+  { key: 'in_testing', label: 'In Testing', test: (j) => j.status === 'testing' }, { key: 'finished', label: 'Finished', test: (j) => j.status === 'ready_to_ship' || j.status === 'closed' || j.status === 'awaiting_manager_review' },
+];
+export type QuickReportKey = 'at_risk' | 'late' | 'overdue' | 'approval_wait' | 'pending_waivers' | 'parts_status';
+export const QUICK_REPORTS: { key: QuickReportKey; label: string; blurb: string; test: (j: Job) => boolean }[] = [
+  { key: 'at_risk', label: 'At Risk (Not Started)', blurb: 'Not yet in progress, within 3 weeks of or past due', test: (j) => ['intake', 'in_review', 'awaiting_customer_approval', 'approved'].includes(j.status) && (daysUntil(j.dueAt) ?? 999) <= 21 },
+  { key: 'late', label: 'Late Jobs', blurb: 'Movement services in early stages, ≤ 21 days to due', test: (j) => j.workflow.includes('W') && ['approved', 'in_service'].includes(j.status) && (daysUntil(j.dueAt) ?? 999) <= 21 },
+  { key: 'overdue', label: 'Overdue Jobs', blurb: 'Every open job past its due date', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) < 0 },
+  { key: 'approval_wait', label: 'Approval Wait Time', blurb: 'Days each job has waited for the client', test: (j) => j.status === 'awaiting_customer_approval' },
+  { key: 'pending_waivers', label: 'Pending Waivers', blurb: 'High-value jobs with no signed liability waiver on file', test: (j) => openJob(j) && valueTierOf(j) === 'high' && !j.notes.some((n) => /waiver/i.test(n.text)) },
+  { key: 'parts_status', label: 'Parts Status', blurb: 'In parts approval or waiting for parts', test: (j) => openJob(j) && prsOf(j).some((r) => ['pending', 'pending_review', 'awaiting_client', 'on_order'].includes(r.status)) },
+];
+export interface JobReportFilter { quick?: QuickReportKey; from?: string; to?: string; movementOnly?: boolean; statuses?: ReportStatusKey[]; categories?: JobCategoryKey[]; q?: string }
+export interface JobReportRow { job: JobWithRefs; estimateNumber?: string; jobType: string; statusLabel: string; intake: string; due?: string; days?: number; overdue: boolean; waitingDays?: number; categories: JobCategoryKey[] }
+const JOB_TYPE_LABEL: Record<Job['kind'], string> = { service: 'Service', small_job: 'Small job', warranty: 'Warranty', trade: 'Trade' };
+export async function getJobReport(f: JobReportFilter = {}): Promise<{ rows: JobReportRow[]; total: number; generatedAt: string }> {
+  const q = f.q?.trim().toLowerCase(); const base = q ? await searchJobs(q) : (store.jobs.map(jobRefs));
+  const rows = base.filter((j) => (!f.quick || QUICK_REPORTS.find((r) => r.key === f.quick)!.test(j)) && (!f.from || (j.intakeDate ?? j.createdAt) >= f.from) && (!f.to || (j.intakeDate ?? j.createdAt).slice(0, 10) <= f.to) && (!f.movementOnly || j.workflow.includes('W')) && (!f.statuses?.length || f.statuses.some((k) => REPORT_STATUSES.find((s) => s.key === k)!.test(j))) && (!f.categories?.length || f.categories.every((k) => JOB_CATEGORIES.find((c) => c.key === k)!.test(j))))
+    .map((j): JobReportRow => { const d = daysUntil(j.dueAt); const waiting = j.status === 'awaiting_customer_approval' ? Math.floor((Date.now() - new Date(j.timeline.at(-1)?.at ?? j.createdAt).getTime()) / 86_400_000) : undefined; return { job: j, estimateNumber: j.estimate?.number, jobType: JOB_TYPE_LABEL[j.kind], statusLabel: REPORT_STATUSES.find((s) => s.test(j))?.label ?? j.status, intake: j.intakeDate ?? j.createdAt, due: j.dueAt, days: d, overdue: d !== undefined && d < 0 && openJob(j), waitingDays: waiting, categories: JOB_CATEGORIES.filter((c) => c.test(j)).map((c) => c.key) }; })
+    .sort((a, b) => (a.due ?? '9').localeCompare(b.due ?? '9'));
+  return resolve({ rows, total: store.jobs.length, generatedAt: new Date().toISOString() });
+}
