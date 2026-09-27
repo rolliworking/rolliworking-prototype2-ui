@@ -18,7 +18,8 @@ import RwEvidencePage from '@/pages/rw/RwEvidencePage';
 import RwFloorPage from '@/pages/rw/RwFloorPage';
 import AssignMovePage from '@/pages/rw/AssignMovePage';
 import CustodyPage from '@/pages/rw/CustodyPage';
-import PartsStubPage from '@/pages/rs/PartsStubPage';
+import PartsPage from '@/pages/rs/PartsPage';
+import HitlistPage from '@/pages/rs/HitlistPage';
 import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
 import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
 import RwWmPage from '@/pages/rw/RwWmPage';
@@ -218,7 +219,8 @@ export default function App() {
               <Route path="/assign" element={<AssignMovePage />} />
               <Route path="/custody" element={<CustodyPage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
-              <Route path="/parts" element={<PartsStubPage />} />
+              <Route path="/parts" element={<PartsPage />} />
+              <Route path="/hitlist" element={<HitlistPage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/inventory/count" element={<CycleCountPage />} />

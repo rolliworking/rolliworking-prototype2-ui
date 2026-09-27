@@ -42,6 +42,10 @@ import type {
   PortalSplitTrack,
   PortalRequestState,
   Part,
+  Caliber,
+  PartInput,
+  PartRow,
+  PartSafe,
   PartsKnowledgeEntry,
   PartsRequest,
   PartsRequestWithRefs,
@@ -615,6 +619,7 @@ export async function lookupEstimate(numberOrId: string): Promise<EstimateWithRe
 }
 
 export interface ReceivePackageInput {
+  cameraBypass?: boolean;
   trackingNumber?: string;
   estimateId?: string;
   clientId?: string;
@@ -627,6 +632,8 @@ export async function receivePackage(id: string, input: ReceivePackageInput): Pr
   const pkg = getPkg(id);
   if (pkg.status !== 'arrived') throw new Error('Package is not awaiting processing');
   if (input.contents.length === 0) throw new Error('Describe what was received (pick at least one pill)');
+  if (input.photos.length === 0 && !input.cameraBypass) throw new Error('Take at least one photo — or tick “Camera not working” to bypass (logged to the MH Hitlist)');
+  if (input.cameraBypass && input.photos.length === 0) logBypass({ kind: 'receiving_camera', jobNumber: pkg.subNumber, reason: 'Camera not working — photo/scan verification skipped at Receive Package', context: { detail: `${pkg.carrier}${pkg.trackingNumber ? ` ${pkg.trackingNumber}` : ''} · ${input.contents.join(', ')}` } });
   const a = actor();
   const est = input.estimateId ? store.estimates.find((e) => e.id === input.estimateId) : undefined;
   pkg.trackingNumber = input.trackingNumber?.trim() || pkg.trackingNumber;
@@ -1989,6 +1996,7 @@ export async function confirmShipment(id: string, input: ConfirmShipmentInput): 
   o.lines.forEach((l) => { l.shippedQty = l.qty; });
   if (o.status !== 'fulfilled') { o.fulfilledAt = o.fulfilledAt ?? shipment.at; }
   o.status = 'shipped'; soTotals(o);
+  if (shipment.bypassReason) logBypass({ kind: 'payment_release', orderId: o.id, jobNumber: o.number, reason: shipment.bypassReason, context: { invoiceAmount: o.total, minutesSincePayment: minutesSincePayment(o), detail: `released by shipping · ${input.carrier.toUpperCase()}` } });
   soStamp(o, `Shipped · ${input.carrier.toUpperCase()} ${shipment.tracking} · insured ${fmtMoney(shipment.coverage)}${shipment.bypassReason ? ` · PAYMENT BYPASS: ${shipment.bypassReason}` : ''}`);
   closeCustody(o, `Shipped ${shipment.tracking}`);
   soEmail(o, 'Your watch has shipped', `Your watch is on its way via ${shipment.service}. Tracking: ${shipment.tracking}. The shipment is insured for ${fmtMoney(shipment.coverage)} and requires a signature on delivery.`);
@@ -2015,6 +2023,7 @@ export async function confirmPickup(id: string, input: ConfirmPickupInput): Prom
   if (codeOk) o.pickupCode = undefined; // consumed
   if (fully) { o.status = 'picked_up'; o.pickedUpAt = o.pickupSession.at; if (!o.fulfilledAt) o.fulfilledAt = o.pickedUpAt; } else o.status = 'partial_fulfilled';
   soTotals(o);
+  if (o.pickupSession.bypassReason) logBypass({ kind: 'payment_release', orderId: o.id, jobNumber: o.number, reason: o.pickupSession.bypassReason, context: { invoiceAmount: o.total, minutesSincePayment: minutesSincePayment(o), detail: 'released at pickup station' } });
   soStamp(o, `${fully ? 'Picked up' : 'Partial pickup'} · ${codeOk ? 'code verified' : `proxy ${input.proxyName} (ID photo)`}${o.pickupSession.bypassReason ? ` · PAYMENT BYPASS: ${o.pickupSession.bypassReason}` : ''}`);
   if (fully) closeCustody(o, 'Picked up at counter');
   soEmail(o, fully ? 'Thank you — your watch is home' : 'Partial pickup recorded', fully ? 'Your watch was handed back at the counter today. Thank you for trusting us with it.' : 'Part of your order was collected today; the remaining items will be ready shortly.');
@@ -3014,7 +3023,7 @@ export async function receivePurchaseOrder(id: string, qtyByLine: Record<string,
 // -- Inventory
 export async function getLocations(): Promise<StockLocation[]> { return resolve([...rs.locations]); }
 export async function getStockRows(): Promise<StockRow[]> {
-  return resolve(rs.stock.map((s): StockRow => ({ part: byId(store.parts, s.partId), location: byId(rs.locations, s.locationId), onHand: s.onHand, reorderPoint: s.reorderPoint, low: s.onHand <= s.reorderPoint })).sort((a, b) => Number(b.low) - Number(a.low) || a.part.partNumber.localeCompare(b.part.partNumber)));
+  ensurePartsModule(); return resolve(rs.stock.map((s): StockRow => { const r = getReorderRule(s.partId); return { part: byId(store.parts, s.partId), location: byId(rs.locations, s.locationId), onHand: s.onHand, reorderPoint: r.min, low: r.min > 0 && onHandOf(s.partId) + onOrderOf(s.partId) <= r.min }; }).sort((a, b) => Number(b.low) - Number(a.low) || a.part.partNumber.localeCompare(b.part.partNumber)));
 }
 export async function getLowStock(): Promise<StockRow[]> { return (await getStockRows()).filter((r) => r.low); }
 export async function getStockMovements(partId?: string): Promise<StockMovement[]> { return resolve(rs.movements.filter((m) => !partId || m.partId === partId).sort((a, b) => b.at.localeCompare(a.at))); }
@@ -3775,7 +3784,7 @@ export async function getRwFloorMap(): Promise<RwFloorMap> {
 
 // ---- E18 RW deep build — shop floor core (parts = components with station/status/custody/history) --------------------
 import type { FloorDot, GateDirection, GateScan, GateTrack, JobPhotoView, PadCard, PartHistoryView, PartMove, PartStatus, PartSuggestion, PickTask, PickTaskView, RoomSummary, RwStation, RwStationKey, ScanSession, SendBackReason, WorkQueueRow } from './types';
-export type { GateDirection, GateScan, GateTrack } from './types';
+export type { GateDirection, GateScan, GateTrack, Caliber, PartInput, PartRow, PartSafe } from './types';
 export { isSafeStation } from './types';
 export { RW_STATIONS } from './fixtures';
 const rw18 = { picks: fx.pickTasks.map((p): PickTask => ({ ...p })), recent: fx.recentPartChoices.map((r) => ({ ...r })), replied: new Set<string>(), scanSession: { rows: [] } as ScanSession, stationMemory: null as RwStationKey | null, undos: new Map<string, { jobId: string; key: ComponentKey; before: { station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; historyLen: number; timelineLen: number; status: JobStatus }; transitioned: boolean; expiresAt: number }>() };
@@ -3932,6 +3941,31 @@ export async function getCustodyByPerson(): Promise<CustodyByPerson[]> {
   roomJobs().forEach((j) => { const c = byId(fx.clients, j.clientId); ensureParts(j).forEach((p) => { const holder = p.custodyTech; if (!holder) return; const d = dotOf(j, p); const last = p.history?.[p.history.length - 1]; (groups.get(holder) ?? groups.set(holder, []).get(holder)!).push({ ...d, clientLastName: c.lastName, workflow: j.workflow, status: j.status, stationLabel: stationOf(d.station).label, heldSince: last?.at, notes: j.notes.slice(-2).map((n) => n.text) }); }); });
   return resolve([...groups.entries()].map(([tech, items]) => ({ tech, name: HOLDER_NAME[tech] ?? fx.users.find((u) => u.shortName === tech)?.displayName.split(' — ')[0] ?? tech, items: items.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber)) })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)));
 }
+// ---- MH HITLIST — owner accountability: client asset $ on premises + every bypass use (visibility feed, not a gate) ----
+export type BypassKind = 'receiving_camera' | 'payment_release' | 'other';
+export interface BypassEvent { id: string; kind: BypassKind; by: string; station: string; at: string; jobNumber?: string; orderId?: string; reason: string; context: { invoiceAmount?: number; minutesSincePayment?: number; detail?: string } }
+const hAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+const bypasses: BypassEvent[] = [
+  { id: 'byp-01', kind: 'payment_release', by: 'Vienna', station: 'Ship Station', at: hAgo(1.5), jobNumber: 'SO-26-0104', orderId: 'so-04', reason: 'Client paid by card on the phone 2 min ago — Intuit not synced yet', context: { invoiceAmount: 1_840, minutesSincePayment: 2, detail: 'released by shipping · UPS' } },
+  { id: 'byp-02', kind: 'receiving_camera', by: 'Chyna', station: 'Front Desk 1', at: hAgo(5), jobNumber: 'SUB-26-0313', reason: 'Camera not working — photo/scan verification skipped at Receive Package', context: { detail: 'UPS 1Z44AB0398765432 · Watch head, Bracelet' } },
+  { id: 'byp-03', kind: 'payment_release', by: 'MM', station: 'Pickup Station', at: hAgo(27), jobNumber: 'SO-26-0099', orderId: 'so-02', reason: 'Zelle received, screenshot verified — RS still showing balance', context: { invoiceAmount: 4_250, minutesSincePayment: 38, detail: 'released at pickup station' } },
+  { id: 'byp-04', kind: 'receiving_camera', by: 'MH', station: 'Front Desk 1', at: hAgo(50), jobNumber: 'SUB-26-0309', reason: 'Camera not working — photo/scan verification skipped at Receive Package', context: { detail: 'FedEx 748900112233 · Watch head' } },
+];
+const minutesSincePayment = (o: SalesOrder): number | undefined => { const last = [...(o.payments ?? [])].sort((a, b) => b.at.localeCompare(a.at))[0]; return last ? Math.max(0, Math.round((Date.now() - new Date(last.at).getTime()) / 60_000)) : undefined; };
+const logBypass = (e: Omit<BypassEvent, 'id' | 'by' | 'station' | 'at'>) => { const a = actor(); const row: BypassEvent = { id: newId('byp'), by: a.by, station: a.station, at: new Date().toISOString(), ...e }; bypasses.unshift(row); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `BYPASS · ${row.kind.replace(/_/g, ' ')} · ${row.jobNumber ?? ''} · ${row.reason}` }); return row; };
+export interface AssetValueRow { jobId: string; jobNumber: string; client: string; watch: string; holders: string[]; value: number; source: 'insurance' | 'dropoff' | 'none' }
+export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[] }
+// Seed (once): insured declared values for a spread of in-custody jobs via arrived inbound shipments; two jobs came in as drop-offs (no insurance → $0)
+let assetSeeded = false; const DROPOFF_SEED = new Set(['E02012', 'E02024', 'E02020']);
+const seedAssetValues = () => { if (assetSeeded) return; assetSeeded = true; const vals: Record<string, number> = { E02013: 14_500, E02015: 9_800, E02026: 38_000, E02027: 12_200, E02032: 4_600, E02033: 27_500, E02011: 11_900, E02014: 16_750, E02031: 8_900, E02016: 21_000, E02023: 6_400, E02007: 13_300 };
+  Object.entries(vals).forEach(([num, v]) => { const j = store.jobs.find((x) => x.number === num); if (!j?.estimateId || shp.rows.some((r) => r.estimateId === j.estimateId)) return; const c = byId(fx.clients, j.clientId); shp.rows.push({ id: newId('sh'), direction: 'inbound', estimateId: j.estimateId, clientId: j.clientId, stage: 'arrived', carrier: 'UPS', service: 'UPS Next Day Air', serviceLevel: '1_day', declaredValue: v, destinationState: c.state, requestedAt: hAgo(9 * 24), labelSentAt: hAgo(8 * 24), trackingNumber: `1Z${num}SEED`, arrivedAt: hAgo(6 * 24), events: [], stamps: [], emailIds: [] }); });
+  ['E02012', 'E02024'].forEach((num) => { const j = store.jobs.find((x) => x.number === num); const pk = j?.packageId ? store.packages.find((p) => p.id === j.packageId) : undefined; if (pk) { pk.source = 'walk_in'; pk.trackingNumber = undefined; } }); };
+export async function getHitlist(): Promise<Hitlist> {
+  seedAssetValues(); const people = await getCustodyByPerson(); const byJob = new Map<string, AssetValueRow>();
+  people.forEach((g) => g.items.forEach((it) => { let row = byJob.get(it.jobId); if (!row) { const j = getJobRow(it.jobId); const pk = j.packageId ? store.packages.find((p) => p.id === j.packageId) : undefined; const sh = shp.rows.find((r) => r.estimateId === j.estimateId && r.direction === 'inbound' && (r.trackingNumber || r.stage === 'arrived')); const value = sh?.declaredValue ?? 0; row = { jobId: j.id, jobNumber: j.number, client: `${it.clientLastName}`, watch: it.watchLabel, holders: [], value, source: sh ? 'insurance' : pk?.source === 'walk_in' || DROPOFF_SEED.has(j.number) ? 'dropoff' : 'none' }; byJob.set(it.jobId, row); } if (!row.holders.includes(g.name)) row.holders.push(g.name); }));
+  const assets = [...byJob.values()].sort((a, b) => b.value - a.value);
+  return resolve({ assetTotal: assets.reduce((t, r) => t + r.value, 0), assets, bypasses: [...bypasses].sort((a, b) => b.at.localeCompare(a.at)) });
+}
 export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
 export const POLISHERS = ['Walter', 'Joseph', 'Leo'];
 
@@ -4031,7 +4065,8 @@ export const partSuggestions = (jobId: string, q: string): PartSuggestion[] => {
   const j = getJobRow(jobId); const ref = byId(store.watches, j.watchId).reference; const needle = q.trim().toLowerCase(); if (!needle) return [];
   const refKey = (r: string) => r.replace(/[^0-9A-Z]/gi, '').slice(0, 6);
   const recent = rw18.recent.filter((r) => refKey(r.reference) === refKey(ref)).sort((a, b) => b.at.localeCompare(a.at));
-  return store.parts.map((p): PartSuggestion | null => {
+  const pool = new Set(searchPartsSync(needle, 200).map((p) => p.id)); // ONE search — ranking (recent / ref) layered on top
+  return store.parts.filter((p) => pool.has(p.id)).map((p): PartSuggestion | null => {
     const inRef = p.compatibleRefs.some((r) => refKey(r) === refKey(ref)); const nameHit = p.name.toLowerCase().includes(needle) || p.partNumber.toLowerCase().includes(needle); const aliasHit = p.aliases.some((a) => a.toLowerCase().includes(needle) || needle.includes(a.toLowerCase()));
     if (!nameHit && !aliasHit) return null; const ri = recent.findIndex((r) => r.partId === p.id);
     return { part: p, score: (ri >= 0 ? 1000 - ri : 0) + (inRef ? 100 : 0) + (nameHit ? 10 : 0) + (aliasHit ? 8 : 0), reason: ri >= 0 ? 'recent' : inRef ? 'ref' : nameHit ? 'name' : 'alias' };
@@ -4099,11 +4134,12 @@ export async function getPadPartsContext(label: string): Promise<PadPartsContext
 // Description search scoped to the reference (model-specific), learned mappings for this reference on top, caliber parts as a tail
 export const padSearchParts = (ref: string, caliber: string | undefined, q: string): PadSuggestion[] => {
   const needle = q.trim().toLowerCase(); if (!needle) return []; const qt = toks(needle);
-  const hit = (p: Part) => { const hay = `${p.name} ${p.partNumber} ${p.aliases.join(' ')}`.toLowerCase(); return (qt.length > 0 && qt.every((t) => hay.includes(t))) || p.aliases.some((a) => needle.includes(a.toLowerCase())); };
+  const pool = new Set(searchPartsSync(needle, 200).map((p) => p.id)); const hit = (p: Part) => pool.has(p.id) || (qt.length > 0 && qt.every((t) => `${p.name} ${p.partNumber} ${p.aliases.join(' ')}`.toLowerCase().includes(t))); // ONE search feeds the Pad too
   const out: PadSuggestion[] = []; const push = (s: PadSuggestion) => { if (!out.some((o) => o.part.id === s.part.id)) out.push(s); };
   learnedEvents(ref, caliber).filter((e) => similarDesc(e.description, needle)).sort((a, b) => b.ts.localeCompare(a.ts)).forEach((e) => { const p = store.parts.find((x) => x.id === e.partId); if (p) push({ part: p, learned: true, source: 'learned', hint: `learned · “${e.description}”${e.kind === 'resolved' ? ` → ${e.partNumber}` : ''}` }); });
   store.parts.filter((p) => p.compatibleRefs.some((r) => refKey6(r) === refKey6(ref)) && hit(p)).forEach((p) => push({ part: p, learned: false, source: 'ref', hint: `fits ${ref}` }));
   if (caliber) store.parts.filter((p) => p.calibers.includes(caliber) && hit(p)).forEach((p) => push({ part: p, learned: false, source: 'caliber', hint: `cal. ${caliber}` }));
+  searchPartsSync(needle, 10).forEach((p) => push({ part: p, learned: false, source: 'ref', hint: `${p.category}${p.calibers.length ? ` · cal. ${p.calibers.join('/')}` : ''}` }));
   return out.slice(0, 10);
 };
 export const padRecordSelection = (ref: string, caliber: string | undefined, part: Part, description: string) => { m3ke.events.push({ id: newId('m3'), kind: 'selected', description: description.trim() || part.name, reference: ref, caliber, partId: part.id, partNumber: part.partNumber, price: part.price, resolvedBy: actor().by, ts: new Date().toISOString() }); };
@@ -4624,6 +4660,40 @@ export const partPricingSync = (partId: string): PartPricing => {
 export async function getPartPricing(partId: string): Promise<PartPricing> { return resolve(partPricingSync(partId)); }
 // ±10% dead band: black within, green >10% below (good buy), red >10% above (needs a tap-to-acknowledge before send)
 export const priceColor = (unit: number, avg: number | null): PriceColor => (avg === null || avg === 0 ? 'black' : unit < avg * 0.9 ? 'green' : unit > avg * 1.1 ? 'red' : 'black');
+// ---- PARTS MODULE — one part record · one stock count · one reorder rule · one caliber table · one search ----
+export const PART_CATEGORIES = ['Vintage Parts', 'Crystals', 'Crowns', 'Inserts', 'Mov-Parts', 'crystal gaskets', 'Bezels', 'Spring bar', 'Main Springs', 'Unique Resale'];
+const LEGACY_CATEGORY: Record<string, string> = { crystal: 'Crystals', crown: 'Crowns', insert: 'Inserts', movement: 'Mov-Parts', gasket: 'crystal gaskets', bezel: 'Bezels', spring_bar: 'Spring bar', mainspring: 'Main Springs', vintage: 'Vintage Parts', resale: 'Unique Resale', tube: 'Crowns', bracelet: 'Unique Resale', hands: 'Mov-Parts', dial: 'Vintage Parts' };
+export const canonicalCategory = (c: string): string => (PART_CATEGORIES.includes(c) ? c : LEGACY_CATEGORY[c] ?? (c.includes('spring') && !c.includes('bar') ? 'Main Springs' : c.includes('crystal') ? 'Crystals' : 'Mov-Parts'));
+// Location = a manager's safe → a bin/drawer inside it (same safe concept as Assign/Move + Custody). No free text.
+export const PART_SAFES: PartSafe[] = [{ id: 'safe-mm', name: "MM's safe", owner: 'MM', bins: ['A1', 'A2', 'A3', 'B1', 'B2'] }, { id: 'safe-vienna', name: "Vienna's safe", owner: 'Vienna', bins: ['P1', 'P2', 'P3'] }, { id: 'safe-joseph', name: "Joseph's safe", owner: 'Joseph', bins: ['S1', 'S2'] }];
+const calibers: Caliber[] = [
+  { id: 'cal-3135', brand: 'Rolex', number: '3135', spec: 'Automatic · 31 jewels · 28,800 vph · 48 h · date' }, { id: 'cal-3235', brand: 'Rolex', number: '3235', spec: 'Automatic · Chronergy escapement · 70 h · date' }, { id: 'cal-3285', brand: 'Rolex', number: '3285', spec: 'Automatic · GMT · 70 h' },
+  { id: 'cal-4130', brand: 'Rolex', number: '4130', spec: 'Automatic chronograph · column wheel · 72 h' }, { id: 'cal-2235', brand: 'Rolex', number: '2235', spec: 'Automatic · ladies · 31 jewels · date' }, { id: 'cal-mt5602', brand: 'Tudor', number: 'MT5602', spec: 'Automatic · silicon hairspring · 70 h' }, { id: 'cal-mt5612', brand: 'Tudor', number: 'MT5612', spec: 'Automatic · date · 70 h' }, { id: 'cal-1570', brand: 'Rolex', number: '1570', spec: 'Vintage automatic · 26 jewels · 19,800 vph (placeholder spec — reconcile)' },
+];
+const partLocationSeed: Record<string, [string, string]> = { 'pt-01': ['safe-mm', 'A1'], 'pt-02': ['safe-mm', 'A1'], 'pt-03': ['safe-mm', 'A2'], 'pt-04': ['safe-mm', 'A2'], 'pt-05': ['safe-vienna', 'P1'], 'pt-06': ['safe-vienna', 'P1'], 'pt-07': ['safe-vienna', 'P2'], 'pt-08': ['safe-vienna', 'P2'], 'pt-09': ['safe-mm', 'B1'], 'pt-10': ['safe-mm', 'B1'], 'pt-11': ['safe-joseph', 'S1'], 'pt-12': ['safe-joseph', 'S1'] };
+let partsModuleReady = false;
+const ensurePartsModule = () => { if (partsModuleReady) return; partsModuleReady = true; store.parts.forEach((p, i) => { p.category = canonicalCategory(p.category); p.cost ??= Math.round(p.price * 0.55); p.vendorIds ??= [rs.vendors[i % rs.vendors.length]?.id].filter(Boolean) as string[]; const loc = partLocationSeed[p.id] ?? [PART_SAFES[i % 3].id, PART_SAFES[i % 3].bins[i % PART_SAFES[i % 3].bins.length]]; p.safeId ??= loc[0]; p.bin ??= loc[1]; p.location = `${byIdSafe(p.safeId).name} → ${p.bin}`; });
+  // seed a few parts right at their trigger so reorder has something real
+  [['pt-03', 2, 5], ['pt-07', 1, 4], ['pt-11', 3, 6]].forEach(([id, min, up]) => { if (!store.parts.some((p) => p.id === id)) return; inv.reorder.set(id as string, { partId: id as string, min: min as number, orderUpTo: up as number }); const total = onHandOf(id as string); const loc = rs.stock.find((x) => x.partId === id); if (loc) loc.onHand = Math.max(0, loc.onHand - (total - (min as number))); }); };
+const byIdSafe = (id?: string): PartSafe => PART_SAFES.find((s) => s.id === id) ?? PART_SAFES[0];
+const partRow = (p: Part): PartRow => { const r = getReorderRule(p.id); const onHand = onHandOf(p.id); const onOrder = onOrderOf(p.id); const flagged = r.min > 0 && onHand + onOrder <= r.min; return { part: p, onHand, onOrder, min: r.min, orderUpTo: r.orderUpTo, reorderQty: flagged ? Math.max(0, r.orderUpTo - onHand - onOrder) : 0, flagged, location: `${byIdSafe(p.safeId).name} → ${p.bin ?? '—'}`, vendors: (p.vendorIds ?? []).map((v) => rs.vendors.find((x) => x.id === v)?.name ?? v), caliberRows: calibers.filter((c) => p.calibers.includes(c.number)) }; };
+// THE search — part#, description, aliases, category, caliber. Every other parts search in the app routes here.
+export const searchPartsSync = (q: string, limit = 25): Part[] => { ensurePartsModule(); const n = q.trim().toLowerCase(); if (!n) return store.parts.slice(0, limit); const score = (p: Part) => (p.partNumber.toLowerCase().startsWith(n) ? 0 : p.partNumber.toLowerCase().includes(n) ? 1 : p.name.toLowerCase().includes(n) ? 2 : p.aliases.some((a) => a.toLowerCase().includes(n)) ? 3 : p.category.toLowerCase().includes(n) ? 4 : p.calibers.some((c) => c.toLowerCase().includes(n)) || p.compatibleRefs.some((r) => r.toLowerCase().includes(n)) ? 5 : -1); return store.parts.map((p) => [p, score(p)] as const).filter(([, sc]) => sc >= 0).sort((a, b) => a[1] - b[1]).slice(0, limit).map(([p]) => p); };
+export async function searchParts(q: string, limit = 25): Promise<PartRow[]> { return resolve(searchPartsSync(q, limit).map(partRow)); }
+export async function getPartsModule(): Promise<{ parts: PartRow[]; calibers: Caliber[]; categories: string[]; safes: PartSafe[]; vendors: Vendor[] }> { ensurePartsModule(); return resolve({ parts: store.parts.map(partRow).sort((a, b) => a.part.partNumber.localeCompare(b.part.partNumber)), calibers: [...calibers].sort((a, b) => a.brand.localeCompare(b.brand) || a.number.localeCompare(b.number)), categories: PART_CATEGORIES, safes: PART_SAFES, vendors: [...rs.vendors] }); }
+export async function getCalibers(): Promise<Caliber[]> { return resolve([...calibers]); }
+export async function saveCaliber(input: Omit<Caliber, 'id'> & { id?: string }): Promise<Caliber> { if (!input.brand.trim() || !input.number.trim()) throw new Error('Brand and caliber # are required'); const ex = input.id ? calibers.find((c) => c.id === input.id) : calibers.find((c) => c.number.toLowerCase() === input.number.trim().toLowerCase()); if (ex) { Object.assign(ex, { brand: input.brand.trim(), number: input.number.trim(), spec: input.spec.trim(), notes: input.notes }); return resolve(ex); } const c: Caliber = { id: newId('cal'), brand: input.brand.trim(), number: input.number.trim(), spec: input.spec.trim(), notes: input.notes }; calibers.push(c); return resolve(c); }
+// Create or edit the ONE part record. Reorder rule + stock go through the canonical stores (inv.reorder / rs.stock), never duplicated.
+export async function savePart(input: PartInput): Promise<PartRow> {
+  ensurePartsModule(); const a = actor(); const pn = input.partNumber.trim(); if (!pn || !input.name.trim()) throw new Error('Part # and description are required'); if (!PART_CATEGORIES.includes(input.category)) throw new Error('Pick a category from the list'); if (input.min < 0 || input.orderUpTo < input.min) throw new Error('Order-up-to must be ≥ low-qty trigger');
+  const dup = store.parts.find((p) => p.partNumber.toLowerCase() === pn.toLowerCase() && p.id !== input.id); if (dup) throw new Error(`${pn} already exists (${dup.name})`);
+  const safe = byIdSafe(input.safeId); const bin = input.bin && safe.bins.includes(input.bin) ? input.bin : safe.bins[0]; const now = new Date().toISOString();
+  let p = input.id ? store.parts.find((x) => x.id === input.id) : undefined;
+  if (p) { Object.assign(p, { partNumber: pn, name: input.name.trim(), category: input.category, calibers: input.calibers, compatibleRefs: input.compatibleRefs ?? p.compatibleRefs, aliases: input.aliases ?? p.aliases, price: input.price, cost: input.cost, vendorIds: input.vendorIds ?? p.vendorIds, safeId: safe.id, bin, location: `${safe.name} → ${bin}`, updatedAt: now }); rsStamp('inventory', `${pn} edited · ${a.by}`); }
+  else { p = { id: newId('pt'), partNumber: pn, name: input.name.trim(), category: input.category, calibers: input.calibers, compatibleRefs: input.compatibleRefs ?? [], aliases: input.aliases ?? [], price: input.price, stock: input.initialOnHand ?? 0, cost: input.cost, vendorIds: input.vendorIds ?? [], safeId: safe.id, bin, location: `${safe.name} → ${bin}`, createdAt: now, createdBy: a.by }; store.parts.push(p); if (input.initialOnHand) { const loc = rs.locations.find((l) => l.kind === 'safe') ?? rs.locations[0]; const st = stockAt(p.id, loc.id); st.onHand = input.initialOnHand; } rsStamp('inventory', `${pn} created · ${p.name} · ${a.by}`); }
+  inv.reorder.set(p.id, { partId: p.id, min: input.min, orderUpTo: input.orderUpTo }); p.stock = onHandOf(p.id);
+  return resolve(partRow(p));
+}
 export const getReorderRule = (partId: string): ReorderRule => inv.reorder.get(partId) ?? { partId, min: 0, orderUpTo: 0 };
 export async function setReorderRule(partId: string, min: number, orderUpTo: number): Promise<ReorderRule> { if (min < 0 || orderUpTo < min) throw new Error('order-up-to must be ≥ min'); const r = { partId, min, orderUpTo }; inv.reorder.set(partId, r); rsStamp('inventory', `Reorder rule · ${byId(store.parts, partId).partNumber} · min ${min} / up to ${orderUpTo}`); return resolve(r); }
 export async function queueNeedsOrdering(partId: string, reason: 'out_of_stock' | 'pick_short', qty: number, ctx: { requestId?: string; jobNumber?: string } = {}): Promise<void> { if (!inv.needs.some((n) => n.partId === partId && n.requestId === ctx.requestId && n.reason === reason)) inv.needs.unshift({ id: newId('no'), partId, reason, qty, at: new Date().toISOString(), ...ctx }); return resolve(undefined); }

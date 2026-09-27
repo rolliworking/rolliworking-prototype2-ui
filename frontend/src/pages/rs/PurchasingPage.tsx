@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { PartForm } from '@/pages/rs/PartsPage';
 import { useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Part, PurchaseOrderWithRefs, StockLocation, Vendor } from '@/api/client';
@@ -79,6 +80,7 @@ function CreatePoModal({ data, presetPart, onClose, run }: { data: Bundle; prese
   const [memo, setMemo] = useState(presetPart ? 'Low-stock reorder' : '');
   const [lines, setLines] = useState<{ partId: string; qty: number; unitCost: number }[]>(presetPart ? [{ partId: presetPart, qty: 2, unitCost: data.parts.find((p) => p.id === presetPart)?.price ?? 0 }] : [{ partId: data.parts[0]?.id ?? '', qty: 1, unitCost: data.parts[0]?.price ?? 0 }]);
   const set = (i: number, patch: Partial<typeof lines[number]>) => setLines(lines.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+  const [inlineNew, setInlineNew] = useState(false); const [pm, setPm] = useState<Awaited<ReturnType<typeof api.getPartsModule>> | null>(null); useEffect(() => { api.getPartsModule().then(setPm); }, []);
   return (
     <Modal testId="po-create-modal" title="New purchase order" width="w-[680px]" onClose={onClose}>
       <div className="grid grid-cols-3 gap-2 text-xs text-ink-500">
@@ -87,7 +89,9 @@ function CreatePoModal({ data, presetPart, onClose, run }: { data: Bundle; prese
         <label>Memo<input data-testid="po-memo" value={memo} onChange={(e) => setMemo(e.target.value)} className={`${field} mt-1 block w-full`} /></label>
       </div>
       <div className="mt-3 space-y-1">{lines.map((l, i) => <div key={i} className="flex items-center gap-2"><select data-testid={`po-line-part-${i}`} value={l.partId} onChange={(e) => set(i, { partId: e.target.value, unitCost: data.parts.find((p) => p.id === e.target.value)?.price ?? 0 })} className={`${field} flex-1`}>{data.parts.map((p) => <option key={p.id} value={p.id}>{p.partNumber} · {p.name}</option>)}</select><input data-testid={`po-line-qty-${i}`} type="number" min={1} value={l.qty} onChange={(e) => set(i, { qty: Number(e.target.value) })} className={`${field} w-16 text-right`} /><input data-testid={`po-line-cost-${i}`} type="number" min={0} step="0.01" value={l.unitCost} onChange={(e) => set(i, { unitCost: Number(e.target.value) })} className={`${field} w-24 text-right`} /><Button size="sm" variant="ghost" onClick={() => setLines(lines.filter((_, k) => k !== i))}>×</Button></div>)}
-        <Button size="sm" data-testid="po-add-line" onClick={() => setLines([...lines, { partId: data.parts[0].id, qty: 1, unitCost: data.parts[0].price }])}>+ line</Button></div>
+        <Button size="sm" data-testid="po-add-line" onClick={() => setLines([...lines, { partId: data.parts[0].id, qty: 1, unitCost: data.parts[0].price }])}>+ line</Button>
+        <Button size="sm" data-testid="po-new-part" onClick={() => setInlineNew(true)} title="Uncataloged part? Create it here — born with this vendor + cost">+ New part (inline)</Button></div>
+      {inlineNew && pm && <PartForm data={pm} presetVendorId={vendorId} onClose={() => setInlineNew(false)} onSaved={(r) => { setInlineNew(false); data.parts.push(r.part); setLines([...lines, { partId: r.part.id, qty: Math.max(1, r.reorderQty || 1), unitCost: r.part.cost ?? r.part.price }]); }} />}
       <div className="mt-3 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" data-testid="po-create-save" onClick={() => run(async () => { await api.createPurchaseOrder({ vendorId, locationId, lines, memo }); onClose(); }, 'Purchase order created (draft)')}>Create draft</Button></div>
     </Modal>
   );

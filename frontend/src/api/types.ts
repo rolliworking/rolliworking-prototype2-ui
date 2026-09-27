@@ -658,7 +658,19 @@ export interface Part {
   price: number;
   stock: number;
   location?: string;
+  // Parts module (canonical record) — shop-owned spare parts only, never client watch components
+  cost?: number;
+  vendorIds?: string[];
+  safeId?: string;
+  bin?: string;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
 }
+export interface Caliber { id: string; brand: string; number: string; spec: string; notes?: string }
+export interface PartSafe { id: string; name: string; owner: string; bins: string[] }
+export interface PartInput { id?: string; partNumber: string; name: string; category: string; calibers: string[]; compatibleRefs?: string[]; aliases?: string[]; price: number; cost?: number; vendorIds?: string[]; safeId?: string; bin?: string; min: number; orderUpTo: number; initialOnHand?: number }
+export interface PartRow { part: Part; onHand: number; onOrder: number; min: number; orderUpTo: number; reorderQty: number; flagged: boolean; location: string; vendors: string[]; caliberRows: Caliber[] }
 
 export type PartsRequestStatus = 'draft' | 'pending' | 'pending_review' | 'awaiting_client' | 'approved' | 'declined' | 'rejected' | 'on_order' | 'received';
 // Pad v2 line item — price + part# filled by the manager at review; generic = free-typed, no part# yet

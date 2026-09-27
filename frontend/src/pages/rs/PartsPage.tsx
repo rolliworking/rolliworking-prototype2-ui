@@ -1,0 +1,71 @@
+import { AlertTriangle, Plus, Search, Tag } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import * as api from '@/api/client';
+import type { Caliber, PartInput, PartRow } from '@/api/client';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
+import { useAsync } from '@/hooks/useAsync';
+import { fmtMoney } from '@/lib/format';
+
+type Bundle = Awaited<ReturnType<typeof api.getPartsModule>>;
+const field = 'h-8 w-full rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:bg-surface focus:outline-none';
+const empty = (): PartInput => ({ partNumber: '', name: '', category: 'Crystals', calibers: [], price: 0, cost: 0, vendorIds: [], safeId: 'safe-mm', bin: 'A1', min: 0, orderUpTo: 0, initialOnHand: 0 });
+
+// The ONE part record — create + edit in place. Location = safe → bin, reorder = trigger + order-up-to.
+export const PartForm = ({ data, initial, onClose, onSaved, presetVendorId }: { data: Bundle; initial?: PartRow; onClose: () => void; onSaved: (r: PartRow) => void; presetVendorId?: string }) => {
+  const [f, setF] = useState<PartInput>(initial ? { id: initial.part.id, partNumber: initial.part.partNumber, name: initial.part.name, category: initial.part.category, calibers: initial.part.calibers, compatibleRefs: initial.part.compatibleRefs, aliases: initial.part.aliases, price: initial.part.price, cost: initial.part.cost ?? 0, vendorIds: initial.part.vendorIds ?? [], safeId: initial.part.safeId, bin: initial.part.bin, min: initial.min, orderUpTo: initial.orderUpTo } : { ...empty(), vendorIds: presetVendorId ? [presetVendorId] : [] });
+  const [err, setErr] = useState<string | null>(null); const safe = data.safes.find((s) => s.id === f.safeId) ?? data.safes[0];
+  const set = (patch: Partial<PartInput>) => setF({ ...f, ...patch });
+  const save = async () => { try { setErr(null); onSaved(await api.savePart(f)); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } };
+  return <Modal testId="part-form" title={initial ? `Edit ${initial.part.partNumber}` : 'New part'} width="w-[640px]" onClose={onClose}>
+    <div className="grid grid-cols-2 gap-2 text-xs text-ink-500">
+      <label>Part #<input data-testid="part-number" value={f.partNumber} onChange={(e) => set({ partNumber: e.target.value })} className={field} placeholder="25-295-C1" /></label>
+      <label>Category<select data-testid="part-category" value={f.category} onChange={(e) => set({ category: e.target.value })} className={field}>{data.categories.map((c) => <option key={c}>{c}</option>)}</select></label>
+      <label className="col-span-2">Description<input data-testid="part-name" value={f.name} onChange={(e) => set({ name: e.target.value })} className={field} placeholder="Crystal, sapphire with cyclops" /></label>
+      <label className="col-span-2">Calibers (one caliber table)<div data-testid="part-calibers" className="mt-1 flex flex-wrap gap-1">{data.calibers.map((c) => { const on = f.calibers.includes(c.number); return <button key={c.id} type="button" data-testid={`part-cal-${c.number}`} aria-pressed={on} onClick={() => set({ calibers: on ? f.calibers.filter((x) => x !== c.number) : [...f.calibers, c.number] })} className={`rounded-sm px-2 py-0.5 font-mono text-[11px] ring-1 ${on ? 'bg-ink text-white ring-ink' : 'bg-canvas text-ink-700 ring-line hover:ring-ink'}`}>{c.brand} {c.number}</button>; })}</div></label>
+      <label>Cost<input data-testid="part-cost" type="number" min={0} value={f.cost ?? 0} onChange={(e) => set({ cost: Number(e.target.value) })} className={field} /></label>
+      <label>Sell price<input data-testid="part-price" type="number" min={0} value={f.price} onChange={(e) => set({ price: Number(e.target.value) })} className={field} /></label>
+      <label className="col-span-2">Vendors<div className="mt-1 flex flex-wrap gap-1">{data.vendors.map((v) => { const on = f.vendorIds?.includes(v.id); return <button key={v.id} type="button" data-testid={`part-vendor-${v.id}`} aria-pressed={on} onClick={() => set({ vendorIds: on ? f.vendorIds!.filter((x) => x !== v.id) : [...(f.vendorIds ?? []), v.id] })} className={`rounded-sm px-2 py-0.5 text-[11px] ring-1 ${on ? 'bg-ink text-white ring-ink' : 'bg-canvas text-ink-700 ring-line hover:ring-ink'}`}>{v.name}</button>; })}</div></label>
+      <label>Safe<select data-testid="part-safe" value={safe.id} onChange={(e) => { const s = data.safes.find((x) => x.id === e.target.value)!; set({ safeId: s.id, bin: s.bins[0] }); }} className={field}>{data.safes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <label>Bin / drawer<select data-testid="part-bin" value={f.bin ?? safe.bins[0]} onChange={(e) => set({ bin: e.target.value })} className={field}>{safe.bins.map((b) => <option key={b}>{b}</option>)}</select></label>
+      <label>Low-qty trigger<input data-testid="part-min" type="number" min={0} value={f.min} onChange={(e) => set({ min: Number(e.target.value) })} className={field} /></label>
+      <label>Order-up-to<input data-testid="part-orderupto" type="number" min={0} value={f.orderUpTo} onChange={(e) => set({ orderUpTo: Number(e.target.value) })} className={field} /></label>
+      {!initial && <label>Initial on hand<input data-testid="part-initial" type="number" min={0} value={f.initialOnHand ?? 0} onChange={(e) => set({ initialOnHand: Number(e.target.value) })} className={field} /></label>}
+    </div>
+    {err && <div data-testid="part-form-error" className="mt-2 rounded-sm bg-rose-50 px-2 py-1 text-xs text-rose-700">{err}</div>}
+    <div className="mt-3 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" data-testid="part-save" onClick={() => void save()}>{initial ? 'Save changes' : 'Create part'}</Button></div>
+  </Modal>;
+};
+
+const CaliberTab = ({ rows, onChange }: { rows: Caliber[]; onChange: () => void }) => {
+  const [f, setF] = useState({ brand: 'Rolex', number: '', spec: '' }); const [err, setErr] = useState<string | null>(null);
+  return <Card title="Caliber table" subtitle="The single reference every part's caliber link points to · placeholder specs until the data reconciliation lands" testId="caliber-tab">
+    <table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase tracking-wide text-ink-500"><th className="py-1">Brand</th><th>Caliber #</th><th>Spec</th></tr></thead><tbody>{rows.map((c) => <tr key={c.id} data-testid={`caliber-row-${c.number}`} className="border-t border-line"><td className="py-1.5">{c.brand}</td><td className="font-mono font-semibold">{c.number}</td><td className="text-ink-600">{c.spec}</td></tr>)}</tbody></table>
+    <div className="mt-3 flex flex-wrap items-end gap-2 text-xs text-ink-500"><label>Brand<input data-testid="caliber-brand" value={f.brand} onChange={(e) => setF({ ...f, brand: e.target.value })} className={`${field} w-28`} /></label><label>Caliber #<input data-testid="caliber-number" value={f.number} onChange={(e) => setF({ ...f, number: e.target.value })} className={`${field} w-28`} /></label><label className="flex-1">Spec<input data-testid="caliber-spec" value={f.spec} onChange={(e) => setF({ ...f, spec: e.target.value })} className={field} /></label><Button variant="primary" data-testid="caliber-add" onClick={async () => { try { setErr(null); await api.saveCaliber(f); setF({ brand: f.brand, number: '', spec: '' }); onChange(); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } }}><Plus size={12} /> Add caliber</Button></div>
+    {err && <div className="mt-1 text-xs text-rose-700">{err}</div>}
+  </Card>;
+};
+
+export default function PartsPage() {
+  const { data, reload } = useAsync(() => api.getPartsModule()); const [tab, setTab] = useState<'parts' | 'calibers' | 'reorder'>('parts'); const [q, setQ] = useState(''); const [cat, setCat] = useState(''); const [edit, setEdit] = useState<PartRow | 'new' | null>(null); const [hits, setHits] = useState<PartRow[] | null>(null); const [flash, setFlash] = useState<string | null>(null);
+  useEffect(() => { if (!q.trim()) { setHits(null); return; } api.searchParts(q, 50).then(setHits); }, [q, data]);
+  const rows = useMemo(() => (hits ?? data?.parts ?? []).filter((r) => !cat || r.part.category === cat), [hits, data, cat]);
+  if (!data) return null; const flagged = data.parts.filter((r) => r.flagged);
+  return <div data-testid="parts-page" className="space-y-4">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-xl font-semibold tracking-tight text-ink">Parts</h1><p className="mt-0.5 text-xs text-ink-500">Shop-owned spare parts — one record, one stock count, one reorder rule, one caliber table, one search. (Client watch components live in Custody, not here.)</p></div><Button variant="primary" data-testid="parts-new" onClick={() => setEdit('new')}><Plus size={13} /> New part</Button></div>
+    {flash && <div data-testid="parts-flash" className="rounded-sm bg-moss-50 px-3 py-2 text-xs text-moss-800">{flash}</div>}
+    <nav className="flex gap-1 border-b border-line">{([['parts', `Parts · ${data.parts.length}`], ['calibers', `Calibers · ${data.calibers.length}`], ['reorder', `Reorder · ${flagged.length}`]] as const).map(([k, l]) => <button key={k} data-testid={`parts-tab-${k}`} aria-current={tab === k} onClick={() => setTab(k)} className={`-mb-px h-9 border-b-2 px-3 text-[13px] font-medium ${tab === k ? 'border-ink text-ink' : 'border-transparent text-ink-500 hover:text-ink'}`}>{l}{k === 'reorder' && flagged.length > 0 && <AlertTriangle size={12} className="ml-1 inline text-amber-700" />}</button>)}</nav>
+    {tab === 'parts' && <Card bodyClassName="p-0" testId="parts-table-card">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line p-2"><div className="relative flex-1"><Search size={13} className="pointer-events-none absolute left-2 top-2.5 text-ink-400" /><input data-testid="parts-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search part #, description, alias, category, caliber…" className={`${field} pl-7`} /></div><select data-testid="parts-category-filter" value={cat} onChange={(e) => setCat(e.target.value)} className={`${field} w-44`}><option value="">All categories</option>{data.categories.map((c) => <option key={c}>{c}</option>)}</select></div>
+      <table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase tracking-wide text-ink-500"><th className="px-2 py-1.5">Part #</th><th>Description</th><th>Category</th><th>Calibers</th><th>Cost / Price</th><th>Vendors</th><th>Location</th><th className="text-right">On hand</th><th className="text-right">Trigger / Up-to</th><th /></tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.part.id} data-testid={`part-row-${r.part.id}`} data-flagged={r.flagged} onClick={() => setEdit(r)} className={`cursor-pointer border-t border-line hover:bg-canvas ${r.flagged ? 'bg-amber-50/60' : ''}`}><td className="px-2 py-1.5 font-mono font-semibold text-ink">{r.part.partNumber}</td><td className="text-ink">{r.part.name}<div className="text-[10px] text-ink-400">{r.part.aliases.slice(0, 3).join(' · ')}</div></td><td><span className="rounded-sm bg-canvas px-1.5 py-0.5 text-[10px] ring-1 ring-line">{r.part.category}</span></td><td className="font-mono text-ink-600">{r.part.calibers.join(', ') || '—'}</td><td className="tabular">{fmtMoney(r.part.cost ?? 0)} / {fmtMoney(r.part.price)}</td><td className="text-ink-600">{r.vendors.join(', ') || '—'}</td><td data-testid={`part-loc-${r.part.id}`} className="text-ink-600">{r.location}</td><td className={`tabular text-right font-semibold ${r.flagged ? 'text-amber-800' : 'text-ink'}`}>{r.onHand}{r.onOrder > 0 && <span className="text-[10px] text-ink-400"> +{r.onOrder} on order</span>}</td><td className="tabular text-right text-ink-600">{r.min} / {r.orderUpTo}</td><td className="pr-2 text-right">{r.flagged && <span data-testid={`part-flag-${r.part.id}`} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">order {r.reorderQty}</span>}</td></tr>)}{!rows.length && <tr><td colSpan={10} className="py-6 text-center text-ink-400">No parts match.</td></tr>}</tbody></table>
+    </Card>}
+    {tab === 'calibers' && <CaliberTab rows={data.calibers} onChange={() => void reload()} />}
+    {tab === 'reorder' && <Card title="Needs ordering" subtitle="Flag when on hand + on order ≤ low-qty trigger · buy order-up-to minus (on hand + on order) — the one canonical rule, shared with Purchasing" testId="reorder-tab">
+      <table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase tracking-wide text-ink-500"><th className="py-1">Part</th><th className="text-right">On hand</th><th className="text-right">On order</th><th className="text-right">Trigger</th><th className="text-right">Up-to</th><th className="text-right">Order qty</th><th /></tr></thead><tbody>{flagged.map((r) => <tr key={r.part.id} data-testid={`reorder-row-${r.part.id}`} className="border-t border-line"><td className="py-1.5"><span className="font-mono font-semibold">{r.part.partNumber}</span> <span className="text-ink-600">{r.part.name}</span></td><td className="text-right">{r.onHand}</td><td className="text-right">{r.onOrder}</td><td className="text-right">{r.min}</td><td className="text-right">{r.orderUpTo}</td><td className="text-right font-semibold text-amber-800" data-testid={`reorder-qty-${r.part.id}`}>{r.reorderQty}</td><td className="text-right"><Link to={`/purchasing?part=${r.part.id}`} data-testid={`reorder-po-${r.part.id}`} className="inline-flex items-center gap-1 text-brand hover:underline"><Tag size={11} /> Generate PO</Link></td></tr>)}{!flagged.length && <tr><td colSpan={7} className="py-6 text-center text-ink-400">Nothing at or below its trigger.</td></tr>}</tbody></table>
+    </Card>}
+    {edit && <PartForm data={data} initial={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} onSaved={(r) => { setEdit(null); setFlash(`${r.part.partNumber} saved · ${r.location} · trigger ${r.min} / up-to ${r.orderUpTo}`); void reload(); window.setTimeout(() => setFlash(null), 4000); }} />}
+  </div>;
+}

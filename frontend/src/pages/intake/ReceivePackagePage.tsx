@@ -28,7 +28,7 @@ export default function ReceivePackagePage() {
   const [b2b, setB2b] = useState<{ client: Client | null; tier: string; code: string } | null>(null);
   const [estError, setEstError] = useState<string | null>(null);
   const [contents, setContents] = useState<string[]>([]);
-  const [photos, setPhotos] = useState<PackagePhoto[]>([]);
+  const [photos, setPhotos] = useState<PackagePhoto[]>([]); const [cameraBypass, setCameraBypass] = useState(false);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,7 +67,7 @@ export default function ReceivePackagePage() {
     setBusy(true);
     setError(null);
     try {
-      await api.receivePackage(pkg.id, { trackingNumber: tracking, estimateId: estimate?.id, clientId: b2b?.client?.id, contents, photos, notes: notes || undefined });
+      await api.receivePackage(pkg.id, { trackingNumber: tracking, estimateId: estimate?.id, clientId: b2b?.client?.id, contents, photos, notes: notes || undefined, cameraBypass });
       refreshCounts();
       navigate('/intake/receive', { replace: true });
     } catch (e) {
@@ -191,7 +191,7 @@ export default function ReceivePackagePage() {
               <>
                 <ul className="mb-3 space-y-1 text-xs text-ink-700">
                   <li className="flex items-center gap-1.5"><Check size={12} className={estimate ? 'text-moss' : 'text-ink-300'} /> Estimate linked {estimate ? estimate.number : '(optional)'}</li>
-                  <li className="flex items-center gap-1.5"><Check size={12} className={photos.length ? 'text-moss' : 'text-ink-300'} /> {photos.length} photo{photos.length === 1 ? '' : 's'}</li>
+                  <li className="flex items-center gap-1.5"><Check size={12} className={photos.length ? 'text-moss' : 'text-ink-300'} /> {photos.length} photo{photos.length === 1 ? '' : 's'}{!photos.length && <label className="ml-2 inline-flex items-center gap-1 text-[11px] text-amber-800"><input type="checkbox" data-testid="receive-camera-bypass" checked={cameraBypass} onChange={(e) => setCameraBypass(e.target.checked)} /> Camera not working — bypass (logged to MH Hitlist)</label>}</li>
                   <li className="flex items-center gap-1.5"><Check size={12} className={contents.length ? 'text-moss' : 'text-ink-300'} /> {contents.length} content pill{contents.length === 1 ? '' : 's'}</li>
                   <li className="flex items-center gap-1.5"><Mail size={12} className={client ? 'text-moss' : 'text-ink-300'} /> {client ? `Confirmation email → ${client.email}` : 'No client email (unknown client)'}</li>
                 </ul>
