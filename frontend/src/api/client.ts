@@ -1462,7 +1462,7 @@ export async function convertEstimateToIntake(estimateId: string, lineIds?: stri
     j = byId(store.jobs, e.jobId);
     // Leftover lines from an earlier partial convert join the existing job (append-only), then the estimate closes if nothing is left open
     const extra = openLines(e, 'job').filter((l) => !lineIds || lineIds.includes(l.id));
-    if (extra.length) { j.lines.push(...extra.map((l) => ({ ...l, conversions: undefined, closedOut: undefined, id: newLineId() }))); j.total = j.lines.reduce((t, l) => t + l.qty * l.unitPrice, 0); jobStamp(j, `${extra.length} leftover estimate line${extra.length === 1 ? '' : 's'} added from ${e.number}`); recordLineConvert(e, extra, { kind: 'intake', number: j.number, id: j.id, at: new Date().toISOString() }); return resolve(jobRefs(j)); }
+    if (extra.length) { j.lines.push(...extra.map((l) => ({ ...l, conversions: undefined, closedOut: undefined, id: newLineId() }))); j.total = j.lines.reduce((t, l) => t + l.qty * l.unitPrice, 0); jobStamp(j, `${extra.length} leftover estimate line${extra.length === 1 ? '' : 's'} added from ${e.number}`); j.notes.push({ id: newId('n'), text: `${extra.length} leftover estimate line${extra.length === 1 ? '' : 's'} added from ${e.number}: ${extra.map((l) => l.description).join(', ')}`, at: new Date().toISOString(), by: actor().by, station: actor().station } as Job['notes'][number]); recordLineConvert(e, extra, { kind: 'intake', number: j.number, id: j.id, at: new Date().toISOString() }); return resolve(jobRefs(j)); }
     if (j.simpleStatus === 'on_hand') throw new Error(`Job ${j.number} is already on hand`);
     if (j.simpleStatus === 'finished') throw new Error(`Job ${j.number} is finished`);
     j.simpleStatus = 'on_hand';
