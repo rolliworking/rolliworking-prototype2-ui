@@ -1079,7 +1079,13 @@ export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage
 
 // ---- E18 RW deep build — shop floor core ----------------------------------------------------------------
 export type RwLane = 'head' | 'band' | 'shared';
-export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'into_safe_head' | 'safe_await_band' | 'band_pre_queue' | 'refinish' | 'polish' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished';
+export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'uncase' | 'mgr_safe_polish_in' | 'polish_room' | 'mgr_safe_polish_out' | 'movement_service' | 'parts_approval' | 'recase_test' | 'into_safe_head' | 'safe_await_band'
+  | 'band_pre_queue' | 'band_assign' | 'band_mgr_safe_in' | 'refinish' | 'band_mgr_safe_out' | 'band_qc' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished';
+// Lock = the item is physically in a manager's safe (custody-holding point), never an abstract gate
+export const isSafeStation = (k: RwStationKey): boolean => k.includes('safe');
+export type GateDirection = 'in' | 'out';
+export type GateTrack = 'watch' | 'band';
+export interface GateScan { id: string; at: string; by: string; station: string; jobId: string; jobNumber: string; direction: GateDirection; track: GateTrack; parts: ComponentKey[]; bundled: boolean; assignedTo: string; from: RwStationKey; to: RwStationKey }
 export interface RwStation { key: RwStationKey; label: string; lane: RwLane; order: number }
 export type PartColorKey = 'head' | 'case' | 'band';
 export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string; completed?: { by: string; undoToken: string; transitioned: boolean } }

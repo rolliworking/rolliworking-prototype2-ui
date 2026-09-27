@@ -3774,7 +3774,9 @@ export async function getRwFloorMap(): Promise<RwFloorMap> {
 }
 
 // ---- E18 RW deep build — shop floor core (parts = components with station/status/custody/history) --------------------
-import type { FloorDot, JobPhotoView, PadCard, PartHistoryView, PartMove, PartStatus, PartSuggestion, PickTask, PickTaskView, RoomSummary, RwStation, RwStationKey, ScanSession, SendBackReason, WorkQueueRow } from './types';
+import type { FloorDot, GateDirection, GateScan, GateTrack, JobPhotoView, PadCard, PartHistoryView, PartMove, PartStatus, PartSuggestion, PickTask, PickTaskView, RoomSummary, RwStation, RwStationKey, ScanSession, SendBackReason, WorkQueueRow } from './types';
+export type { GateDirection, GateScan, GateTrack } from './types';
+export { isSafeStation } from './types';
 export { RW_STATIONS } from './fixtures';
 const rw18 = { picks: fx.pickTasks.map((p): PickTask => ({ ...p })), recent: fx.recentPartChoices.map((r) => ({ ...r })), replied: new Set<string>(), scanSession: { rows: [] } as ScanSession, stationMemory: null as RwStationKey | null, undos: new Map<string, { jobId: string; key: ComponentKey; before: { station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; historyLen: number; timelineLen: number; status: JobStatus }; transitioned: boolean; expiresAt: number }>() };
 const PART_LABEL: Record<ComponentKey, string> = { head: 'Watch head', case: 'Case', band: 'Bracelet' };
@@ -3807,7 +3809,7 @@ export async function getShopFloor(filter?: { tech?: string; kind?: JobKind }): 
   return resolve({ stations: fx.RW_STATIONS, dots, counts, techs: [...new Set(roomJobs().flatMap((j) => ensureParts(j).map((c) => c.custodyTech ?? '')).filter(Boolean))].sort() });
 }
 type ShopFloorT = import('./types').ShopFloor;
-const statusForStation = (s: RwStationKey, prev: PartStatus): PartStatus => (s === 'finished' ? 'fulfilled' : s === 'final_assembly' || s === 'testing' ? 'reunited' : s.startsWith('safe_') || s.startsWith('into_safe') ? 'waiting' : s === 'pre_approval' || s.endsWith('pre_queue') ? 'not_started' : prev === 'fulfilled' ? 'fulfilled' : 'in_progress');
+const statusForStation = (s: RwStationKey, prev: PartStatus): PartStatus => (s === 'finished' ? 'fulfilled' : s === 'final_assembly' || s === 'testing' ? 'reunited' : s.includes('safe') ? 'waiting' : s === 'pre_approval' || s.endsWith('pre_queue') ? 'not_started' : prev === 'fulfilled' ? 'fulfilled' : 'in_progress');
 const partOf = (jobId: string, key: ComponentKey) => { const j = getJobRow(jobId); const c = ensureParts(j).find((x) => x.key === key); if (!c) throw new Error(`${PART_LABEL[key]} is not a part of ${j.number}`); return { j, c }; };
 const recordMove = (j: Job, c: JobComponent, to: RwStationKey | undefined, status: PartStatus, via: PartMove['via'], note?: string, tech?: string) => {
   const a = actor(); const from = derivePlacement(j, c).station;
@@ -3859,6 +3861,38 @@ export async function finishJob(jobId: string): Promise<JobWithRefs> {
   return resolve(jobRefs(j));
 }
 export async function getPartHistory(jobId: string, key: ComponentKey): Promise<PartHistoryView> { const { j, c } = partOf(jobId, key); return resolve({ job: jobRefs(j), part: { ...c }, moves: [...(c.history ?? [])].reverse() }); }
+
+// -- Polish off-ramp: manager-gated custody checkpoint on BOTH ends. Lock = the part is in a manager's safe. Scan IN hands the part(s) to a polisher; scan OUT hands them back onto the track.
+export const isSplitFlow = (j: Job): boolean => j.workflow.includes('B') && ensureComponents(j).some((c) => c.key === 'band');
+export const GATE: Record<GateTrack, Record<GateDirection, { from: RwStationKey; to: RwStationKey }>> = { watch: { in: { from: 'mgr_safe_polish_in', to: 'polish_room' }, out: { from: 'mgr_safe_polish_out', to: 'movement_service' } }, band: { in: { from: 'band_mgr_safe_in', to: 'refinish' }, out: { from: 'band_mgr_safe_out', to: 'band_qc' } } };
+const gateScans: GateScan[] = [];
+// Which physical parts ride a gate scan: watch track = case, plus the bracelet bundled when the job is NOT split; band track = bracelet only (split jobs).
+const gateParts = (j: Job, track: GateTrack): { parts: JobComponent[]; bundled: boolean } => {
+  const comps = ensureParts(j);
+  if (track === 'band') { if (!isSplitFlow(j)) throw new Error(`${j.number} has no separate band track — the bracelet rides the WATCH off-ramp bundled with the case`); return { parts: comps.filter((c) => c.key === 'band'), bundled: false }; }
+  let cs = comps.find((c) => c.key === 'case');
+  if (!cs) { cs = { key: 'case', label: 'Case', depts: ['P'], rework: [], history: [] }; comps.push(cs); jobStamp(j, 'Courtesy polish · case tracked as a part from the manager gate'); }
+  const band = !isSplitFlow(j) ? comps.find((c) => c.key === 'band') : undefined;
+  return { parts: [cs, ...(band ? [band] : [])], bundled: !!band };
+};
+export interface GateScanResult { scan: GateScan; job: JobWithRefs; dots: FloorDot[] }
+export async function polishGateScan(label: string, direction: GateDirection, track: GateTrack, assignTo?: string): Promise<GateScanResult> {
+  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Manager gate — only a manager can scan parts in or out of the safe');
+  const j = await findJobByLabel(label.trim().replace(/^BAND-/i, '')); if (!j) throw new Error(`No job matches label ${label}`); const row = getJobRow(j.id);
+  const { parts, bundled } = gateParts(row, track); const g = GATE[track][direction];
+  const wm = ensureParts(row).find((c) => c.key === 'head')?.custodyTech ?? row.assignees[0];
+  const to = direction === 'in' ? assignTo?.trim() : assignTo?.trim() || wm; if (!to) throw new Error(direction === 'in' ? 'Pick the polisher this part is handed to' : 'No watchmaker on the job — pick who receives it');
+  const wrong = parts.filter((c) => derivePlacement(row, c).station !== g.from);
+  if (wrong.length && wrong.length === parts.length) throw new Error(`${PART_LABEL[wrong[0].key]} is at ${stationOf(derivePlacement(row, wrong[0]).station).label}, not in ${stationOf(g.from).label} — put it in the safe first`);
+  parts.forEach((c) => { recordMove(row, c, g.to, statusForStation(g.to, c.partStatus ?? 'in_progress'), 'scan', `manager gate ${direction.toUpperCase()} · ${a.by} → ${to}${bundled ? ' · bundled case + bracelet' : ''}`, to);
+    if (direction === 'out' && track === 'watch' && !c.completedAt) { c.completedAt = new Date().toISOString(); c.completedBy = c.history?.[c.history.length - 2]?.by ?? to; c.completedStation = 'Polish room'; jobStamp(row, `Component complete · ${c.label} · refinished · credited ${c.completedBy} · via manager gate OUT`); } });
+  const scan: GateScan = { id: newId('gate'), at: new Date().toISOString(), by: a.by, station: a.station, jobId: row.id, jobNumber: row.number, direction, track, parts: parts.map((c) => c.key), bundled, assignedTo: to, from: g.from, to: g.to };
+  gateScans.unshift(scan);
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Manager gate ${direction.toUpperCase()} · ${row.number} · ${parts.map((c) => PART_LABEL[c.key]).join(' + ')}${bundled ? ' (bundled)' : ''} · ${stationOf(g.from).label} → ${stationOf(g.to).label} · handed to ${to}` });
+  return resolve({ scan, job: jobRefs(row), dots: parts.map((c) => dotOf(row, c)) });
+}
+export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
+export const POLISHERS = ['Walter', 'Joseph', 'Leo'];
 
 // -- Bulk assign (scan-driven): TECH-<short> then watch labels
 export const parseTechCode = (code: string): User | undefined => { const m = /^TECH-(.+)$/i.exec(code.trim()); return m ? fx.users.find((u) => u.shortName.toLowerCase() === m[1].toLowerCase()) : undefined; };
@@ -4349,8 +4383,8 @@ const auditableJobs = () => store.jobs.filter((j) => j.division === getSessionDi
 const expectedAt = (k: AuditLocationKey): AuditItem[] => auditableJobs().flatMap((j) => ensureParts(j).filter((c) => believedLocation(j, c) === k).map((c) => auditItemOf(j, c)));
 // Role-scoped audit: MH/owner = full shop grid (unchanged); WM Supervisor = only the WM room's safes, benches, stuck bin, testing, "MM Inspection" (= finished), pre-queue, refinish/polish. Band scope for Joseph later.
 const AUDIT_SCOPES: Record<Exclude<AuditScope, 'full'>, { keys: AuditLocationKey[]; relabel: Partial<Record<AuditLocationKey, string>> }> = {
-  wm: { keys: ['into_safe_head', 'safe_await_band', 'safe_await_head', 'wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'stuck_parts_bin', 'testing', 'finished', 'pre_queue', 'refinish', 'polish'], relabel: { finished: 'MM Inspection · finished, awaiting inspection', pre_queue: 'Pre-queue · in safe, awaiting bench pickup' } },
-  band: { keys: ['band_pre_queue', 'refinish', 'polish', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly'], relabel: { final_assembly: 'Band handoff · final assembly' } },
+  wm: { keys: ['into_safe_head', 'safe_await_band', 'safe_await_head', 'wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'stuck_parts_bin', 'testing', 'finished', 'pre_queue', 'uncase', 'mgr_safe_polish_in', 'polish_room', 'mgr_safe_polish_out', 'movement_service', 'parts_approval', 'recase_test'], relabel: { finished: 'MM Inspection · finished, awaiting inspection', pre_queue: 'Pre-queue · in safe, awaiting bench pickup' } },
+  band: { keys: ['band_pre_queue', 'band_assign', 'band_mgr_safe_in', 'refinish', 'band_mgr_safe_out', 'band_qc', 'polish_room', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly'], relabel: { final_assembly: 'Band handoff · final assembly' } },
 };
 export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' || /Watchmaker Room Supervisor/i.test(u.dutyLabel) ? 'wm' : u.id === 'u-joseph' || /Band/i.test(u.dutyLabel) ? 'band' : 'full');
 export async function getAuditLocations(scope: AuditScope = 'full'): Promise<AuditLocationStatus[]> {
