@@ -287,3 +287,6 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 
 ## Pending / next
 - Real shop lat/lng for the RGTime geofence (user left the field blank). Q91 verdict (bench techs in count mode). Backlog: amber/provisional items (Q57 floor lanes, per-kind evidence slots, cross-division inventory rules, templates → Outbox wiring for legacy emails, hide-money for non-manager tiers).
+
+### Code review fixes (2026-09-27; tested iteration_39, backend 16/16)
+- `ai_routes.extract_bill`: message built once, `text` assigned on a single path; return type hints on `server.py` routes; test files: implicit boolean asserts + type hints. No behaviour change.
