@@ -1,4 +1,4 @@
-import { PauseCircle, UserCog, Wrench } from 'lucide-react';
+import { PauseCircle, UserCog, Wrench, Map } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -35,6 +35,7 @@ export default function SupervisorPage() {
         <h1 className="text-xl font-semibold tracking-tight text-ink">Supervisor board</h1>
         <p className="mt-0.5 text-xs text-ink-500">Assign watchmakers · parts-approval queue · holds parked under {user?.shortName} · QC queue. Every change is audit-stamped.</p>
       </div>
+      <Link to="/floor" data-testid="sup-shop-floor-link" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-canvas"><Map size={13} /> Shop Floor · station map</Link>
       {error && <div data-testid="sup-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
       <div className="grid grid-cols-[1fr_400px] gap-4">
         <div className="space-y-4">

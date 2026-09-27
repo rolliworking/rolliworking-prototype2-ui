@@ -209,7 +209,8 @@ export default function App() {
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />
               <Route path="/supervisor" element={<SupervisorPage />} />
-              <Route path="/floor" element={<FloorMapPage />} />
+              <Route path="/floor" element={<div data-testid="desktop-shop-floor" className="-mx-6 -my-5 min-h-full bg-[#161b22] px-6 py-5 text-slate-100"><RwFloorPage /></div>} />
+              <Route path="/floor/lanes" element={<FloorMapPage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
