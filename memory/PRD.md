@@ -298,3 +298,7 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 
 ### iPad screenshot zip (2026-09-27, 4th request — delivered)
 - `scripts/ipad_screens.py` (Playwright, 1024×768 @2x) → `frontend/public/ipad-screens/*.png` + `frontend/public/ipad-screens-2026-09-27.zip`, served at `<REACT_APP_BACKEND_URL>/ipad-screens-2026-09-27.zip`. Contains what exists today: WM Supervisor Pad (Jobs/Parts/Review/Audit), supervisor view, bench view, work queue, RW jobs lookup, picking, RW today, Jobs board (all lanes / list / in service / testing / closed / shop time). NOT built yet (queued briefs): Band/Polish Room pad, WM department goal dashboard, Queue/In-progress/Finished job tabs. Re-run the script after those ship.
+
+### Supervisor Pad dashboard + parts Quick Add/returns + request history (2026-09-27; tested iteration_41 ~92%, Rosa gate = standing ruling)
+- `PadDashboard.tsx` (DeptGoalTracker reusable), `PadQuickAdd.tsx`, `PadReview.tsx` RequestHistory chips; client.ts: getDeptDashboard/setDeptGoal, jobPartsAllowance/setJobPartsAllowance/getJobParts/quickAddPart/returnJobPart.
+- Backlog (not built): OOS → client notice email; "also used on" cross-ref display; pad job-row density; RW history lookup; Band room pad; component chips + trickle-down; per-staff client reviews; QBO setup; intercom + paging; SUB# receiving branch. Re-run `scripts/ipad_screens.py` after Band pad ships.
