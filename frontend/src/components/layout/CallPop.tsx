@@ -48,7 +48,7 @@ export const CallPopToast = () => {
 // After the call: "add a note?" + one-tap "which job was this about?" chips — appended to the call record (never overwrites)
 const CallNotePrompt = ({ callId, clientId, onDone }: { callId: string; clientId: string; onDone: () => void }) => {
   const [jobs, setJobs] = useState<Job[]>([]); const [note, setNote] = useState(''); const [jobId, setJobId] = useState<string | undefined>();
-  useEffect(() => { void api.getJobs().then((js) => setJobs(js.filter((j) => j.clientId === clientId && j.status !== 'closed'))); }, [clientId]);
+  useEffect(() => { void api.getJobsForClient(clientId).then((js) => setJobs(js.filter((j) => j.status !== 'closed'))); }, [clientId]);
   const save = async () => { if (jobId) await api.linkCallToJob(callId, jobId); if (note.trim()) await api.addCallNote(callId, note); onDone(); };
   return <div data-testid="call-note-prompt" className="fixed bottom-5 right-5 z-50 w-[380px] space-y-2 rounded-md border border-line bg-surface p-3 text-xs shadow-pop animate-rise">
     <div className="flex items-center justify-between"><span className="font-semibold text-ink">Call ended — add a note?</span><button data-testid="call-note-skip" onClick={onDone} className="text-ink-400 hover:text-ink">skip</button></div>

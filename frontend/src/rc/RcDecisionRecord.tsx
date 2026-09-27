@@ -1,4 +1,5 @@
 import { FileCheck2 } from 'lucide-react';
+import { Fragment } from 'react';
 import type { InspectionDecisionRecord } from '@/api/client';
 import { RcCard, rcDate } from '@/rc/RcBits';
 
@@ -10,7 +11,7 @@ export const RcDecisionRecord = ({ d, testId, compact }: { d: InspectionDecision
       <dl className="grid flex-1 gap-2 text-[15px] sm:grid-cols-[140px_1fr]">
         <dt className="text-rc-muted">Decision</dt><dd data-testid={`${testId ?? `rc-decision-${d.id}`}-decision`} className="font-medium">{d.decision === 'approve' ? 'Approved — go ahead' : `Declined${d.reason ? ` — “${d.reason}”` : ''}`}</dd>
         <dt className="text-rc-muted">Polish</dt><dd>{POLISH[d.polish]}</dd>
-        {d.survey.map((s) => <><dt key={`${s.q}-q`} className="text-rc-muted">{s.q}</dt><dd key={`${s.q}-a`}>{s.a}</dd></>)}
+        {d.survey.map((s) => <Fragment key={s.q}><dt className="text-rc-muted">{s.q}</dt><dd>{s.a}</dd></Fragment>)}
         <dt className="text-rc-muted">Signed</dt><dd className="font-serif text-lg italic">{d.signature} <span className="font-sans text-sm not-italic text-rc-muted">· {rcDate(d.decidedAt)} {new Date(d.decidedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · via {d.via === 'portal' ? 'RolliConnect' : 'our team'}</span></dd>
       </dl></div>
   </RcCard>

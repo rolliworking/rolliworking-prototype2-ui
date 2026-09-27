@@ -39,7 +39,7 @@ export const CallCounter = ({ clientId }: { clientId: string }) => {
 export const CallHistoryModal = ({ clientId, onClose }: { clientId: string; onClose: () => void }) => {
   const [rows, setRows] = useState<CallEvent[]>([]); const [jobs, setJobs] = useState<Job[]>([]); const [f, setF] = useState<CallFilter>({ clientId }); const [logging, setLogging] = useState(false); const [form, setForm] = useState({ direction: 'out' as 'in' | 'out', minutes: '', jobId: '', note: '' });
   const load = useCallback(() => api.getCallEvents(f).then(setRows), [f]);
-  useEffect(() => { void load(); void api.getJobs().then((js) => setJobs(js.filter((j) => j.clientId === clientId))); }, [load, clientId]);
+  useEffect(() => { void load(); void api.getJobsForClient(clientId).then(setJobs); }, [load, clientId]);
   const staff = Array.from(new Set(rows.map((r) => r.answeredBy).filter(Boolean))) as string[];
   return <Modal onClose={onClose} testId="call-history" width="w-[760px] max-w-[95vw]">
     <div className="p-5">
