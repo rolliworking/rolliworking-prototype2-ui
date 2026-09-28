@@ -16,6 +16,7 @@ import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
 import { BenchTestsPanel } from '@/components/jobs/BenchTestsPanel';
 import { AuthCapturePanel } from '@/components/inspection/GuidedAuthCapture';
+import { AppraisalsPanel } from '@/components/jobs/AppraisalsPanel';
 import { InspectionReportPanel } from '@/components/jobs/InspectionReportPanel';
 import { TimingCard } from '@/components/jobs/TimingCard';
 import { ComponentsPanel } from '@/components/jobs/ComponentBits';
@@ -134,6 +135,7 @@ export default function JobDetailPage() {
           <TimingCard jobId={j.id} watchId={j.watchId} status={j.status} />
           <Card title="Service evidence" subtitle="Four QC slots · filed by scanning the watch label · keyed to watch AND job" testId="job-evidence-card"><EvidencePanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
+          <Card title="Appraisals" subtitle="Client-facing appraisal report generated from this job’s data · draft → confirm value → finalize & sign → PDF" testId="job-appraisals-card"><AppraisalsPanel job={j} /></Card>
           <Card title="Authentication photos" subtitle="Guided 11-step capture for the authentication app’s training data · per-step camera + per-step Fake / Unsure flag · every shot attaches to the job" testId="job-auth-card"><AuthCapturePanel jobId={j.id} /></Card>
           <Card title="Bench tests" subtitle="Before / after timing + Proofmaster pressure + Witschi Chronoscope · tolerance sheet with caliber match · one photo in, structured readings out (mock extraction)" testId="job-bench-tests-card"><BenchTestsPanel jobId={j.id} /></Card>
           <Card title="Parts requests" subtitle="Chat-style lookup → attach → supervisor approval" testId="job-parts-card" bodyClassName="p-0">

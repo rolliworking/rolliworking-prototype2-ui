@@ -59,6 +59,7 @@ import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
 import EstimatesListPage from '@/pages/estimates/EstimatesListPage';
 import PersonHitlistPage, { HitlistIndex, HomeRedirect } from '@/pages/hitlist/PersonHitlistPage';
 import TeamHitlistPage from '@/pages/hitlist/TeamHitlistPage';
+import AppraisalPage from '@/pages/jobs/AppraisalPage';
 import ArrivalPage from '@/pages/intake/ArrivalPage';
 import LabelQueuePage from '@/pages/intake/LabelQueuePage';
 import OutboxPage from '@/pages/intake/OutboxPage';
@@ -202,6 +203,7 @@ export default function App() {
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/jobs/new" element={<JobCreatePage />} />
               <Route path="/jobs/all" element={<AllJobsPage />} />
+              <Route path="/jobs/:jobId/appraisal/:id" element={<AppraisalPage />} />
               <Route path="/inspection/new" element={<InspectionNewRedirect />} />
               <Route path="/inspection/:id" element={<InspectionRedirect />} />
               <Route path="/inspection-photos" element={<Navigate to="/intake/photos" replace />} />
