@@ -186,6 +186,13 @@ Dashboard, Today/hit list, Clients directory, Requests, Inbound shipments, Label
 - `OWNER_USER_ID = 'u-michael'`; `NavItem.ownerOnly` → `canAccess(item, user)` used by the sidebar (`navForUser`) and the route `TierGate`; `getHitlist()` throws for any other account. Vienna / MM / Walter / Joseph see neither the nav entry nor the data. Rationale: the bypass feed tracks staff who may hold manager access themselves.
 - Verified end to end (iteration_51): receiving-camera bypass on Receive Package, payment-release bypass at Ship (green, 0 min) and Pickup (red, >10 min) all fire `logBypass` and land on `/hitlist` with staff · station · time · job/SO# · invoice $ · minutes since payment.
 
+## 12d. Schedule / booking rules · Arrival bulk + Scan 2 camera · Template managers · Price units (2026-09-28)
+- `api/appointments.ts`: `BookingRules` (per-weekday hours, 30-min slots, capacityPerSlot, overrides, lead/max-ahead, enabled types, required refs, closedDates, confirmation) → `slotsFor(date)`, `validateBooking(input, source)` = the single rule set for the EXTERNAL booking page and the internal `/appointments`; `saveAppointment`, `setAppointmentStatus`, `setClosedDate`, `getAppointmentsToday` (on every `/today`).
+- Arrival Scan 1 = bulk session → `commitArrivals` (logArrival + auto bin + shelve + one audit row); Scan 2 = single → `openScan` → `/intake/receive/:id?camera=1` → `InspectionCameraFlow`.
+- Email templates: `MessageTemplate.audience/usedBy/active`, `setTemplateActive`; new keys `po_email`, `receiving_report`, `appointment_confirmation`, `package_accepted`.
+- Job templates: `api/jobTemplates.ts` (`JobTemplate` with `depts` vs `inferredDepts`, `reviewed`, `archived`; `reviewJobTemplate` = VB10-04 one-time review) — UI under Bill Audit tab.
+- Money: every price store is DOLLARS (purchase history converted at source). Cycle count has no threshold/pin — `CycleCount.gainLoss` report only.
+
 ## 13. Consolidated STAND-INS to replace in production
 1. Job status map `complete→ready_to_ship`, `awaiting_parts/hold→in_service`; default `simpleStatus`, `priority`, `department`, `division` derivation. 2. `valid_until` = created+30 d. 3. Lead numbering `RQ-YY-XXXX` from id. 4. Serial prefix decode table. 5. B2B account-code heuristics. 6. `lineDollars` cents/dollars heuristic. 7. Team "actual" scaled from component-count goals; roster lists. 8. Waiver-required proxy; 14-day update-email threshold; approval wait-time origin. 9. $98/hr bracelet rate; inspection type list. 10. Camera device assignment (IPEVO vs microscope). 11. Base64 photos in memory (→ object storage). 12. QBO and intercom entirely mocked. 13. Audit scope membership lists (WM/band) and `stuck_parts_bin` derivation. 14. Concierge pad placeholder view.
 
