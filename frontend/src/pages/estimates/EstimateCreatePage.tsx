@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Address, Client, DeptCode, EstimateLine, QuoteContext, RequestPrefill, Watch } from '@/api/client';
@@ -21,7 +21,7 @@ export default function EstimateCreatePage() {
   const navigate = useNavigate(); const [params] = useSearchParams(); const requestId = params.get('request') ?? undefined;
   const [prefill, setPrefill] = useState<RequestPrefill | null>(null);
   const [client, setClient] = useState<Client | null>(null);
-  const [watch, setWatch] = useState<Watch | null>(null);
+  const [watch, setWatch] = useState<Watch | null>(null); const scanWatch = useRef<Watch | null>(null);
   const [items, setItems] = useState<EstimateItem[]>([newItem('W', 'Watch')]); const [selItem, setSelItem] = useState(() => '');
   const activeItem = items.find((i) => i.id === selItem)?.id ?? items[0].id;
   const [lines, setLines] = useState<EstimateLine[]>([{ ...blankLine(false), itemId: undefined }]);
@@ -47,7 +47,7 @@ export default function EstimateCreatePage() {
     if (!client) return setCtx(null);
     const addr: Address = { name: client.company ? `${client.company} · ${fullName(client)}` : fullName(client), street: client.street, city: client.city, state: client.state };
     setMeta((m) => ({ ...m, billing: addr, shipping: addr }));
-    setWatch(null);
+    setWatch(scanWatch.current); scanWatch.current = null; // a label scan carries the watch with it
     api.getQuoteContext(client.id, undefined).then(setCtx);
   }, [client]);
 
@@ -87,7 +87,7 @@ export default function EstimateCreatePage() {
       <div className="grid grid-cols-[1fr_360px] gap-4">
         <div className="space-y-4">
           <Card title="Customer" subtitle="Required to save — no customer, nothing saves" testId="create-customer-card">
-            <ClientPicker value={client} onChange={setClient} />
+            <ClientPicker value={client} onChange={setClient} onResolved={(r) => { scanWatch.current = r.watch?.reference ? r.watch : null; }} />
             {client && <div className="mt-4"><EstimateAddresses billing={meta.billing} shipping={meta.shipping} mirror={meta.mirror} onChange={(p) => setMeta((m) => ({ ...m, ...p }))} /></div>}
             {client && (
               <div className="mt-4">

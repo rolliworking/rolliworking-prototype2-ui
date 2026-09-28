@@ -3248,6 +3248,9 @@ export async function postCycleCount(id: string, counted: Record<string, number>
 }
 
 // -- Labels (batch reprint → existing Label Queue, unprinted)
+// Band-only jobs have no watch head → no ref#/serial# to encode. Same PDF417 format, but the payload carries the job number so a scan still resolves to job → client with no name involved.
+export const isBandOnlyJob = (j: Job, w?: Watch) => j.workflow.length > 0 && j.workflow.every((d) => d === 'B') && !(w?.reference && w?.serial);
+export const bandLabelPayload = (num: string, workflow: DeptCode[]) => `${num}|BAND|${num}|NS|${workflow.join(',')}`;
 export async function queueLabelsFor(kind: 'estimate' | 'job' | 'watch', ids: string[]): Promise<LabelJob[]> {
   const out: LabelJob[] = [];
   ids.forEach((id) => {
@@ -3255,12 +3258,33 @@ export async function queueLabelsFor(kind: 'estimate' | 'job' | 'watch', ids: st
     const est = kind === 'estimate' ? store.estimates.find((e) => e.id === id) : job?.estimateId ? store.estimates.find((e) => e.id === job.estimateId) : undefined;
     const w = kind === 'watch' ? store.watches.find((x) => x.id === id) : job ? store.watches.find((x) => x.id === job.watchId) : est?.watchId ? store.watches.find((x) => x.id === est.watchId) : undefined;
     if (!w) return; const c = byId(fx.clients, w.clientId); const num = job?.number ?? est?.number ?? w.id; const pkgId = job?.packageId ?? store.packages.find((p) => p.estimateId === est?.id)?.id ?? '';
+    if (job && isBandOnlyJob(job, w)) { out.push(queueLabel({ type: 'pdf417_data', packageId: pkgId, estimateNumber: num, payload: bandLabelPayload(num, job.workflow), lines: [num, `${c.firstName} ${c.lastName}`, 'BAND ONLY · scan = job #', `Workflow ${job.workflow.join(' · ')}`] })); return; }
     out.push(queueLabel({ type: 'pdf417_data', packageId: pkgId, estimateNumber: num, payload: `${num}|${w.reference}|${w.serial}|${job?.workflow.join(',') ?? ''}`, lines: [num, `${c.firstName} ${c.lastName}`, job ? `Workflow ${job.workflow.join(' · ')}` : 'Reprint'] }));
     out.push(queueLabel({ type: 'ref_serial', packageId: pkgId, estimateNumber: num, payload: `${w.reference} / ${w.serial}`, lines: [`${w.brand} ${w.model}`, `Ref ${w.reference}`, `Serial ${w.serial}`] }));
   });
   if (!out.length) throw new Error('Nothing matched — pick records with a watch');
   rsStamp('labels', `${out.length} labels queued (batch reprint by ${kind})`); return resolve(out);
 }
+export async function queueJobLabels(jobId: string): Promise<LabelJob[]> { const j = getJobRow(jobId); const w = byId(store.watches, j.watchId); const out = await queueLabelsFor('job', [jobId]); jobStamp(j, `${out.length} label${out.length === 1 ? '' : 's'} queued${isBandOnlyJob(j, w) ? ' · band-only PDF417 (job #)' : ' · PDF417 + ref/serial'}`); return out; }
+
+// ---- Scan-to-client — a label scan resolves job → client by ID; never through a name ----
+export interface ScanResolution { client: Client; job?: Job; estimate?: Estimate; watch?: Watch; via: 'job' | 'estimate' | 'ref_serial'; scanned: string }
+export async function resolveScan(raw: string): Promise<ScanResolution | null> {
+  const s = raw.trim().toUpperCase(); if (!s) return resolve(null);
+  const toks = s.split(/[^A-Z0-9-]+/).filter(Boolean);
+  for (const t of toks) {
+    const j = store.jobs.find((x) => x.number.toUpperCase() === t); if (j) return resolve({ client: byId(fx.clients, j.clientId), job: j, estimate: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined, watch: store.watches.find((w) => w.id === j.watchId), via: 'job', scanned: s });
+    const e = store.estimates.find((x) => x.number.toUpperCase() === t); if (e) return resolve({ client: byId(fx.clients, e.clientId), estimate: e, job: e.jobId ? store.jobs.find((x) => x.id === e.jobId) : undefined, watch: e.watchId ? store.watches.find((w) => w.id === e.watchId) : undefined, via: 'estimate', scanned: s });
+  }
+  const rs = parseRefSerial(s); if (!rs) return resolve(null);
+  const w = store.watches.find((x) => x.reference && x.serial && x.reference.toUpperCase() === rs.reference && x.serial.toUpperCase() === rs.serial); if (!w) return resolve(null);
+  const j = store.jobs.filter((x) => x.watchId === w.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  return resolve({ client: byId(fx.clients, w.clientId), job: j, estimate: j?.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined, watch: w, via: 'ref_serial', scanned: s });
+}
+// Duplicate-name detection — EXACT full-name match only (v1); near-matches are an open decision
+const nameKey = (c: Client) => `${c.firstName} ${c.lastName}`.trim().toLowerCase().replace(/\s+/g, ' ');
+export const sameNameClients = (c: Client): Client[] => fx.clients.filter((x) => x.id !== c.id && nameKey(x) === nameKey(c));
+export const duplicateNamesIn = (hits: Client[]): string[] => { const seen = new Map<string, number>(); hits.forEach((c) => seen.set(nameKey(c), (seen.get(nameKey(c)) ?? 0) + 1)); return hits.filter((c) => (seen.get(nameKey(c)) ?? 0) > 1 || sameNameClients(c).length > 0).map((c) => `${c.firstName} ${c.lastName}`).filter((n, i, a) => a.indexOf(n) === i); };
 
 // -- Reports (each reconciles with getDashboardStats)
 const monthKey = (iso: string) => iso.slice(0, 7);

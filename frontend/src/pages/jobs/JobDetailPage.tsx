@@ -1,4 +1,6 @@
-import { ArrowLeft, FileText, Package, Pin, Receipt, Trash2, Watch as WatchIcon } from 'lucide-react';
+import { ArrowLeft, FileText, Package, Pin, Receipt, Tags, Trash2, Watch as WatchIcon } from 'lucide-react';
+import { LabelPrintDialog } from '@/components/intake/LabelBits';
+import type { LabelJob } from '@/api/client';
 import { RatingBadge } from '@/components/clients/RatingBadge';
 import { JobCallsLine } from '@/components/clients/CallLedger';
 import { JobDecisionRecords } from '@/components/jobs/JobDecisionRecords';
@@ -47,6 +49,7 @@ export default function JobDetailPage() {
   const [so, setSo] = useState<SalesOrderWithRefs | null>(null);
   const [prs, setPrs] = useState<PartsRequestWithRefs[]>([]);
   const [openPr, setOpenPr] = useState<PartsRequestWithRefs | null>(null);
+  const [labels, setLabels] = useState<LabelJob[] | null>(null);
 
   const load = useCallback(async () => { setJob(await api.getJob(id)); setSo(await api.getSalesOrderForJob(id)); setPrs(await api.getPartsRequestsForJob(id)); }, [id]);
   useEffect(() => { void load(); }, [load]);
@@ -98,6 +101,7 @@ export default function JobDetailPage() {
           ))}
           {(j.status === 'ready_to_ship' || j.status === 'closed') && !so && <Button variant="primary" data-testid="act-invoice" onClick={async () => { try { const o = await api.invoiceJob(j.id); navigate(`/sales/${o.id}`); } catch (er) { setError(er instanceof Error ? er.message : 'Invoice failed'); } }}><Receipt size={13} /> Create invoice (SO)</Button>}
           {so && <Link to={`/sales/${so.id}`} data-testid="act-open-so" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:border-ink-300 hover:bg-canvas"><Receipt size={13} /> {so.number} · {so.status.replace(/_/g, ' ')}</Link>}
+          <Button data-testid="act-print-label" title={api.isBandOnlyJob(j, j.watch) ? 'Band-only job — PDF417 encodes the job number (no ref/serial)' : 'PDF417 (job · ref · serial) + ref/serial label'} onClick={async () => { try { setLabels(await api.queueJobLabels(j.id)); } catch (er) { setError(er instanceof Error ? er.message : 'Label failed'); } }}><Tags size={13} /> {api.isBandOnlyJob(j, j.watch) ? 'Print label · band only' : 'Print labels'}</Button>
           {j.status !== 'closed' && <Button data-testid="act-parts-request" onClick={async () => { try { setOpenPr(await api.openPartsRequest(j.id)); } catch (er) { setError(er instanceof Error ? er.message : 'Failed'); } }}><Wrench size={13} /> Parts request</Button>}
           <Button data-testid="act-pin" onClick={() => setModal({ kind: 'pin' })} title="Add to someone's hit list"><Pin size={13} /> Add to hit list</Button>
           {user?.accessTier === 'manager' && <Button data-testid="act-delete-job" title="Delete (can-delete-jobs)" onClick={() => { if (window.confirm(`Delete ${j.number}?`)) void run(() => api.deleteJob(j.id), '').then(() => navigate('/jobs')); }}><Trash2 size={13} className="text-rose-700" /></Button>}
@@ -156,6 +160,7 @@ export default function JobDetailPage() {
       </div>
 
       {modal?.kind === 'trade_back' && <TradeSendBackModal testId="trade-send-back-modal" onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, 'trade_send_back', r); setModal(null); await load(); say('Sent back to the bench'); }} />}
+      {labels && <LabelPrintDialog labels={labels} title={`${j.number} · ${api.isBandOnlyJob(j, j.watch) ? 'band-only label (PDF417 = job #)' : 'job labels'}`} onClose={() => { setLabels(null); void load(); }} onPrinted={() => say(`${labels.length} label${labels.length === 1 ? '' : 's'} printed`)} />}
       {modal?.kind === 'reason' && <ReasonModal testId={`reason-modal-${modal.action.key}`} title={modal.action.label.replace('…', '')} hint={modal.action.key === 'qc_fail' ? 'Fail moves the job back to service and queues a client email with this reason.' : 'A reason is required; it lands on the timeline.'} confirmLabel={modal.action.label.replace('…', '')} danger={modal.action.tone === 'danger'} onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, modal.action.key, r); setModal(null); await load(); say(`${modal.action.label.replace('…', '')}${modal.action.notifies ? ' · client email queued' : ''}`); }} />}
       {openPr && <PartsRequestModal request={openPr} onClose={() => { setOpenPr(null); void load(); }} onChange={setOpenPr} />}
       {modal?.kind === 'pin' && <PinModal defaultTitle={`${j.number} · ${fullName(j.client)} · ${j.watch.model}`} jobId={j.id} onClose={() => setModal(null)} onPinned={() => { setModal(null); say('Pinned to their hit list'); }} />}

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
+import { ToastHost } from '@/components/ui/Toast';
 import AppShell from '@/components/layout/AppShell';
 import IntakeLayout from '@/components/intake/IntakeLayout';
 import { canAccess, findNavItem } from '@/config/navigation';
@@ -126,6 +127,7 @@ const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastHost />
       <AuthProvider>
         <Routes>
           <Route path="/station-setup" element={<StationSetupPage />} />

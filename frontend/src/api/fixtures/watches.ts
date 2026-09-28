@@ -33,4 +33,7 @@ export const watches: Watch[] = [
   // RolliShop (internal) trade stock — scanned in, no inspection report, no estimate
   { id: 'w-50', clientId: 'c-31', brand: 'Tudor', model: 'Black Bay 58', reference: 'M79030N-0001', serial: 'T8B5K2R7', dial: 'Black', bracelet: 'Steel rivet', status: 'in_service', receivedAt: daysAgo(3) },
   { id: 'w-51', clientId: 'c-31', brand: 'Rolex', model: 'Oyster Perpetual 36', reference: '126000', serial: 'P3Q9L4M8', dial: 'Turquoise', bracelet: 'Oyster', status: 'qc', receivedAt: daysAgo(6) },
+  // Band-only piece — no watch head, so no ref# / serial# to encode on a label
+  { id: 'w-52', clientId: 'c-32', brand: 'Rolex', model: 'Oyster bracelet (band only)', reference: '', serial: '', dial: '—', bracelet: 'Oyster 78360', status: 'in_service', receivedAt: daysAgo(3) },
+  { id: 'w-53', clientId: 'c-33', brand: 'Rolex', model: 'GMT-Master II', reference: '126710BLRO', serial: 'M4R7K2P9', dial: 'Black', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(4) },
 ];

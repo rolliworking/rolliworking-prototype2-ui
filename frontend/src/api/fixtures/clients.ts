@@ -31,6 +31,9 @@ const rows: Row[] = [
   ['c-30', 'Robert', 'Calloway', 'robert.calloway@example.com', '(203) 555-0130', 'Greenwich', 'CT', undefined],
   ['c-25', 'Sebastian', 'Vidal', 'sebastian.vidal@example.com', '(786) 555-0125', 'Coral Gables', 'FL', 'Vidal Jewelers'],
   ['c-31', 'RolliShop', '(internal)', 'rollishop@rollisuite.internal', '(212) 555-0131', 'New York', 'NY', 'RolliShop'],
+  // Two different customers, same name — the real-world mixup case; contact info is what tells them apart
+  ['c-32', 'William', 'Sanchez', 'wsanchez.nyc@example.com', '(212) 555-0132', 'New York', 'NY'],
+  ['c-33', 'William', 'Sanchez', 'will.sanchez.tx@example.com', '(713) 555-0133', 'Houston', 'TX'],
 ];
 
 const tradeIds = new Set(['c-11', 'c-25', 'c-31']);

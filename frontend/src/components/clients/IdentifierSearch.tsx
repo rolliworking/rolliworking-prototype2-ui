@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { SearchHit, SearchResults } from '@/api/client';
+import { dupWarning } from '@/components/estimates/EstimateForm';
+import { toast } from '@/components/ui/Toast';
 import { flattenHits, SearchHitList } from './SearchHitList';
 
 interface Props {
@@ -19,7 +21,7 @@ export const IdentifierSearch = ({ autoFocus, inline, placeholder, testIdPrefix 
   const [results, setResults] = useState<SearchResults | null>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null); const warnedRef = useRef('');
   const navigate = useNavigate();
   const hits = flattenHits(results);
 
@@ -33,6 +35,12 @@ export const IdentifierSearch = ({ autoFocus, inline, placeholder, testIdPrefix 
         setResults(r);
         setActive(0);
         setOpen(true);
+        // Name-based lookup path: same duplicate-name warning as the client pickers
+        const clientHits = r.groups.find((g) => g.kind === 'client')?.hits ?? [];
+        const names = clientHits.map((h) => h.clientName.trim().toLowerCase());
+        const dups = names.filter((n, i) => names.indexOf(n) !== i).filter((n, i, a) => a.indexOf(n) === i);
+        const key = dups.join('|');
+        if (dups.length && key !== warnedRef.current) { warnedRef.current = key; dups.forEach((n) => toast.warn(dupWarning(clientHits.find((h) => h.clientName.trim().toLowerCase() === n)!.clientName))); }
       });
     }, 120);
     return () => clearTimeout(t);

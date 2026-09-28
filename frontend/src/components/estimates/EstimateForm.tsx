@@ -1,24 +1,45 @@
-import { Plus, Search, UserRound, Watch as WatchIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Plus, ScanLine, Search, UserRound, Watch as WatchIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import * as api from '@/api/client';
-import type { Address, Client, Watch } from '@/api/client';
+import type { Address, Client, ScanResolution, Watch } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { StatusPill } from '@/components/ui/Pills';
+import { toast } from '@/components/ui/Toast';
 import { fullName } from '@/lib/format';
 import { Provisional } from './EstimateBits';
 
-export const ClientPicker = ({ value, onChange }: { value: Client | null; onChange: (c: Client) => void }) => {
+export const dupWarning = (name: string) => `More than one customer named ${name} — confirm you have the right one`;
+
+// Scan-first: a label scan resolves job → client by ID with no name involved. Scanners type fast and end with Enter, so Enter resolves and never submits the page.
+export const ScanClientField = ({ onResolved, testId = 'client-scan' }: { onResolved: (r: ScanResolution) => void; testId?: string }) => {
+  const [q, setQ] = useState(''); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  const go = async () => { if (!q.trim()) return; setBusy(true); setErr(null); try { const r = await api.resolveScan(q); if (!r) { setErr(`Nothing matched “${q.trim()}” — scan the job label or enter a job / estimate # (e.g. E02060) or ref-serial`); return; } onResolved(r); setQ(''); } finally { setBusy(false); } };
+  return <div data-testid={`${testId}-wrap`} className="rounded-md border-2 border-ink bg-ink/[0.03] p-3">
+    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink"><ScanLine size={14} /> Scan the job label <span className="font-normal text-ink-500">· or enter job / estimate # · resolves straight to the customer, no name lookup</span></div>
+    <div className="relative"><ScanLine size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" /><input data-testid={testId} autoFocus value={q} disabled={busy} onChange={(e) => { setQ(e.target.value); setErr(null); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void go(); } }} placeholder="Scan PDF417 · E02060 · 126610LN-7F2K9R41" autoComplete="off" className="h-11 w-full rounded-sm border border-line bg-surface pl-9 pr-24 font-mono text-[15px] tracking-wide focus:border-ink focus:outline-none" /><Button size="sm" data-testid={`${testId}-go`} disabled={busy || !q.trim()} onClick={() => void go()} className="absolute right-1.5 top-1/2 -translate-y-1/2">Look up</Button></div>
+    {err && <p data-testid={`${testId}-error`} className="mt-1.5 text-xs text-rose-700">{err}</p>}
+  </div>;
+};
+
+export const ClientPicker = ({ value, onChange, onResolved, scan = true }: { value: Client | null; onChange: (c: Client) => void; onResolved?: (r: ScanResolution) => void; scan?: boolean }) => {
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<Client[]>([]);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [err, setErr] = useState<string | null>(null);
+  const [resolved, setResolved] = useState<ScanResolution | null>(null);
+  const warned = useRef<string>('');
 
   useEffect(() => {
     if (!q.trim()) return setHits([]);
-    const t = setTimeout(() => api.searchClients(q).then(setHits), 120);
+    const t = setTimeout(() => api.searchClients(q).then((hs) => { setHits(hs); const dups = api.duplicateNamesIn(hs); const key = dups.join('|'); if (dups.length && key !== warned.current) { warned.current = key; dups.forEach((n) => toast.warn(dupWarning(n))); } }), 120);
     return () => clearTimeout(t);
   }, [q]);
+  useEffect(() => { if (!value) setResolved(null); }, [value]);
+
+  // Name-based pick: warn (again) if this exact name belongs to more than one customer — staff can proceed, but only after seeing it
+  const pickByName = (c: Client) => { if (api.sameNameClients(c).length) toast.warn(dupWarning(fullName(c))); setResolved(null); onChange(c); };
+  const pickByScan = (r: ScanResolution) => { setResolved(r); onResolved?.(r); onChange(r.client); };
 
   const create = async () => {
     try {
@@ -36,14 +57,15 @@ export const ClientPicker = ({ value, onChange }: { value: Client | null; onChan
       <div data-testid="client-selected" className="flex items-center justify-between rounded-sm border border-line bg-canvas px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="grid h-7 w-7 place-items-center rounded-full bg-brand-50 text-brand"><UserRound size={13} /></span>
-          <div><div className="text-[13px] font-medium text-ink">{fullName(value)}</div><div className="text-[11px] text-ink-500">{value.email} · {value.phone}</div></div>
+          <div><div className="text-[13px] font-medium text-ink">{fullName(value)}</div><div className="text-[11px] text-ink-500">{value.email} · {value.phone}</div>{resolved && <div data-testid="client-resolved-via" className="mt-0.5 inline-flex items-center gap-1 rounded-sm bg-moss-50 px-1.5 py-0.5 text-[10px] font-semibold text-moss-700"><ScanLine size={10} /> Resolved by scan · {resolved.via === 'job' ? `job ${resolved.job!.number}` : resolved.via === 'estimate' ? `estimate ${resolved.estimate!.number}` : `ref·serial ${resolved.watch!.reference}-${resolved.watch!.serial}`} → customer ID {value.id} · no name lookup</div>}{!resolved && api.sameNameClients(value).length > 0 && <div data-testid="client-dup-badge" className="mt-0.5 inline-flex items-center rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">⚠ {api.sameNameClients(value).length + 1} customers share this name · picked by name — verify email / phone</div>}</div>
         </div>
         <button type="button" data-testid="client-change" onClick={() => onChange(null as unknown as Client)} className="text-xs text-brand hover:underline">Change</button>
       </div>
     );
   }
   return (
-    <div>
+    <div className="space-y-3">
+      {scan && <ScanClientField onResolved={pickByScan} />}
       {creating ? (
         <div data-testid="client-new-form" className="grid grid-cols-2 gap-2 rounded-sm border border-line p-3">
           <input data-testid="client-new-first" placeholder="First name" value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} className="h-8 rounded-sm border border-line bg-canvas px-2 text-[13px]" autoFocus />
@@ -55,12 +77,13 @@ export const ClientPicker = ({ value, onChange }: { value: Client | null; onChan
         </div>
       ) : (
         <div className="relative">
-          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input data-testid="client-search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client by name, email, phone…" className="h-9 w-full rounded-sm border border-line bg-canvas pl-8 pr-2 text-[13px] focus:border-ink focus:bg-surface focus:outline-none" />
+          {scan && <div className="mb-1 text-[11px] text-ink-400">Or search by name <span className="text-amber-800">· fallback only — names can be shared by more than one customer</span></div>}
+          <Search size={13} className="pointer-events-none absolute left-2.5 top-[calc(50%+8px)] -translate-y-1/2 text-ink-400" />
+          <input data-testid="client-search" autoFocus={!scan} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client by name, email, phone…" className="h-9 w-full rounded-sm border border-line bg-canvas pl-8 pr-2 text-[13px] focus:border-ink focus:bg-surface focus:outline-none" />
           {(hits.length > 0 || q.trim()) && (
             <ul className="absolute left-0 right-0 top-full z-20 mt-1 rounded-md bg-surface p-1 shadow-pop animate-rise">
               {hits.map((c) => (
-                <li key={c.id}><button type="button" data-testid={`client-hit-${c.id}`} onClick={() => onChange(c)} className="flex w-full justify-between rounded-sm px-2.5 py-1.5 text-left text-[13px] hover:bg-canvas"><span className="text-ink">{fullName(c)}</span><span className="text-xs text-ink-400">{c.email}</span></button></li>
+                <li key={c.id}><button type="button" data-testid={`client-hit-${c.id}`} onClick={() => pickByName(c)} className="flex w-full justify-between rounded-sm px-2.5 py-1.5 text-left text-[13px] hover:bg-canvas"><span className="text-ink">{fullName(c)}{api.sameNameClients(c).length > 0 && <span data-testid={`client-hit-dup-${c.id}`} className="ml-1.5 rounded-sm bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-900">duplicate name</span>}</span><span className="text-xs text-ink-400">{c.email}</span></button></li>
               ))}
               <li><button type="button" data-testid="client-new-toggle" onClick={() => setCreating(true)} className="flex w-full items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-xs text-brand hover:bg-canvas"><Plus size={12} /> New client{q.trim() && ` “${q.trim()}”`}</button></li>
             </ul>
