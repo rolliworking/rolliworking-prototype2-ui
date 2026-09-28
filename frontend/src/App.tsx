@@ -44,7 +44,8 @@ import RequestsPage from '@/pages/RequestsPage';
 import RwTestingQueuePage from '@/pages/rw/testing/RwTestingQueuePage';
 import RwTestingTestPage from '@/pages/rw/testing/RwTestingTestPage';
 import RcLoginPage from '@/pages/rc/RcLoginPage';
-import RcAuthPage from '@/pages/rc/RcAuthPage';
+import RcSignupPage from '@/pages/rc/RcSignupPage';
+import RcAccountPage from '@/pages/rc/RcAccountPage';
 import RcHomePage from '@/pages/rc/RcHomePage';
 import RcEstimatePage from '@/pages/rc/RcEstimatePage';
 import RcInvoicePage from '@/pages/rc/RcInvoicePage';
@@ -169,7 +170,9 @@ export default function App() {
           <Route path="/pay/:token" element={<PayPage />} />
           <Route path="/rc" element={<RcShell />}>
             <Route index element={<RcLoginPage />} />
-            <Route path="auth/:token" element={<RcAuthPage />} />
+            <Route path="signup" element={<RcSignupPage />} />
+            <Route path="account" element={<RcAccountPage />} />
+            <Route path="auth/:token" element={<Navigate to="/rc" replace />} />
             <Route path="home" element={<RcHomePage />} />
             <Route path="estimates/:id" element={<RcEstimatePage />} />
             <Route path="invoices/:id" element={<RcInvoicePage />} />

@@ -2577,12 +2577,91 @@ export async function portalRequestMagicLink(email: string): Promise<{ link: Mag
 }
 
 // Deep link: magic-link token that lands inside the portal on one page (Q43: unguessable; revoke = banner, never a dead page)
-export const portalDeepLink = (clientId: string, next: string): string => {
-  const c = byId(fx.clients, clientId);
-  const link: MagicLink = { token: `${c.id}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`, clientId: c.id, email: c.email, createdAt: new Date().toISOString(), next };
-  store.magicLinks.unshift(link); writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20));
-  return `/rc/auth/${link.token}?next=${encodeURIComponent(next)}`;
+// Magic links retired (2026-09-28): emailed links now point at the login wall, which sends the client on to the document after password + TOTP
+export const portalDeepLink = (_clientId: string, next: string): string => `/rc?next=${encodeURIComponent(next)}`;
+
+// ---- RolliConnect accounts — email + password + TOTP (fixed demo code 000000) + backup codes · per-document gating by type · per-photo lock -------------
+export interface RcAccount { clientId: string; email: string; password: string; totpSecret: string; totpEnabled: boolean; backupCodes: string[]; usedBackupCodes: string[]; createdAt: string; lastLoginAt?: string }
+export const RC_DEMO_TOTP = '000000';
+const RC_KEYS = { accounts: 'rollisuite.rc.accounts', docAccess: 'rollisuite.rc.docAccess', photoUnlocked: 'rollisuite.rc.photoUnlocked' };
+const b32 = (n: number) => Array.from({ length: n }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'[Math.floor(Math.random() * 32)]).join('');
+const backupCode = () => `${Math.random().toString(36).slice(2, 6)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+const rcAccounts = (): RcAccount[] => {
+  let a = readJson<RcAccount[]>(RC_KEYS.accounts, []);
+  if (!a.length) { const c = fx.clients.find((x) => x.email === 'eleanor.vance@example.com')!; a = [{ clientId: c.id, email: c.email, password: 'Rolli2026!', totpSecret: 'JBSWY3DPEHPK3PXP', totpEnabled: true, backupCodes: ['K7Q2-M9X4', 'P3RT-8NW2', 'H6VD-Q1LZ', 'B2ZC-7KMP', 'X9FN-3RTD', 'W4JH-M6QS', 'T8LB-2VNC', 'D5PK-9HXR'], usedBackupCodes: ['K7Q2-M9X4'], createdAt: daysAgoIso(12) }]; writeJson(RC_KEYS.accounts, a); }
+  return a;
 };
+const daysAgoIso = (d: number) => new Date(Date.now() - d * 864e5).toISOString();
+const saveAccounts = (a: RcAccount[]) => writeJson(RC_KEYS.accounts, a);
+const rcAccountByEmail = (email: string) => rcAccounts().find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
+const rcPublic = (a: RcAccount) => ({ ...a, password: undefined as unknown as string, totpSecret: a.totpEnabled ? '' : a.totpSecret });
+export async function rcLookup(email: string): Promise<{ clientOnFile: boolean; hasAccount: boolean; totpEnabled: boolean; firstName?: string }> {
+  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase()); const a = rcAccountByEmail(email);
+  return resolve({ clientOnFile: !!c, hasAccount: !!a, totpEnabled: !!a?.totpEnabled, firstName: c?.firstName });
+}
+// Step 1 of signup — the email must already be on file (accounts are for existing clients; new clients come in through Requests)
+export async function rcSignup(email: string, password: string): Promise<{ account: RcAccount; otpauth: string }> {
+  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
+  if (!c) throw new Error('We don’t have that email on file. Use the address we contact you at, or message the workshop.');
+  if (rcAccountByEmail(email)) throw new Error('An account already exists for this email — sign in instead.');
+  if (password.length < 8) throw new Error('Password needs at least 8 characters');
+  const a: RcAccount = { clientId: c.id, email: c.email, password, totpSecret: b32(16), totpEnabled: false, backupCodes: [], usedBackupCodes: [], createdAt: new Date().toISOString() };
+  saveAccounts([...rcAccounts(), a]); portalStamp(c.id, 'RolliConnect account created — awaiting authenticator setup');
+  return resolve({ account: rcPublic(a), otpauth: `otpauth://totp/RolliConnect:${encodeURIComponent(c.email)}?secret=${a.totpSecret}&issuer=RolliConnect` });
+}
+// Step 2 — first code from the authenticator turns TOTP on and issues 8 single-use backup codes
+export async function rcConfirmTotp(email: string, code: string): Promise<{ backupCodes: string[] }> {
+  const all = rcAccounts(); const a = all.find((x) => x.email.toLowerCase() === email.trim().toLowerCase()); if (!a) throw new Error('No account for that email');
+  if (code.replace(/\s/g, '') !== RC_DEMO_TOTP) throw new Error('That code didn’t match — check your authenticator and try again');
+  a.totpEnabled = true; a.backupCodes = Array.from({ length: 8 }, backupCode); a.usedBackupCodes = []; saveAccounts(all); portalStamp(a.clientId, 'Authenticator enabled · 8 backup codes issued');
+  return resolve({ backupCodes: [...a.backupCodes] });
+}
+export async function rcSignIn(email: string, password: string): Promise<{ step: 'totp' | 'totp_setup'; otpauth?: string }> {
+  const a = rcAccountByEmail(email);
+  if (!a || a.password !== password) { if (a) portalStamp(a.clientId, 'RolliConnect sign-in failed · wrong password'); throw new Error('Email or password didn’t match'); }
+  if (!a.totpEnabled) return resolve({ step: 'totp_setup', otpauth: `otpauth://totp/RolliConnect:${encodeURIComponent(a.email)}?secret=${a.totpSecret}&issuer=RolliConnect` });
+  return resolve({ step: 'totp' });
+}
+const rcOpenSession = (a: RcAccount, how: string) => { const s: PortalSession = { clientId: a.clientId, email: a.email, token: `acct-${newId('rc')}`, issuedAt: new Date().toISOString() }; writeJson(KEYS.portalSession, s); a.lastLoginAt = s.issuedAt; portalStamp(a.clientId, `Signed in to RolliConnect · password + ${how}`); };
+// Step 3 — 6-digit code (demo 000000) or an unused backup code
+export async function rcVerifyTotp(email: string, code: string): Promise<Client> {
+  const all = rcAccounts(); const a = all.find((x) => x.email.toLowerCase() === email.trim().toLowerCase()); if (!a || !a.totpEnabled) throw new Error('Finish authenticator setup first');
+  const c = code.trim().toUpperCase().replace(/\s/g, '');
+  if (c === RC_DEMO_TOTP) rcOpenSession(a, 'authenticator');
+  else if (a.backupCodes.includes(c) && !a.usedBackupCodes.includes(c)) { a.usedBackupCodes.push(c); rcOpenSession(a, `backup code (${a.backupCodes.length - a.usedBackupCodes.length} left)`); }
+  else { portalStamp(a.clientId, 'RolliConnect sign-in failed · bad authenticator / backup code'); throw new Error(a.usedBackupCodes.includes(c) ? 'That backup code was already used' : 'That code didn’t match'); }
+  saveAccounts(all); return resolve(byId(fx.clients, a.clientId));
+}
+export async function rcGetAccount(clientId: string): Promise<RcAccount | null> { const a = rcAccounts().find((x) => x.clientId === clientId); return resolve(a ? rcPublic(a) : null); }
+export async function rcRegenerateBackupCodes(clientId: string): Promise<string[]> { const all = rcAccounts(); const a = all.find((x) => x.clientId === clientId); if (!a) throw new Error('No account'); a.backupCodes = Array.from({ length: 8 }, backupCode); a.usedBackupCodes = []; saveAccounts(all); portalStamp(clientId, 'Backup codes regenerated · old codes void'); return resolve([...a.backupCodes]); }
+export async function rcListAccounts(): Promise<(RcAccount & { clientName: string })[]> { return resolve(rcAccounts().map((a) => ({ ...rcPublic(a), clientName: fullNameOf(byId(fx.clients, a.clientId)) }))); }
+export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset for ${fullNameOf(byId(fx.clients, clientId))} — client must sign up again` }); return resolve(undefined); }
+
+// Per-document gating by type — token documents (report, inspection form) can stay public links; identity-bound pages always need the account
+export type RcDocType = 'estimate' | 'invoice' | 'watch' | 'messages' | 'report' | 'inspection_form';
+export type RcDocAccess = 'public' | 'login';
+export const RC_DOC_META: Record<RcDocType, { label: string; blurb: string; lockable: boolean }> = {
+  estimate: { label: 'Estimates · approve / decline', blurb: 'Identity-bound (approval is a signature) — always behind the account', lockable: false },
+  invoice: { label: 'Invoices · pay balance', blurb: 'Identity-bound (payment) — always behind the account', lockable: false },
+  watch: { label: 'Watch pages · photos & timeline', blurb: 'Photos are private unless a staff member unlocks them — always behind the account', lockable: false },
+  messages: { label: 'Messages', blurb: 'Two-way thread — always behind the account', lockable: false },
+  report: { label: 'Inspection report (tokened link)', blurb: 'Public: the emailed link opens read-only · Login: the link hits the wall first', lockable: true },
+  inspection_form: { label: 'Inspection form (tokened link)', blurb: 'Public: read-only by link · Login: account required', lockable: true },
+};
+const RC_DOC_DEFAULTS: Record<RcDocType, RcDocAccess> = { estimate: 'login', invoice: 'login', watch: 'login', messages: 'login', report: 'public', inspection_form: 'login' };
+export const rcDocAccess = (): Record<RcDocType, RcDocAccess> => ({ ...RC_DOC_DEFAULTS, ...readJson<Partial<Record<RcDocType, RcDocAccess>>>(RC_KEYS.docAccess, {}) });
+export async function getRcDocAccess(): Promise<Record<RcDocType, RcDocAccess>> { return resolve(rcDocAccess()); }
+export async function setRcDocAccess(t: RcDocType, v: RcDocAccess): Promise<Record<RcDocType, RcDocAccess>> { managerOnly(); if (!RC_DOC_META[t].lockable && v === 'public') throw new Error(`${RC_DOC_META[t].label} is identity-bound — it cannot be made public`); const next = { ...rcDocAccess(), [t]: v }; writeJson(RC_KEYS.docAccess, next); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect access · ${RC_DOC_META[t].label} → ${v === 'public' ? 'public link' : 'login required'}` }); return resolve(next); }
+export const rcDocTypeForPath = (p: string): RcDocType | null => (p.startsWith('/rc/estimates/') ? 'estimate' : p.startsWith('/rc/invoices/') ? 'invoice' : p.startsWith('/rc/watches/') ? 'watch' : p.startsWith('/rc/messages') ? 'messages' : p.startsWith('/rc/report/') ? 'report' : p.startsWith('/rc/inspection/') ? 'inspection_form' : null);
+
+// Per-photo lock — every staff-created photo is PRIVATE by default; unlocking makes it visible on the client's side of the portal (behind their login)
+const photoUnlocked = (): Record<string, true> => readJson<Record<string, true>>(RC_KEYS.photoUnlocked, { 'ph-r1-1': true, 'ph-r1-2': true, 'ph-r3-1': true });
+export const isPhotoUnlocked = (id: string) => !!photoUnlocked()[id];
+export async function setPhotoUnlocked(jobId: string, photoId: string, unlocked: boolean): Promise<JobPhotoView[]> {
+  const j = getJobRow(jobId); const map = photoUnlocked(); if (unlocked) map[photoId] = true; else delete map[photoId]; writeJson(RC_KEYS.photoUnlocked, map);
+  const view = (await getJobPhotoViews(jobId)).find((p) => p.id === photoId); jobStamp(j, `Photo ${unlocked ? 'unlocked · visible to client in RolliConnect' : 'locked · private to the workshop'} · ${view?.slot ?? photoId}`);
+  return getJobPhotoViews(jobId);
+}
 export async function portalRevokeLink(token: string): Promise<void> { const l = store.magicLinks.find((x) => x.token === token); if (l) { l.revokedAt = new Date().toISOString(); writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20)); } return resolve(undefined); }
 export async function portalRedeemMagicLink(token: string): Promise<Client> {
   const link = store.magicLinks.find((l) => l.token === token);
@@ -2629,11 +2708,15 @@ export const portalPhotoSections = (clientId: string, jobId: string): PortalPhot
   const j = requireOwner(clientId, store.jobs.find((x) => x.id === jobId), 'job');
   const fixture = fx.jobPhotos.filter((p) => p.jobId === jobId && !STAFF_ONLY_PHOTO.test(p.slot));
   const pkg = store.packages.find((p) => p.id === j.packageId);
-  const arrival = [...(pkg?.photos ?? []).map((p, i) => photoRow(`${pkg!.id}-${i}`, p.dataUrl, p.slot ?? 'Arrival', pkg!.arrivedAt)), ...fixture.filter((p) => p.kind === 'intake').map((p) => photoRow(p.id, p.url, p.slot, p.at))];
-  const condition = [...fixture.filter((p) => p.kind === 'inspection').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...j.photos.filter((p) => p.clientVisible !== false && !STAFF_ONLY_PHOTO.test(p.slot ?? '')).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Inspection', p.at))];
-  const completed = [...fixture.filter((p) => p.kind === 'completed').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...rs.evidence.filter((e) => e.jobId === jobId && e.slot !== 'hidden_serial' && e.slot !== 'parts_grading').map((e) => photoRow(e.id, e.photo.dataUrl, EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label, e.at))];
+  const arrivalAll = [...(pkg?.photos ?? []).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Arrival', pkg!.arrivedAt)), ...fixture.filter((p) => p.kind === 'intake').map((p) => photoRow(p.id, p.url, p.slot, p.at))];
+  const conditionAll = [...fixture.filter((p) => p.kind === 'inspection').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...j.photos.filter((p) => !STAFF_ONLY_PHOTO.test(p.slot ?? '')).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Inspection', p.at))];
+  const completedAll = [...fixture.filter((p) => p.kind === 'completed').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...rs.evidence.filter((e) => e.jobId === jobId && e.slot !== 'hidden_serial' && e.slot !== 'parts_grading').map((e) => photoRow(e.id, e.photo.dataUrl, EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label, e.at))];
+  // Private by default — only photos a staff member unlocked reach the client
+  const open = (xs: PortalPhoto[]) => xs.filter((p) => isPhotoUnlocked(p.id));
+  const arrival = open(arrivalAll); const condition = open(conditionAll); const completed = open(completedAll);
+  const privateCount = arrivalAll.length + conditionAll.length + completedAll.length - arrival.length - condition.length - completed.length;
   const byAt = (a: PortalPhoto, b: PortalPhoto) => a.at.localeCompare(b.at);
-  return { arrival: arrival.sort(byAt), condition: condition.sort(byAt), completed: completed.sort(byAt), jobNumber: j.number };
+  return { arrival: arrival.sort(byAt), condition: condition.sort(byAt), completed: completed.sort(byAt), jobNumber: j.number, privateCount };
 };
 export async function portalGetPhotoSections(clientId: string, jobId: string): Promise<PortalPhotoSections> { return resolve(portalPhotoSections(clientId, jobId)); }
 const portalRequestCards = (clientId: string): PortalRequestCard[] => {
@@ -2699,7 +2782,7 @@ const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefin
 
 const portalDocs = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalDocument[] => {
   const docs: PortalDocument[] = [];
-  jobs.forEach((j) => j.photos.filter((p) => p.clientVisible !== false).forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
+  jobs.forEach((j) => j.photos.filter((p) => isPhotoUnlocked(p.id)).forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
   jobs.forEach((j) => rs.evidence.filter((e) => e.jobId === j.id).forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'photo', title: `Service evidence · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label}${e.depthRating ? ` · ${e.depthRating}` : ''}${e.grades ? ` · ${e.grades.join(', ')}` : ''} · ${j.number}`, at: e.at, dataUrl: e.photo.dataUrl })));
   store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => p.photos.forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
   ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', legacy: !!e.legacy, title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
@@ -4188,7 +4271,7 @@ export async function pickAction(taskId: string, action: 'picked' | 'short' | 'f
   else { if (!location?.trim()) throw new Error('Type the actual location'); if (part) part.location = location.trim(); t.location = location.trim(); t.status = 'open'; t.note = 'found elsewhere'; appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, detail: `${part?.name ?? 'part'} relocated → ${location.trim()}` }); }
   return resolve(pickView(t));
 }
-export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => p), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by }))]); }
+export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => ({ ...p, unlocked: isPhotoUnlocked(p.id) })), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by, unlocked: isPhotoUnlocked(p.id) }))]); }
 // Pad camera — photo binds to the open job (job ↔ watch identity), stamped who / when / slot. Client sees only client-visible slots.
 export const PHOTO_SLOTS: { key: string; label: string; clientVisible: boolean }[] = [{ key: 'workbench', label: 'Workbench', clientVisible: false }, { key: 'movement', label: 'Movement', clientVisible: true }, { key: 'dial', label: 'Dial', clientVisible: true }, { key: 'caseback', label: 'Caseback', clientVisible: true }, { key: 'bracelet', label: 'Bracelet', clientVisible: true }, { key: 'parts', label: 'Parts', clientVisible: false }, { key: 'other', label: 'Other', clientVisible: false }];
 export async function capturePadPhoto(jobId: string, dataUrl: string, slotKey: string): Promise<JobWithRefs> {

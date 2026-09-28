@@ -1,10 +1,10 @@
-import { Camera, X } from 'lucide-react';
+import { Camera, Lock, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { PortalPhoto, PortalPhotoSections as Sections } from '@/api/client';
 import { RcCard, rcDate } from '@/rc/RcBits';
 
-const SECTIONS: { key: keyof Omit<Sections, 'jobNumber'>; title: string; sub: string }[] = [
+const SECTIONS: { key: 'arrival' | 'condition' | 'completed'; title: string; sub: string }[] = [
   { key: 'arrival', title: 'Arrival photos', sub: 'Taken when your watch was checked in' },
   { key: 'condition', title: 'Condition photos', sub: 'Taken during inspection — what we found' },
   { key: 'completed', title: 'Completed', sub: 'Taken when the work was finished' },
@@ -18,6 +18,7 @@ export const RcPhotoSections = ({ clientId, jobId }: { clientId: string; jobId: 
   if (!s) return null;
   const total = s.arrival.length + s.condition.length + s.completed.length;
   return <RcCard eyebrow="Photos" title={total ? `${total} photo${total === 1 ? '' : 's'} · service ${s.jobNumber}` : 'Photos will appear here as your service progresses'} testId="rc-photo-sections">
+    {s.privateCount > 0 && <p data-testid="rc-photos-private" className="mb-4 inline-flex items-center gap-2 rounded-md border border-rc-line bg-rc-paper px-3 py-2 text-xs text-rc-muted"><Lock size={12} /> {s.privateCount} more photo{s.privateCount === 1 ? ' is' : 's are'} private to the workshop — we release photos here as the work is reviewed.</p>}
     <div className="space-y-6">
       {SECTIONS.map(({ key, title, sub }) => <section key={key} data-testid={`rc-photos-${key}`}>
         <div className="flex items-baseline gap-2"><h3 className="font-serif text-xl">{title}</h3><span className="text-xs text-rc-muted">{sub}</span><span data-testid={`rc-photos-${key}-count`} className="ml-auto text-xs text-rc-muted">{s[key].length || '—'}</span></div>

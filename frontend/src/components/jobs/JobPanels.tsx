@@ -1,4 +1,4 @@
-import { Camera, Clock, ListChecks, PauseCircle, PlayCircle, Send, UserCog, UserRound } from 'lucide-react';
+import { Camera, Clock, ListChecks, Lock, PauseCircle, PlayCircle, Send, Unlock, UserCog, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -134,9 +134,10 @@ export const PhotosPanel = ({ job: j, run }: { job: JobWithRefs; run: Refresh })
       {open && <div className="mt-2"><PhotoCapture onAdd={(p) => run(() => api.addJobPhotos(j.id, p), `${p.length} photo${p.length === 1 ? '' : 's'} attached`)} /></div>}
       {j.photos.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5" data-testid="photo-grid">
-          {j.photos.map((p) => <figure key={p.id} className="w-[88px]"><img src={p.dataUrl} alt={p.fileName ?? 'Job photo'} className="h-16 w-full rounded-sm object-cover ring-1 ring-line" /><figcaption className="truncate text-[10px] text-ink-400">{p.source} · {p.by} · {fmtDate(p.at)}</figcaption></figure>)}
+          {j.photos.map((p) => { const open = api.isPhotoUnlocked(p.id); return <figure key={p.id} className="relative w-[88px]" data-testid={`job-photo-${p.id}`} data-unlocked={open}><img src={p.dataUrl} alt={p.fileName ?? 'Job photo'} className={`h-16 w-full rounded-sm object-cover ring-1 ${open ? 'ring-moss' : 'ring-line'}`} /><button type="button" data-testid={`photo-lock-${p.id}`} title={open ? 'Visible to the client in RolliConnect — click to make private' : 'Private to the workshop — click to unlock for the client'} onClick={() => run(() => api.setPhotoUnlocked(j.id, p.id, !open), open ? 'Photo locked — private to the workshop' : 'Photo unlocked — visible to the client')} className={`absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-white ${open ? 'bg-moss' : 'bg-ink/80'}`}>{open ? <Unlock size={10} /> : <Lock size={10} />}</button><figcaption className="truncate text-[10px] text-ink-400">{open ? 'client-visible' : 'private'} · {p.by} · {fmtDate(p.at)}</figcaption></figure>; })}
         </div>
       )}
+      <p className="mt-2 text-[10px] text-ink-400">Every staff photo is private by default · unlock to publish it to the client’s RolliConnect (behind their login)</p>
     </div>
   );
 };

@@ -913,7 +913,7 @@ export interface PortalSession { clientId: string; email: string; token: string;
 export type PortalRequestState = 'in_progress' | 'received' | 'decision' | 'stale_estimate' | 'history';
 export interface PortalRequestCard { id: string; state: PortalRequestState; stateLabel: string; watchName: string; reference: string; title: string; blurb: string; lastUpdate: string; lastUpdateLabel: string; path: string; cta?: { label: string; path: string }; photoCount: number; requestNumber?: string; estimateNumber?: string; jobNumber?: string; amount?: number; split?: PortalSplit }
 export interface PortalPhoto { id: string; url: string; label: string; at: string }
-export interface PortalPhotoSections { arrival: PortalPhoto[]; condition: PortalPhoto[]; completed: PortalPhoto[]; jobNumber: string }
+export interface PortalPhotoSections { arrival: PortalPhoto[]; condition: PortalPhoto[]; completed: PortalPhoto[]; jobNumber: string; privateCount: number }
 
 export interface Message {
   id: string;
@@ -1130,7 +1130,7 @@ export interface PartSuggestion { part: Part; score: number; reason: 'recent' | 
 export type SendBackReason = 'rework' | 'waiting_on_part' | 'failed_qc' | 'other';
 export interface PadCard { job: JobWithRefs; stage: JobStatus; stageLabel: string; canAdvance: boolean; canSendBack: boolean; parts: FloorDot[]; photos: number; pendingParts: number }
 export interface RoomSummary { jobsInRoom: number; waitingOnParts: number; waitingOnApproval: number; picksRemaining: number; shortsToday: number }
-export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection' | 'completed'; at: string; by: string }
+export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection' | 'completed'; at: string; by: string; unlocked: boolean }
 
 // ---- Job messages — threaded, internal-only board ON the job; @mentions route by tier (hit list vs bench Messages) ----
 export interface JobMessage extends Stamp { id: string; jobId: string; parentId?: string; text: string; mentions: string[]; notify: string[]; photo?: PackagePhoto; readBy: string[] }
