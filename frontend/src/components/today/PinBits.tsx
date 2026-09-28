@@ -16,6 +16,7 @@ export const PinnedList = ({ items, onDismiss, dense }: { items: PinnedItem[]; o
     {items.map((p) => (
       <li key={p.id} data-testid={`pinned-${p.id}`} className={`flex items-center gap-3 bg-amber-50/40 px-4 ${dense ? 'py-1.5' : 'py-2.5'}`}>
         <Pin size={13} className="shrink-0 text-amber-700" />
+        {p.photo && <img src={p.photo.dataUrl} alt="" data-testid={`pinned-photo-${p.id}`} className="h-9 w-12 shrink-0 rounded-sm object-cover ring-1 ring-line" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] text-ink">
             {p.jobId ? <Link to={`/jobs/${p.jobId}${p.messageId ? `#msg-${p.messageId}` : ''}`} className="hover:underline">{p.messageId && <MessageSquare size={11} className="mr-1 inline text-amber-700" />}{p.title}</Link>
