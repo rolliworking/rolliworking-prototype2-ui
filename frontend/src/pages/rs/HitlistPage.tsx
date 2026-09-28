@@ -34,6 +34,9 @@ export default function HitlistPage() {
           <span className="basis-full text-ink-700">{e.reason}{e.context.detail && <span className="text-ink-400"> · {e.context.detail}</span>}</span>
         </li>; })}{!data.bypasses.length && <li className="px-3 py-6 text-center text-ink-400">No bypasses used.</li>}</ul>
       </Card>
+      <Card title={`Zero balance — no QBO sync · ${data.zeroBalances.length}`} subtitle="MH's own action · reconciliation trail against QuickBooks — who · when · invoice / job · reason · notes" testId="zero-balance-log" bodyClassName="p-0" className="border-l-[3px] border-amber-400">
+        <ul className="divide-y divide-line/70 text-xs">{data.zeroBalances.map((z) => <li key={z.salesOrderId} data-testid={`zero-log-${z.salesOrderId}`} className="px-4 py-2"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-ink">{z.by}</span><span className="text-ink-400">{z.station} · {fmtDate(z.at)} {fmtTime(z.at)}</span><Link to={`/sales/${z.salesOrderId}`} className="font-mono font-semibold hover:underline">{z.number}</Link>{z.jobNumber && <span className="font-mono text-ink-500">job {z.jobNumber}</span>}<span className="text-ink-600">{z.client}</span><span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">{api.ZERO_REASON_LABEL[z.reason]}</span><span className="ml-auto tabular font-semibold">{fmtMoney(z.amount)}</span></div><div className="mt-0.5 text-ink-600">{z.notes}</div></li>)}{!data.zeroBalances.length && <li className="px-4 py-3 text-ink-400">No zero-balanced invoices.</li>}</ul>
+      </Card>
     </div>
   </div>;
 }

@@ -65,7 +65,7 @@ export const MoneyStrip = ({ order: o }: { order: SalesOrder }) => (
     <div><div className="text-ink-500">Total</div><div className="tabular text-[15px] font-semibold text-ink">{fmtMoneyCents(o.total)}</div></div>
     <div><div className="text-ink-500">Paid</div><div className="tabular text-[15px] font-semibold text-moss-700">{fmtMoneyCents(o.total - o.balanceDue)}</div></div>
     <div><div className="text-ink-500">Balance due</div><div data-testid="so-balance" className={clsx('tabular text-[15px] font-semibold', o.balanceDue > 0 ? 'text-rose-700' : 'text-ink-400')}>{fmtMoneyCents(o.balanceDue)}</div></div>
-    <div><div className="text-ink-500">QBO</div><div data-testid="so-qbo" className="inline-flex items-center gap-1 text-[13px] font-medium">{o.qboStatus === 'queued' ? <><span className="h-2 w-2 rounded-full bg-amber-500" /> Queued for QBO <span className="font-mono text-xs text-ink-400">{o.qboInvoiceId}</span></> : <><span className="h-2 w-2 rounded-full bg-slate-300" /> Not queued</>}</div></div>
+    <div><div className="text-ink-500">QBO</div><div data-testid="so-qbo" className="inline-flex items-center gap-1 text-[13px] font-medium">{o.qboStatus === 'excluded' ? <><span className="h-2 w-2 rounded-full bg-amber-700" /> Excluded — no QBO sync</> : o.qboStatus === 'queued' ? <><span className="h-2 w-2 rounded-full bg-amber-500" /> Queued for QBO <span className="font-mono text-xs text-ink-400">{o.qboInvoiceId}</span></> : <><span className="h-2 w-2 rounded-full bg-slate-300" /> Not queued</>}</div></div>
   </div>
 );
 

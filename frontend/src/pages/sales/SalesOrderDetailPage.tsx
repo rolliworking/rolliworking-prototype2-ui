@@ -6,6 +6,7 @@ import { LegacyBanner } from '@/components/LegacyBits';
 import { SoPrintButton } from '@/components/sales/SoPrint';
 import type { Address, Client, SOLineInput, SalesOrderWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
+import { FulfillMenu, ZeroBalanceBadge, ZeroBalanceModal } from '@/components/sales/FulfillMenu';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { ClientPicker } from '@/components/estimates/EstimateForm';
 import { ReasonModal } from '@/components/jobs/JobBits';
@@ -16,7 +17,7 @@ import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fmtMoneyCents, fmtTime, fullName } from '@/lib/format';
 
 const field = 'h-8 rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:outline-none';
-type ModalState = 'payment' | 'cancel' | 'admin-pickup' | 'admin-ship' | null;
+type ModalState = 'payment' | 'cancel' | 'admin-pickup' | 'admin-ship' | 'zero' | null;
 
 export default function SalesOrderDetailPage() {
   const { id } = useParams();
@@ -64,7 +65,7 @@ export default function SalesOrderDetailPage() {
           <Link to="/sales" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Sales orders</Link>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="so-number">{o ? o.number : 'New sales order'}</h1>
-            {o && <><StatusPill status={o.status} testId="so-status" /><SOBadge order={o} testId="so-badge" />{o.channel && <span data-testid="so-channel" className="inline-flex items-center gap-1 rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-ink-700">{o.channel === 'ship' ? <Truck size={11} /> : <PackageCheck size={11} />} {o.channel}</span>}</>}
+            {o && <><StatusPill status={o.status} testId="so-status" /><SOBadge order={o} testId="so-badge" /><ZeroBalanceBadge order={o} />{o.channel && <span data-testid="so-channel" className="inline-flex items-center gap-1 rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-ink-700">{o.channel === 'ship' ? <Truck size={11} /> : <PackageCheck size={11} />} {o.channel}</span>}</>}
           </div>
           {o && <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${o.clientId}`} className="font-medium text-ink hover:underline">{fullName(o.client)}</Link> · {o.client.email}{o.job && <> · <Link to={`/jobs/${o.job.id}`} data-testid="so-job-link" className="inline-flex items-center gap-1 text-brand hover:underline"><Wrench size={11} /> Job {o.job.number}</Link>{o.watch && ` · ${o.watch.brand} ${o.watch.model}`}</>} · ordered {fmtDate(o.orderDate)}</div>}
         </div>
@@ -75,6 +76,7 @@ export default function SalesOrderDetailPage() {
       {o && o.legacy && <div className="flex flex-wrap items-center gap-1.5" data-testid="so-actions"><SoPrintButton order={o} /></div>}
       {o && !o.legacy && (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="so-actions">
+          <FulfillMenu order={o} isOwner={user?.id === api.OWNER_USER_ID} editing={editing} onSave={(close) => { void (async () => { if (editing) await save(); if (close) navigate('/sales'); })(); }} onRun={(fn, m) => void run(fn, m)} onModal={(m) => setModal(m)} />
           <SoPrintButton order={o} />
           {o.status === 'draft' && <Button variant="primary" data-testid="act-open-so" onClick={() => run(() => api.openSalesOrder(o.id), 'Opened · email queued')}>Open order</Button>}
           {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <Button variant={o.invoiceSentAt ? 'secondary' : 'primary'} data-testid="act-send-invoice" onClick={() => run(() => api.sendInvoice(o.id), o.invoiceSentAt ? 'Invoice re-sent · same pay link · Outbox' : 'Invoice sent · pay link queued to Outbox')}><Send size={13} /> {o.invoiceSentAt ? 'Re-send invoice' : 'Send invoice'}</Button>}
@@ -112,7 +114,7 @@ export default function SalesOrderDetailPage() {
             ) : o && <SOLinesTable order={o} showFulfil />}
             {!editing && o?.memo && <p className="border-t border-line px-4 py-2 text-xs text-ink-500">Memo: {o.memo}</p>}
           </Card>
-          {o && <Card title="Payments" subtitle="Stub ledger — no processor; partial allowed" testId="so-payments-card"><MoneyStrip order={o} /><div className="mt-3"><PaymentsList order={o} /></div></Card>}
+          {o && <Card title="Payments" subtitle="Stub ledger — no processor; partial allowed" testId="so-payments-card"><MoneyStrip order={o} /><div className="mt-3"><PaymentsList order={o} /></div>{o.zeroBalance && <div data-testid="so-zero-balance-detail" className="mt-3 rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900"><div className="font-semibold">Zero balance — no QBO sync · {api.ZERO_REASON_LABEL[o.zeroBalance.reason]} · {fmtMoneyCents(o.zeroBalance.amount)}</div><div className="mt-0.5">{o.zeroBalance.notes}</div><div className="mt-0.5 text-[11px] text-amber-800/80">by {o.zeroBalance.by} · {o.zeroBalance.station} · {fmtDate(o.zeroBalance.at)} · excluded from QuickBooks revenue · completion credit unaffected</div></div>}</Card>}
           {o && o.status !== 'draft' && o.status !== 'cancelled' && <Card title="Payment link" subtitle="One link per order, minted once — the page behind it always shows the LIVE balance (edit-after-send safe)" testId="so-paylink-card">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <Link2 size={12} className="text-ink-400" /><Link data-testid="so-pay-link" to={api.payLinkPath(o)} className="font-mono text-brand hover:underline">{api.payLinkPath(o)}</Link>
@@ -156,6 +158,7 @@ export default function SalesOrderDetailPage() {
         )}
       </div>
 
+      {modal === 'zero' && o && <ZeroBalanceModal order={o} onClose={() => setModal(null)} onDone={(m) => { setModal(null); void load(); say(m); }} />}
       {modal === 'payment' && o && <PaymentModal order={o} onClose={() => setModal(null)} onDone={() => { setModal(null); void load(); say('Payment recorded · email queued'); }} />}
       {modal === 'cancel' && o && <ReasonModal testId="cancel-so-modal" title={`Cancel ${o.number}`} confirmLabel="Cancel order" danger onClose={() => setModal(null)} onConfirm={async (r) => { await api.cancelSalesOrder(o.id, r); setModal(null); await load(); say('Cancelled'); }} />}
       {(modal === 'admin-pickup' || modal === 'admin-ship') && o && <ReasonModal testId="admin-mark-modal" title={modal === 'admin-pickup' ? 'Admin: mark picked up' : 'Admin: mark shipped'} hint="Privileged override — logged to the audit trail." confirmLabel="Mark" onClose={() => setModal(null)} onConfirm={async (r) => { await api.adminMarkComplete(o.id, modal === 'admin-pickup' ? 'pickup' : 'ship', r); setModal(null); await load(); say('Marked (admin)'); }} />}

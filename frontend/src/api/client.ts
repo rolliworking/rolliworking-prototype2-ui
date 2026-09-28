@@ -1906,8 +1906,7 @@ export async function fulfillSalesOrder(id: string): Promise<SalesOrderWithRefs>
   if (o.lines.length === 0) throw new Error('Nothing to fulfil');
   o.status = 'fulfilled'; o.fulfilledAt = new Date().toISOString();
   const c = byId(fx.clients, o.clientId);
-  o.qboInvoiceId = `QBO-STUB-${10000 + store.salesOrders.length * 7 + Math.floor(Math.random() * 90)}`; // HARD STOP: nothing leaves the app
-  o.qboStatus = 'queued';
+  if (!o.zeroBalance) { o.qboInvoiceId = `QBO-STUB-${10000 + store.salesOrders.length * 7 + Math.floor(Math.random() * 90)}`; o.qboStatus = 'queued'; } // HARD STOP: nothing leaves the app · zero-balanced invoices never queue
   soTotals(o);
   soStamp(o, `Fulfilled · QBO stub: ensure customer ${c.lastName} → push ${o.lines.length} items → push invoice ${o.qboInvoiceId} (queued, no live call)`);
   if (o.channel === 'pickup' && !o.pickupCode) issuePickupCode(o);
@@ -2939,7 +2938,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
 }
 
 // ---- E9 RS modules ---------------------------------------------------------------------------------
-import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, Vendor, VendorInput, VendorPartRow, VendorSummary } from './types';
+import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, Vendor, VendorInput, ZeroBalanceReason, VendorPartRow, VendorSummary } from './types';
 
 const rs = {
   vendors: fx.vendors.map((v): Vendor => ({ ...v })),
@@ -3114,7 +3113,7 @@ export const reportToCsv = (r: Report): string => [r.columns.join(','), ...r.row
 
 // -- Accounting (QBO stub views)
 export async function getQboQueue(): Promise<QboQueueRow[]> {
-  return resolve(store.salesOrders.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').map((o): QboQueueRow => ({ salesOrderId: o.id, number: o.number, client: clientName(o.clientId), total: o.total, qboInvoiceId: o.qboInvoiceId, syncState: o.qboStatus === 'queued' ? (o.number.endsWith('5') ? 'error_stub' : o.status === 'picked_up' || o.status === 'shipped' ? 'pushed_stub' : 'queued') : 'not_queued', at: o.fulfilledAt ?? o.orderDate })).sort((a, b) => b.at.localeCompare(a.at)));
+  return resolve(store.salesOrders.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').map((o): QboQueueRow => (o.zeroBalance ? { salesOrderId: o.id, number: o.number, client: fullNameOf(byId(fx.clients, o.clientId)), total: o.total, qboInvoiceId: undefined, syncState: 'excluded_no_sync', exclusion: `${ZERO_REASON_LABEL[o.zeroBalance.reason]} · ${o.zeroBalance.by} · ${o.zeroBalance.notes}`, at: o.zeroBalance.at } : { salesOrderId: o.id, number: o.number, client: clientName(o.clientId), total: o.total, qboInvoiceId: o.qboInvoiceId, syncState: o.qboStatus === 'queued' ? (o.number.endsWith('5') ? 'error_stub' : o.status === 'picked_up' || o.status === 'shipped' ? 'pushed_stub' : 'queued') : 'not_queued', at: o.fulfilledAt ?? o.orderDate })).sort((a, b) => b.at.localeCompare(a.at)));
 }
 export async function exportAccountingCsv(kind: 'invoices' | 'payments' | 'qbo'): Promise<string> {
   rsStamp('accounting', `Export file generated · ${kind} (stub CSV)`);
@@ -3807,7 +3806,7 @@ export async function getRwFloorMap(): Promise<RwFloorMap> {
 
 // ---- E18 RW deep build — shop floor core (parts = components with station/status/custody/history) --------------------
 import type { FloorDot, GateDirection, GateScan, GateTrack, JobPhotoView, PadCard, PartHistoryView, PartMove, PartStatus, PartSuggestion, PickTask, PickTaskView, RoomSummary, RwStation, RwStationKey, ScanSession, SendBackReason, WorkQueueRow } from './types';
-export type { GateDirection, GateScan, GateTrack, Caliber, PartInput, PartRow, PartSafe } from './types';
+export type { GateDirection, GateScan, GateTrack, Caliber, PartInput, PartRow, PartSafe, ZeroBalance, ZeroBalanceReason } from './types';
 export { isSafeStation } from './types';
 export { RW_STATIONS } from './fixtures';
 const rw18 = { picks: fx.pickTasks.map((p): PickTask => ({ ...p })), recent: fx.recentPartChoices.map((r) => ({ ...r })), replied: new Set<string>(), scanSession: { rows: [] } as ScanSession, stationMemory: null as RwStationKey | null, undos: new Map<string, { jobId: string; key: ComponentKey; before: { station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; historyLen: number; timelineLen: number; status: JobStatus }; transitioned: boolean; expiresAt: number }>() };
@@ -3977,7 +3976,7 @@ const bypasses: BypassEvent[] = [
 const minutesSincePayment = (o: SalesOrder): number | undefined => { const last = [...(o.payments ?? [])].sort((a, b) => b.at.localeCompare(a.at))[0]; return last ? Math.max(0, Math.round((Date.now() - new Date(last.at).getTime()) / 60_000)) : undefined; };
 const logBypass = (e: Omit<BypassEvent, 'id' | 'by' | 'station' | 'at'>) => { const a = actor(); const row: BypassEvent = { id: newId('byp'), by: a.by, station: a.station, at: new Date().toISOString(), ...e }; bypasses.unshift(row); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `BYPASS · ${row.kind.replace(/_/g, ' ')} · ${row.jobNumber ?? ''} · ${row.reason}` }); return row; };
 export interface AssetValueRow { jobId: string; jobNumber: string; client: string; watch: string; holders: string[]; value: number; source: 'insurance' | 'dropoff' | 'none' }
-export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[] }
+export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[]; zeroBalances: ZeroBalanceRow[] }
 // Owner-only: the bypass feed tracks staff who may themselves hold manager access, so it is MH's account specifically — not the manager tier
 export const OWNER_USER_ID = 'u-michael';
 export const isOwnerSync = (): boolean => currentUserSync()?.id === OWNER_USER_ID;
@@ -3991,7 +3990,7 @@ export async function getHitlist(): Promise<Hitlist> {
   seedAssetValues(); const people = await getCustodyByPerson(); const byJob = new Map<string, AssetValueRow>();
   people.forEach((g) => g.items.forEach((it) => { let row = byJob.get(it.jobId); if (!row) { const j = getJobRow(it.jobId); const pk = j.packageId ? store.packages.find((p) => p.id === j.packageId) : undefined; const sh = shp.rows.find((r) => r.estimateId === j.estimateId && r.direction === 'inbound' && (r.trackingNumber || r.stage === 'arrived')); const value = sh?.declaredValue ?? 0; row = { jobId: j.id, jobNumber: j.number, client: `${it.clientLastName}`, watch: it.watchLabel, holders: [], value, source: sh ? 'insurance' : pk?.source === 'walk_in' || DROPOFF_SEED.has(j.number) ? 'dropoff' : 'none' }; byJob.set(it.jobId, row); } if (!row.holders.includes(g.name)) row.holders.push(g.name); }));
   const assets = [...byJob.values()].sort((a, b) => b.value - a.value);
-  return resolve({ assetTotal: assets.reduce((t, r) => t + r.value, 0), assets, bypasses: [...bypasses].sort((a, b) => b.at.localeCompare(a.at)) });
+  return resolve({ assetTotal: assets.reduce((t, r) => t + r.value, 0), assets, bypasses: [...bypasses].sort((a, b) => b.at.localeCompare(a.at)), zeroBalances: zeroBalanceLog() });
 }
 export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
 export const POLISHERS = ['Walter', 'Joseph', 'Leo'];
@@ -5233,4 +5232,49 @@ export async function commitArrivals(rows: ArrivalRow[], signature: boolean): Pr
   }
   const a = actor(); appendAudit({ type: 'intake', stationName: a.station, userShortName: a.user?.shortName, detail: `Scan 1 · bulk commit · ${out.filter((x) => x.ok).length}/${rows.length} packages shelved` });
   return resolve(out);
+}
+
+// ---- MH-only: zero balance / mark paid WITHOUT QBO sync (barter or internal work — no money changed hands, must not inflate revenue) ----
+export const ZERO_REASON_LABEL: Record<ZeroBalanceReason, string> = { barter_client: 'Barter (client)', barter_b2b: 'Barter (B2B)', internal_work: 'Internal work' };
+export async function zeroBalanceNoSync(id: string, reason: ZeroBalanceReason, notes: string): Promise<SalesOrderWithRefs> {
+  if (!isOwnerSync()) throw new Error('Zero balance — no QBO sync is an MH-only action');
+  const o = getSO(id);
+  if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order must be open or fulfilled');
+  if (o.balanceDue <= 0) throw new Error('Balance is already $0');
+  if (!ZERO_REASON_LABEL[reason]) throw new Error('Pick a reason category'); if (!notes.trim()) throw new Error('Notes are required — what was exchanged / why no cash');
+  const a = actor(); const at = new Date().toISOString(); const amount = Math.round(o.balanceDue * 100) / 100;
+  o.payments.push({ id: newId('pay'), amount, method: 'zero_balance', note: `Zero balance — ${ZERO_REASON_LABEL[reason]}`, at, by: a.by, station: a.station });
+  o.zeroBalance = { reason, notes: notes.trim(), amount, by: a.by, at, station: a.station }; o.qboStatus = 'excluded'; o.qboInvoiceId = undefined; soTotals(o);
+  soStamp(o, `ZERO BALANCE — NO QBO SYNC · ${fmtMoney(amount)} · ${ZERO_REASON_LABEL[reason]} · ${notes.trim()} · by ${a.by}`);
+  // auto-route to fulfillment: shipping product on the order → Ship cart, otherwise → Pickup cart
+  const hasShipping = o.shippingAmount > 0 || o.lines.some((l) => /shipping|insured ship|ship /i.test(l.description));
+  if (o.status !== 'fulfilled' || !o.channel) { await setFulfillmentChannel(o.id, hasShipping ? 'ship' : 'pickup'); }
+  appendAudit({ type: 'accounting', stationName: a.station, userShortName: a.user?.shortName, detail: `Zero balance — no QBO sync · ${o.number}${o.jobId ? ` · job ${store.jobs.find((j) => j.id === o.jobId)?.number ?? ''}` : ''} · ${fmtMoney(amount)} · ${ZERO_REASON_LABEL[reason]} · ${notes.trim()}` });
+  return resolve(soRefs(o));
+}
+export interface ZeroBalanceRow { salesOrderId: string; number: string; jobNumber?: string; client: string; amount: number; reason: ZeroBalanceReason; notes: string; by: string; at: string; station: string }
+// Reconciliation trail against QBO — every zero-balanced invoice (seeded + live)
+export const zeroBalanceLog = (): ZeroBalanceRow[] => store.salesOrders.filter((o) => o.zeroBalance).map((o) => ({ salesOrderId: o.id, number: o.number, jobNumber: o.jobId ? store.jobs.find((j) => j.id === o.jobId)?.number : undefined, client: fullNameOf(byId(fx.clients, o.clientId)), amount: o.zeroBalance!.amount, reason: o.zeroBalance!.reason, notes: o.zeroBalance!.notes, by: o.zeroBalance!.by, at: o.zeroBalance!.at, station: o.zeroBalance!.station })).sort((a, b) => b.at.localeCompare(a.at));
+
+// ---- Sales order Fulfill menu actions (ported from the legacy SO screen) ----
+export async function sendSoReminder(id: string, kind: 'pickup' | 'payment', channel: 'email' | 'sms'): Promise<SalesOrderWithRefs> {
+  const o = getSO(id); if (o.status === 'draft' || o.status === 'cancelled') throw new Error('Open the order first');
+  if (kind === 'payment' && o.balanceDue <= 0) throw new Error('Nothing owed — order is paid'); if (kind === 'pickup' && o.channel !== 'pickup') throw new Error('Push to Pickup Station first');
+  const c = byId(fx.clients, o.clientId); const a = actor();
+  const text = kind === 'pickup' ? `Your watch is ready for pickup at RolliWorks. Verification code ${o.pickupCode ?? '—'}.` : `Friendly reminder: ${fmtMoney(o.balanceDue)} is due on ${o.number}. Pay online with your secure link or at the counter.`;
+  if (channel === 'email') soEmail(o, kind === 'pickup' ? 'Pickup reminder' : 'Payment reminder', text, kind === 'payment' ? `/pay/${o.payLinkToken}` : undefined);
+  else store.outbox.unshift({ id: `ob-${Date.now().toString(36)}`, to: c.phone || '(no phone on file)', toName: fullNameOf(c), relatedRef: o.number, status: 'pending', subject: `SMS → ${c.phone || 'no phone'} — ${o.number}`, body: text, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  soStamp(o, `${kind === 'pickup' ? 'Pickup' : 'Payment'} reminder ${channel.toUpperCase()} queued`); return resolve(soRefs(o));
+}
+export async function qboSyncInvoice(id: string, direction: 'pull' | 'push'): Promise<SalesOrderWithRefs> {
+  const o = getSO(id); managerOnly();
+  if (o.zeroBalance) throw new Error(`${o.number} is zero-balanced (${ZERO_REASON_LABEL[o.zeroBalance.reason]}) — excluded from QuickBooks revenue, nothing to sync`);
+  if (o.status === 'draft') throw new Error('Open the order before syncing');
+  if (direction === 'push') { o.qboInvoiceId ??= `QBO-STUB-${10000 + store.salesOrders.length * 7 + Math.floor(Math.random() * 90)}`; o.qboStatus = 'queued'; qboLog(`Push edits · invoice ${o.number} → ${o.qboInvoiceId} (stub, queued)`); soStamp(o, `Edits pushed to QuickBooks · ${o.qboInvoiceId} (stub)`); }
+  else { qboLog(`Sync from QuickBooks · ${o.number} (stub — no remote changes)`); soStamp(o, 'Synced from QuickBooks (stub) — no changes found'); }
+  return resolve(soRefs(o));
+}
+export async function deleteSalesOrder(id: string): Promise<void> {
+  const o = getSO(id); if (o.status !== 'draft') throw new Error('Only drafts can be deleted — cancel the order instead (history is kept)');
+  store.salesOrders.splice(store.salesOrders.indexOf(o), 1); const a = actor(); appendAudit({ type: 'accounting', stationName: a.station, userShortName: a.user?.shortName, detail: `Draft ${o.number} deleted` }); return resolve(undefined);
 }

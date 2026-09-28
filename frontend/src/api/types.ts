@@ -552,7 +552,10 @@ export interface ReceiveWatchInput {
 export type SOStatus = 'draft' | 'open' | 'partial_fulfilled' | 'fulfilled' | 'shipped' | 'picked_up' | 'cancelled';
 export type FulfillmentChannel = 'ship' | 'pickup';
 export type ShipCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other';
-export type PaymentMethod = 'card' | 'cash' | 'check' | 'wire' | 'other';
+export type PaymentMethod = 'card' | 'cash' | 'check' | 'wire' | 'other' | 'zero_balance';
+export type ZeroBalanceReason = 'barter_client' | 'barter_b2b' | 'internal_work';
+// MH-only: balance → $0 / Paid inside RS, EXCLUDED from QBO revenue push. Performance credit untouched (completion-based, not invoice-based).
+export interface ZeroBalance { reason: ZeroBalanceReason; notes: string; amount: number; by: string; at: string; station: string }
 
 export interface SOLine {
   id: string;
@@ -619,7 +622,8 @@ export interface SalesOrder {
   total: number;
   memo?: string;
   qboInvoiceId?: string;
-  qboStatus: 'not_queued' | 'queued';
+  qboStatus: 'not_queued' | 'queued' | 'excluded';
+  zeroBalance?: ZeroBalance;
   payments: Payment[];
   balanceDue: number;
   isPaid: boolean;
@@ -1002,7 +1006,7 @@ export interface EvidenceItem extends Stamp {
 }
 export interface ReportRow { label: string; values: Record<string, number | string> }
 export interface Report { key: string; title: string; columns: string[]; rows: ReportRow[]; note: string; generatedAt: string }
-export interface QboQueueRow { salesOrderId: string; number: string; client: string; total: number; qboInvoiceId?: string; syncState: 'not_queued' | 'queued' | 'pushed_stub' | 'error_stub'; at: string }
+export interface QboQueueRow { salesOrderId: string; number: string; client: string; total: number; qboInvoiceId?: string; syncState: 'not_queued' | 'queued' | 'pushed_stub' | 'error_stub' | 'excluded_no_sync'; exclusion?: string; at: string }
 export interface IntegrationTile { key: 'qbo' | 'shipping' | 'rollitime' | 'email'; name: string; health: 'not_connected' | 'stub'; blurb: string; lastCheck: string }
 
 // ---- E10 Companion panel (scripted assistant) ------------------------------------------------------

@@ -27,6 +27,7 @@ export default function EstimateCreatePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => { const cid = params.get('client'); const kind = params.get('kind'); const from = params.get('from'); if (!cid) return; void api.getClient(cid).then((c) => { if (c) setClient(c); }); if (kind) setMeta((m) => ({ ...m, internalNotes: `${kind === 'appraisal' ? 'Appraisal' : kind === 'warranty' ? 'Warranty estimate' : kind}${from ? ` — created from ${from}` : ''}`, clientNotes: kind === 'warranty' ? 'Warranty work — no charge unless noted.' : m.clientNotes })); }, [params]);
   useEffect(() => {
     if (!client) return setCtx(null);
     const addr: Address = { name: client.company ? `${client.company} · ${fullName(client)}` : fullName(client), street: client.street, city: client.city, state: client.state };
