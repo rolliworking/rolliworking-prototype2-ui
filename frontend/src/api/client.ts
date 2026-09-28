@@ -168,23 +168,31 @@ const store = {
 export const clientRefSubject = (subject: string, ref?: string) => (ref?.trim() ? `[REF: ${ref.trim()}] ${subject}` : subject);
 const clientRefFor = (relatedRef: string): string | undefined => {
   const toks = relatedRef.split(/[^A-Za-z0-9-]+/).filter(Boolean);
+  const ofJob = (j?: Job) => j ? j.clientRef ?? (j.estimateId ? store.estimates.find((x) => x.id === j.estimateId)?.clientRef : undefined) : undefined;
   for (const t of toks) {
-    const e = store.estimates.find((x) => x.number === t); if (e) return e.clientRef;
-    const j = store.jobs.find((x) => x.number === t); if (j?.estimateId) return store.estimates.find((x) => x.id === j.estimateId)?.clientRef;
+    const e = store.estimates.find((x) => x.number === t); if (e) return e.clientRef ?? ofJob(store.jobs.find((j) => j.estimateId === e.id));
+    const j = store.jobs.find((x) => x.number === t); if (j) return ofJob(j);
     const p = store.packages.find((x) => x.subNumber === t); if (p?.estimateId) return store.estimates.find((x) => x.id === p.estimateId)?.clientRef;
-    const o = store.salesOrders.find((x) => x.number === t); const oj = o?.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; if (oj?.estimateId) return store.estimates.find((x) => x.id === oj.estimateId)?.clientRef;
+    const o = store.salesOrders.find((x) => x.number === t); if (o?.jobId) return ofJob(store.jobs.find((x) => x.id === o.jobId));
   }
   return undefined;
 };
 // Single choke point for outbound mail — the reference is applied here so no individual sender has to remember it
 const queueOutbox = (email: OutboxEmail) => { const ref = clientRefFor(email.relatedRef); if (ref && !email.subject.startsWith('[REF:')) email.subject = clientRefSubject(email.subject, ref); store.outbox.unshift(email); return email; };
+// One reference per job/package — written to the estimate AND every job linked to it so both detail screens read the same value
+const writeClientRef = (e: Estimate | undefined, j: Job | undefined, ref: string) => {
+  const next = ref.trim() || undefined; const before = e?.clientRef ?? j?.clientRef;
+  if (e) { e.clientRef = next; e.updatedAt = new Date().toISOString(); store.jobs.filter((x) => x.estimateId === e.id).forEach((x) => { x.clientRef = next; }); }
+  if (j) { j.clientRef = next; if (j.estimateId) { const je = store.estimates.find((x) => x.id === j.estimateId); if (je) je.clientRef = next; } }
+  const a = actor(); appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${e?.number ?? j?.number} · Client reference ${before ? `"${before}" → ` : ''}${next ? `"${next}"` : 'cleared'}` });
+};
 export async function setClientRef(estimateId: string, ref: string): Promise<EstimateWithRefs> {
-  const e = byId(store.estimates, estimateId); const next = ref.trim() || undefined; if ((e.clientRef ?? '') === (next ?? '')) return resolve(withRefs(e));
-  const a = actor(); appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${e.number} · Client reference ${e.clientRef ? `"${e.clientRef}" → ` : ''}${next ? `"${next}"` : 'cleared'}` });
-  e.clientRef = next; e.updatedAt = new Date().toISOString(); return resolve(withRefs(e));
+  const e = byId(store.estimates, estimateId); if ((e.clientRef ?? '') !== ref.trim()) writeClientRef(e, undefined, ref); return resolve(withRefs(e));
 }
+export async function setJobClientRef(jobId: string, ref: string): Promise<void> { const j = byId(store.jobs, jobId); if ((j.clientRef ?? '') !== ref.trim()) writeClientRef(undefined, j, ref); return resolve(undefined); }
+export const jobClientRef = (j: Job & { estimate?: Estimate | null }) => j.clientRef ?? j.estimate?.clientRef;
 // Seed: E02013's estimate carries a B2B reference; every other job leaves it blank for comparison
-(() => { const e = store.estimates.find((x) => x.id === 'e-04'); if (e) e.clientRef = 'B2B-88421'; })();
+(() => { const e = store.estimates.find((x) => x.id === 'e-04'); if (e) { e.clientRef = 'B2B-88421'; store.jobs.filter((j) => j.estimateId === e.id).forEach((j) => { j.clientRef = e.clientRef; }); } })();
 
 // Seeded multi-item estimate — E01053: Item 1 full watch service, Item 2 band-only; pk-06 already has Item 1 in hand
 (() => { const e = store.estimates.find((x) => x.number === 'E01053'); if (!e) return; const items: EstimateItem[] = [{ id: 'it-e13-1', flow: 'W', label: `${store.watches.find((w) => w.id === e.watchId)?.brand ?? ''} ${store.watches.find((w) => w.id === e.watchId)?.model ?? ''}`.trim() }, { id: 'it-e13-2', flow: 'B', label: 'Separate Oyster bracelet' }]; e.items = items; e.lines.forEach((l) => { l.itemId = items[0].id; }); e.lines.push({ id: 'ln-e13-band', description: 'Re-pin stretched links — spare bracelet', qty: 1, unitPrice: 180, dept: 'B', taxable: true, type: 'service', itemId: items[1].id }); const p = store.packages.find((x) => x.id === 'pk-06'); if (p) p.itemsReceived = [items[0].id]; })();
@@ -786,7 +794,7 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
   pkg.workflow = [...input.workflow];
   pkg.componentsVerified = [...input.componentsReceived];
   pkg.notes = input.notes || pkg.notes; pkg.itemLabel = input.itemLabel?.trim() || pkg.itemLabel;
-  if (input.clientRef !== undefined) { const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0 && (e0.clientRef ?? '') !== input.clientRef.trim()) { e0.clientRef = input.clientRef.trim() || undefined; stamp(`Client reference ${e0.clientRef ? `"${e0.clientRef}"` : 'cleared'} · threads into email subjects`, pkg.subNumber); } }
+  if (input.clientRef !== undefined) { const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0 && (e0.clientRef ?? '') !== input.clientRef.trim()) { e0.clientRef = input.clientRef.trim() || undefined; store.jobs.filter((j) => j.estimateId === e0.id).forEach((j) => { j.clientRef = e0.clientRef; }); stamp(`Client reference ${e0.clientRef ? `"${e0.clientRef}"` : 'cleared'} · threads into email subjects`, pkg.subNumber); } }
   // Target completion is set ONCE, here — the inspection form, estimate and client report read it from the estimate
   if (input.targetDate) { pkg.targetWeeks = input.targetWeeks; pkg.targetDate = input.targetDate; const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0) { e0.targetWeeks = input.targetWeeks; e0.targetDate = input.targetDate; } }
 
@@ -896,7 +904,7 @@ export async function updateIntakeRecord(packageId: string, input: IntakeEditInp
   if ((pkg.componentsVerified ?? []).join() !== input.componentsVerified.join()) { changes.push(`components ${input.componentsVerified.join(', ') || '—'}`); pkg.componentsVerified = [...input.componentsVerified]; }
   if ((pkg.itemLabel ?? '') !== (input.itemLabel ?? '').trim()) { changes.push(`item label "${(input.itemLabel ?? '').trim()}"`); pkg.itemLabel = input.itemLabel?.trim() || undefined; }
   if ((pkg.notes ?? '') !== (input.notes ?? '').trim()) { changes.push('notes'); pkg.notes = input.notes?.trim() || undefined; }
-  if (est && input.clientRef !== undefined && (est.clientRef ?? '') !== input.clientRef.trim()) { changes.push(`client ref "${input.clientRef.trim() || '—'}"`); est.clientRef = input.clientRef.trim() || undefined; }
+  if (est && input.clientRef !== undefined && (est.clientRef ?? '') !== input.clientRef.trim()) { changes.push(`client ref "${input.clientRef.trim() || '—'}"`); est.clientRef = input.clientRef.trim() || undefined; store.jobs.filter((j) => j.estimateId === est.id).forEach((j) => { j.clientRef = est.clientRef; }); }
   if (input.targetDate && input.targetDate !== pkg.targetDate) { changes.push(`target ${pkg.targetDate ?? '—'}→${input.targetDate}`); pkg.targetWeeks = input.targetWeeks; pkg.targetDate = input.targetDate; if (est) { est.targetWeeks = input.targetWeeks; est.targetDate = input.targetDate; } insp.forms.filter((f) => f.jobId && est?.jobId === f.jobId).forEach((f) => { f.targetTo = input.targetDate; f.targetWeeks = input.targetWeeks ?? f.targetWeeks; }); }
   if (est && watch) { const c = fx.clients.find((x) => x.id === est.clientId); store.labels.filter((l) => l.packageId === pkg.id).forEach((l) => { if (l.type === 'ref_serial') { l.payload = `${ref} / ${ser}`; l.lines = watchLabelLines(est.number, c?.lastName ?? '', watch, ref, ser); } else { l.payload = `${est.number}|${pkg.subNumber}|${ref}|${ser}|${(pkg.workflow ?? []).join(',')}`; l.lines[3] = `Workflow ${(pkg.workflow ?? []).join(' · ')}`; } }); }
   stamp(`Intake record edited · ${changes.join(' · ') || 'no changes'}`, pkg.subNumber);
@@ -3616,7 +3624,7 @@ const renderWith = (key: TemplateKey, ctx: { clientId: string; anchor?: Conversa
   return { key, subject: fill(src.subject), body: fill(src.body), missing: uniq(missing), source: src.source, owner: src.owner };
 };
 export async function renderTemplate(conversationId: string, key: TemplateKey, shopDefault = false): Promise<RenderedTemplate> { return resolve(renderWith(key, convOf(conversationId), shopDefault)); }
-export async function renderTemplateForEstimate(estimateId: string, shopDefault = false): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...renderWith('estimate_sent', ctx, shopDefault), vals: mergeValues(ctx) }); }
+export async function renderTemplateForEstimate(estimateId: string, shopDefault = false): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...(() => { const r = renderWith('estimate_sent', ctx, shopDefault); return { ...r, subject: clientRefSubject(r.subject, e.clientRef) }; })(), vals: mergeValues(ctx) }); }
 export async function mergeValuesForConversation(conversationId: string): Promise<Record<string, string>> { return resolve(mergeValues(convOf(conversationId))); }
 export async function replyInThread(id: string, input: { text: string; subject?: string; templateKey?: TemplateKey; photos?: PackagePhoto[] }): Promise<ConvMessage> {
   const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId);

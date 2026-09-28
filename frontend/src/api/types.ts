@@ -297,6 +297,7 @@ export interface Job {
   status: JobStatus;
   simpleStatus: JobSimpleStatus;
   wireWarnings?: string[];
+  clientRef?: string;
   priority: JobPriority;
   division: Division;
   lines: EstimateLine[];
