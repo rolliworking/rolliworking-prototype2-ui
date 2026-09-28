@@ -3,25 +3,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { LegacyBadge, LegacyBanner } from '@/components/LegacyBits';
-import type { Address, EstimateLine, EstimateWithRefs, Watch } from '@/api/client';
+import type { Address, DeptCode, EstimateLine, EstimateWithRefs, Watch } from '@/api/client';
 import { EstimateStatusPill, Provisional } from '@/components/estimates/EstimateBits';
 import { EstimateAddresses, EstimateMeta, WatchPicker } from '@/components/estimates/EstimateForm';
 import { DeclineModal, RevisionHistory, SendModal } from '@/components/estimates/EstimateModals';
-import { LineEditor } from '@/components/estimates/LineEditor';
-import { ChainForEstimate, ComponentCodeChips } from '@/components/estimates/ComponentChain';
+import { ChainForEstimate } from '@/components/estimates/ComponentChain';
+import { ItemSection } from '@/components/estimates/ItemSection';
+import { AddItemButton } from '@/components/estimates/MultiItemBits';
+import { inferItemCodes, newItem, removeItem, type EstimateItem } from '@/api/items';
+import { blankLine } from '@/components/estimates/LineEditor';
+import { useAuth } from '@/auth/AuthContext';
 import { PrintPreview } from '@/components/estimates/PrintPreview';
 import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { fmtDate, fmtTime, fullName } from '@/lib/format';
 
-interface Form { lines: EstimateLine[]; watch: Watch | null; validUntil: string; clientNotes: string; messageNotes: string; internalNotes: string; billing: Address; shipping: Address; mirror: boolean }
-const toForm = (e: EstimateWithRefs): Form => ({ lines: e.lines.map((l) => ({ ...l })), watch: e.watch, validUntil: e.validUntil, clientNotes: e.clientNotes, messageNotes: e.messageNotes, internalNotes: e.internalNotes, billing: e.billingAddress, shipping: e.shippingAddress, mirror: e.shippingMirrorsBilling });
-const toPatch = (f: Form): api.EstimatePatch => ({ lines: f.lines, watchId: f.watch?.id ?? '', validUntil: f.validUntil, clientNotes: f.clientNotes, messageNotes: f.messageNotes, internalNotes: f.internalNotes, billingAddress: f.billing, shippingAddress: f.shipping, shippingMirrorsBilling: f.mirror });
+interface Form { lines: EstimateLine[]; items: EstimateItem[]; watch: Watch | null; validUntil: string; clientNotes: string; messageNotes: string; internalNotes: string; billing: Address; shipping: Address; mirror: boolean }
+const SINGLE: EstimateItem = { id: '__single', label: 'Watch' };
+const toForm = (e: EstimateWithRefs): Form => ({ lines: e.lines.map((l) => ({ ...l })), items: (e.items ?? []).map((i) => ({ ...i })), watch: e.watch, validUntil: e.validUntil, clientNotes: e.clientNotes, messageNotes: e.messageNotes, internalNotes: e.internalNotes, billing: e.billingAddress, shipping: e.shippingAddress, mirror: e.shippingMirrorsBilling });
+const toPatch = (f: Form): api.EstimatePatch => ({ lines: f.lines, items: f.items.length > 1 ? f.items : undefined, watchId: f.watch?.id ?? '', validUntil: f.validUntil, clientNotes: f.clientNotes, messageNotes: f.messageNotes, internalNotes: f.internalNotes, billingAddress: f.billing, shippingAddress: f.shipping, shippingMirrorsBilling: f.mirror });
 
 export default function EstimateDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [est, setEst] = useState<EstimateWithRefs | null | undefined>(undefined);
   const [form, setForm] = useState<Form | null>(null);
@@ -83,6 +89,19 @@ export default function EstimateDetailPage() {
   const pickedIds = () => e.lines.filter((l) => !deselected.has(l.id)).map((l) => l.id);
 
   const saveRevision = () => run(() => api.reviseEstimate(e.id, toPatch(form)), `Revision ${e.revision + 1} saved — rev ${e.revision} kept`).then(() => setRevising(false));
+
+  // Items: multi-item estimates carry their own array; a single-item estimate renders the same unit with one synthetic item (no numbering, no header)
+  const multi = form.items.length > 1; const items = multi ? form.items : [SINGLE];
+  const chipsLocked = !!e.legacy || e.status === 'converted';
+  const setItemLines = (itemId: string, ls: EstimateLine[]) => change({ lines: [...form.lines.filter((l) => (l.itemId ?? items[0].id) !== itemId), ...ls.map((l) => ({ ...l, itemId: multi ? itemId : l.itemId }))] });
+  const addItem = () => { const first = form.items[0] ?? newItem(e.watch ? `${e.watch.brand} ${e.watch.model}` : 'Watch'); const it = newItem(`Item ${(form.items.length || 1) + 1}`); const base = form.items.length ? form.items : [first]; change({ items: [...base, it], lines: [...form.lines.map((l) => ({ ...l, itemId: l.itemId ?? first.id })), { ...blankLine(true), itemId: it.id }] }); };
+  const removeIt = (itemId: string) => { const r = removeItem(form.lines, form.items, itemId); change({ items: r.items.length > 1 ? r.items : [], lines: r.items.length > 1 ? r.lines : r.lines.map((l) => ({ ...l, itemId: undefined })) }); };
+  // Chip override per item: logged with who / when / what was inferred. Draft → travels with autosave; otherwise persisted immediately.
+  const setItemCodes = (itemId: string, codes: DeptCode[] | null) => {
+    if (!multi) { const cur = api.estimateComponentCodes(e).codes; if (codes) void run(() => api.setEstimateComponents(e.id, codes), 'Component codes updated'); else void run(() => api.setEstimateComponents(e.id, api.inferComponentCodes(e.lines)), 'Component codes reverted to inferred'); void cur; return; }
+    if (editing) { change({ items: form.items.map((i) => (i.id !== itemId ? i : codes === null ? { ...i, components: undefined, componentsOverride: undefined } : { ...i, components: codes, componentsOverride: { by: user?.shortName ?? 'Staff', at: new Date().toISOString(), from: inferItemCodes(form.lines, form.items, itemId) } })) }); return; }
+    void run(() => api.setEstimateItemComponents(e.id, itemId, codes), codes ? 'Item component codes overridden · logged' : 'Item component codes reverted to inferred');
+  };
 
   return (
     <div data-testid="estimate-detail-page" className="space-y-4">
@@ -149,14 +168,17 @@ export default function EstimateDetailPage() {
         {editing ? <WatchPicker clientId={e.clientId} value={form.watch} onChange={(w) => change({ watch: w })} /> : e.watch ? <div className="text-[13px]">{e.watch.brand} {e.watch.model} <span className="font-mono text-xs text-ink-500">Ref {e.watch.reference} · Serial {e.watch.serial}</span>{e.targetDate && <span data-testid="estimate-target" className="ml-2 rounded-sm bg-moss-50 px-1.5 py-0.5 text-xs font-medium text-moss-700">Target {fmtDate(e.targetDate)} · {e.targetWeeks} wk · set at Receive Watch</span>}</div> : <span className="text-xs text-ink-400">No watch on this estimate.</span>}
       </Card>
 
-      <Card title="Lines" subtitle={editing ? 'Drag or use arrows to reorder · edit amount to back-calc rate · ≥2 blank rows kept' : 'Read-only in this status'} testId="detail-lines-card">
-        <LineEditor lines={form.lines} onChange={(ls) => change({ lines: ls })} readOnly={!editing} blankTaxableDefault minBlank={editing ? 2 : 0} selection={!editing && !e.legacy ? { selected: new Set(e.lines.filter((l) => !deselected.has(l.id)).map((l) => l.id)), onToggle: (id) => setDeselected((d) => { const n = new Set(d); if (n.has(id)) n.delete(id); else n.add(id); return n; }), onCloseOut: (id) => { const reason = window.prompt('Close this line out without converting — reason?'); if (reason) void run(() => api.closeOutEstimateLine(e.id, id, reason), 'Line closed out'); } } : undefined} />
+      <Card title="Lines" subtitle={editing ? 'Drag or use arrows to reorder · edit amount to back-calc rate · ≥2 blank rows kept · each item has its own table + chips' : 'Read-only in this status'} testId="detail-lines-card">
+        {editing && <div className="mb-3 flex flex-wrap items-center gap-2 text-xs"><AddItemButton onAdd={addItem} testId="detail-add-item" /><span className="text-[10px] text-ink-400">“Add additional line” (inside a table) = more work on the same piece · “Add Additional Item” = another physical piece</span></div>}
+        <div data-testid="detail-items" data-count={items.length} className="space-y-3">
+          {items.map((it) => { const single = !multi; const ec = single ? api.estimateComponentCodes(e) : null; const shown = single ? { ...it, components: ec!.codes, componentsOverride: undefined } : it;
+            return <ItemSection key={it.id} items={single ? [shown] : items} item={shown} lines={form.lines} onLines={editing ? (ls) => setItemLines(it.id, ls) : undefined} onLabel={editing ? (label) => change({ items: form.items.map((i) => (i.id === it.id ? { ...i, label } : i)) }) : undefined} onRemove={editing && multi ? () => removeIt(it.id) : undefined} onToggleCode={chipsLocked ? undefined : (next) => setItemCodes(it.id, next)} onRevertCodes={chipsLocked ? undefined : () => setItemCodes(it.id, null)} chipsReadOnly={chipsLocked} readOnly={!editing} blankTaxableDefault minBlank={editing ? 2 : 0} selection={!editing && !e.legacy ? { selected: new Set(e.lines.filter((l) => !deselected.has(l.id)).map((l) => l.id)), onToggle: (lid) => setDeselected((d) => { const n = new Set(d); if (n.has(lid)) n.delete(lid); else n.add(lid); return n; }), onCloseOut: (lid) => { const reason = window.prompt('Close this line out without converting — reason?'); if (reason) void run(() => api.closeOutEstimateLine(e.id, lid, reason), 'Line closed out'); } } : undefined} />; })}
+        </div>
         {!editing && !e.legacy && e.lines.some((l) => l.conversions?.length) && <p data-testid="lines-convert-summary" className="mt-2 text-[11px] text-ink-500">{e.lines.filter((l) => l.conversions?.length).length} line{e.lines.filter((l) => l.conversions?.length).length === 1 ? '' : 's'} converted · {e.lines.filter((l) => !l.conversions?.length && !l.closedOut && (l.description.trim() || l.unitPrice)).length} still open · {e.lines.filter((l) => l.closedOut).length} closed out. Open lines can be converted separately or closed out.</p>}
       </Card>
 
-      <Card title="Components · trickle-down chain" subtitle="Expected (these chips) → Received at Scan 1 → Verified at Scan 2 · toggling a chip is an explicit override, logged" testId="detail-chain-card">
-        <ComponentCodeChips value={api.estimateComponentCodes(e).codes} inferred={api.estimateComponentCodes(e).inferred} readOnly={!!e.legacy || e.status === 'converted'} onToggle={(c) => { const cur = api.estimateComponentCodes(e).codes; api.setEstimateComponents(e.id, cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]).then(() => { void load(); say(`Component codes updated`); }).catch((x) => setError(x.message)); }} />
-        <div className="mt-3 border-t border-line pt-3"><ChainForEstimate estimateId={e.id} tick={e.updatedAt} /></div>
+      <Card title="Components · trickle-down chain" subtitle={multi ? 'One chain per item — Expected (that item’s chips) → Received at Scan 1 → Verified at Scan 2 · nothing crosses between items' : 'Expected (chips above the lines) → Received at Scan 1 → Verified at Scan 2 · toggling a chip is an explicit override, logged'} testId="detail-chain-card">
+        <ChainForEstimate estimateId={e.id} tick={e.updatedAt} />
       </Card>
 
       <Card title="Details" testId="detail-meta-card">

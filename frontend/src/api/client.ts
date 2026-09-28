@@ -54,6 +54,7 @@ import type {
   PaymentMethod,
   PinnedItem,
   SalesOrder,
+  ClientResolution,
   SalesOrderWithRefs,
   ShipCarrier,
   Shipment,
@@ -164,7 +165,7 @@ const store = {
   counters: { sub: 314, label: 3, estimate: 1058, job: Math.max(2030, ...fx.jobs.map((j) => Number(j.number.replace(/\D/g, '')) || 0)), so: 107, pr: 44 },
 };
 // ---- B2B client reference (their barcode / internal tracking #) — captured at Receive Watch, lives on the estimate, threads into every client email subject for that job ----
-// FORMAT PLACEHOLDER — bracketed prefix; final format is an open decision
+// FINAL FORMAT (user decision): bracketed prefix "[REF: <ref>] <subject>"
 export const clientRefSubject = (subject: string, ref?: string) => (ref?.trim() ? `[REF: ${ref.trim()}] ${subject}` : subject);
 const clientRefFor = (relatedRef: string): string | undefined => {
   const toks = relatedRef.split(/[^A-Za-z0-9-]+/).filter(Boolean);
@@ -194,8 +195,6 @@ export const jobClientRef = (j: Job & { estimate?: Estimate | null }) => j.clien
 // Seed: E02013's estimate carries a B2B reference; every other job leaves it blank for comparison
 (() => { const e = store.estimates.find((x) => x.id === 'e-04'); if (e) { e.clientRef = 'B2B-88421'; store.jobs.filter((j) => j.estimateId === e.id).forEach((j) => { j.clientRef = e.clientRef; }); } })();
 
-// Seeded multi-item estimate — E01053: Item 1 full watch service, Item 2 band-only; pk-06 already has Item 1 in hand
-(() => { const e = store.estimates.find((x) => x.number === 'E01053'); if (!e) return; const items: EstimateItem[] = [{ id: 'it-e13-1', flow: 'W', label: `${store.watches.find((w) => w.id === e.watchId)?.brand ?? ''} ${store.watches.find((w) => w.id === e.watchId)?.model ?? ''}`.trim() }, { id: 'it-e13-2', flow: 'B', label: 'Separate Oyster bracelet' }]; e.items = items; e.lines.forEach((l) => { l.itemId = items[0].id; }); e.lines.push({ id: 'ln-e13-band', description: 'Re-pin stretched links — spare bracelet', qty: 1, unitPrice: 180, dept: 'B', taxable: true, type: 'service', itemId: items[1].id }); const p = store.packages.find((x) => x.id === 'pk-06'); if (p) p.itemsReceived = [items[0].id]; })();
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
   const row = rows.find((r) => r.id === id);
@@ -730,12 +729,27 @@ export async function findPackageForInspection(estimateNumber: string): Promise<
 
 const uniq = <T>(xs: T[]) => Array.from(new Set(xs));
 
-export async function getInspectionContext(packageId: string): Promise<InspectionContext> {
+export async function getInspectionContext(packageId: string, itemId?: string): Promise<InspectionContext> {
   const pkg = pkgWithRefs(getPkg(packageId));
   if (!pkg.estimate || !pkg.estimate.watch) throw new Error('Package has no linked estimate with a watch — go back to Receive Package');
+  const items = pkg.estimate.items;
+  if (items && items.length > 1) {
+    // Item-scoped: expected / suggested / received all come from THIS item's chips, lines and scans — never the estimate-wide union
+    const item = items.find((i) => i.id === itemId) ?? items[0];
+    const ic = itemCodes(pkg.estimate.lines, items, item);
+    return resolve({ pkg, estimate: pkg.estimate, expectedComponents: uniq(ic.codes.flatMap((d) => fx.DEPT_COMPONENTS[d])), suggestedWorkflow: [...ic.codes], item: { id: item.id, number: itemNumber(items, item.id), count: items.length, label: item.label, inferred: ic.inferred }, receivedForItem: pkg.itemContents?.[item.id] ?? [] });
+  }
   const depts = pkg.estimate.components?.length ? [...pkg.estimate.components] : uniq(pkg.estimate.lines.map((l) => l.dept));
   const expectedComponents = uniq(depts.flatMap((d) => fx.DEPT_COMPONENTS[d]));
   return resolve({ pkg, estimate: pkg.estimate, expectedComponents, suggestedWorkflow: depts });
+}
+// Per-item Scan 1 (received) / Scan 2 (verified) — written only under this item's key; other items' records are untouched
+export async function setItemScan(packageId: string, itemId: string, patch: { received?: string[]; verified?: string[] }): Promise<PackageWithRefs> {
+  const pkg = getPkg(packageId); const a = actor(); const est = pkg.estimateId ? store.estimates.find((e) => e.id === pkg.estimateId) : undefined; const items = est?.items ?? [];
+  const n = itemNumber(items, itemId); const tag = `Item ${n} of ${items.length}`;
+  if (patch.received) { pkg.itemContents = { ...(pkg.itemContents ?? {}), [itemId]: [...patch.received] }; stamp(`${tag} · Scan 1 · received ${patch.received.join(', ') || '— nothing'}`, pkg.subNumber); }
+  if (patch.verified) { pkg.itemComponentsVerified = { ...(pkg.itemComponentsVerified ?? {}), [itemId]: { at: new Date().toISOString(), by: a.by, components: [...patch.verified] } }; stamp(`${tag} · Scan 2 · verified in hand ${patch.verified.join(', ') || '— nothing'}`, pkg.subNumber); }
+  return resolve(pkgWithRefs(pkg));
 }
 
 export async function findWatchBySerial(reference: string, serial: string): Promise<WatchMatch | null> {
@@ -782,7 +796,7 @@ export function computeDiscrepancies(ctx: InspectionContext, input: ReceiveWatch
 }
 
 export async function receiveWatch(packageId: string, input: ReceiveWatchInput): Promise<ReceiveWatchResult> {
-  const ctx = await getInspectionContext(packageId);
+  const ctx = await getInspectionContext(packageId, input.itemId);
   const pkg = getPkg(packageId);
   if (pkg.status !== 'awaiting_inspection') throw new Error('Package is not awaiting inspection');
   if (!input.reference.trim() || !input.serial.trim()) throw new Error('Reference and serial are required (use NS if unreadable)');
@@ -791,8 +805,17 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
   const discrepancies = computeDiscrepancies(ctx, input);
   pkg.inspectedAt = new Date().toISOString();
   pkg.inspectedBy = a.by;
-  pkg.workflow = [...input.workflow];
-  pkg.componentsVerified = [...input.componentsReceived];
+  if (ctx.item) {
+    // Multi-item: this commit's verification is recorded under the selected item; package-level fields become the union of per-item records (whole-job read model)
+    pkg.itemComponentsVerified = { ...(pkg.itemComponentsVerified ?? {}), [ctx.item.id]: { at: pkg.inspectedAt, by: a.by, components: [...input.componentsReceived] } };
+    pkg.itemWorkflow = { ...(pkg.itemWorkflow ?? {}), [ctx.item.id]: [...input.workflow] };
+    pkg.componentsVerified = uniq(Object.values(pkg.itemComponentsVerified).flatMap((v) => v.components));
+    pkg.workflow = uniq(Object.values(pkg.itemWorkflow).flat());
+    stamp(`Item ${ctx.item.number} of ${ctx.item.count} · Scan 2 · verified ${input.componentsReceived.join(', ') || '— nothing'} · codes ${input.workflow.join('+')}`, pkg.subNumber);
+  } else {
+    pkg.workflow = [...input.workflow];
+    pkg.componentsVerified = [...input.componentsReceived];
+  }
   pkg.notes = input.notes || pkg.notes; pkg.itemLabel = input.itemLabel?.trim() || pkg.itemLabel;
   if (input.clientRef !== undefined) { const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0 && (e0.clientRef ?? '') !== input.clientRef.trim()) { e0.clientRef = input.clientRef.trim() || undefined; store.jobs.filter((j) => j.estimateId === e0.id).forEach((j) => { j.clientRef = e0.clientRef; }); stamp(`Client reference ${e0.clientRef ? `"${e0.clientRef}"` : 'cleared'} · threads into email subjects`, pkg.subNumber); } }
   // Target completion is set ONCE, here — the inspection form, estimate and client report read it from the estimate
@@ -1021,8 +1044,10 @@ export async function createEstimate(input: EstimateInput): Promise<EstimateWith
     updatedAt: new Date().toISOString(),
   };
   recalc(e);
+  syncEstimateComponents(e);
   store.estimates.unshift(e);
   estStamp(e, `Draft created · ${lines.length} line${lines.length === 1 ? '' : 's'} · ${e.total.toFixed(2)}`);
+  e.items?.forEach((it) => { if (it.componentsOverride) estStamp(e, `Item ${itemNumber(e.items!, it.id)} of ${e.items!.length} · component codes override → ${it.components!.join('+')} (inferred was ${it.componentsOverride.from.join('+') || '—'}) · by ${it.componentsOverride.by}`); });
   if (input.requestId) linkEstimateToRequest(e, input.requestId);
   return resolve(withRefs(e));
 }
@@ -1030,7 +1055,14 @@ export async function createEstimate(input: EstimateInput): Promise<EstimateWith
 export type EstimatePatch = Partial<Omit<EstimateInput, 'clientId'>>;
 
 const applyPatch = (e: Estimate, patch: EstimatePatch) => {
+  if (patch.items) {
+    // Removal is BLOCKED once an item has any custody scan — a custody-touched item must never silently disappear
+    const next = new Set(patch.items.map((i) => i.id)); const pkgs = store.packages.filter((p) => p.estimateId === e.id);
+    (e.items ?? []).forEach((it) => { if (!next.has(it.id) && pkgs.some((p) => p.itemContents?.[it.id] || p.itemComponentsVerified?.[it.id] || p.itemsReceived?.includes(it.id))) throw new Error(`Item ${itemNumber(e.items!, it.id)} of ${e.items!.length} has custody scans — it can't be removed`); });
+    e.items = patch.items.length > 1 ? patch.items.map((i) => ({ ...i })) : undefined;
+  }
   if (patch.lines) e.lines = realLines(patch.lines).map((l) => ({ ...l, id: l.id || newLineId() }));
+  if (patch.components) e.components = uniq(patch.components);
   if (patch.watchId !== undefined) e.watchId = patch.watchId || undefined;
   if (patch.validUntil) e.validUntil = patch.validUntil;
   if (patch.clientNotes !== undefined) e.clientNotes = patch.clientNotes;
@@ -1041,6 +1073,7 @@ const applyPatch = (e: Estimate, patch: EstimatePatch) => {
   if (patch.shippingAddress) e.shippingAddress = patch.shippingAddress;
   if (e.shippingMirrorsBilling) e.shippingAddress = e.billingAddress;
   recalc(e);
+  syncEstimateComponents(e);
 };
 
 // Draft: edit in place (autosaved by the UI)
@@ -1893,7 +1926,32 @@ export async function findSalesOrders(query: string): Promise<SalesOrderWithRefs
 }
 
 export interface SOLineInput { description: string; partNumber?: string; qty: number; rate: number; dept?: DeptCode }
-export interface SalesOrderInput { clientId: string; jobId?: string; estimateId?: string; lines: SOLineInput[]; shippingAmount?: number; memo?: string; channel?: FulfillmentChannel; status?: 'draft' | 'open' }
+export interface SalesOrderInput { clientId: string; jobId?: string; estimateId?: string; lines: SOLineInput[]; shippingAmount?: number; memo?: string; channel?: FulfillmentChannel; status?: 'draft' | 'open'; clientResolution?: Pick<ClientResolution, 'via' | 'detail'> }
+
+// ---- Scan gate (user decision: hard gate + manager override) — an invoice can't be sent for a name-picked customer until the job label is scan-confirmed or a manager overrides with a logged reason ----
+const linkedNumber = (input: SalesOrderInput) => input.jobId ? store.jobs.find((j) => j.id === input.jobId)?.number : input.estimateId ? store.estimates.find((e) => e.id === input.estimateId)?.number : undefined;
+const resolutionFor = (input: SalesOrderInput, a: { by: string }): ClientResolution => {
+  const now = new Date().toISOString(); const linked = linkedNumber(input);
+  if (linked) return { via: 'linked', detail: `customer carried from ${linked} by ID`, at: now, by: a.by };
+  if (input.clientResolution?.via === 'scan') return { via: 'scan', detail: input.clientResolution.detail, at: now, by: a.by };
+  return { via: 'name', detail: input.clientResolution?.detail ?? 'picked from a name search', at: now, by: a.by };
+};
+export const soScanGate = (o: SalesOrder): { locked: boolean; reason?: string } => { const r = o.clientResolution; if (!r || r.via !== 'name' || r.override) return { locked: false }; return { locked: true, reason: `Customer was picked by name (${r.detail}) — scan the job label to confirm, or a manager can override with a reason` }; };
+export async function confirmSoClientByScan(id: string, raw: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id); const r = await resolveScan(raw); if (!r) throw new Error(`Nothing matched “${raw.trim()}” — scan the job label or enter a job / estimate #`);
+  if (r.client.id !== o.clientId) { const other = r.client; soStamp(o, `Scan MISMATCH · label ${r.scanned} → ${other.firstName} ${other.lastName} (${other.id}), order customer is ${o.clientId} · invoice stays locked`); throw new Error(`That label belongs to ${other.firstName} ${other.lastName} (customer ID ${other.id}, ${other.email}) — not this order's customer (ID ${o.clientId}). Invoice stays locked.`); }
+  const a = actor(); const detail = r.via === 'job' ? `job ${r.job!.number}` : r.via === 'estimate' ? `estimate ${r.estimate!.number}` : `ref·serial ${r.watch!.reference}-${r.watch!.serial}`;
+  o.clientResolution = { via: 'scan', detail: `scan-confirmed via ${detail} → customer ID ${r.client.id}`, at: new Date().toISOString(), by: a.by }; o.updatedAt = o.clientResolution.at;
+  soStamp(o, `Customer scan-confirmed · ${detail} → ${r.client.firstName} ${r.client.lastName} (${r.client.id}) · invoice unlocked`); return resolve(soRefs(o));
+}
+export async function overrideSoScanGate(id: string, reason: string): Promise<SalesOrderWithRefs> {
+  const o = getSO(id); const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Manager access required to override the scan gate');
+  if (!reason.trim()) throw new Error('A reason is required for the override'); if (!o.clientResolution || o.clientResolution.via !== 'name') throw new Error('Nothing to override — customer is already scan-confirmed or linked');
+  o.clientResolution.override = { by: a.by, at: new Date().toISOString(), reason: reason.trim() }; o.updatedAt = o.clientResolution.override.at;
+  soStamp(o, `Scan gate OVERRIDDEN by ${a.by} (manager) · reason: ${reason.trim()} · customer remains name-picked`);
+  appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${o.number} · scan gate override · ${reason.trim()}` });
+  return resolve(soRefs(o));
+}
 
 const nextSONumber = () => `SO-26-${String(++store.counters.so).padStart(4, '0')}`;
 const buildSO = (input: SalesOrderInput): SalesOrder => {
@@ -1906,11 +1964,14 @@ const buildSO = (input: SalesOrderInput): SalesOrder => {
     lines: input.lines.filter((l) => l.description.trim()).map((l) => ({ id: newId('sol'), description: l.description.trim(), partNumber: l.partNumber, qty: l.qty || 1, rate: l.rate || 0, dept: l.dept, pickedUpQty: 0, shippedQty: 0 })),
     shippingAmount: input.shippingAmount ?? 0, total: 0, memo: input.memo?.trim() || undefined, qboStatus: 'not_queued', payments: [], balanceDue: 0, isPaid: false, payLinkToken: newId('pl'), invoiceSends: [],
     createdAt: now, createdBy: a.by, updatedAt: now,
+    clientResolution: resolutionFor(input, a),
   };
   soTotals(o);
   store.salesOrders.unshift(o);
   return o;
 };
+// Seed: the Sanchez incident — SO-26-0090 was name-picked for the Houston William Sanchez (c-33); it stays invoice-locked until scan-confirmed or overridden
+(() => { const o = buildSO({ clientId: 'c-33', lines: [{ description: 'Bracelet re-pin — stretched links', qty: 1, rate: 220, dept: 'B' }, { description: 'Clasp adjust + tighten', qty: 1, rate: 60, dept: 'B' }], memo: 'Band-only job · walked in without label', status: 'open', clientResolution: { via: 'name', detail: 'picked from a name search (William Sanchez)' } }); o.id = 'so-ws'; o.number = 'SO-26-0090'; o.createdBy = 'Vienna'; o.clientResolution!.by = 'Vienna'; })();
 
 export async function createSalesOrder(input: SalesOrderInput): Promise<SalesOrderWithRefs> {
   const o = buildSO(input);
@@ -1954,6 +2015,7 @@ export async function sendInvoice(id: string): Promise<SalesOrderWithRefs> {
   const o = getSO(id);
   if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Open the order before sending the invoice');
   if (o.lines.length === 0) throw new Error('Nothing to invoice');
+  { const g = soScanGate(o); if (g.locked) { soStamp(o, `Invoice send BLOCKED by scan gate · ${o.clientResolution!.detail}`); throw new Error(g.reason!); } }
   const a = actor(); const url = payLinkUrl(o); const emailId = `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
   const c = byId(fx.clients, o.clientId);
   queueOutbox({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nYour watch's service records: ${window.location.origin}${soRecordsLink(o)}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
@@ -5208,13 +5270,49 @@ export async function setEstimateComponents(id: string, codes: DeptCode[]): Prom
 const chainFor = (e: Estimate): VerificationChain => {
   const { codes, inferred } = estimateComponentCodes(e); const expected = uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));
   const pkg = store.packages.filter((p) => p.estimateId === e.id && p.status !== 'arrived').sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt))[0];
-  const received = pkg ? pkg.contents : undefined; const verified = pkg?.componentsVerified;
+  return buildChain(e, codes, inferred, expected, pkg, pkg ? pkg.contents : undefined, pkg?.componentsVerified, pkg?.inspectedAt ? { at: pkg.inspectedAt, by: pkg.inspectedBy ?? '—' } : undefined);
+};
+const buildChain = (e: Estimate, codes: DeptCode[], inferred: boolean, expected: string[], pkg: Package | undefined, received: string[] | undefined, verified: string[] | undefined, verifiedMeta: { at: string; by: string } | undefined): VerificationChain => {
   const all = uniq([...expected, ...(received ?? []), ...(verified ?? [])]);
   const rows: ChainRow[] = all.map((component) => { const exp = expected.includes(component); const rec = received?.includes(component); const ver = verified?.includes(component);
     const state: ChainState = verified ? (exp && ver ? 'ok' : exp ? 'missing' : 'extra') : received ? (exp && rec ? 'pending' : exp ? 'missing' : 'extra') : 'pending';
     return { component, expected: exp, received: rec, verified: ver, state }; });
-  return { estimateId: e.id, estimateNumber: e.number, codes, inferred, rows, received: pkg ? { at: pkg.processedAt ?? pkg.arrivedAt, by: pkg.processedBy ?? pkg.arrivedBy, packageId: pkg.id, subNumber: pkg.subNumber } : undefined, verified: pkg?.inspectedAt ? { at: pkg.inspectedAt, by: pkg.inspectedBy ?? '—' } : undefined, complete: !!verified, discrepancies: rows.filter((r) => r.state === 'missing' || r.state === 'extra').length };
+  return { estimateId: e.id, estimateNumber: e.number, codes, inferred, rows, received: pkg && received ? { at: pkg.processedAt ?? pkg.arrivedAt, by: pkg.processedBy ?? pkg.arrivedBy, packageId: pkg.id, subNumber: pkg.subNumber } : undefined, verified: verifiedMeta, complete: !!verified, discrepancies: rows.filter((r) => r.state === 'missing' || r.state === 'extra').length };
 };
+// Per-item chain — reads ONLY this item's chips (own lines / own override) and ONLY this item's Scan 1 / Scan 2 records
+const chainForItem = (e: Estimate, itemId: string): VerificationChain | null => {
+  const items = e.items ?? []; const item = items.find((i) => i.id === itemId); if (!item) return null;
+  const ic = itemCodes(e.lines, items, item); const expected = uniq(ic.codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));
+  const pkg = store.packages.filter((p) => p.estimateId === e.id && p.status !== 'arrived').sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt))[0];
+  const received = pkg?.itemContents?.[itemId]; const ver = pkg?.itemComponentsVerified?.[itemId];
+  return { ...buildChain(e, ic.codes, ic.inferred, expected, pkg, received, ver?.components, ver ? { at: ver.at, by: ver.by } : undefined), override: ic.override, item: { id: item.id, number: itemNumber(items, item.id), count: items.length, label: item.label } };
+};
+// One chain per item for multi-item estimates; a single whole-package chain otherwise
+const chainsFor = (e: Estimate): VerificationChain[] => (e.items && e.items.length > 1 ? e.items.map((i) => chainForItem(e, i.id)!).filter(Boolean) : [chainFor(e)]);
+export async function getVerificationChains(estimateId: string): Promise<VerificationChain[]> { const e = store.estimates.find((x) => x.id === estimateId); return resolve(e ? chainsFor(e) : []); }
+export async function getJobVerificationChains(jobId: string): Promise<VerificationChain[]> { const j = store.jobs.find((x) => x.id === jobId); const e = j?.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined; return resolve(e ? chainsFor(e) : []); }
+export async function getItemVerificationChain(estimateId: string, itemId: string): Promise<VerificationChain | null> { const e = store.estimates.find((x) => x.id === estimateId); return resolve(e ? chainForItem(e, itemId) : null); }
+// Per-item chip override — logged with who / when / what was inferred; null reverts to inferred. Estimate-level union re-synced as the whole-job read model.
+export const syncEstimateComponents = (e: Estimate) => { if (e.items && e.items.length > 1) e.components = unionItemCodes(e.lines, e.items); };
+export async function setEstimateItemComponents(estimateId: string, itemId: string, codes: DeptCode[] | null): Promise<EstimateWithRefs> {
+  const e = byId(store.estimates, estimateId); if (e.legacy) throw new Error('Legacy record is read-only'); const items = e.items ?? []; const item = items.find((i) => i.id === itemId); if (!item) throw new Error('Item not found on this estimate');
+  const n = itemNumber(items, itemId); const inferredNow = inferItemCodes(e.lines, items, itemId); const before = itemCodes(e.lines, items, item).codes.join('+') || '—'; const a = actor();
+  if (codes === null) { item.components = undefined; item.componentsOverride = undefined; estStamp(e, `Item ${n} of ${items.length} · component codes reverted to inferred (${inferredNow.join('+') || '—'}) · was ${before}`); }
+  else { if (!codes.length) throw new Error('Pick at least one component code'); item.components = uniq(codes); item.componentsOverride = { by: a.by, at: new Date().toISOString(), from: inferredNow }; estStamp(e, `Item ${n} of ${items.length} · component codes override ${before} → ${item.components.join('+')} (inferred was ${inferredNow.join('+') || '—'})`); }
+  syncEstimateComponents(e); e.updatedAt = new Date().toISOString(); return resolve(withRefs(e));
+}
+// Seeded multi-item estimate — E01053: Item 1 = band only (lines infer B), Item 2 = complete watch (lines infer W+P, PM added by a logged override). pk-06: Item 1 mid-chain (Scan 1 partial, no Scan 2); Item 2 not yet arrived.
+(() => { const e = store.estimates.find((x) => x.number === 'E01053'); if (!e) return; const w = store.watches.find((x) => x.id === e.watchId);
+  const items: EstimateItem[] = [{ id: 'it-e13-1', label: 'Oyster bracelet — band only' }, { id: 'it-e13-2', label: `${w?.brand ?? ''} ${w?.model ?? ''} — complete watch`.trim(), components: ['W', 'P', 'PM'], componentsOverride: { by: 'Vienna', at: daysAgoIso(2), from: ['W', 'P'] } }];
+  e.items = items;
+  e.lines = [
+    { id: 'ln-e13-band', description: 'Re-pin stretched links — Oyster bracelet', qty: 1, unitPrice: 180, dept: 'B', taxable: true, type: 'service', itemId: items[0].id },
+    { id: 'ln-e13-mvt', description: 'Complete movement service — cal. 3230', qty: 1, unitPrice: 1250, dept: 'W', taxable: true, type: 'service', itemId: items[1].id },
+    { id: 'ln-e13-pol', description: 'Retail case polish', qty: 1, unitPrice: 340, dept: 'P', taxable: true, type: 'service', itemId: items[1].id, catalogId: 'svc-16' },
+  ];
+  recalc(e); syncEstimateComponents(e);
+  const p = store.packages.find((x) => x.id === 'pk-06'); if (p) { p.itemsReceived = [items[0].id]; p.itemContents = { [items[0].id]: ['bracelet'] }; p.contents = ['bracelet', 'box', 'papers']; }
+})();
 export async function getVerificationChain(estimateId: string): Promise<VerificationChain | null> { const e = store.estimates.find((x) => x.id === estimateId); return resolve(e ? chainFor(e) : null); }
 export async function getJobVerificationChain(jobId: string): Promise<VerificationChain | null> { const j = store.jobs.find((x) => x.id === jobId); const e = j?.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined; return resolve(e ? chainFor(e) : null); }
 
@@ -5417,8 +5515,8 @@ export const applySheetSuggestion = (f: InspectionForm, s: SheetSuggestion, acce
 void AUTHENTICITY; void BRACELET_LINES; void INSPECTION_COMPONENTS;
 export const shortNameOf = (userId: string) => fx.users.find((u) => u.id === userId)?.shortName ?? userId;
 
-export type { EstimateItem, ItemFlow } from './items';
-import type { EstimateItem } from './items';
+export type { EstimateItem } from './items';
+import { type EstimateItem, itemCodes, itemNumber, inferItemCodes, unionItemCodes } from './items';
 // ---- Appointments bridge (data module lives in ./appointments.ts; these expose the store bits it needs) ----
 export const actorInfo = () => actor();
 // ---- Hitlist bridge (per-person hit lists, inbox, supervisor rollup live in ./hitlist.ts) ----

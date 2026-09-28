@@ -486,6 +486,10 @@ export interface Package {
   receiptPrinted: boolean;
   processedAt?: string;
   itemsReceived?: string[];
+  // Per-item custody scans — keyed by item id; each item has its own Scan 1 / Scan 2 record, never a shared array
+  itemContents?: Record<string, string[]>;
+  itemComponentsVerified?: Record<string, { at: string; by: string; components: string[] }>;
+  itemWorkflow?: Record<string, DeptCode[]>;
   targetWeeks?: number;
   targetDate?: string;
   processedBy?: string;
@@ -549,10 +553,14 @@ export interface InspectionContext {
   estimate: EstimateWithRefs;
   expectedComponents: string[];
   suggestedWorkflow: DeptCode[];
+  // Present only for multi-item estimates — everything above is then scoped to THIS item
+  item?: { id: string; number: number; count: number; label: string; inferred: boolean };
+  receivedForItem?: string[];
 }
 
 export interface ReceiveWatchInput {
   itemLabel?: string;
+  itemId?: string;
   clientRef?: string;
   targetWeeks?: number;
   targetDate?: string;
@@ -569,6 +577,8 @@ export interface ReceiveWatchInput {
 // ---- Sales orders / fulfil / pickup / ship (E5) — per PROMPT-PACK-invoicing-pickup-ship.md ----
 
 export type SOStatus = 'draft' | 'open' | 'partial_fulfilled' | 'fulfilled' | 'shipped' | 'picked_up' | 'cancelled';
+// How the customer on an order was identified — 'name' is the risky path and locks invoicing until scan-confirmed or manager-overridden
+export interface ClientResolution { via: 'scan' | 'linked' | 'name'; detail: string; at: string; by: string; override?: { by: string; at: string; reason: string } }
 export type FulfillmentChannel = 'ship' | 'pickup';
 export type ShipCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other';
 export type PaymentMethod = 'card' | 'cash' | 'check' | 'wire' | 'other' | 'zero_balance';
@@ -655,6 +665,7 @@ export interface SalesOrder {
   shippingInfoRequestedAt?: string;
   tracking?: string;
   pickedUpAt?: string;
+  clientResolution?: ClientResolution;
   pickupWindow?: PickupWindow;
   shipment?: Shipment;
   pickupSession?: PickupSession;
@@ -1220,7 +1231,7 @@ export interface QuickAddResult { kind: 'added' | 'routed_to_approval'; part: Pa
 // ---- Component code chips + trickle-down verification chain (Expected → Received → Verified) ----
 export type ChainState = 'ok' | 'missing' | 'extra' | 'pending';
 export interface ChainRow { component: string; expected: boolean; received?: boolean; verified?: boolean; state: ChainState }
-export interface VerificationChain { estimateId: string; estimateNumber: string; codes: DeptCode[]; inferred: boolean; rows: ChainRow[]; received?: { at: string; by: string; packageId: string; subNumber: string }; verified?: { at: string; by: string }; complete: boolean; discrepancies: number }
+export interface VerificationChain { estimateId: string; estimateNumber: string; codes: DeptCode[]; inferred: boolean; override?: { by: string; at: string; from: DeptCode[] }; item?: { id: string; number: number; count: number; label: string }; rows: ChainRow[]; received?: { at: string; by: string; packageId: string; subNumber: string }; verified?: { at: string; by: string }; complete: boolean; discrepancies: number }
 
 // ---- Per-staff client reviews (STRICTLY internal) — one review per staff member per client, latest wins, history kept ----
 export interface StaffReview { id: string; clientId: string; by: string; attitude: Star; communication: Star; jobsHandled: number; note?: string; at: string; station: string }

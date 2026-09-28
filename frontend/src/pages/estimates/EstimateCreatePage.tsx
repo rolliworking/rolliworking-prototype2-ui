@@ -3,13 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Address, Client, DeptCode, EstimateLine, QuoteContext, RequestPrefill, Watch } from '@/api/client';
-import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Provisional, QuoteContextStrip } from '@/components/estimates/EstimateBits';
 import { ClientPicker, EstimateAddresses, EstimateMeta, ShippingCalculator, WatchPicker } from '@/components/estimates/EstimateForm';
-import { blankLine, LineEditor } from '@/components/estimates/LineEditor';
-import { AddItemButton, MultiItemPanel } from '@/components/estimates/MultiItemBits';
+import { blankLine } from '@/components/estimates/LineEditor';
+import { ItemSection } from '@/components/estimates/ItemSection';
+import { AddItemButton } from '@/components/estimates/MultiItemBits';
 import * as jt from '@/api/jobTemplates';
-import { linesFor, newItem, removeItem, type EstimateItem, type ItemFlow } from '@/api/items';
+import { inferItemCodes, newItem, removeItem, unionItemCodes, type EstimateItem } from '@/api/items';
+import { useAuth } from '@/auth/AuthContext';
 import { Button, PageHeader } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { fullName } from '@/lib/format';
@@ -18,25 +19,24 @@ const EMPTY: Address = { name: '', street: '', city: '', state: '' };
 const plus30 = () => new Date(Date.now() + 30 * 86_400_000).toISOString();
 
 export default function EstimateCreatePage() {
-  const navigate = useNavigate(); const [params] = useSearchParams(); const requestId = params.get('request') ?? undefined;
+  const navigate = useNavigate(); const [params] = useSearchParams(); const requestId = params.get('request') ?? undefined; const { user } = useAuth();
   const [prefill, setPrefill] = useState<RequestPrefill | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [watch, setWatch] = useState<Watch | null>(null); const scanWatch = useRef<Watch | null>(null);
-  const [items, setItems] = useState<EstimateItem[]>([newItem('W', 'Watch')]); const [selItem, setSelItem] = useState(() => '');
-  const activeItem = items.find((i) => i.id === selItem)?.id ?? items[0].id;
+  const [items, setItems] = useState<EstimateItem[]>([newItem('Watch')]);
   const [lines, setLines] = useState<EstimateLine[]>([{ ...blankLine(false), itemId: undefined }]);
   const [templates, setTemplates] = useState<jt.JobTemplate[]>([]); useEffect(() => { void jt.getJobTemplates().then(setTemplates); }, []);
-  // Lines shown = the selected item's lines; edits merge back without touching other items' lines
-  const itemLines = linesFor(lines, items, activeItem);
-  const setItemLines = (ls: EstimateLine[]) => setLines((all) => [...all.filter((l) => (l.itemId ?? items[0].id) !== activeItem), ...ls.map((l) => ({ ...l, itemId: activeItem }))]);
-  const addItem = (flow: ItemFlow) => { const it = newItem(flow); setItems((v) => [...v, it]); setLines((all) => [...all.map((l) => ({ ...l, itemId: l.itemId ?? items[0].id })), { ...blankLine(false), itemId: it.id }]); setSelItem(it.id); };
+  // Each item owns its own table: edits to one item's lines merge back without touching any other item's lines
+  const setItemLines = (itemId: string, ls: EstimateLine[]) => setLines((all) => [...all.filter((l) => (l.itemId ?? items[0].id) !== itemId), ...ls.map((l) => ({ ...l, itemId }))]);
+  const addItem = () => { const it = newItem(`Item ${items.length + 1}`); setItems((v) => [...v, it]); setLines((all) => [...all.map((l) => ({ ...l, itemId: l.itemId ?? items[0].id })), { ...blankLine(false), itemId: it.id }]); };
+  // Chip override is local until save — same shape as the persisted one (who / when / what was inferred)
+  const setItemCodes = (itemId: string, codes: DeptCode[] | null) => setItems((v) => v.map((i) => (i.id !== itemId ? i : codes === null ? { ...i, components: undefined, componentsOverride: undefined } : { ...i, components: codes, componentsOverride: { by: user?.shortName ?? 'Staff', at: new Date().toISOString(), from: inferItemCodes(lines, v, itemId) } })));
   const applyTemplate = (t: jt.JobTemplate) => {
-    const tItems = t.items?.length ? t.items.map((x) => newItem(x.flow, x.label)) : [newItem('W', 'Watch')];
-    setItems(tItems); setSelItem(tItems[0].id);
+    const tItems = t.items?.length ? t.items.map((x) => newItem(x.label)) : [newItem('Watch')];
+    setItems(tItems);
     setLines(t.lines.map((l) => ({ ...blankLine(false), description: l.description, dept: l.dept, type: l.type, qty: l.qty, unitPrice: l.unitPrice, itemId: tItems[Math.max(0, (l.item ?? 1) - 1)]?.id ?? tItems[0].id })));
   };
-  const [codes, setCodes] = useState<DeptCode[] | null>(null);
-  const shownCodes = codes ?? api.inferComponentCodes(lines);
+  const shownCodes = unionItemCodes(lines, items);
   const [meta, setMeta] = useState({ validUntil: plus30(), clientNotes: '', messageNotes: 'Thank you for your business.', internalNotes: '', billing: EMPTY, shipping: EMPTY, mirror: true });
   const [ctx, setCtx] = useState<QuoteContext | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,13 +99,12 @@ export default function EstimateCreatePage() {
 
           {ctx && client && <QuoteContextStrip clientEstimates={ctx.clientEstimates} watchEstimates={ctx.watchEstimates} clientName={fullName(client)} />}
 
-          <Card title="Lines" subtitle="Pick from the catalog — department tag is inherited; custom lines pick their own" testId="create-lines-card">
-            <div className="mb-3 rounded-md border border-line bg-canvas/60 p-2.5"><div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Component codes · what we expect in the box</div><ComponentCodeChips value={shownCodes} inferred={codes === null} onToggle={(c) => setCodes(shownCodes.includes(c) ? shownCodes.filter((x) => x !== c) : [...shownCodes, c])} /></div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs"><label className="inline-flex items-center gap-1 text-ink-500">Start from template<select data-testid="create-template-select" defaultValue="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) applyTemplate(t); }} className="h-9 rounded-sm border border-line bg-canvas px-2 text-xs"><option value="">— pick a job template —</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.items && t.items.length > 1 ? ` · ${t.items.length} items` : ''}</option>)}</select></label><AddItemButton onAdd={addItem} testId="create-add-item" /><span className="text-[10px] text-ink-400">“Add additional line” (below) = more work on the same piece · “Add Additional Item” = another physical piece</span></div>
-            <div className="mb-3"><MultiItemPanel items={items} lines={lines} selected={activeItem} onSelect={setSelItem} onRemove={(id) => { const r = removeItem(lines, items, id); setItems(r.items); setLines(r.lines); if (activeItem === id) setSelItem(r.items[0].id); }} onLabel={(id, label) => setItems((v) => v.map((i) => (i.id === id ? { ...i, label } : i)))} testId="create-items" /></div>
-            {items.length > 1 && <div data-testid="create-lines-for-item" className="mb-1 text-[11px] font-semibold text-ink-500">Lines for Item {items.findIndex((i) => i.id === activeItem) + 1} of {items.length}</div>}
-            <LineEditor lines={itemLines} onChange={setItemLines} blankTaxableDefault={false} />
-            <div className="mt-4"><ShippingCalculator onAddLine={(amount, label) => setLines((ls) => [...ls.filter((l) => l.description.trim() || l.unitPrice), { ...blankLine(false), description: label, unitPrice: amount, type: 'shipping', dept: 'W' }])} /></div>
+          <Card title="Lines" subtitle="Pick from the catalog — department tag is inherited; custom lines pick their own · each item has its own table and its own W/B/P/PM chips" testId="create-lines-card">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs"><label className="inline-flex items-center gap-1 text-ink-500">Start from template<select data-testid="create-template-select" defaultValue="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) applyTemplate(t); }} className="h-9 rounded-sm border border-line bg-canvas px-2 text-xs"><option value="">— pick a job template —</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.items && t.items.length > 1 ? ` · ${t.items.length} items` : ''}</option>)}</select></label><AddItemButton onAdd={addItem} testId="create-add-item" /><span className="text-[10px] text-ink-400">“Add additional line” (inside a table) = more work on the same piece · “Add Additional Item” = another physical piece, its own table + chips</span></div>
+            <div data-testid="create-items" data-count={items.length} className="space-y-3">
+              {items.map((it) => <ItemSection key={it.id} items={items} item={it} lines={lines} onLines={(ls) => setItemLines(it.id, ls)} onLabel={(label) => setItems((v) => v.map((i) => (i.id === it.id ? { ...i, label } : i)))} onRemove={() => { const r = removeItem(lines, items, it.id); setItems(r.items); setLines(r.lines); }} onToggleCode={(next) => setItemCodes(it.id, next)} onRevertCodes={() => setItemCodes(it.id, null)} blankTaxableDefault={false} />)}
+            </div>
+            <div className="mt-4"><ShippingCalculator onAddLine={(amount, label) => setLines((ls) => [...ls.filter((l) => l.description.trim() || l.unitPrice), { ...blankLine(false), description: label, unitPrice: amount, type: 'shipping', dept: 'W', itemId: items[0].id }])} /></div>
           </Card>
 
           <Card title="Details" testId="create-meta-card">

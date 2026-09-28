@@ -1,11 +1,10 @@
 import type { DeptCode, LineType } from './types';
-import type { ItemFlow } from './items';
 import { actorInfo, auditAppointments as audit } from './client';
 
 // ---- Job templates — built for volume (legacy has 100+). Applying one sets the job's W/B/P/PM chips (VB10-04); legacy imports carry inferred flags until a human confirms.
 export interface JobTemplateLine { id: string; description: string; dept: DeptCode; type: LineType; qty: number; unitPrice: number; item?: number }
-export interface JobTemplate { items?: { flow: ItemFlow; label: string }[]; id: string; name: string; category: string; depts: DeptCode[]; inferredDepts: DeptCode[]; lines: JobTemplateLine[]; source: 'legacy' | 'new'; reviewed: boolean; reviewedBy?: string; reviewedAt?: string; archived: boolean; createdAt: string; updatedAt: string; updatedBy: string; usedCount: number }
-export interface JobTemplateInput { items?: { flow: ItemFlow; label: string }[]; id?: string; name: string; category: string; depts: DeptCode[]; lines: Omit<JobTemplateLine, 'id'>[] }
+export interface JobTemplate { items?: { label: string }[]; id: string; name: string; category: string; depts: DeptCode[]; inferredDepts: DeptCode[]; lines: JobTemplateLine[]; source: 'legacy' | 'new'; reviewed: boolean; reviewedBy?: string; reviewedAt?: string; archived: boolean; createdAt: string; updatedAt: string; updatedBy: string; usedCount: number }
+export interface JobTemplateInput { items?: { label: string }[]; id?: string; name: string; category: string; depts: DeptCode[]; lines: Omit<JobTemplateLine, 'id'>[] }
 export interface JobTemplateFilter { q?: string; category?: string; dept?: DeptCode; unreviewedOnly?: boolean; includeArchived?: boolean }
 
 export const JOB_TEMPLATE_CATEGORIES = ['Complete service', 'Movement', 'Case & refinish', 'Bracelet', 'Battery / quartz', 'Water resistance', 'Vintage', 'Trade / B2B'];
@@ -20,7 +19,7 @@ const T = (id: string, name: string, category: string, lines: JobTemplateLine[],
 };
 const templates: JobTemplate[] = [
   // Seeded 2-item template — Item 1 full watch service, Item 2 band-only (separate bracelet dropped off with it)
-  { ...T('jt-multi', 'Watch service + separate bracelet', 'Complete service', [{ ...L('Complete movement service — cal. 3135', 'W', 1250), item: 1 }, { ...L('Gasket set', 'W', 45, 'part'), item: 1 }, { ...L('Bracelet refinish — second Oyster bracelet', 'P', 220), item: 2 }, { ...L('Re-pin stretched links', 'B', 180), item: 2 }], { depts: ['W', 'B', 'P'] }), items: [{ flow: 'W', label: 'Rolex Submariner' }, { flow: 'B', label: 'Spare Oyster bracelet' }] },
+  { ...T('jt-multi', 'Watch service + separate bracelet', 'Complete service', [{ ...L('Complete movement service — cal. 3135', 'W', 1250), item: 1 }, { ...L('Gasket set', 'W', 45, 'part'), item: 1 }, { ...L('Bracelet refinish — second Oyster bracelet', 'P', 220), item: 2 }, { ...L('Re-pin stretched links', 'B', 180), item: 2 }], { depts: ['W', 'B', 'P'] }), items: [{ label: 'Rolex Submariner' }, { label: 'Spare Oyster bracelet' }] },
   T('jt-01', 'Complete service — cal. 3135', 'Complete service', [L('Complete movement service — cal. 3135', 'W', 1250), L('Gasket set', 'W', 45, 'part'), L('Pressure test', 'W', 0), L('Case & bracelet refinish', 'P', 320)], { reviewed: true, used: 212 }),
   T('jt-02', 'Complete service — cal. 3235', 'Complete service', [L('Complete movement service — cal. 3235', 'W', 1350), L('Gasket set', 'W', 45, 'part'), L('Case & bracelet refinish', 'P', 320)], { reviewed: true, used: 148 }),
   T('jt-03', 'Complete service — cal. 4130 (Daytona)', 'Complete service', [L('Complete movement service — cal. 4130', 'W', 1650), L('Chronograph adjustment', 'W', 0), L('Case & bracelet refinish', 'P', 360)], { reviewed: true, used: 61 }),

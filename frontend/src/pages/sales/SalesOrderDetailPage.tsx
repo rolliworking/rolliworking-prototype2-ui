@@ -1,5 +1,5 @@
-import { ArrowLeft, Ban, CheckCircle2, CreditCard, ExternalLink, Link2, Mail, MapPin, PackageCheck, RefreshCw, Save, Send, Truck, Wrench } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Ban, CheckCircle2, CreditCard, ExternalLink, Link2, Lock, Mail, MapPin, PackageCheck, RefreshCw, Save, Send, Truck, Wrench } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { LegacyBanner } from '@/components/LegacyBits';
@@ -9,6 +9,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { FulfillMenu, ZeroBalanceBadge, ZeroBalanceModal } from '@/components/sales/FulfillMenu';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { ClientPicker } from '@/components/estimates/EstimateForm';
+import { ClientResolutionBadge, ScanGateCard } from '@/components/sales/ScanGate';
 import { ReasonModal } from '@/components/jobs/JobBits';
 import { LinesEditor, MoneyStrip, PaymentModal, PaymentsList, SOBadge, SOLinesTable, SalesSubNav } from '@/components/sales/SalesBits';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +27,7 @@ export default function SalesOrderDetailPage() {
   const isNew = !id;
   const [o, setO] = useState<SalesOrderWithRefs | null | undefined>(isNew ? null : undefined);
   const [client, setClient] = useState<Client | null>(null);
+  const [resolution, setResolution] = useState<{ via: 'scan' | 'name'; detail: string }>({ via: 'name', detail: 'picked from a name search' }); const scanRes = useRef(false);
   const [lines, setLines] = useState<SOLineInput[]>([{ description: '', qty: 1, rate: 0 }]);
   const [shippingAmount, setShipping] = useState(0);
   const [memo, setMemo] = useState('');
@@ -48,7 +50,7 @@ export default function SalesOrderDetailPage() {
 
   const save = async () => {
     try {
-      if (isNew) { const created = await api.createSalesOrder({ clientId: client?.id ?? '', lines, shippingAmount, memo }); navigate(`/sales/${created.id}`); return; }
+      if (isNew) { const created = await api.createSalesOrder({ clientId: client?.id ?? '', lines, shippingAmount, memo, clientResolution: resolution }); navigate(`/sales/${created.id}`); return; }
       await api.updateSalesOrder(id!, { lines, shippingAmount, memo }); setEditing(false); await load(); say('Saved');
     } catch (e) { setError(e instanceof Error ? e.message : 'Save failed'); }
   };
@@ -65,7 +67,7 @@ export default function SalesOrderDetailPage() {
           <Link to="/sales" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Sales orders</Link>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="so-number">{o ? o.number : 'New sales order'}</h1>
-            {o && <><StatusPill status={o.status} testId="so-status" /><SOBadge order={o} testId="so-badge" /><ZeroBalanceBadge order={o} />{o.channel && <span data-testid="so-channel" className="inline-flex items-center gap-1 rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-ink-700">{o.channel === 'ship' ? <Truck size={11} /> : <PackageCheck size={11} />} {o.channel}</span>}</>}
+            {o && <><StatusPill status={o.status} testId="so-status" /><SOBadge order={o} testId="so-badge" /><ZeroBalanceBadge order={o} /><ClientResolutionBadge order={o} />{o.channel && <span data-testid="so-channel" className="inline-flex items-center gap-1 rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-ink-700">{o.channel === 'ship' ? <Truck size={11} /> : <PackageCheck size={11} />} {o.channel}</span>}</>}
           </div>
           {o && <div className="mt-0.5 text-xs text-ink-500"><Link to={`/clients/${o.clientId}`} className="font-medium text-ink hover:underline">{fullName(o.client)}</Link> · {o.client.email}{o.job && <> · <Link to={`/jobs/${o.job.id}`} data-testid="so-job-link" className="inline-flex items-center gap-1 text-brand hover:underline"><Wrench size={11} /> Job {o.job.number}</Link>{o.watch && ` · ${o.watch.brand} ${o.watch.model}`}</>} · ordered {fmtDate(o.orderDate)}</div>}
         </div>
@@ -79,7 +81,7 @@ export default function SalesOrderDetailPage() {
           <FulfillMenu order={o} isOwner={user?.id === api.OWNER_USER_ID} editing={editing} onSave={(close) => { void (async () => { if (editing) await save(); if (close) navigate('/sales'); })(); }} onRun={(fn, m) => void run(fn, m)} onModal={(m) => setModal(m)} />
           <SoPrintButton order={o} />
           {o.status === 'draft' && <Button variant="primary" data-testid="act-open-so" onClick={() => run(() => api.openSalesOrder(o.id), 'Opened · email queued')}>Open order</Button>}
-          {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <Button variant={o.invoiceSentAt ? 'secondary' : 'primary'} data-testid="act-send-invoice" onClick={() => run(() => api.sendInvoice(o.id), o.invoiceSentAt ? 'Invoice re-sent · same pay link · Outbox' : 'Invoice sent · pay link queued to Outbox')}><Send size={13} /> {o.invoiceSentAt ? 'Re-send invoice' : 'Send invoice'}</Button>}
+          {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <Button variant={o.invoiceSentAt ? 'secondary' : 'primary'} data-testid="act-send-invoice" disabled={api.soScanGate(o).locked} title={api.soScanGate(o).reason} onClick={() => run(() => api.sendInvoice(o.id), o.invoiceSentAt ? 'Invoice re-sent · same pay link · Outbox' : 'Invoice sent · pay link queued to Outbox')}>{api.soScanGate(o).locked ? <Lock size={13} /> : <Send size={13} />} {o.invoiceSentAt ? 'Re-send invoice' : 'Send invoice'}</Button>}
           {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.balanceDue > 0 && <Button data-testid="act-payment" onClick={() => setModal('payment')}><CreditCard size={13} /> Record payment</Button>}
           {['open', 'partial_fulfilled'].includes(o.status) && <span className="inline-flex items-center gap-1"><Button data-testid="act-fulfill" onClick={() => run(() => api.fulfillSalesOrder(o.id), 'Fulfilled · QBO queued (stub)')}><CheckCircle2 size={13} /> Fulfil → QBO</Button><Provisional note="Pack: without an invoice id, pickup may assume paid — simplest version: payment still gated" /></span>}
           {['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && <>
@@ -96,11 +98,12 @@ export default function SalesOrderDetailPage() {
       )}
 
       {flash && <div data-testid="so-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
+      {o && <ScanGateCard order={o} onDone={async (m) => { await load(); say(m); }} onError={setError} />}
       {error && <div data-testid="so-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
 
       <div className="grid grid-cols-[1fr_380px] gap-4">
         <div className="space-y-4">
-          {isNew && <Card title="Customer" subtitle="Required before save" testId="so-client-card"><ClientPicker value={client} onChange={setClient} /></Card>}
+          {isNew && <Card title="Customer" subtitle="Required before save · scan the job label — name-picked customers lock the invoice until confirmed" testId="so-client-card"><ClientPicker value={client} onChange={(c) => { setClient(c); if (!scanRes.current) setResolution({ via: 'name', detail: `picked from a name search (${c.firstName} ${c.lastName})` }); scanRes.current = false; }} onResolved={(r) => { scanRes.current = true; setResolution({ via: 'scan', detail: `scan-confirmed via ${r.via === 'job' ? `job ${r.job!.number}` : r.via === 'estimate' ? `estimate ${r.estimate!.number}` : `ref·serial ${r.watch!.reference}-${r.watch!.serial}`} → customer ID ${r.client.id}` }); }} /></Card>}
           <Card title="Lines" subtitle="amount = qty × rate · total = Σ lines + shipping" testId="so-lines-card" bodyClassName={editing ? 'p-4' : 'p-0'}>
             {editing ? (
               <div className="space-y-3">

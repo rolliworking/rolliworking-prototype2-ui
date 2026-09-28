@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowLeft, Camera, Check, Flag, MessageSquareQuote, Printer, ScanLine, Tags } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
+import { ChainForItem, ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import * as hl from '@/api/hitlist';
@@ -25,7 +25,9 @@ const addWeeks = (w: number) => new Date(Date.now() + w * 7 * 864e5).toISOString
 export default function ReceiveWatchPage() {
   const { id = '' } = useParams();
   const { refreshCounts } = useIntakeCounts();
-  const { data: ctx, loading, error: loadError } = useAsync(() => api.getInspectionContext(id), [id]);
+  const [selItem, setSelItem] = useState<string | null>(null); const [itemsReceived, setItemsReceived] = useState<string[]>([]); const [chainTick, setChainTick] = useState(0); const [livePkg, setLivePkg] = useState<api.PackageWithRefs | null>(null);
+  // Item-scoped context: cards 4 / 5 / 6, discrepancies and the chain all read the SELECTED item's own chips, lines and scans
+  const { data: ctx, loading, error: loadError } = useAsync(() => api.getInspectionContext(id, selItem ?? undefined), [id, selItem]);
 
   const [linesVerified, setLinesVerified] = useState<number[]>([]);
   const [components, setComponents] = useState<string[]>([]);
@@ -42,13 +44,12 @@ export default function ReceiveWatchPage() {
   const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
   const [photos, setPhotos] = useState<PackagePhoto[]>([]); const [cam, setCam] = useState(false); const [photoScan, setPhotoScan] = useState(''); const [photoErr, setPhotoErr] = useState<string | null>(null); const [lastAttach, setLastAttach] = useState<string | null>(null);
   const [targetWeeks, setTargetWeeks] = useState(6); const [targetDate, setTargetDate] = useState(addWeeks(6));
-  const [selItem, setSelItem] = useState<string | null>(null); const [itemsReceived, setItemsReceived] = useState<string[]>([]);
   const [flag, setFlag] = useState(''); const [flagNote, setFlagNote] = useState(''); const [flagBusy, setFlagBusy] = useState(false); const [flagMsg, setFlagMsg] = useState<string | null>(null);
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
   useEffect(() => {
     if (!ctx) return;
-    setComponents(ctx.expectedComponents.filter((c) => ctx.pkg.contents.includes(c)));
+    setComponents(ctx.expectedComponents.filter((c) => (ctx.receivedForItem ?? ctx.pkg.contents).includes(c)));
     setReference(ctx.estimate.watch!.reference);
     setSerial(ctx.estimate.watch!.serial);
     setWorkflow(ctx.suggestedWorkflow);
@@ -76,7 +77,7 @@ export default function ReceiveWatchPage() {
   }, [ctx, reference, serial]);
 
   const input: ReceiveWatchInput | null = ctx
-    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined, clientRef, targetWeeks, targetDate }
+    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined, itemId: ctx.item?.id, clientRef, targetWeeks, targetDate }
     : null;
   const discrepancies = useMemo(() => (ctx && input ? api.computeDiscrepancies(ctx, input) : []), [ctx, input]);
   const forkPending = !!match && decision === 'n/a';
@@ -91,7 +92,7 @@ export default function ReceiveWatchPage() {
     );
   }
 
-  const { pkg, estimate } = ctx;
+  const { pkg, estimate } = ctx; const recNow = ctx.item ? ((livePkg ?? pkg).itemContents?.[ctx.item.id] ?? []) : pkg.contents; // this item's Scan 1 (live) or the whole package's
   const expWatch = estimate.watch!;
 
   // Photo flow is armed by the job's own ref·serial barcode (or typing it) — must resolve to THIS job
@@ -200,11 +201,19 @@ export default function ReceiveWatchPage() {
         {pkg.photos.length > 0 && <div className="mt-3 border-t border-line pt-3"><PhotoStrip photos={pkg.photos} size="sm" /></div>}
       </Card>
 
-      {(estimate.items?.length ?? 0) > 1 && <Card title="3b · Which item are you logging?" subtitle="Item count, numbering and flow tags come straight from the estimate — nothing re-entered here" testId="rw-items-card">
-        <MultiItemPanel title={`Multi-item estimate · ${estimate.number}`} items={estimate.items!} lines={estimate.lines} selected={selItem ?? estimate.items![0].id} onSelect={setSelItem} received={itemsReceived} onToggleReceived={readOnly ? undefined : (id, v) => void api.setItemReceived(pkg.id, id, v).then((p) => setItemsReceived(p.itemsReceived ?? []))} testId="rw-items" />
+      {(estimate.items?.length ?? 0) > 1 && ctx.item && <Card title="3b · Which item are you logging?" subtitle="Item count and numbering come straight from the estimate — each item has its own Expected → Scan 1 → Scan 2 chain; nothing below crosses between items" testId="rw-items-card">
+        <MultiItemPanel title={`Multi-item estimate · ${estimate.number}`} items={estimate.items!} lines={estimate.lines} selected={ctx.item.id} onSelect={setSelItem} received={itemsReceived} onToggleReceived={readOnly ? undefined : (iid, v) => void api.setItemReceived(pkg.id, iid, v).then((p) => setItemsReceived(p.itemsReceived ?? []))} testId="rw-items" />
+        <div data-testid="rw-item-scope" data-item-id={ctx.item.id} data-item-number={ctx.item.number} className="mt-3 rounded-md border border-ink/60 bg-surface p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs"><span className="inline-flex h-6 items-center rounded-sm bg-ink px-2 font-mono text-[11px] font-bold text-white">Item {ctx.item.number} of {ctx.item.count}</span><span className="font-medium text-ink">{ctx.item.label}</span><span className="text-ink-400">· expected from this item’s chips ({ctx.suggestedWorkflow.join('+') || '—'}{ctx.item.inferred ? ', inferred from its lines' : ', staff override'}): {ctx.expectedComponents.join(', ') || '—'}</span></div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div><div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Scan 1 · received for this item</div><div data-testid="rw-item-scan1" className="flex flex-wrap gap-1.5">{(() => { const cur = (livePkg ?? pkg).itemContents?.[ctx.item.id] ?? []; return Array.from(new Set([...ctx.expectedComponents, ...cur])).map((c) => { const on = cur.includes(c); return <button key={c} type="button" data-testid={`rw-item-scan1-${c.replace(/\s+/g, '-')}`} aria-pressed={on} disabled={readOnly} onClick={() => void api.setItemScan(pkg.id, ctx.item!.id, { received: on ? cur.filter((x) => x !== c) : [...cur, c] }).then((p) => { setLivePkg(p); setChainTick((t) => t + 1); })} className={`inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium ${on ? 'border-ink bg-ink text-white' : 'border-line bg-canvas text-ink-600 hover:border-ink-300'}`}>{on ? <Check size={11} /> : null}{c}</button>; }); })()}</div></div>
+            <div><div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Scan 2 · verified in hand for this item</div><div data-testid="rw-item-scan2" className="flex flex-wrap gap-1.5">{(() => { const ver = (livePkg ?? pkg).itemComponentsVerified?.[ctx.item.id]?.components ?? []; return Array.from(new Set([...ctx.expectedComponents, ...ver])).map((c) => { const on = ver.includes(c); return <button key={c} type="button" data-testid={`rw-item-scan2-${c.replace(/\s+/g, '-')}`} aria-pressed={on} disabled={readOnly} onClick={() => void api.setItemScan(pkg.id, ctx.item!.id, { verified: on ? ver.filter((x) => x !== c) : [...ver, c] }).then((p) => { setLivePkg(p); setChainTick((t) => t + 1); })} className={`inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium ${on ? 'border-moss bg-moss text-white' : 'border-line bg-canvas text-ink-600 hover:border-ink-300'}`}>{on ? <Check size={11} /> : null}{c}</button>; }); })()}</div></div>
+          </div>
+          <div className="mt-3 border-t border-line pt-3"><ChainForItem estimateId={estimate.id} itemId={ctx.item.id} tick={chainTick} /></div>
+        </div>
       </Card>}
       <Card title="4 · Inspector’s confirmation — what is physically in hand" subtitle="Tap each item you are holding right now; this is compared against what was recorded as received above" testId="inspection-components-card" accent="moss">
-        <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...pkg.contents])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = pkg.contents.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} disabled={readOnly} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors ${ver ? 'border-moss bg-moss text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
+        <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...recNow])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = recNow.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} disabled={readOnly} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors ${ver ? 'border-moss bg-moss text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
         <ComponentChecklist expected={ctx.expectedComponents} received={components} onToggle={(c) => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} />
         <label className="mt-3 block text-xs text-ink-500">Item description · shown on the shop-floor badge (multiple items on one estimate → 1/3, 2/3, 3/3)<input data-testid="rw-item-label" value={itemLabel} onChange={(e) => setItemLabel(e.target.value)} disabled={readOnly} placeholder="e.g. 1/3 · Submariner head" className="mt-1 block h-9 w-72 rounded-sm border border-line bg-canvas px-2.5 font-mono text-[13px] focus:border-ink focus:bg-surface focus:outline-none" /></label>
         <textarea data-testid="rw-inhand-notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={readOnly} rows={2} placeholder="Anything else in hand not covered above — new dial, hands, box, papers…" className="mt-3 w-full rounded-sm border border-line bg-canvas px-2.5 py-1.5 text-[13px] focus:border-ink focus:bg-surface focus:outline-none" />
@@ -232,7 +241,7 @@ export default function ReceiveWatchPage() {
         <div data-testid="rw-client-ref-card" className="mt-4 rounded-sm border border-line bg-canvas/60 px-3 py-2">
           <div className="flex flex-wrap items-start gap-3">
             <label className="block text-xs text-ink-500"><span className="font-semibold text-ink">Client Reference #</span> <span className="text-ink-400">· optional · the client’s own barcode / tracking number · scanner or keyboard</span><ClientRefInput value={clientRef} onChange={setClientRef} disabled={readOnly} testId="rw-client-ref" className="mt-1 w-80" /></label>
-            <div className="min-w-0 flex-1 pt-5"><SubjectPreview clientRef={clientRef} sample={`Your estimate ${estimate.number} is ready to review`} testId="rw-client-ref-preview" /><p className="mt-1 text-[10px] text-ink-400">Applies to every client email on this job — estimate, inspection report, invoice, status updates. Blank = subjects unchanged. Bracketed-prefix format is a placeholder pending a formatting decision.</p></div>
+            <div className="min-w-0 flex-1 pt-5"><SubjectPreview clientRef={clientRef} sample={`Your estimate ${estimate.number} is ready to review`} testId="rw-client-ref-preview" /><p className="mt-1 text-[10px] text-ink-400">Applies to every client email on this job — estimate, inspection report, invoice, status updates. Blank = subjects unchanged.</p></div>
           </div>
         </div>
         {match && <div className="mt-4"><SameWatchFork match={match} expectedClientId={estimate.clientId} decision={decision} onDecide={setDecision} /></div>}
