@@ -171,6 +171,7 @@ export interface Estimate {
   id: string;
   number: string;
   items?: import('./items').EstimateItem[];
+  clientRef?: string;
   targetWeeks?: number;
   targetDate?: string;
   revision: number;
@@ -551,6 +552,7 @@ export interface InspectionContext {
 
 export interface ReceiveWatchInput {
   itemLabel?: string;
+  clientRef?: string;
   targetWeeks?: number;
   targetDate?: string;
   reference: string;

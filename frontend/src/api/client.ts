@@ -163,6 +163,29 @@ const store = {
   magicLinks: readJson<MagicLink[]>('rollisuite.rc.magicLinks', []),
   counters: { sub: 314, label: 3, estimate: 1058, job: Math.max(2030, ...fx.jobs.map((j) => Number(j.number.replace(/\D/g, '')) || 0)), so: 107, pr: 44 },
 };
+// ---- B2B client reference (their barcode / internal tracking #) — captured at Receive Watch, lives on the estimate, threads into every client email subject for that job ----
+// FORMAT PLACEHOLDER — bracketed prefix; final format is an open decision
+export const clientRefSubject = (subject: string, ref?: string) => (ref?.trim() ? `[REF: ${ref.trim()}] ${subject}` : subject);
+const clientRefFor = (relatedRef: string): string | undefined => {
+  const toks = relatedRef.split(/[^A-Za-z0-9-]+/).filter(Boolean);
+  for (const t of toks) {
+    const e = store.estimates.find((x) => x.number === t); if (e) return e.clientRef;
+    const j = store.jobs.find((x) => x.number === t); if (j?.estimateId) return store.estimates.find((x) => x.id === j.estimateId)?.clientRef;
+    const p = store.packages.find((x) => x.subNumber === t); if (p?.estimateId) return store.estimates.find((x) => x.id === p.estimateId)?.clientRef;
+    const o = store.salesOrders.find((x) => x.number === t); const oj = o?.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; if (oj?.estimateId) return store.estimates.find((x) => x.id === oj.estimateId)?.clientRef;
+  }
+  return undefined;
+};
+// Single choke point for outbound mail — the reference is applied here so no individual sender has to remember it
+const queueOutbox = (email: OutboxEmail) => { const ref = clientRefFor(email.relatedRef); if (ref && !email.subject.startsWith('[REF:')) email.subject = clientRefSubject(email.subject, ref); store.outbox.unshift(email); return email; };
+export async function setClientRef(estimateId: string, ref: string): Promise<EstimateWithRefs> {
+  const e = byId(store.estimates, estimateId); const next = ref.trim() || undefined; if ((e.clientRef ?? '') === (next ?? '')) return resolve(withRefs(e));
+  const a = actor(); appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${e.number} · Client reference ${e.clientRef ? `"${e.clientRef}" → ` : ''}${next ? `"${next}"` : 'cleared'}` });
+  e.clientRef = next; e.updatedAt = new Date().toISOString(); return resolve(withRefs(e));
+}
+// Seed: E02013's estimate carries a B2B reference; every other job leaves it blank for comparison
+(() => { const e = store.estimates.find((x) => x.id === 'e-04'); if (e) e.clientRef = 'B2B-88421'; })();
+
 // Seeded multi-item estimate — E01053: Item 1 full watch service, Item 2 band-only; pk-06 already has Item 1 in hand
 (() => { const e = store.estimates.find((x) => x.number === 'E01053'); if (!e) return; const items: EstimateItem[] = [{ id: 'it-e13-1', flow: 'W', label: `${store.watches.find((w) => w.id === e.watchId)?.brand ?? ''} ${store.watches.find((w) => w.id === e.watchId)?.model ?? ''}`.trim() }, { id: 'it-e13-2', flow: 'B', label: 'Separate Oyster bracelet' }]; e.items = items; e.lines.forEach((l) => { l.itemId = items[0].id; }); e.lines.push({ id: 'ln-e13-band', description: 'Re-pin stretched links — spare bracelet', qty: 1, unitPrice: 180, dept: 'B', taxable: true, type: 'service', itemId: items[1].id }); const p = store.packages.find((x) => x.id === 'pk-06'); if (p) p.itemsReceived = [items[0].id]; })();
 
@@ -583,7 +606,7 @@ const pushScan = (pkg: Package, s: Omit<PackageScan, 'id' | 'at' | 'by' | 'stati
 const queuePackageAcceptedEmail = (pkg: Package) => {
   const c = pkg.clientId ? fx.clients.find((x) => x.id === pkg.clientId) : undefined; if (!c) return undefined; const a = actor(); const e = pkg.estimateId ? store.estimates.find((x) => x.id === pkg.estimateId) : undefined;
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e?.number ?? pkg.subNumber} · ${pkg.trackingNumber ?? pkg.subNumber}`, status: 'pending', subject: `We have your package — ${e?.number ?? pkg.subNumber}`, body: `Hello ${c.firstName},\n\nYour package${pkg.trackingNumber ? ` (${pkg.carrier} ${pkg.trackingNumber})` : ''} was accepted at Rolliworks today and is secured, unopened, in our receiving area. Packages are opened and checked in as a batch at the end of the day; you will get a second note with photos once your watch has been received and inspected.\n\nNothing to do on your side.\n\n— The Rolliworks team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
-  store.outbox.unshift(email); return email;
+  queueOutbox(email); return email;
 };
 export async function shelvePackage(id: string, input: { shelfBin: string; clientId?: string; estimateId?: string }): Promise<PackageWithRefs> {
   const pkg = getPkg(id); if (pkg.status !== 'arrived') throw new Error(`${pkg.subNumber} is already open — cannot shelve`);
@@ -665,7 +688,7 @@ export async function receivePackage(id: string, input: ReceivePackageInput): Pr
       createdBy: a.by,
       station: a.station,
     };
-    store.outbox.unshift(email);
+    queueOutbox(email);
   }
   stamp(`Package processed · ${pkg.contents.join(', ')} · ${pkg.photos.length} photo${pkg.photos.length === 1 ? '' : 's'}${est ? ` · linked ${est.number}` : ''}${email ? ' · confirmation email queued' : ' · no client email (unknown client)'}`, pkg.subNumber);
   return resolve({ pkg: pkgWithRefs(pkg), email });
@@ -763,6 +786,7 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
   pkg.workflow = [...input.workflow];
   pkg.componentsVerified = [...input.componentsReceived];
   pkg.notes = input.notes || pkg.notes; pkg.itemLabel = input.itemLabel?.trim() || pkg.itemLabel;
+  if (input.clientRef !== undefined) { const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0 && (e0.clientRef ?? '') !== input.clientRef.trim()) { e0.clientRef = input.clientRef.trim() || undefined; stamp(`Client reference ${e0.clientRef ? `"${e0.clientRef}"` : 'cleared'} · threads into email subjects`, pkg.subNumber); } }
   // Target completion is set ONCE, here — the inspection form, estimate and client report read it from the estimate
   if (input.targetDate) { pkg.targetWeeks = input.targetWeeks; pkg.targetDate = input.targetDate; const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0) { e0.targetWeeks = input.targetWeeks; e0.targetDate = input.targetDate; } }
 
@@ -859,7 +883,7 @@ export async function getIntakeHistory(q = ''): Promise<IntakeHistoryRow[]> {
 }
 export async function getLabelsForPackage(packageId: string): Promise<LabelJob[]> { return resolve(store.labels.filter((l) => l.packageId === packageId)); }
 
-export interface IntakeEditInput { reference: string; serial: string; itemLabel?: string; notes?: string; componentsVerified: string[]; workflow: DeptCode[]; targetWeeks?: number; targetDate?: string }
+export interface IntakeEditInput { reference: string; serial: string; itemLabel?: string; clientRef?: string; notes?: string; componentsVerified: string[]; workflow: DeptCode[]; targetWeeks?: number; targetDate?: string }
 export async function updateIntakeRecord(packageId: string, input: IntakeEditInput): Promise<PackageWithRefs> {
   const pkg = getPkg(packageId); if (!pkg.inspectedAt) throw new Error('Watch has not been received yet');
   const ref = input.reference.trim().toUpperCase(); const ser = input.serial.trim().toUpperCase();
@@ -872,6 +896,7 @@ export async function updateIntakeRecord(packageId: string, input: IntakeEditInp
   if ((pkg.componentsVerified ?? []).join() !== input.componentsVerified.join()) { changes.push(`components ${input.componentsVerified.join(', ') || '—'}`); pkg.componentsVerified = [...input.componentsVerified]; }
   if ((pkg.itemLabel ?? '') !== (input.itemLabel ?? '').trim()) { changes.push(`item label "${(input.itemLabel ?? '').trim()}"`); pkg.itemLabel = input.itemLabel?.trim() || undefined; }
   if ((pkg.notes ?? '') !== (input.notes ?? '').trim()) { changes.push('notes'); pkg.notes = input.notes?.trim() || undefined; }
+  if (est && input.clientRef !== undefined && (est.clientRef ?? '') !== input.clientRef.trim()) { changes.push(`client ref "${input.clientRef.trim() || '—'}"`); est.clientRef = input.clientRef.trim() || undefined; }
   if (input.targetDate && input.targetDate !== pkg.targetDate) { changes.push(`target ${pkg.targetDate ?? '—'}→${input.targetDate}`); pkg.targetWeeks = input.targetWeeks; pkg.targetDate = input.targetDate; if (est) { est.targetWeeks = input.targetWeeks; est.targetDate = input.targetDate; } insp.forms.filter((f) => f.jobId && est?.jobId === f.jobId).forEach((f) => { f.targetTo = input.targetDate; f.targetWeeks = input.targetWeeks ?? f.targetWeeks; }); }
   if (est && watch) { const c = fx.clients.find((x) => x.id === est.clientId); store.labels.filter((l) => l.packageId === pkg.id).forEach((l) => { if (l.type === 'ref_serial') { l.payload = `${ref} / ${ser}`; l.lines = watchLabelLines(est.number, c?.lastName ?? '', watch, ref, ser); } else { l.payload = `${est.number}|${pkg.subNumber}|${ref}|${ser}|${(pkg.workflow ?? []).join(',')}`; l.lines[3] = `Workflow ${(pkg.workflow ?? []).join(' · ')}`; } }); }
   stamp(`Intake record edited · ${changes.join(' · ') || 'no changes'}`, pkg.subNumber);
@@ -1081,7 +1106,7 @@ export async function sendEstimate(id: string, override?: { subject: string; bod
     body: override?.body ?? `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. One tap opens it in your RolliConnect portal — review, approve, and request a prepaid shipping label right there. No attachment needed.\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}${portalDeepLink(c.id, `/rc/estimates/${e.id}`)}\n\n— The RolliSuite team`,
     createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
   };
-  store.outbox.unshift(email);
+  queueOutbox(email);
   e.status = 'sent';
   e.sentAt = new Date().toISOString();
   e.updatedAt = e.sentAt;
@@ -1259,7 +1284,7 @@ const queueJobEmail = (j: Job, subject: string, body: string): OutboxEmail | und
     body: `Hello ${c.firstName},\n\n${body}\n\nJob: ${j.number} · ${w.brand} ${w.model} ${w.reference}\n\n— The RolliSuite team`,
     createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
   };
-  store.outbox.unshift(email);
+  queueOutbox(email);
   return email;
 };
 
@@ -1320,7 +1345,7 @@ const tradeAccept = (j: Job) => {
   if (!existing) soStamp(o, `Created from trade job ${j.number} · accepted by ${a.by}`);
   jobStamp(j, `Trade accepted by ${a.by} → invoice ${o.number} · ${fmtMoney(o.total)}`);
   store.pinned.filter((p) => p.jobId === j.id && p.title.startsWith('Trade review') && !p.dismissedAt).forEach((p) => { p.dismissedAt = new Date().toISOString(); p.dismissedBy = a.by; });
-  if (!c.internal) { const w = byId(store.watches, j.watchId); store.outbox.unshift({ id: newId('ob'), to: c.email, toName: c.company ?? fullNameOf(c), relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Invoice ${o.number} — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nWork on ${w.brand} ${w.model} ${w.reference} (${j.number}) is complete and has been accepted by ${a.by}. Your invoice ${o.number} for ${fmtMoney(o.total)} is attached.\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }); soStamp(o, 'Invoice email queued (external trade account)'); }
+  if (!c.internal) { const w = byId(store.watches, j.watchId); queueOutbox({ id: newId('ob'), to: c.email, toName: c.company ?? fullNameOf(c), relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Invoice ${o.number} — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nWork on ${w.brand} ${w.model} ${w.reference} (${j.number}) is complete and has been accepted by ${a.by}. Your invoice ${o.number} for ${fmtMoney(o.total)} is attached.\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }); soStamp(o, 'Invoice email queued (external trade account)'); }
   else soStamp(o, 'No email — internal trade account');
 };
 
@@ -1818,7 +1843,7 @@ const soStamp = (o: SalesOrder, detail: string) => {
 const soEmail = (o: SalesOrder, subject: string, body: string, payLink?: string) => {
   const a = actor();
   const c = byId(fx.clients, o.clientId);
-  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink, subject: `${subject} — ${o.number}`, body: `Hello ${c.firstName},\n\n${body}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  queueOutbox({ id: `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink, subject: `${subject} — ${o.number}`, body: `Hello ${c.firstName},\n\n${body}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
 };
 
 export const SO_BADGE = (o: SalesOrder): 'picked_up' | 'shipped' | 'paid' | 'unpaid' => (o.pickedUpAt ? 'picked_up' : o.tracking || o.shipDate ? 'shipped' : o.isPaid ? 'paid' : 'unpaid');
@@ -1923,7 +1948,7 @@ export async function sendInvoice(id: string): Promise<SalesOrderWithRefs> {
   if (o.lines.length === 0) throw new Error('Nothing to invoice');
   const a = actor(); const url = payLinkUrl(o); const emailId = `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
   const c = byId(fx.clients, o.clientId);
-  store.outbox.unshift({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nYour watch's service records: ${window.location.origin}${soRecordsLink(o)}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  queueOutbox({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nYour watch's service records: ${window.location.origin}${soRecordsLink(o)}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
   o.invoiceSentAt = new Date().toISOString(); o.invoiceSends.push({ at: o.invoiceSentAt, by: a.by, total: o.total, balanceDue: o.balanceDue, emailId }); soTotals(o);
   soStamp(o, `Invoice sent · ${fmtMoney(o.total)} · balance ${fmtMoney(o.balanceDue)} · pay link ${payLinkPath(o)} (send #${o.invoiceSends.length})`);
   if (o.jobId) jobStamp(byId(store.jobs, o.jobId), `Invoice ${o.number} sent · pay link emailed`);
@@ -2583,7 +2608,7 @@ export async function portalRequestMagicLink(email: string): Promise<{ link: Mag
   store.magicLinks.unshift(link);
   writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20));
   const path = `/rc/auth/${link.token}`;
-  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: 'RolliConnect sign-in', status: 'pending', subject: 'Your RolliConnect sign-in link', body: `Hello ${c.firstName},\n\nTap the link below to open RolliConnect. It expires in 15 minutes.\n\n${path}\n\nIf you didn’t ask for this, you can ignore it.\n\n— RolliSuite`, createdAt: new Date().toISOString(), createdBy: 'RolliConnect', station: 'RolliConnect' });
+  queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: 'RolliConnect sign-in', status: 'pending', subject: 'Your RolliConnect sign-in link', body: `Hello ${c.firstName},\n\nTap the link below to open RolliConnect. It expires in 15 minutes.\n\n${path}\n\nIf you didn’t ask for this, you can ignore it.\n\n— RolliSuite`, createdAt: new Date().toISOString(), createdBy: 'RolliConnect', station: 'RolliConnect' });
   portalStamp(c.id, 'Magic link requested · email queued to Outbox (stub)');
   return resolve({ link, path });
 }
@@ -3087,7 +3112,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
   recordRcEvent({ t: 'reply', clientId, text, watchId, by: a.by });
   const c = byId(fx.clients, clientId);
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: 'RolliConnect message', status: 'pending', subject: 'A reply from the RolliSuite team', body: `Hello ${c.firstName},\n\n${text.trim()}\n\nReply any time in RolliConnect.\n\n— ${a.by}, RolliSuite`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
-  store.outbox.unshift(email);
+  queueOutbox(email);
   const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, from: 'staff', by: a.by, text: text.trim(), at: email.createdAt, readByStaff: true, readByClient: false, emailId: email.id };
   store.messages.push(m);
   await markThreadRead(clientId);
@@ -3179,7 +3204,7 @@ export async function sendPurchaseOrder(id: string): Promise<PurchaseOrderWithRe
   const p = byId(rs.pos, id); if (p.status !== 'draft') throw new Error('Only a draft PO can be sent');
   if (poRedLines(p).length && !p.redAcknowledgedBy) throw new Error(`${poRedLines(p).length} line(s) are more than 10% above your average — acknowledge them before sending`);
   p.status = 'sent'; p.sentAt = new Date().toISOString(); const v = byId(rs.vendors, p.vendorId); const a = actor();
-  store.outbox.unshift({ id: `ob-${Date.now().toString(36)}`, to: v.email, toName: v.name, relatedRef: p.number, status: 'pending', subject: `Purchase order ${p.number}`, body: `${p.lines.map((l) => `• ${l.partNumber} ${l.description} × ${l.qty} @ ${fmtMoney(l.unitCost)}`).join('\n')}\n\nTotal ${fmtMoney(p.total)} · ${v.terms}${p.labelUrl ? `\n\nPrepaid return label attached (${p.labelService}${p.trackingNumber ? ` · ${p.trackingNumber}` : ''}).` : ''}\n\n— RolliSuite purchasing (STUB — not sent)`, createdAt: p.sentAt, createdBy: a.by, station: a.station });
+  queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: v.email, toName: v.name, relatedRef: p.number, status: 'pending', subject: `Purchase order ${p.number}`, body: `${p.lines.map((l) => `• ${l.partNumber} ${l.description} × ${l.qty} @ ${fmtMoney(l.unitCost)}`).join('\n')}\n\nTotal ${fmtMoney(p.total)} · ${v.terms}${p.labelUrl ? `\n\nPrepaid return label attached (${p.labelService}${p.trackingNumber ? ` · ${p.trackingNumber}` : ''}).` : ''}\n\n— RolliSuite purchasing (STUB — not sent)`, createdAt: p.sentAt, createdBy: a.by, station: a.station });
   rsStamp('purchasing', `${p.number} sent to ${v.name} (stub · Outbox)`); return resolve(poRefs(p));
 }
 export async function cancelPurchaseOrder(id: string, reason: string): Promise<PurchaseOrderWithRefs> {
@@ -3573,7 +3598,7 @@ export async function replyInThread(id: string, input: { text: string; subject?:
   const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId);
   const token = `RT-${c.id.replace(/[^a-z0-9]/gi, '').toUpperCase()}-${++c.tokenSeq}`;
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: anchorRef(c.anchor).label ?? c.subject, status: 'pending', subject: input.subject?.trim() || `Re: ${c.subject}`, body: `${input.text.trim()}\n\n[reply token ${token}]${input.photos?.length ? `\n[${input.photos.length} photo${input.photos.length === 1 ? '' : 's'} attached]` : ''}`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
-  store.outbox.unshift(email);
+  queueOutbox(email);
   const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: input.text.trim(), at: email.createdAt, token, emailId: email.id, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
   await markConversationRead(id); if (c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; }
   cxStamp(`Reply queued → Outbox · ${client.firstName} ${client.lastName} · ${token}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
@@ -3620,7 +3645,7 @@ export async function issueInspectionReport(jobId: string, grades: { component: 
   const t = renderTemplateFor('inspection_ready', { clientId: j.clientId, anchor: { kind: 'job', id: j.id } });
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: t.subject, body: t.body, createdAt: r.issuedAt, createdBy: a.by, station: a.station };
   email.body = `${email.body}\n\n▶ Open your inspection report: ${typeof window !== 'undefined' ? window.location.origin : ''}${portalDeepLink(j.clientId, `/rc/report/${r.token}`)}`;
-  store.outbox.unshift(email); r.emailId = email.id;
+  queueOutbox(email); r.emailId = email.id;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'system', a.by, `Inspection report v${r.version} issued — notification queued with portal link /rc/report/${r.token}`);
   jobStamp(j, `Inspection report v${r.version} issued to client (portal-first)`);
   return resolve({ ...r });
@@ -3693,7 +3718,7 @@ export async function recordTimingTest(jobId: string, input: TimingInput): Promi
   const client = byId(fx.clients, j.clientId);
   if (input.verdict === 'pass') {
     const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: `Testing complete — ${w.model}`, body: `Hello ${client.firstName},\n\nYour ${w.brand} ${w.model} has completed timing tests on our bench and moves to final quality control. Details are on your watch page:\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/watches/${w.id}\n\n— The RolliSuite team`, createdAt: t.at, createdBy: a.by, station: a.station };
-    store.outbox.unshift(email); t.emailId = email.id;
+    queueOutbox(email); t.emailId = email.id;
     jobStamp(j, `Timing test PASS · avg ${t.avgRate} s/d · Δ ${t.delta} · ${t.powerReserve} h — to QC queue`);
     rtStamp(`${j.number} timing PASS · ${tol.caliber} · avg ${t.avgRate} s/d · Δ ${t.delta} · beat ${t.avgBeat} ms · amp ${t.avgAmp}° · reserve ${t.powerReserve} h${ev.suggested === 'reject' ? ' · OVERRIDE (auto-eval suggested reject)' : ''}`);
   } else {
@@ -4358,7 +4383,7 @@ export async function sendForClientApproval(requestId: string): Promise<PartsReq
   const bad = (r.items ?? []).filter((i) => i.price === undefined || !(i.price >= 0)); if (bad.length) throw new Error(`Price required on every line — missing: ${bad.map((b) => b.description).join(', ')}`);
   const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0);
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
-  store.outbox.unshift(email); r.emailId = email.id; r.status = 'awaiting_client'; r.sentForApprovalAt = email.createdAt; r.sentBy = a.by;
+  queueOutbox(email); r.emailId = email.id; r.status = 'awaiting_client'; r.sentForApprovalAt = email.createdAt; r.sentBy = a.by;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'parts', a.by, `Parts approval sent · ${r.number} · ${(r.items ?? []).length} line(s) · $${total.toFixed(2)}`);
   partsStamp(r, `sent for client approval · $${total.toFixed(2)} · email queued`); jobStamp(j, `${r.number} sent for client approval`);
   return resolve(prRefs(r));
@@ -4478,7 +4503,7 @@ export async function sendLabelRequest(id: string): Promise<ShipmentWithRefs> {
   const from: ShipAddress = r ? { name: r.name, street: r.street, city: r.city, state: r.state, zip: r.zip } : { name: `${c.firstName} ${c.lastName}`, street: c.street, city: c.city, state: c.state || s.destinationState };
   return createInboundLabel(id, from, r?.insuredValue ?? s.declaredValue ?? byId(store.estimates, s.estimateId).total, s.carrier, r?.serviceLevel ?? s.serviceLevel ?? '1_day');
 }
-const queueShipEmail = (s: InboundShipment, subject: string, extra = '') => { const e = byId(store.estimates, s.estimateId); const c = byId(fx.clients, s.clientId); const a = actor(); const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e.number} · ${s.trackingNumber ?? 'label'}`, status: 'pending', subject: `${subject} — ${e.number}`, body: `Hello ${c.firstName},\n\n${extra || `Your prepaid, fully insured ${s.carrier} label for estimate ${e.number} is attached (insured value $${s.declaredValue.toLocaleString()}). Print it, pack the watch securely, and drop it at any ${s.carrier} location.`}\n\nLabel: ${s.labelUrl}\nTracking: ${s.trackingNumber}\nTrack it any time in RolliConnect: ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }; store.outbox.unshift(email); return email; };
+const queueShipEmail = (s: InboundShipment, subject: string, extra = '') => { const e = byId(store.estimates, s.estimateId); const c = byId(fx.clients, s.clientId); const a = actor(); const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${e.number} · ${s.trackingNumber ?? 'label'}`, status: 'pending', subject: `${subject} — ${e.number}`, body: `Hello ${c.firstName},\n\n${extra || `Your prepaid, fully insured ${s.carrier} label for estimate ${e.number} is attached (insured value $${s.declaredValue.toLocaleString()}). Print it, pack the watch securely, and drop it at any ${s.carrier} location.`}\n\nLabel: ${s.labelUrl}\nTracking: ${s.trackingNumber}\nTrack it any time in RolliConnect: ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station }; queueOutbox(email); return email; };
 export async function resendLabelEmail(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Your prepaid shipping label (resent)').id); shipStamp(s, 'label email re-queued'); return resolve(shipRefs(s)); }
 export async function followUpLabel(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (!s.trackingNumber) throw new Error('No label yet'); s.emailIds.push(queueShipEmail(s, 'Still planning to send your watch in?', `We sent you a prepaid ${s.carrier} label ${dayDiff(s.labelSentAt!)} days ago and haven't seen the package move yet. No rush — just let us know if you need a new label or a different date.`).id); shipStamp(s, 'follow-up reminder queued'); return resolve(shipRefs(s)); }
 export async function voidAndReissue(id: string): Promise<ShipmentWithRefs> { const s = shipOf(id); if (s.stage !== 'label_sent') throw new Error('Only outstanding labels can be voided'); await parcelpro.voidLabel(s.trackingNumber!); ba.voided.push({ trackingNumber: s.trackingNumber!, ref: byId(store.estimates, s.estimateId).number, kind: 'inbound', carrier: s.carrier, service: s.service, cost: s.cost ?? 0, createdAt: s.labelSentAt ?? s.requestedAt, voided: true, voidedAt: new Date().toISOString(), who: actor().by, path: `/shipping/inbound?track=${s.trackingNumber}` }); shipStamp(s, `label ${s.trackingNumber} voided · back to Label Requests (reissue)`); s.trackingNumber = undefined; s.labelUrl = undefined; s.cost = undefined; s.labelSentAt = undefined; s.stage = 'label_requested'; s.reissued = true; s.requestedAt = new Date().toISOString(); return resolve(shipRefs(s)); }
@@ -5046,7 +5071,7 @@ export async function draftDisputeReport(auditId: string): Promise<DisputeDraft>
 }
 export async function sendDisputeReport(auditId: string, subject: string, body: string): Promise<BillAudit> {
   const a = managerOnly(); const b = byId(ba.audits, auditId); if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required');
-  const emailId = `ob-${Date.now().toString(36)}`; store.outbox.unshift({ id: emailId, to: 'billing@parcelpro.example', toName: `${b.vendor} billing`, relatedRef: b.number, status: 'pending', subject: subject.trim(), body: body.trim(), createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  const emailId = `ob-${Date.now().toString(36)}`; queueOutbox({ id: emailId, to: 'billing@parcelpro.example', toName: `${b.vendor} billing`, relatedRef: b.number, status: 'pending', subject: subject.trim(), body: body.trim(), createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
   b.disputeEmailId = emailId; b.disputeSentAt = new Date().toISOString(); b.events.push({ at: b.disputeSentAt, by: a.by, text: `Dispute report queued to Outbox · ${fmtMoney(baTotals(b.lines).disputed)}` }); baStamp(`${b.number} dispute report → Outbox`);
   return resolve(baRefs(b));
 }
@@ -5439,7 +5464,7 @@ export async function sendSoReminder(id: string, kind: 'pickup' | 'payment', cha
   const c = byId(fx.clients, o.clientId); const a = actor();
   const text = kind === 'pickup' ? `Your watch is ready for pickup at RolliWorks. Verification code ${o.pickupCode ?? '—'}.` : `Friendly reminder: ${fmtMoney(o.balanceDue)} is due on ${o.number}. Pay online with your secure link or at the counter.`;
   if (channel === 'email') soEmail(o, kind === 'pickup' ? 'Pickup reminder' : 'Payment reminder', text, kind === 'payment' ? `/pay/${o.payLinkToken}` : undefined);
-  else store.outbox.unshift({ id: `ob-${Date.now().toString(36)}`, to: c.phone || '(no phone on file)', toName: fullNameOf(c), relatedRef: o.number, status: 'pending', subject: `SMS → ${c.phone || 'no phone'} — ${o.number}`, body: text, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  else queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: c.phone || '(no phone on file)', toName: fullNameOf(c), relatedRef: o.number, status: 'pending', subject: `SMS → ${c.phone || 'no phone'} — ${o.number}`, body: text, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
   soStamp(o, `${kind === 'pickup' ? 'Pickup' : 'Payment'} reminder ${channel.toUpperCase()} queued`); return resolve(soRefs(o));
 }
 export async function qboSyncInvoice(id: string, direction: 'pull' | 'push'): Promise<SalesOrderWithRefs> {
@@ -5514,7 +5539,7 @@ export async function createSwoOutboundLabel(id: string, customs?: Partial<SwoCu
   const c = intl ? { ...swoCustoms(w, v), ...Object.fromEntries(Object.entries(customs ?? {}).filter(([, val]) => val !== undefined && val !== '')) } as SwoCustoms : undefined; if (intl && (!c?.contents || !c.value || !c.hsCode)) throw new Error('International shipment — customs contents, value and HS code are required');
   w.outbound = { direction: 'outbound', carrier: intl ? 'DHL Express' : 'FedEx', service: intl ? 'Express Worldwide' : 'Priority Overnight', tracking: swoTracking(intl ? 'DHL Express' : 'FedEx'), international: intl, customs: c, cost: intl ? 148.2 : 62.4, createdAt: now, createdBy: a.by };
   w.stage = 'sent'; w.sentAt = now; setSwoCustody(w, `vendor:${w.vendorId}`, `Out to vendor · ${w.number}`);
-  const j = getJobRow(w.jobId); store.outbox.unshift({ id: newId('ob'), to: v.email, toName: v.name, relatedRef: w.number, status: 'pending', subject: `Shop work order ${w.number} — item on its way`, body: `Hello ${v.name},\n\n${w.number} (${j.number}) is on its way: ${w.outbound.carrier} ${w.outbound.tracking}.\n\nWork: ${w.work}\n\nPlease confirm receipt and your expected completion date. A prepaid return label will follow by email.\n\nThank you,\n${a.by}`, createdAt: now, createdBy: a.by, station: a.station });
+  const j = getJobRow(w.jobId); queueOutbox({ id: newId('ob'), to: v.email, toName: v.name, relatedRef: w.number, status: 'pending', subject: `Shop work order ${w.number} — item on its way`, body: `Hello ${v.name},\n\n${w.number} (${j.number}) is on its way: ${w.outbound.carrier} ${w.outbound.tracking}.\n\nWork: ${w.work}\n\nPlease confirm receipt and your expected completion date. A prepaid return label will follow by email.\n\nThank you,\n${a.by}`, createdAt: now, createdBy: a.by, station: a.station });
   swoStamp(w, `Outbound label · ${w.outbound.carrier} ${w.outbound.tracking}${intl ? ` · customs ${c!.hsCode} ${c!.incoterm} $${c!.value}` : ''} · vendor emailed`); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `${w.number} sent to ${v.name} · ${w.outbound.tracking} · custody → vendor` });
   return resolve(swoRefs(w));
 }
@@ -5523,7 +5548,7 @@ export async function queueSwoReturnLabel(id: string, predictedCompletion?: stri
   const w = byId(swos, id); if (w.stage === 'queue') throw new Error('Create the outbound label first'); if (w.stage === 'received') throw new Error('Already back at shop'); const v = byId(rs.vendors, w.vendorId); const intl = isInternationalVendor(v); const a = actor(); const now = new Date().toISOString();
   if (predictedCompletion) w.predictedCompletion = predictedCompletion; if (!w.predictedCompletion) throw new Error('Set the predicted completion date first — it goes in the vendor email');
   w.returnLabel = { direction: 'return', carrier: intl ? 'DHL Express' : 'FedEx', service: intl ? 'Express Worldwide (prepaid)' : 'Priority Overnight (prepaid)', tracking: swoTracking(intl ? 'DHL Express' : 'FedEx'), international: intl, customs: intl ? { ...swoCustoms(w, v), contents: `Returned watch ${w.components.join(' / ')} after refinishing — repair & return, no sale`, incoterm: 'DAP' } : undefined, cost: intl ? 152.7 : 64.1, createdAt: now, createdBy: a.by, emailedAt: now };
-  store.outbox.unshift({ id: newId('ob'), to: v.email, toName: v.name, relatedRef: w.number, status: 'pending', subject: `Return label for ${w.number} — please ship back by ${w.predictedCompletion}`, body: `Hello ${v.name},\n\nAttached is the prepaid return label for shop work order ${w.number}: ${w.returnLabel.carrier} ${w.returnLabel.tracking}.\n\nExpected completion: ${w.predictedCompletion}. Please pack the item in the original case, apply the label and hand it to the carrier — no need to arrange shipping on your side.\n\nThank you,\n${a.by}`, createdAt: now, createdBy: a.by, station: a.station });
+  queueOutbox({ id: newId('ob'), to: v.email, toName: v.name, relatedRef: w.number, status: 'pending', subject: `Return label for ${w.number} — please ship back by ${w.predictedCompletion}`, body: `Hello ${v.name},\n\nAttached is the prepaid return label for shop work order ${w.number}: ${w.returnLabel.carrier} ${w.returnLabel.tracking}.\n\nExpected completion: ${w.predictedCompletion}. Please pack the item in the original case, apply the label and hand it to the carrier — no need to arrange shipping on your side.\n\nThank you,\n${a.by}`, createdAt: now, createdBy: a.by, station: a.station });
   swoStamp(w, `Return label queued · ${w.returnLabel.carrier} ${w.returnLabel.tracking} · emailed to vendor · expected ${w.predictedCompletion}`); return resolve(swoRefs(w));
 }
 export async function advanceSwo(id: string, to: SwoStage): Promise<SwoWithRefs> {

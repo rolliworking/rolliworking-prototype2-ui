@@ -3,6 +3,7 @@ import { RatingBadge } from '@/components/clients/RatingBadge';
 import { JobCallsLine } from '@/components/clients/CallLedger';
 import { JobDecisionRecords } from '@/components/jobs/JobDecisionRecords';
 import { ChainForJob } from '@/components/estimates/ComponentChain';
+import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -80,7 +81,7 @@ export default function JobDetailPage() {
             <KindPill kind={j.kind} testId="job-kind-pill" client={j.client} />
             <PriorityPill priority={j.priority} testId="job-priority" />
             <WorkflowBadges workflow={j.workflow} />
-            <StatusPill status={j.simpleStatus} testId="job-simple-status" />{j.wireWarnings?.length ? <span data-testid="job-wire-warning" title={j.wireWarnings.join(' · ')} className="rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">unmapped live status · {j.wireWarnings.length}</span> : null}
+            <StatusPill status={j.simpleStatus} testId="job-simple-status" />{j.estimate && <ClientRefPill value={j.estimate.clientRef} sample={`Your watch is ready for pickup — ${j.watch.brand} ${j.watch.model} (${j.number})`} onSave={async (v) => { await api.setClientRef(j.estimate!.id, v); await load(); }} testId="job-client-ref" />}{j.wireWarnings?.length ? <span data-testid="job-wire-warning" title={j.wireWarnings.join(' · ')} className="rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">unmapped live status · {j.wireWarnings.length}</span> : null}
             <OwnerBadge owner={j.owner} testId="job-owner" />
             <TailPill stage={api.tailStage(j)} testId="job-tail" />
             <ClientRequestBadge n={api.openClientRequests(j).length} testId="job-client-requests-badge" />

@@ -11,6 +11,7 @@ import { InspectionCameraFlow } from '@/components/inspection/InspectionCameraFl
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
 import { LabelPrintDialog } from '@/components/intake/LabelBits';
 import { MultiItemPanel } from '@/components/estimates/MultiItemBits';
+import { ClientRefInput, SubjectPreview } from '@/components/intake/ClientRefBits';
 import { ComponentChecklist, LineChecklist, SameWatchFork } from '@/components/intake/InspectionBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
@@ -34,7 +35,7 @@ export default function ReceiveWatchPage() {
   const [decision, setDecision] = useState<'n/a' | 'returning' | 'conflict'>('n/a');
   const [workflow, setWorkflow] = useState<DeptCode[]>([]);
   const [extraWatch, setExtraWatch] = useState(false);
-  const [notes, setNotes] = useState(''); const [itemLabel, setItemLabel] = useState('');
+  const [notes, setNotes] = useState(''); const [itemLabel, setItemLabel] = useState(''); const [clientRef, setClientRef] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReceiveWatchResult | null>(null); const [printDialog, setPrintDialog] = useState(false); const [printedIds, setPrintedIds] = useState<string[]>([]);
@@ -53,6 +54,7 @@ export default function ReceiveWatchPage() {
     setWorkflow(ctx.suggestedWorkflow);
     setPhotos(ctx.pkg.photos.filter(api.isInspectionPhoto));
     setItemsReceived(ctx.pkg.itemsReceived ?? []);
+    setClientRef(ctx.estimate.clientRef ?? '');
     if (ctx.pkg.targetDate) { setTargetWeeks(ctx.pkg.targetWeeks ?? 6); setTargetDate(ctx.pkg.targetDate); }
   }, [ctx]);
 
@@ -74,7 +76,7 @@ export default function ReceiveWatchPage() {
   }, [ctx, reference, serial]);
 
   const input: ReceiveWatchInput | null = ctx
-    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined, targetWeeks, targetDate }
+    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined, clientRef, targetWeeks, targetDate }
     : null;
   const discrepancies = useMemo(() => (ctx && input ? api.computeDiscrepancies(ctx, input) : []), [ctx, input]);
   const forkPending = !!match && decision === 'n/a';
@@ -225,6 +227,12 @@ export default function ReceiveWatchPage() {
             <span className="ml-2 inline-flex items-center gap-1" data-testid="rw-target-weeks">{[2, 4, 6, 8, 12].map((w) => <button key={w} type="button" data-testid={`rw-target-week-${w}`} aria-pressed={targetWeeks === w} disabled={readOnly} onClick={() => { setTargetWeeks(w); setTargetDate(addWeeks(w)); }} className={`h-8 rounded-full border px-3 font-medium transition-colors ${targetWeeks === w ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink-700 hover:border-ink-300'}`}>{w} wk</button>)}</span>
             <label className="inline-flex items-center gap-1 text-ink-500">Date<input type="date" data-testid="rw-target-date" value={targetDate} disabled={readOnly} onChange={(e) => { if (e.target.value) { setTargetDate(e.target.value); setTargetWeeks(Math.max(1, Math.round((new Date(e.target.value).getTime() - Date.now()) / (7 * 864e5)))); } }} className="h-8 rounded-sm border border-line bg-surface px-2 text-xs focus:border-ink focus:outline-none" /></label>
             <span data-testid="rw-target-summary" className="rounded-sm bg-moss-50 px-2 py-0.5 font-medium text-moss-700">Target {fmtDate(targetDate)} · {targetWeeks} week{targetWeeks === 1 ? '' : 's'}</span>
+          </div>
+        </div>
+        <div data-testid="rw-client-ref-card" className="mt-4 rounded-sm border border-line bg-canvas/60 px-3 py-2">
+          <div className="flex flex-wrap items-start gap-3">
+            <label className="block text-xs text-ink-500"><span className="font-semibold text-ink">Client Reference #</span> <span className="text-ink-400">· optional · the client’s own barcode / tracking number · scanner or keyboard</span><ClientRefInput value={clientRef} onChange={setClientRef} disabled={readOnly} testId="rw-client-ref" className="mt-1 w-80" /></label>
+            <div className="min-w-0 flex-1 pt-5"><SubjectPreview clientRef={clientRef} sample={`Your estimate ${estimate.number} is ready to review`} testId="rw-client-ref-preview" /><p className="mt-1 text-[10px] text-ink-400">Applies to every client email on this job — estimate, inspection report, invoice, status updates. Blank = subjects unchanged. Bracketed-prefix format is a placeholder pending a formatting decision.</p></div>
           </div>
         </div>
         {match && <div className="mt-4"><SameWatchFork match={match} expectedClientId={estimate.clientId} decision={decision} onDecide={setDecision} /></div>}

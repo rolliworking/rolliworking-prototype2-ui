@@ -10,6 +10,7 @@ import { DeclineModal, RevisionHistory, SendModal } from '@/components/estimates
 import { LineEditor } from '@/components/estimates/LineEditor';
 import { ChainForEstimate, ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { PrintPreview } from '@/components/estimates/PrintPreview';
+import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { fmtDate, fmtTime, fullName } from '@/lib/format';
@@ -103,6 +104,7 @@ export default function EstimateDetailPage() {
             <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="estimate-number">{e.number}</h1>
             <span className="rounded-sm bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-ink-500" data-testid="estimate-revision">rev {e.revision}</span>{e.validUntil && <span className="text-[11px] text-ink-500" data-testid="estimate-valid-until">Valid until {fmtDate(e.validUntil)}</span>}
             <EstimateStatusPill status={e.status} testId="estimate-status" />
+            <ClientRefPill value={e.clientRef} readOnly={!!e.legacy || e.historical} sample={`Your estimate ${e.number} is ready to review`} onSave={(v) => run(() => api.setClientRef(e.id, v), v.trim() ? `Client reference "${v.trim()}" — email subjects will carry it` : 'Client reference cleared')} testId="estimate-client-ref" />
             {e.historical && <span data-testid="historical-badge" className="inline-flex items-center gap-1 rounded-sm bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"><Lock size={10} /> Historical · read-only</span>}
             {e.revision > 1 && e.sentAt && e.updatedAt > e.sentAt && e.status === 'sent' && <span className="text-[11px] text-amber-800">revised since last send</span>}
           </div>
