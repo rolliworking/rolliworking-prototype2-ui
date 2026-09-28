@@ -1848,6 +1848,10 @@ async function getTodayMock(userId?: string): Promise<TodayView> {
     });
   }
 
+  // Watchmaker-room kiosk: required 4-photo documentation still outstanding on my W-routed jobs (admin toggle on)
+  if (kioskRequiredSetting()) store.jobs.filter((j) => j.assignees.includes(me.shortName) && !['closed', 'ready_to_ship', 'cancelled'].includes(j.status) && kioskStatusFor(j).required && !kioskStatusFor(j).done).forEach((j) => {
+    rows.push({ id: `kiosk-${j.id}`, source: 'task', title: `WM room photos required · ${j.number}`, detail: `${clientOf(j.clientId)} · 4-step dial / movement / case back set at the kiosk`, via: 'watchmaker room kiosk', jobId: j.id, dueAt: j.dueAt, overdue: false, urgent: j.priority === 'high' });
+  });
   // Task-derived rows — division-scoped
   store.tasks.filter((t) => t.status === 'open' && t.division === sessionDiv && assigneeMatches(t.assignedTo, me)).forEach((t) => {
     const job = t.jobId ? store.jobs.find((j) => j.id === t.jobId) : undefined;
@@ -5315,6 +5319,39 @@ export async function setEstimateItemComponents(estimateId: string, itemId: stri
 })();
 export async function getVerificationChain(estimateId: string): Promise<VerificationChain | null> { const e = store.estimates.find((x) => x.id === estimateId); return resolve(e ? chainFor(e) : null); }
 export async function getJobVerificationChain(jobId: string): Promise<VerificationChain | null> { const j = store.jobs.find((x) => x.id === jobId); const e = j?.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined; return resolve(e ? chainFor(e) : null); }
+
+// ---- WATCHMAKER-ROOM PHOTO KIOSK — shared common-area station (microscope + IPEVO). Attribution = the scanned job's assigned watchmaker; the kiosk has no login. ----
+export type KioskCam = 'ipevo' | 'microscope';
+export interface KioskStep { key: string; label: string; cam: KioskCam; hint: string }
+// PROPOSED camera assignment (not confirmed): microscope for the three close-ups, IPEVO for the wider case-back shot
+export const KIOSK_STEPS: KioskStep[] = [
+  { key: 'dial-front', label: 'Front of dial', cam: 'microscope', hint: 'Dial face, hands, indices — straight on' },
+  { key: 'dial-back', label: 'Back of dial', cam: 'microscope', hint: 'Dial feet, date disc side' },
+  { key: 'movement-back', label: 'Back of movement', cam: 'microscope', hint: 'Rotor / bridges, serial visible if present' },
+  { key: 'case-back', label: 'Case back', cam: 'ipevo', hint: 'Whole case back, engravings legible' },
+];
+export interface KioskShot { step: string; dataUrl: string; device: string; cam: KioskCam; at: string }
+export interface KioskSession { id: string; jobId: string; watchmaker: string; startedAt: string; completedAt?: string; shots: KioskShot[] }
+export interface KioskStatus { required: boolean; done: boolean; reason: string; watchmaker: string; session?: KioskSession }
+const KIOSK_KEY = 'rollisuite.kiosk.required';
+export const kioskRequiredSetting = () => localStorage.getItem(KIOSK_KEY) !== 'off';
+export async function setKioskRequired(on: boolean): Promise<boolean> { localStorage.setItem(KIOSK_KEY, on ? 'on' : 'off'); const a = actor(); appendAudit({ type: 'estimate', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Setting · Require watchmaker-room photo documentation → ${on ? 'ON' : 'OFF'}` }); return resolve(on); }
+const kioskSessions: KioskSession[] = [];
+// Applicable = the job (or any of its estimate's items, by its own inferred/overridden chips) routes through W
+const jobIsWRouted = (j: Job) => { if (j.workflow.includes('W')) return true; const e = j.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined; return !!e && (e.items && e.items.length > 1 ? e.items.some((it) => itemCodes(e.lines, e.items!, it).codes.includes('W')) : estimateComponentCodes(e).codes.includes('W')); };
+const kioskStatusFor = (j: Job): KioskStatus => { const s = kioskSessions.filter((x) => x.jobId === j.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]; const w = jobIsWRouted(j); const on = kioskRequiredSetting(); return { required: on && w, done: !!s?.completedAt, reason: !on ? 'setting off — ad-hoc photos only' : w ? 'W-routed item → 4-step set required' : 'not W-routed — ad-hoc photos only', watchmaker: j.assignees[0] ?? '—', session: s }; };
+export async function getKioskStatus(jobId: string): Promise<KioskStatus> { return resolve(kioskStatusFor(getJobRow(jobId))); }
+export async function startKioskSession(jobId: string): Promise<KioskSession> { const j = getJobRow(jobId); const open = kioskSessions.find((s) => s.jobId === jobId && !s.completedAt); if (open) return resolve(open); const s: KioskSession = { id: newId('wmk'), jobId, watchmaker: j.assignees[0] ?? 'unassigned', startedAt: new Date().toISOString(), shots: [] }; kioskSessions.unshift(s); jobStamp(j, `WM room kiosk · required photo set started · attributed to ${s.watchmaker}`); return resolve(s); }
+export async function recordKioskShot(sessionId: string, shot: Omit<KioskShot, 'at'>): Promise<KioskSession> {
+  const s = kioskSessions.find((x) => x.id === sessionId); if (!s) throw new Error('Kiosk session not found'); const j = getJobRow(s.jobId); const at = new Date().toISOString();
+  s.shots = [...s.shots.filter((x) => x.step !== shot.step), { ...shot, at }];
+  j.photos = j.photos.filter((p) => p.slot !== `wmroom-${shot.step}`); j.photos.unshift({ id: newId('ph'), source: 'camera', dataUrl: shot.dataUrl, slot: `wmroom-${shot.step}`, fileName: `WM room · ${KIOSK_STEPS.find((k) => k.key === shot.step)?.label}`, at, by: s.watchmaker, station: 'Watchmaker Room Kiosk' });
+  if (s.shots.length >= KIOSK_STEPS.length && !s.completedAt) { s.completedAt = at; jobStamp(j, `WM room kiosk · required 4-photo set FINISHED · attributed to ${s.watchmaker} · clears the bench task`); }
+  return resolve({ ...s, shots: [...s.shots] });
+}
+export async function addKioskPhoto(jobId: string, dataUrl: string, device: string, note: string): Promise<PackagePhoto> { const j = getJobRow(jobId); const p: PackagePhoto = { id: newId('ph'), source: 'camera', dataUrl, slot: 'wmroom-adhoc', fileName: note.slice(0, 60) || 'WM room photo' }; j.photos.unshift({ ...p, at: new Date().toISOString(), by: j.assignees[0] ?? 'Watchmaker', station: `Watchmaker Room Kiosk · ${device}` }); jobStamp(j, `WM room kiosk · ad-hoc photo added${note ? ` — ${note.slice(0, 80)}` : ''}`); return resolve(p); }
+// Seed: E02014 (j-04, MM) walked through the full 4-step set yesterday — its bench task is already clear
+(() => { const j = store.jobs.find((x) => x.id === 'j-04'); if (!j) return; const at = daysAgoIso(1); const s: KioskSession = { id: 'wmk-seed-1', jobId: j.id, watchmaker: j.assignees[0] ?? 'MM', startedAt: at, completedAt: at, shots: KIOSK_STEPS.map((k, i) => ({ step: k.key, dataUrl: `https://picsum.photos/seed/wmk-${k.key}/640/480`, device: k.cam === 'ipevo' ? 'IPEVO V4K' : 'HY-3307 Microscope', cam: k.cam, at: new Date(new Date(at).getTime() + i * 60000).toISOString() })) }; kioskSessions.push(s); s.shots.forEach((sh) => j.photos.push({ id: `ph-${sh.step}`, source: 'camera', dataUrl: sh.dataUrl, slot: `wmroom-${sh.step}`, fileName: `WM room · ${KIOSK_STEPS.find((k) => k.key === sh.step)?.label}`, at: sh.at, by: s.watchmaker, station: 'Watchmaker Room Kiosk' })); })();
 
 // ---- PER-STAFF CLIENT REVIEWS — every staff member rates independently (A / C); N = jobs that person handled for the client. Aggregate badge = rounded mean of the latest review per staff. Internal only. ----
 const reviews = { rows: [] as StaffReview[] };

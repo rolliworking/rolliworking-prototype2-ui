@@ -2,25 +2,20 @@ import { AlertTriangle, Camera, Check, ChevronRight, HelpCircle, Microscope, Shi
 import { useEffect, useState } from 'react';
 import * as ac from '@/api/authCapture';
 import type { AuthFlag, AuthSession } from '@/api/authCapture';
-import { MOCK_CAMERAS } from '@/components/inspection/InspectionCameraFlow';
 import { Button } from '@/components/ui/Button';
-import { useCamera } from '@/hooks/useCamera';
+import { camKind, placeholderFrame as placeholder, useStepCamera } from '@/hooks/useStepCamera';
 import { fmtDate } from '@/lib/format';
 
-const isScope = (l: string) => /hy-?3307|microscope|scope/i.test(l); const isIpevo = (l: string) => /ipevo|v4k/i.test(l);
-const placeholder = (label: string, cam: string) => { const c = document.createElement('canvas'); c.width = 320; c.height = 200; const g = c.getContext('2d')!; g.fillStyle = cam === 'ipevo' ? '#1f2630' : '#0e3b4a'; g.fillRect(0, 0, 320, 200); g.fillStyle = '#fff'; g.font = '14px sans-serif'; g.fillText(label, 16, 90); g.fillText(`${cam} · no camera`, 16, 112); return c.toDataURL('image/jpeg', 0.6); };
 const FLAGS: { v: AuthFlag; label: string; icon: React.ReactNode; cls: string }[] = [{ v: 'authentic', label: 'Authentic', icon: <ShieldCheck size={12} />, cls: 'border-moss bg-moss text-white' }, { v: 'unsure', label: 'Unsure', icon: <HelpCircle size={12} />, cls: 'border-amber-500 bg-amber-500 text-black' }, { v: 'fake', label: 'Fake', icon: <ShieldX size={12} />, cls: 'border-rose-600 bg-rose-600 text-white' }];
 
 // Guided 11-step sequence: label + assigned camera per step, auto-switch (manual override kept), per-step authenticity flag, Next to advance
 export const GuidedAuthCapture = ({ session, onShot, onClose }: { session: AuthSession; onShot: (s: AuthSession) => void; onClose: () => void }) => {
   const [idx, setIdx] = useState(Math.min(session.shots.length, ac.AUTH_STEPS.length - 1)); const step = ac.AUTH_STEPS[idx]; const total = ac.AUTH_STEPS.length;
-  const [manual, setManual] = useState<string | null>(null); const [devId, setDevId] = useState<string | undefined>(); const { videoRef, status, capture, devices } = useCamera(true, devId);
-  const cams = devices.length ? devices : MOCK_CAMERAS; const auto = cams.find((d) => (step.cam === 'ipevo' ? isIpevo(d.label) : isScope(d.label))) ?? cams[step.cam === 'ipevo' ? 0 : Math.min(1, cams.length - 1)]; const active = (manual && cams.find((d) => d.deviceId === manual)) || auto;
-  useEffect(() => { setManual(null); }, [idx]); useEffect(() => { setDevId(active.deviceId.startsWith('mock-') ? undefined : active.deviceId); }, [active.deviceId]);
+  const { videoRef, status, capture, cams, active, manual, setManual } = useStepCamera(step.cam, step.key);
   const existing = session.shots.find((s) => s.step === step.key); const [shot, setShot] = useState<string | null>(null); const [flag, setFlag] = useState<AuthFlag>('authentic'); const [note, setNote] = useState('');
   useEffect(() => { setShot(existing?.dataUrl ?? null); setFlag(existing?.flag ?? 'authentic'); setNote(existing?.note ?? ''); }, [idx]); // eslint-disable-line react-hooks/exhaustive-deps
   const snap = () => { const c = capture(); setShot(c.dataUrl || placeholder(step.label, step.cam)); };
-  const next = async () => { if (!shot) return; const s = await ac.recordAuthShot(session.id, { step: step.key, dataUrl: shot, device: active.label, cam: isScope(active.label) ? 'microscope' : isIpevo(active.label) ? 'ipevo' : step.cam, flag, note: flag === 'authentic' ? undefined : note || undefined }); onShot(s); if (idx < total - 1) setIdx(idx + 1); else onClose(); };
+  const next = async () => { if (!shot) return; const s = await ac.recordAuthShot(session.id, { step: step.key, dataUrl: shot, device: active.label, cam: camKind(active.label, step.cam), flag, note: flag === 'authentic' ? undefined : note || undefined }); onShot(s); if (idx < total - 1) setIdx(idx + 1); else onClose(); };
   const done = session.shots.length;
   return <div data-testid="auth-capture" data-step={idx + 1} data-step-key={step.key} data-cam={step.cam} data-device={active.label} className="fixed inset-0 z-[85] flex flex-col bg-black/90 text-white">
     <div className="flex flex-wrap items-center gap-3 px-5 py-3">

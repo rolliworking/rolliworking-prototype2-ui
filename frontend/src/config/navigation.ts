@@ -25,7 +25,7 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays } from 'lucide-react';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera } from 'lucide-react';
 import { OWNER_USER_ID, type AccessTier, type User } from '@/api/client';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
@@ -81,6 +81,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'parts-catalog', label: 'Parts', path: '/parts', icon: Tag, tiers: MGR, group: 'parts', built: true, blurb: 'One part record · one stock count · one reorder rule · one caliber table · one search.' },
   { key: 'bill-audit', label: 'Bill Audit', path: '/shipping/bill-audit', icon: Receipt, tiers: MGR, group: 'intake', built: true, blurb: 'Carrier bill vs our label ledger — variances, voided-but-billed, disputes.' },
   { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, built: true, blurb: 'Bag tags, shipping labels and QR codes.' },
+  { key: 'wm-kiosk', label: 'WM Photo Kiosk', path: '/wm-kiosk', icon: Camera, tiers: ALL, built: true, blurb: 'Watchmaker-room shared photo station — required 4-step set + ad-hoc photos with @-mentions.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
   { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },

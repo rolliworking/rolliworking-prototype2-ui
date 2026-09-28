@@ -1,5 +1,6 @@
 import { ArrowLeft, Watch as WatchIcon, Wrench } from 'lucide-react';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { KioskRequirementBanner } from '@/components/rw/KioskRequirementBanner';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -47,6 +48,7 @@ export default function RwJobPage() {
     {flash && <div data-testid="rw-job-flash" className="rounded-sm bg-emerald-950/50 px-3 py-1.5 text-xs font-medium text-emerald-300">{flash}</div>}
     {error && <div data-testid="rw-job-error" className="rounded-sm bg-rose-950/50 px-3 py-1.5 text-xs font-medium text-rose-300">{error}</div>}
     <ReviewGate job={j} />
+    <KioskRequirementBanner jobId={j.id} tick={j.photos.length} />
     {j.kind === 'trade' && <TradePathStrip job={j} dark testId="rw-trade-path" />}
     {api.activeHold(j) && <div data-testid="rw-held-banner" className="rounded-sm bg-rose-950/50 px-3 py-1.5 text-xs text-rose-200">Parked on hold — status actions return when the hold is released.</div>}
     <div className="grid grid-cols-[1fr_360px] gap-3">

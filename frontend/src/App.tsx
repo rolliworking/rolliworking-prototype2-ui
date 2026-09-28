@@ -40,6 +40,7 @@ import RgManagerPage from '@/pages/rg/RgManagerPage';
 import RgWeekPage from '@/pages/rg/RgWeekPage';
 import RgKioskPage from '@/pages/rg/RgKioskPage';
 import KioskPage from '@/pages/kiosk/KioskPage';
+import WmKioskPage from '@/pages/kiosk/WmKioskPage';
 import PayPage from '@/pages/PayPage';
 import RequestsPage from '@/pages/RequestsPage';
 import RwTestingQueuePage from '@/pages/rw/testing/RwTestingQueuePage';
@@ -233,6 +234,7 @@ export default function App() {
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/setup" element={<SetupPage />} />
+              <Route path="/wm-kiosk" element={<WmKioskPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />
               <Route path="/supervisor" element={<SupervisorPage />} />

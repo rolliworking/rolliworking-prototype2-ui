@@ -1,4 +1,4 @@
-import { Camera, Check, Image as ImageIcon, Inbox, Mail, MailOpen, X } from 'lucide-react';
+import { Camera, Check, Image as ImageIcon, Inbox, Mail, MailOpen, Reply, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as hl from '@/api/hitlist';
@@ -10,9 +10,10 @@ import { fmtDate, fmtTime } from '@/lib/format';
 
 // Messages and photos other staff sent to this person (or one of their roles) — newest first, read/unread, photo → lightbox, message → linked job
 export const InboxPanel = ({ me, items, onChange, jobBase = '/jobs' }: { me: User; items: InboxRow[]; onChange: () => void; jobBase?: string }) => {
-  const [open, setOpen] = useState<InboxRow | null>(null);
+  const [open, setOpen] = useState<InboxRow | null>(null); const [replying, setReplying] = useState<string | null>(null); const [reply, setReply] = useState('');
   const unread = items.filter((i) => i.unread).length;
   const toggle = async (i: InboxRow) => { await hl.markInboxRead(i.id, me.shortName, i.unread); onChange(); };
+  const sendReply = async (i: InboxRow) => { await hl.replyToInbox(i.id, reply); setReply(''); setReplying(null); if (i.unread) await hl.markInboxRead(i.id, me.shortName, true); onChange(); };
   return <Card title={<span className="inline-flex items-center gap-2">Inbox {unread > 0 && <span data-testid="inbox-unread-count" className="rounded-full bg-rose-600 px-1.5 text-[10px] font-semibold text-white">{unread}</span>}</span>} subtitle="Messages and photos sent to you — tap a photo to view full-size, a message opens the linked job" testId="hitlist-inbox-card" bodyClassName="p-0" className="border-l-[3px] border-sky-500">
     <ul data-testid="inbox-list" className="divide-y divide-line/70">
       {items.map((i) => <li key={i.id} data-testid={`inbox-${i.id}`} data-unread={i.unread} className={`flex items-start gap-3 px-4 py-2.5 ${i.unread ? 'bg-sky-50/40' : ''}`}>
@@ -21,7 +22,9 @@ export const InboxPanel = ({ me, items, onChange, jobBase = '/jobs' }: { me: Use
         <div className="min-w-0 flex-1">
           <div className={`text-[13px] ${i.unread ? 'font-semibold text-ink' : 'text-ink-700'}`} data-testid={`inbox-text-${i.id}`}>{i.text ?? (i.photo ? 'Photo' : '')}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-400">from <OwnerChip owner={i.from} /><span>{i.station} · {fmtDate(i.createdAt)} {fmtTime(i.createdAt)}</span>{i.to.type === 'role' && <span className="rounded-sm bg-canvas px-1 font-mono text-[10px]">#{i.to.role}</span>}
-            {i.jobId && <Link to={`${jobBase}/${i.jobId}`} data-testid={`inbox-job-${i.id}`} onClick={() => { if (i.unread) void toggle(i); }} className="font-mono font-semibold text-brand hover:underline">{i.jobNumber}</Link>}{i.jobLabel && <span className="truncate">{i.jobLabel}</span>}</div>
+            {i.jobId && <Link to={`${jobBase}/${i.jobId}`} data-testid={`inbox-job-${i.id}`} onClick={() => { if (i.unread) void toggle(i); }} className="font-mono font-semibold text-brand hover:underline">{i.jobNumber}</Link>}{i.jobLabel && <span className="truncate">{i.jobLabel}</span>}{i.replyToId && <span data-testid={`inbox-reply-tag-${i.id}`} className="rounded-sm bg-moss-50 px-1 font-semibold text-moss-700">reply</span>}
+            {i.from !== me.shortName && <button type="button" data-testid={`inbox-reply-${i.id}`} onClick={() => { setReplying(replying === i.id ? null : i.id); setReply(''); }} className="inline-flex items-center gap-1 font-medium text-brand hover:underline"><Reply size={11} /> Reply</button>}</div>
+          {replying === i.id && <div data-testid={`inbox-reply-form-${i.id}`} className="mt-1.5 flex items-center gap-1.5"><input autoFocus data-testid={`inbox-reply-input-${i.id}`} value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && reply.trim()) void sendReply(i); }} placeholder={`Reply to ${i.from} — lands on their hitlist / bench iPad`} className="h-8 flex-1 rounded-sm border border-line bg-canvas px-2 text-xs focus:border-ink focus:outline-none" /><button type="button" data-testid={`inbox-reply-send-${i.id}`} disabled={!reply.trim()} onClick={() => void sendReply(i)} className="h-8 rounded-sm bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">Send</button></div>}
         </div>
         <button type="button" data-testid={`inbox-toggle-${i.id}`} onClick={() => void toggle(i)} title={i.unread ? 'Mark read' : 'Mark unread'} className="inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[11px] text-ink-500 hover:bg-surface hover:text-ink">{i.unread ? <><Check size={11} /> Read</> : <><MailOpen size={11} /> Unread</>}</button>
       </li>)}

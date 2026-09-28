@@ -1,6 +1,7 @@
 import { SetupRsPanels } from '@/pages/SetupRsPanels';
 import { SetupAuditsCard } from '@/components/rw/SetupAuditsCard';
 import { SetupGradingCard } from '@/components/rw/SetupGradingCard';
+import { KioskSettingCard } from '@/components/setup/KioskSettingCard';
 import { ArrowRight, MonitorSmartphone, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -101,6 +102,7 @@ export default function SetupPage() {
           )}
         </Card>
 
+        <KioskSettingCard />
         <Card
           title="Audit trail"
           subtitle="Sign-in evidence: who, when, which station, photo"
