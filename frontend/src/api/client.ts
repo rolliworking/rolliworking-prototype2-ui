@@ -5361,7 +5361,8 @@ export const hitlistBridge = {
   jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
 };
 // ---- Bench-test capture bridge (before/after timing + pressure slips, tolerance sheet — ./benchTests.ts) ----
-export const benchBridge = { job: (id: string) => store.jobs.find((j) => j.id === id), watch: (id?: string) => store.watches.find((w) => w.id === id), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); } };
+// Bench events land on the job as a note (visible on the job page) as well as in the audit log
+export const benchBridge = { job: (id: string) => store.jobs.find((j) => j.id === id), watch: (id?: string) => store.watches.find((w) => w.id === id), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (!j) return; jobStamp(j, detail); const a = actor(); j.notes.unshift({ id: newId('n'), text: detail, at: new Date().toISOString(), by: a.by, station: a.station }); } };
 export const auditAppointments = (detail: string) => appendAudit({ type: 'appointments', stationName: actor().station, userShortName: actor().user?.shortName, detail });
 export interface ApptRefLookup { ref: string; clientId: string; clientName: string; email: string; phone: string; watch?: string; kind: 'estimate' | 'sales_order' }
 // Drop-off books against an estimate #; pick-up against a sales order # (or the SO's job #)
