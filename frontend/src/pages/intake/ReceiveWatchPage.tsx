@@ -282,7 +282,7 @@ export default function ReceiveWatchPage() {
         {error && <p data-testid="inspection-commit-error" className="mt-2 text-xs font-medium text-rose-700">{error}</p>}
         <div className="mt-3 flex items-center justify-end gap-2">
           <Link to="/intake/inspection" data-testid="inspection-cancel"><Button>Cancel</Button></Link>
-          <Button data-testid="inspection-commit" disabled={!canCommit || busy} onClick={() => commit(false)}>{busy ? 'Saving…' : 'Save'}</Button>
+          <Button data-testid="inspection-commit" disabled={!canCommit || busy} title={!canCommit ? (forkPending ? 'Decide the same-watch check (card 6) first — this watch has history on file' : !reference.trim() || !serial.trim() ? 'Reference and serial are required (NS if unreadable)' : workflow.length === 0 ? 'Pick at least one component code (card 5)' : ctx?.pkg.status !== 'awaiting_inspection' ? 'Package already received' : undefined) : undefined} onClick={() => commit(false)}>{busy ? 'Saving…' : 'Save'}</Button>
           <Button variant="primary" data-testid="inspection-save-print" className={discrepancies.length ? '!bg-rose-700 hover:!bg-rose-800' : ''} disabled={!canCommit || busy} onClick={() => commit(true)}><Printer size={13} /> {busy ? 'Saving…' : discrepancies.length ? 'Save → discrepancy hold' : 'Save & Print labels'}</Button>
         </div>
         <p className="mt-2 text-right text-[11px] leading-4 text-ink-400">{forkPending ? 'Resolve the same-watch check first.' : discrepancies.length ? 'Reason is recorded on the package; nothing is queued for print.' : 'Save queues the intake labels unprinted · Save & Print opens Print Intake Labels pre-filled with ref#, serial#, model, client and est#.'}</p>
