@@ -73,7 +73,7 @@ Order on screen (RULING from MH brief): (1) scan estimate barcode / type est# or
 Rules:
 - **Discrepancies** = expected component not confirmed in hand, serial/reference mismatch vs estimate watch (unless serial = `NS`), extra watch flagged, unverified lines. Any discrepancy → commit sets `discrepancy_hold`, requires reason, queues no labels.
 - **Same-watch check:** reference+serial matched against watch history → fork `returning` (same client) vs `conflict` (different client) must be decided before commit. `NS` skips it.
-- Commit writes `pkg.componentsVerified`, creates 2 component labels (unprinted); **Save & Print** additionally marks them printed (`setLabelPrinted`). Result screen offers "Start inspection → camera" (`/inspection/new?est=<E#>&camera=1`).
+- Commit writes `pkg.componentsVerified`, creates 2 component labels (unprinted); **Save & Print** opens the **label print dialog** (`LabelPrintDialog` in `components/intake/LabelBits.tsx`: preview, include, printer, copies → `setLabelPrinted`); result screen shows printed count + Reprint. Label Queue reuses the dialog for "Print all unprinted". Result screen offers "Start inspection → camera" (`/inspection/new?est=<E#>&camera=1`).
 - **Serial auto-decode (`decodeSerial`) — STAND-IN prefix table**, not real reference data: `1601→Datejust 36 cal.1570`, `1603`, `1675 GMT cal.1575`, `5513 Sub cal.1520/1530`, `1680 Sub Date cal.1575`, `16xxx→cal.3035/3135`, `126→cal.3235/3285`, `116→cal.3135/3186`, `[A-Z]\d{6}→letter-prefix 1987–2010`. Order: prefix match on the part before `-` → exact serial in our watch records → reference prefix. Real authentication reference PDFs are **outstanding from MH**.
 
 ### 1.3 Trickle-down chain — Expected → Received → Verified (MOCK)

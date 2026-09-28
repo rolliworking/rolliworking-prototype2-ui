@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { DeptCode, ReceiveWatchInput, ReceiveWatchResult, WatchMatch } from '@/api/client';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
+import { LabelPrintDialog } from '@/components/intake/LabelBits';
 import { ComponentChecklist, LineChecklist, SameWatchFork } from '@/components/intake/InspectionBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
@@ -30,7 +31,7 @@ export default function ReceiveWatchPage() {
   const [notes, setNotes] = useState(''); const [itemLabel, setItemLabel] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ReceiveWatchResult | null>(null);
+  const [result, setResult] = useState<ReceiveWatchResult | null>(null); const [printDialog, setPrintDialog] = useState(false); const [printedIds, setPrintedIds] = useState<string[]>([]);
   const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
@@ -83,8 +84,9 @@ export default function ReceiveWatchPage() {
     setError(null);
     try {
       const res = await api.receiveWatch(pkg.id, input);
-      if (print) await Promise.all(res.labels.map((l) => api.setLabelPrinted(l.id, true)));
-      setResult({ ...res, printed: print } as ReceiveWatchResult & { printed?: boolean });
+      setResult(res);
+      // Save & Print → flows straight into the label dialog (printer / copies / preview) — labels are marked printed there, not silently
+      if (print && res.labels.length && res.pkg.status !== 'discrepancy_hold') setPrintDialog(true);
       refreshCounts();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not commit');
@@ -114,7 +116,7 @@ export default function ReceiveWatchPage() {
                 </ul>
               ) : (
                 <div className="mt-3 rounded-sm bg-canvas p-3 text-xs" data-testid="inspection-result-labels">
-                  <div className="mb-1 inline-flex items-center gap-1 font-semibold text-ink-500"><Tags size={12} /> {(result as ReceiveWatchResult & { printed?: boolean }).printed ? '2 component labels printed' : '2 labels queued (unprinted)'}</div>
+                  <div className="mb-1 flex items-center gap-1 font-semibold text-ink-500"><Tags size={12} /> <span data-testid="inspection-result-labels-state">{printedIds.length ? `${printedIds.length} component label${printedIds.length === 1 ? '' : 's'} printed` : `${result.labels.length} labels queued (unprinted)`}</span><Button size="sm" className="ml-auto" data-testid="inspection-result-print" onClick={() => setPrintDialog(true)}><Printer size={12} /> {printedIds.length ? 'Reprint' : 'Print now'}</Button></div>
                   {result.labels.map((l) => (
                     <div key={l.id} className="font-mono text-ink-700">{l.type === 'pdf417_data' ? 'PDF417' : 'REF/SER'} · {l.payload}</div>
                   ))}
@@ -128,6 +130,7 @@ export default function ReceiveWatchPage() {
             </div>
           </div>
         </Card>
+        {printDialog && <LabelPrintDialog labels={result.labels} title={`Print component labels · ${estimate.number}`} onClose={() => setPrintDialog(false)} onPrinted={(ids) => setPrintedIds(ids)} />}
       </div>
     );
   }
@@ -180,7 +183,7 @@ export default function ReceiveWatchPage() {
           <div><label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Serial #</label><div className="flex gap-2"><input data-testid="identity-serial" value={serial} onChange={(e) => setSerial(e.target.value.toUpperCase())} disabled={readOnly} placeholder="1601-1545646546" className="h-11 flex-1 rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" /><Button type="button" data-testid="identity-ns" onClick={() => setSerial('NS')} disabled={readOnly} title="Serial unreadable — placeholder">NS</Button></div><p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.serial}</span>{serial === 'NS' && <span className="ml-1 text-amber-800">· NS placeholder — skips the same-watch check</span>}</p></div>
           <div><label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Reference</label><input data-testid="identity-reference" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 w-full rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" /><p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.reference}</span></p></div>
         </div>
-        {decoded.confidence !== 'none' && <div data-testid="serial-decode" data-confidence={decoded.confidence} className="mt-3 flex flex-wrap items-center gap-2 rounded-sm bg-canvas px-3 py-2 text-xs"><span className="font-semibold text-ink-500">Decoded:</span><span data-testid="serial-decode-brand" className="font-semibold text-ink">{decoded.brand}</span><span data-testid="serial-decode-model" className="text-ink-700">{decoded.model}</span><span data-testid="serial-decode-caliber" className="font-mono text-ink-700">{decoded.caliber}</span>{decoded.era && <span className="text-ink-400">{decoded.era}</span>}<span className="ml-auto text-[10px] uppercase text-ink-400">{decoded.confidence === 'reference' ? 'from our records' : 'prefix lookup · provisional'}</span></div>}
+        {decoded.confidence !== 'none' && <div data-testid="serial-decode" data-confidence={decoded.confidence} className="mt-3 flex flex-wrap items-center gap-2 rounded-sm bg-canvas px-3 py-2 text-xs"><span className="font-semibold text-ink-500">Decoded:</span><span data-testid="serial-decode-brand" className="font-semibold text-ink">{decoded.brand}</span><span data-testid="serial-decode-model" className="text-ink-700">{decoded.model}</span><span data-testid="serial-decode-caliber" className="font-mono text-ink-700">{decoded.caliber}</span>{decoded.era && <span className="text-ink-400">{decoded.era}</span>}{decoded.model && expWatch.model && !decoded.model.toLowerCase().includes(expWatch.model.split(' ')[0].toLowerCase()) && <span data-testid="serial-decode-mismatch" className="rounded-sm bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">≠ estimate watch ({expWatch.model})</span>}<span className="ml-auto text-[10px] uppercase text-ink-400">{decoded.confidence === 'reference' ? 'from our records' : 'prefix lookup · provisional'}</span></div>}
         {match && <div className="mt-4"><SameWatchFork match={match} expectedClientId={estimate.clientId} decision={decision} onDecide={setDecision} /></div>}
         {!match && serial && serial !== 'NS' && <p data-testid="same-watch-clear" className="mt-3 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> No prior history for this reference + serial.</p>}
       </Card>
