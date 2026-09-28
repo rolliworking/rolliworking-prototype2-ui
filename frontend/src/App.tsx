@@ -64,6 +64,7 @@ import ReceivePackageListPage from '@/pages/intake/ReceivePackageListPage';
 import ReceivePackagePage from '@/pages/intake/ReceivePackagePage';
 import ReceiveWatchListPage from '@/pages/intake/ReceiveWatchListPage';
 import ReceiveWatchPage from '@/pages/intake/ReceiveWatchPage';
+import WatchIntakeHistoryPage from '@/pages/intake/WatchIntakeHistoryPage';
 import WorkOrderPage from '@/pages/intake/WorkOrderPage';
 import TradeScanInPage from '@/pages/intake/TradeScanInPage';
 import JobsPage from '@/pages/JobsPage';
@@ -200,6 +201,7 @@ export default function App() {
                 <Route path="work-order" element={<WorkOrderPage />} />
                 <Route path="inspection" element={<ReceiveWatchListPage />} />
                 <Route path="inspection/:id" element={<ReceiveWatchPage />} />
+                <Route path="history" element={<WatchIntakeHistoryPage />} />
                 <Route path="photos" element={<IntakePhotosPage />} />
                 <Route path="inspect" element={<IntakeInspectionListPage />} />
                 <Route path="inspect/new" element={<IntakeInspectionFormStep />} />

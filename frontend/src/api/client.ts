@@ -783,7 +783,7 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
     const ser = input.serial.trim().toUpperCase();
     labels = [
       queueLabel({ type: 'pdf417_data', packageId: pkg.id, estimateNumber: est.number, payload: `${est.number}|${pkg.subNumber}|${ref}|${ser}|${input.workflow.join(',')}`, lines: [est.number, pkg.subNumber, `${est.client.firstName} ${est.client.lastName}`, `Workflow ${input.workflow.join(' · ')}`] }),
-      queueLabel({ type: 'ref_serial', packageId: pkg.id, estimateNumber: est.number, payload: `${ref} / ${ser}`, lines: [`${est.watch!.brand} ${est.watch!.model}`, `Ref ${ref}`, `Serial ${ser}`] }),
+      queueLabel({ type: 'ref_serial', packageId: pkg.id, estimateNumber: est.number, payload: `${ref} / ${ser}`, lines: watchLabelLines(est.number, est.client.lastName, est.watch!, ref, ser) }),
     ];
     stamp(`Watch received · ${ref} / ${ser} · workflow ${input.workflow.join('+')}${input.sameWatchDecision === 'returning' ? ' · same watch returning' : ''} · 2 labels queued`, pkg.subNumber);
   }
@@ -803,6 +803,69 @@ export async function setLabelPrinted(id: string, printed: boolean): Promise<Lab
   l.printed = printed;
   stamp(`${l.type === 'pdf417_data' ? 'PDF417 data label' : 'Ref/serial label'} ${printed ? 'printed (mock)' : 'marked unprinted'}`, l.estimateNumber);
   return resolve({ ...l });
+}
+
+// ---- Receive Watch extras — watch-label prefill from the serial decode, shared ref·serial scan parser, inspection photos, intake history + post-hoc edit ----
+// Generic prefix families ("116xxx family", "Letter-prefix serial") are not label-worthy — fall back to the estimate's watch
+export const labelModel = (watch: { brand: string; model: string }, serial: string, reference: string) => {
+  const d = decodeSerial(serial, reference);
+  return d.confidence !== 'none' && d.model && !/family|serial/i.test(d.model) ? `${d.brand} ${d.model.replace(/\s*\(.*\)$/, '')}` : `${watch.brand} ${watch.model}`;
+};
+const watchLabelLines = (estNumber: string, lastName: string, watch: { brand: string; model: string }, ref: string, ser: string) => [labelModel(watch, ser, ref), `Ref ${ref}`, `Serial ${ser}`, `${lastName} · ${estNumber}`];
+
+// Accepts "REF / SER", "REF-SER", "Ref 16610 Serial Y528634" or a pasted PDF417 payload (EST|SUB|REF|SER|WF) — one normalisation for the photo flow and the label reprint scan
+export const parseRefSerial = (raw: string): { reference: string; serial: string } | null => {
+  let s = raw.trim().toUpperCase(); if (!s) return null;
+  if (s.includes('|')) { const p = s.split('|').map((x) => x.trim()); return p.length >= 4 && p[2] && p[3] ? { reference: p[2], serial: p[3] } : null; }
+  s = s.replace(/\bREF(?:ERENCE)?\b:?/g, ' ').replace(/\bSER(?:IAL)?\b:?/g, ' ').replace(/\s+/g, ' ').trim();
+  const two = s.split(/\s*\/\s*|\s+/).filter(Boolean);
+  if (two.length === 2) return { reference: two[0], serial: two[1] };
+  if (two.length === 1 && s.includes('-')) {
+    const idxs = [...s].map((c, i) => (c === '-' ? i : -1)).filter((i) => i > 0 && i < s.length - 1);
+    const cands = idxs.map((i) => ({ reference: s.slice(0, i), serial: s.slice(i + 1) }));
+    return cands.find((c) => store.watches.some((w) => w.reference.toUpperCase() === c.reference && w.serial.toUpperCase() === c.serial)) ?? cands[cands.length - 1] ?? null;
+  }
+  return null;
+};
+
+export const isInspectionPhoto = (p: PackagePhoto) => !!p.slot?.startsWith('inspection-');
+export async function addPackageInspectionPhoto(packageId: string, p: { source: 'ipevo' | 'microscope'; dataUrl: string }): Promise<{ pkg: PackageWithRefs; photo: PackagePhoto; attachedToJob?: string }> {
+  const pkg = getPkg(packageId); const a = actor();
+  const n = pkg.photos.filter(isInspectionPhoto).length + 1;
+  const photo: PackagePhoto = { id: newId('iph'), source: 'camera', dataUrl: p.dataUrl, slot: `inspection-${p.source}-${n}`, fileName: `${p.source === 'ipevo' ? 'IPEVO overview' : 'Microscope detail'} ${n}` };
+  pkg.photos.push(photo);
+  const est = pkg.estimateId ? store.estimates.find((e) => e.id === pkg.estimateId) : undefined;
+  const j = est?.jobId ? store.jobs.find((x) => x.id === est.jobId) : undefined;
+  if (j) j.photos.unshift({ ...photo, at: new Date().toISOString(), by: a.by, station: a.station });
+  stamp(`Inspection photo ${n} · ${p.source === 'ipevo' ? 'IPEVO' : 'microscope'}${j ? ` · attached to ${j.number}` : ''}`, pkg.subNumber);
+  return resolve({ pkg: pkgWithRefs(pkg), photo, attachedToJob: j?.number });
+}
+
+export interface IntakeHistoryRow { pkg: PackageWithRefs; labels: LabelJob[]; labeled: boolean; photos: number }
+export async function getIntakeHistory(q = ''): Promise<IntakeHistoryRow[]> {
+  const s = q.trim().toLowerCase();
+  const rows = store.packages.filter((p) => p.inspectedAt).map((p): IntakeHistoryRow => { const pkg = pkgWithRefs(p); const labels = store.labels.filter((l) => l.packageId === p.id); return { pkg, labels, labeled: labels.some((l) => l.printed), photos: p.photos.filter(isInspectionPhoto).length }; });
+  const hit = (r: IntakeHistoryRow) => { const w = r.pkg.estimate?.watch; const c = r.pkg.client; return !s || [w?.brand, w?.model, w?.reference, w?.serial, r.pkg.estimate?.number, r.pkg.subNumber, c?.firstName, c?.lastName].some((x) => x?.toLowerCase().includes(s)); };
+  return resolve(rows.filter(hit).sort((a, b) => (b.pkg.inspectedAt ?? '').localeCompare(a.pkg.inspectedAt ?? '')));
+}
+export async function getLabelsForPackage(packageId: string): Promise<LabelJob[]> { return resolve(store.labels.filter((l) => l.packageId === packageId)); }
+
+export interface IntakeEditInput { reference: string; serial: string; itemLabel?: string; notes?: string; componentsVerified: string[]; workflow: DeptCode[] }
+export async function updateIntakeRecord(packageId: string, input: IntakeEditInput): Promise<PackageWithRefs> {
+  const pkg = getPkg(packageId); if (!pkg.inspectedAt) throw new Error('Watch has not been received yet');
+  const ref = input.reference.trim().toUpperCase(); const ser = input.serial.trim().toUpperCase();
+  if (!ref || !ser) throw new Error('Reference and serial are required (use NS if unreadable)'); if (!input.workflow.length) throw new Error('Pick at least one component code');
+  const est = pkg.estimateId ? store.estimates.find((e) => e.id === pkg.estimateId) : undefined; const watch = est ? store.watches.find((w) => w.id === est.watchId) : undefined;
+  const changes: string[] = [];
+  if (watch && watch.reference !== ref) { changes.push(`ref ${watch.reference}→${ref}`); watch.reference = ref; }
+  if (watch && ser !== 'NS' && watch.serial !== ser) { changes.push(`serial ${watch.serial}→${ser}`); watch.serial = ser; }
+  if ((pkg.workflow ?? []).join() !== input.workflow.join()) { changes.push(`workflow ${(pkg.workflow ?? []).join('+') || '—'}→${input.workflow.join('+')}`); pkg.workflow = [...input.workflow]; }
+  if ((pkg.componentsVerified ?? []).join() !== input.componentsVerified.join()) { changes.push(`components ${input.componentsVerified.join(', ') || '—'}`); pkg.componentsVerified = [...input.componentsVerified]; }
+  if ((pkg.itemLabel ?? '') !== (input.itemLabel ?? '').trim()) { changes.push(`item label "${(input.itemLabel ?? '').trim()}"`); pkg.itemLabel = input.itemLabel?.trim() || undefined; }
+  if ((pkg.notes ?? '') !== (input.notes ?? '').trim()) { changes.push('notes'); pkg.notes = input.notes?.trim() || undefined; }
+  if (est && watch) { const c = fx.clients.find((x) => x.id === est.clientId); store.labels.filter((l) => l.packageId === pkg.id).forEach((l) => { if (l.type === 'ref_serial') { l.payload = `${ref} / ${ser}`; l.lines = watchLabelLines(est.number, c?.lastName ?? '', watch, ref, ser); } else { l.payload = `${est.number}|${pkg.subNumber}|${ref}|${ser}|${(pkg.workflow ?? []).join(',')}`; l.lines[3] = `Workflow ${(pkg.workflow ?? []).join(' · ')}`; } }); }
+  stamp(`Intake record edited · ${changes.join(' · ') || 'no changes'}`, pkg.subNumber);
+  return resolve(pkgWithRefs(pkg));
 }
 
 // ---- Estimates (E3) ---------------------------------------------------------

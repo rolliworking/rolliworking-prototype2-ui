@@ -2,14 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VerificationPhoto } from '@/api/client';
 
 export type CameraState = 'idle' | 'starting' | 'ready' | 'unavailable' | 'denied';
+export interface CameraDevice { deviceId: string; label: string }
 
 const W = 320;
 const H = 240;
 
-export function useCamera(active: boolean) {
+// deviceId lets a caller pin a specific camera (IPEVO vs microscope); devices lists every video input once permission is granted
+export function useCamera(active: boolean, deviceId?: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [status, setStatus] = useState<CameraState>('idle');
+  const [devices, setDevices] = useState<CameraDevice[]>([]);
 
   useEffect(() => {
     if (!active) {
@@ -22,9 +25,10 @@ export function useCamera(active: boolean) {
     }
     let cancelled = false;
     setStatus('starting');
+    const video: MediaTrackConstraints = deviceId ? { deviceId: { exact: deviceId }, width: W, height: H } : { width: W, height: H, facingMode: 'user' };
     navigator.mediaDevices
-      .getUserMedia({ video: { width: W, height: H, facingMode: 'user' }, audio: false })
-      .then((stream) => {
+      .getUserMedia({ video, audio: false })
+      .then(async (stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -32,6 +36,8 @@ export function useCamera(active: boolean) {
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         setStatus('ready');
+        const list = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
+        if (!cancelled) setDevices(list.filter((d) => d.kind === 'videoinput').map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -43,7 +49,7 @@ export function useCamera(active: boolean) {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [active]);
+  }, [active, deviceId]);
 
   const capture = useCallback((): VerificationPhoto => {
     const v = videoRef.current;
@@ -57,5 +63,5 @@ export function useCamera(active: boolean) {
     return { dataUrl: canvas.toDataURL('image/jpeg', 0.7), cameraStatus: 'captured' };
   }, [status]);
 
-  return { videoRef, status, capture };
+  return { videoRef, status, capture, devices };
 }

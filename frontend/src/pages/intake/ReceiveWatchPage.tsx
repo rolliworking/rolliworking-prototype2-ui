@@ -1,10 +1,11 @@
-import { AlertTriangle, ArrowLeft, Check, MessageSquareQuote, Printer, ScanLine, Tags } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Camera, Check, MessageSquareQuote, Printer, ScanLine, Tags } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { DeptCode, ReceiveWatchInput, ReceiveWatchResult, WatchMatch } from '@/api/client';
+import type { DeptCode, PackagePhoto, ReceiveWatchInput, ReceiveWatchResult, WatchMatch } from '@/api/client';
+import { InspectionCameraFlow } from '@/components/inspection/InspectionCameraFlow';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
 import { LabelPrintDialog } from '@/components/intake/LabelBits';
 import { ComponentChecklist, LineChecklist, SameWatchFork } from '@/components/intake/InspectionBits';
@@ -33,6 +34,7 @@ export default function ReceiveWatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReceiveWatchResult | null>(null); const [printDialog, setPrintDialog] = useState(false); const [printedIds, setPrintedIds] = useState<string[]>([]);
   const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
+  const [photos, setPhotos] = useState<PackagePhoto[]>([]); const [cam, setCam] = useState(false); const [photoScan, setPhotoScan] = useState(''); const [photoErr, setPhotoErr] = useState<string | null>(null); const [lastAttach, setLastAttach] = useState<string | null>(null);
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
   useEffect(() => {
@@ -41,6 +43,7 @@ export default function ReceiveWatchPage() {
     setReference(ctx.estimate.watch!.reference);
     setSerial(ctx.estimate.watch!.serial);
     setWorkflow(ctx.suggestedWorkflow);
+    setPhotos(ctx.pkg.photos.filter(api.isInspectionPhoto));
   }, [ctx]);
 
   // Mandatory same-watch check whenever ref + serial settle
@@ -79,6 +82,21 @@ export default function ReceiveWatchPage() {
   const { pkg, estimate } = ctx;
   const expWatch = estimate.watch!;
 
+  // Photo flow is armed by the job's own ref·serial barcode (or typing it) — must resolve to THIS job
+  const armCamera = (raw: string) => {
+    const hit = api.parseRefSerial(raw);
+    if (!hit) { setPhotoErr(`Could not read a ref · serial from “${raw}”`); return; }
+    const same = hit.reference === reference.trim().toUpperCase() && (hit.serial === serial.trim().toUpperCase() || serial.trim().toUpperCase() === 'NS');
+    if (!same) { setPhotoErr(`${hit.reference} / ${hit.serial} is not this job (${reference} / ${serial})`); return; }
+    setPhotoErr(null); setPhotoScan(''); setCam(true);
+  };
+  const onShot = async (p: { source: 'ipevo' | 'microscope'; dataUrl: string }) => {
+    const res = await api.addPackageInspectionPhoto(pkg.id, p);
+    setPhotos((v) => [...v, res.photo]); setLastAttach(res.attachedToJob ?? null);
+  };
+  const cameraEl = cam && <InspectionCameraFlow title={`${estimate.number} · ${reference} / ${serial}`} onShot={onShot} onDone={() => setCam(false)} onClose={() => setCam(false)} />;
+  const photoSummary = photos.length ? `${photos.length} captured · ${photos.filter((p) => p.slot?.includes('ipevo')).length} IPEVO · ${photos.filter((p) => p.slot?.includes('microscope')).length} micro` : 'none yet';
+
   const commit = async (print: boolean) => {
     setBusy(true);
     setError(null);
@@ -110,6 +128,8 @@ export default function ReceiveWatchPage() {
                 {result.pkg.subNumber} · {estimate.number} · {fullName(estimate.client)}
               </div>
               <div className="mt-2"><StatusPill status={result.pkg.status} testId="inspection-result-status" /></div>
+              <div className="mt-2 flex items-center gap-2 text-xs text-ink-500" data-testid="inspection-result-photos"><Camera size={12} /> Inspection photos: <span data-testid="inspection-result-photo-count" className="font-semibold text-ink">{photoSummary}</span><Button size="sm" className="ml-auto" data-testid="inspection-result-camera" onClick={() => setCam(true)}>{photos.length ? 'Add more' : 'Capture now'}</Button></div>
+              {photos.length > 0 && <div className="mt-2"><PhotoStrip photos={photos} size="sm" /></div>}
               {hold ? (
                 <ul className="mt-3 space-y-1 text-[13px] text-rose-800" data-testid="inspection-result-reasons">
                   {result.discrepancies.map((d) => <li key={d} className="flex gap-2"><span>•</span>{d}</li>)}
@@ -125,12 +145,14 @@ export default function ReceiveWatchPage() {
               <div className="mt-4 flex gap-2">
                 <Link to="/intake/inspection" data-testid="inspection-result-back"><Button>Back to bins</Button></Link>
                 {!hold && <Link to="/intake/labels" data-testid="inspection-result-labels-link"><Button>Open Label Queue</Button></Link>}
-                {!hold && <Link to={`/inspection/new?est=${encodeURIComponent(estimate.number)}&camera=1`} data-testid="inspection-result-start-inspection"><Button variant="primary">Start inspection → camera (2× IPEVO, then microscope)</Button></Link>}
+                {!hold && <Link to="/intake/history" data-testid="inspection-result-history-link"><Button>Intake History</Button></Link>}
+                {!hold && <Link to={`/inspection/new?est=${encodeURIComponent(estimate.number)}`} data-testid="inspection-result-start-inspection"><Button variant="primary">Start inspection form →</Button></Link>}
               </div>
             </div>
           </div>
         </Card>
-        {printDialog && <LabelPrintDialog labels={result.labels} title={`Print component labels · ${estimate.number}`} onClose={() => setPrintDialog(false)} onPrinted={(ids) => setPrintedIds(ids)} />}
+        {cameraEl}
+        {printDialog && <LabelPrintDialog labels={result.labels} title={`Print Intake Labels · ${estimate.number} · ${estimate.client.lastName}`} onClose={() => setPrintDialog(false)} onPrinted={(ids) => setPrintedIds(ids)} />}
       </div>
     );
   }
@@ -188,17 +210,29 @@ export default function ReceiveWatchPage() {
         {!match && serial && serial !== 'NS' && <p data-testid="same-watch-clear" className="mt-3 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> No prior history for this reference + serial.</p>}
       </Card>
 
-      <Card title="7 · Date received" testId="rw-date-card"><div className="text-sm text-ink" data-testid="rw-date-received">{fmtDate(pkg.processedAt ?? pkg.arrivedAt)} {fmtTime(pkg.processedAt ?? pkg.arrivedAt)} <span className="text-xs text-ink-400">· auto-filled from the receive timestamp · {pkg.carrier} {pkg.trackingNumber ?? ''}</span></div></Card>
+      <Card title="7 · Inspection photos" subtitle="Scan or enter the job’s ref · serial barcode → IPEVO fires first for 2 overview shots, then hands off to the microscope (no cap) · every shot attaches to the job file as it’s taken" testId="rw-photos-card" action={<span data-testid="rw-photo-count" className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${photos.length ? 'bg-moss-50 text-moss-700' : 'bg-canvas text-ink-500'}`}>{photos.length} captured</span>}>
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (photoScan.trim()) armCamera(photoScan); }}>
+          <div className="relative flex-1"><ScanLine size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" /><input data-testid="rw-photo-scan" value={photoScan} onChange={(e) => setPhotoScan(e.target.value)} disabled={readOnly} placeholder={`Scan the ref · serial barcode · or type ${reference} / ${serial} · ${reference}-${serial} · pasted label payload`} className="h-11 w-full rounded-sm border border-line bg-canvas pl-9 pr-3 font-mono text-[15px] focus:border-ink focus:bg-surface focus:outline-none" /></div>
+          <Button type="submit" data-testid="rw-photo-scan-go" disabled={readOnly || !photoScan.trim()}>Resolve</Button>
+          <Button type="button" variant="primary" data-testid="rw-photo-use-fields" disabled={readOnly || !reference.trim() || !serial.trim()} onClick={() => armCamera(`${reference} / ${serial}`)}><Camera size={13} /> Use ref + serial above</Button>
+        </form>
+        {photoErr && <p data-testid="rw-photo-error" className="mt-1 text-xs text-rose-700">{photoErr}</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-500"><span data-testid="rw-photo-summary">{photoSummary}</span>{lastAttach && <span data-testid="rw-photo-attached" className="rounded-sm bg-moss-50 px-1.5 py-0.5 font-medium text-moss-700">attached to {lastAttach}</span>}{!lastAttach && photos.length > 0 && <span className="text-ink-400">saved on {pkg.subNumber} · cascades to the job when it’s opened</span>}</div>
+        {photos.length > 0 && <div className="mt-2"><PhotoStrip photos={photos} /></div>}
+      </Card>
 
-      <Card title="8 · Copy of the estimate" subtitle={`${estimate.number} · ${fullName(estimate.client)} · verify each line is in scope`} testId="inspection-lines-card">
+      <Card title="8 · Date received" testId="rw-date-card"><div className="text-sm text-ink" data-testid="rw-date-received">{fmtDate(pkg.processedAt ?? pkg.arrivedAt)} {fmtTime(pkg.processedAt ?? pkg.arrivedAt)} <span className="text-xs text-ink-400">· auto-filled from the receive timestamp · {pkg.carrier} {pkg.trackingNumber ?? ''}</span></div></Card>
+
+      <Card title="9 · Copy of the estimate" subtitle={`${estimate.number} · ${fullName(estimate.client)} · verify each line is in scope`} testId="inspection-lines-card">
         <LineChecklist lines={estimate.lines} verified={linesVerified} onToggle={(i) => setLinesVerified((v) => (v.includes(i) ? v.filter((x) => x !== i) : [...v, i]))} />
         <div className="mt-2 flex justify-end text-xs text-ink-500">Estimate total <span className="ml-2 font-mono font-semibold text-ink">{fmtMoney(estimate.total)}</span></div>
       </Card>
 
-      <Card title="9 · Save" testId="inspection-commit-card" accent={discrepancies.length ? 'none' : 'moss'} className={discrepancies.length ? 'border-l-[3px] border-rose-500' : ''}>
+      <Card title="10 · Save" testId="inspection-commit-card" accent={discrepancies.length ? 'none' : 'moss'} className={discrepancies.length ? 'border-l-[3px] border-rose-500' : ''}>
         <ul className="space-y-1 text-xs text-ink-700">
           <li className="flex items-center gap-1.5"><Check size={12} className={linesVerified.length === estimate.lines.length ? 'text-moss' : 'text-ink-300'} /> {linesVerified.length}/{estimate.lines.length} estimate lines verified</li>
           <li className="flex items-center gap-1.5"><Check size={12} className={components.length === ctx.expectedComponents.length ? 'text-moss' : 'text-rose-600'} /> {components.length}/{ctx.expectedComponents.length} expected components verified in hand</li>
+          <li className="flex items-center gap-1.5"><Check size={12} className={photos.length >= 2 ? 'text-moss' : 'text-ink-300'} /> Inspection photos: {photoSummary}</li>
           <li className="flex items-center gap-1.5"><Check size={12} className={match ? (decision !== 'n/a' ? 'text-moss' : 'text-amber-600') : 'text-moss'} /> Same-watch check {match ? (decision === 'n/a' ? 'needs a decision' : decision === 'returning' ? 'same watch returning' : 'conflict flagged') : 'clear'}</li>
         </ul>
         {discrepancies.length > 0 && <div data-testid="discrepancy-list" className="mt-3 rounded-sm bg-rose-50 p-2.5 text-xs text-rose-800"><div className="mb-1 inline-flex items-center gap-1 font-semibold"><AlertTriangle size={12} /> Discrepancy — save places a hold</div><ul className="space-y-0.5">{discrepancies.map((d) => <li key={d}>• {d}</li>)}</ul></div>}
@@ -208,8 +242,9 @@ export default function ReceiveWatchPage() {
           <Button data-testid="inspection-commit" disabled={!canCommit || busy} onClick={() => commit(false)}>{busy ? 'Saving…' : 'Save'}</Button>
           <Button variant="primary" data-testid="inspection-save-print" className={discrepancies.length ? '!bg-rose-700 hover:!bg-rose-800' : ''} disabled={!canCommit || busy} onClick={() => commit(true)}><Printer size={13} /> {busy ? 'Saving…' : discrepancies.length ? 'Save → discrepancy hold' : 'Save & Print labels'}</Button>
         </div>
-        <p className="mt-2 text-right text-[11px] leading-4 text-ink-400">{forkPending ? 'Resolve the same-watch check first.' : discrepancies.length ? 'Reason is recorded on the package; nothing is queued for print.' : 'Save queues the component labels unprinted · Save & Print marks them printed and routes the watch.'}</p>
+        <p className="mt-2 text-right text-[11px] leading-4 text-ink-400">{forkPending ? 'Resolve the same-watch check first.' : discrepancies.length ? 'Reason is recorded on the package; nothing is queued for print.' : 'Save queues the intake labels unprinted · Save & Print opens Print Intake Labels pre-filled with ref#, serial#, model, client and est#.'}</p>
       </Card>
+      {cameraEl}
     </div>
   );
 }

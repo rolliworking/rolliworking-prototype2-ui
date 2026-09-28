@@ -66,7 +66,7 @@ export const PhotoStrip = ({ photos, onRemove, size = 'md' }: { photos: PackageP
     {photos.map((p) => (
       <div key={p.id} className="group relative" data-testid={`photo-${p.id}`}>
         <img src={p.dataUrl} alt={p.fileName ?? 'photo'} className={clsx('rounded-sm object-cover ring-1 ring-line', size === 'sm' ? 'h-10 w-[54px]' : 'h-[72px] w-24')} />
-        <span className="absolute bottom-0.5 left-0.5 rounded-sm bg-ink/70 px-1 text-[9px] font-medium uppercase text-white">{p.source}</span>
+        <span className="absolute bottom-0.5 left-0.5 rounded-sm bg-ink/70 px-1 text-[9px] font-medium uppercase text-white">{p.slot?.includes('ipevo') ? 'ipevo' : p.slot?.includes('microscope') ? 'micro' : p.source}</span>
         {onRemove && (
           <button
             type="button"
