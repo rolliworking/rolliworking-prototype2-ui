@@ -5,6 +5,7 @@ import { ArrowRight, MonitorSmartphone, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
+import * as hl from '@/api/hitlist';
 import { useAuth } from '@/auth/AuthContext';
 import { Button, PageHeader } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -21,6 +22,7 @@ export default function SetupPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAdmin = user!.accessTier === 'manager';
+  const [home, setHome] = useState<hl.HomeScreen>(() => hl.getHomeScreen(user!.id));
 
   const rename = async (e: FormEvent) => {
     e.preventDefault();
@@ -55,6 +57,14 @@ export default function SetupPage() {
             <div>
               <div data-testid="setup-station-name" className="text-[15px] font-semibold tracking-tight text-ink">{station?.name}</div>
               <div className="text-[11px] text-ink-400">Stamps every sign-in and audit event from this device</div>
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-line pt-4" data-testid="setup-home-screen">
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Home screen · this device · {user!.shortName}</label>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {(['default', 'hitlist', ...(hl.isSupervisor(user) ? ['team'] : [])] as hl.HomeScreen[]).map((h) => <button key={h} type="button" data-testid={`home-screen-${h}`} aria-pressed={home === h} onClick={() => { hl.setHomeScreen(user!.id, h); setHome(h); }} className={`h-8 rounded-full border px-3 font-medium transition-colors ${home === h ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink-700 hover:border-ink-300'}`}>{h === 'default' ? 'Dashboard (default)' : h === 'hitlist' ? 'My Hitlist' : 'Team Hitlist'}</button>)}
+              <span className="text-ink-400">{home === 'default' ? 'Sign-in lands on the Dashboard.' : `Set Hitlist as home screen — sign-in and PIN switch land on ${home === 'team' ? 'the team rollup' : 'your Hitlist'} on this device (iPad-only stations).`}</span>
             </div>
           </div>
 

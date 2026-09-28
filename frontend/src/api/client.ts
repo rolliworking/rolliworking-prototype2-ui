@@ -1389,7 +1389,7 @@ export async function saveInspectionReport(id: string, answers: Record<string, s
   jobStamp(j, `Inspection report saved · ${INSPECTION_QUESTIONS.map((q) => `${q.label} ${answers[q.key]}`).join(', ')}`);
   return resolve(jobRefs(j));
 }
-export const ROLES: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker'];
+export const ROLES: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker', 'polisher', 'band_tech'];
 export const roleHolders = (role: Role): User[] => fx.users.filter((u) => u.roles.includes(role));
 
 export async function setJobOwner(id: string, role: Role | null): Promise<JobWithRefs> {
@@ -5266,6 +5266,13 @@ export const shortNameOf = (userId: string) => fx.users.find((u) => u.id === use
 
 // ---- Appointments bridge (data module lives in ./appointments.ts; these expose the store bits it needs) ----
 export const actorInfo = () => actor();
+// ---- Hitlist bridge (per-person hit lists, inbox, supervisor rollup live in ./hitlist.ts) ----
+export const hitlistBridge = {
+  users: () => fx.users, pinned: () => store.pinned, tasks: () => store.tasks, jobs: () => store.jobs, watches: () => store.watches, clients: () => fx.clients,
+  stationId: () => readStation()?.id ?? 'unknown', division: getSessionDivision, matches: assigneeMatches, today: (userId: string) => getTodayMock(userId), newId, label: assigneeLabel, actor: () => actor(),
+  audit: (detail: string) => appendAudit({ type: 'pin', stationName: actor().station, userShortName: actor().user?.shortName, userDisplayName: actor().user?.displayName, detail }),
+  jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
+};
 export const auditAppointments = (detail: string) => appendAudit({ type: 'appointments', stationName: actor().station, userShortName: actor().user?.shortName, detail });
 export interface ApptRefLookup { ref: string; clientId: string; clientName: string; email: string; phone: string; watch?: string; kind: 'estimate' | 'sales_order' }
 // Drop-off books against an estimate #; pick-up against a sales order # (or the SO's job #)

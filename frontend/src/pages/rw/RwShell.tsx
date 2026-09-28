@@ -11,6 +11,7 @@ import { IntercomButton } from '@/components/layout/IntercomPanel';
 import { CornerLookup } from '@/components/layout/CornerLookup';
 
 export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTier[]; end?: boolean }[] = [
+  { key: 'hitlist', label: 'Hitlist', path: '/rw/hitlist', tiers: ['manager', 'concierge'] },
   { key: 'bench', label: 'Bench', path: '/rw', tiers: ['manager', 'concierge'], end: true },
   { key: 'floor', label: 'Shop Floor', path: '/rw/floor', tiers: ['manager', 'concierge'] },
   { key: 'assign', label: 'Assign / Move', path: '/rw/assign', tiers: ['manager', 'concierge'] },
@@ -30,7 +31,6 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
   { key: 'bench-pad', label: 'Bench Pad', path: '/rw/bench', tiers: ['manager', 'concierge'] },
   { key: 'picking', label: 'Picking', path: '/rw/picking', tiers: ['manager', 'concierge'] },
   { key: 'evidence', label: 'Evidence', path: '/rw/evidence', tiers: ['manager', 'concierge'] },
-  { key: 'today', label: 'My today', path: '/rw/today', tiers: ['manager', 'concierge'] },
 ];
 
 const JOB_LINK = /^\/jobs\/([^/?#]+)$/;

@@ -56,7 +56,7 @@ const MGR: AccessTier[] = ['manager'];
 
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, tiers: ALL, built: true, blurb: 'Shop overview and daily priorities.' },
-  { key: 'today', label: 'Today', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your derived hit list — owner actions, bench work, holds, discrepancies, tasks.' },
+  { key: 'today', label: 'Hitlist', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your personal work queue — bookmarkable at /hitlist/{you}: inbox, pinned, derived rows, tasks. Supervisors get a team rollup.' },
   { key: 'requests', label: 'Requests', path: '/requests', icon: MessageSquarePlus, tiers: ALL, group: 'intake', built: true, blurb: 'Service requests queue — calls, emails, web forms and kiosk check-ins; kiosk matches to confirm.' },
   { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, group: 'intake', built: true, blurb: 'Client messages from RolliConnect; replies queue to Outbox.' },
   { key: 'inbound', label: 'Shipping', path: '/shipping/inbound', icon: Truck, tiers: ALL, group: 'intake', built: true, blurb: 'Pre-arrival shipping: label requests, outstanding labels, in transit, delivered-unscanned. Track a package for a caller.' },
@@ -70,7 +70,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'supervisor', label: 'Supervisor', path: '/supervisor', icon: ClipboardCheck, tiers: MGR, group: 'rw', built: true, blurb: 'Assign watchmakers, approve parts, park holds, QC queue.' },
   { key: 'floor', label: 'Shop Floor', path: '/floor', icon: Map, tiers: MGR, group: 'rw', built: true, blurb: 'Station map — WATCH / BRACELET tracks, manager safes, gate scans, Bulk assign, Component lookup.' },
   { key: 'assign-move', label: 'Assign / Move', path: '/assign', icon: MousePointerClick, tiers: MGR, built: true, blurb: 'Click a destination on the map, scan labels, commit — moves jobs without the detail board.' },
-  { key: 'hitlist', label: 'MH Hitlist', path: '/hitlist', icon: ShieldAlert, tiers: ['manager'], ownerOnly: true, built: true, blurb: 'Owner accountability (MH only): live client-asset $ on premises + every bypass use.' },
+  { key: 'hitlist', label: 'MH Accountability', path: '/hitlist/owner', icon: ShieldAlert, tiers: ['manager'], ownerOnly: true, built: true, blurb: 'Owner accountability (MH only): live client-asset $ on premises + every bypass use.' },
   { key: 'custody', label: 'Custody', path: '/custody', icon: Hand, tiers: MGR, built: true, blurb: 'Who physically holds which watch head / case / bracelet right now, grouped by person.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, group: 'clients', built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, group: 'parts', built: true, blurb: 'Parts, stock levels and reorder alerts.' },

@@ -2,6 +2,7 @@ import { MonitorSmartphone } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
+import { homeRouteFor } from '@/api/hitlist';
 import type { User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { PrototypeBanner } from '@/components/layout/AppShell';
@@ -60,7 +61,7 @@ export default function SignInPage() {
                   user={selected}
                   signedInToday={todayIds.has(selected.id)}
                   onBack={() => setSelected(null)}
-                  onDone={() => navigate('/', { replace: true })}
+                  onDone={() => navigate(homeRouteFor(selected), { replace: true })}
                 />
               ) : (
                 <div data-testid="sign-in-empty" className="grid h-full min-h-[240px] place-items-center rounded-md border border-dashed border-ink-300/70 text-center text-xs text-ink-400">

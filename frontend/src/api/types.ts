@@ -1,6 +1,6 @@
 export type AccessTier = 'manager' | 'concierge';
 
-export type Role = 'concierge' | 'manager' | 'inspector' | 'watchmaker';
+export type Role = 'concierge' | 'manager' | 'inspector' | 'watchmaker' | 'polisher' | 'band_tech';
 
 export type Division = 'rolliworks' | 'rollishop';
 
@@ -371,6 +371,8 @@ export interface PinnedItem {
   clientId?: string;
   estimateId?: string;
   messageId?: string;
+  inboxId?: string;
+  photo?: PackagePhoto;
   createdAt: string;
   station: string;
   dismissedAt?: string;

@@ -56,7 +56,8 @@ import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
 import EstimatesListPage from '@/pages/estimates/EstimatesListPage';
-import TodayPage from '@/pages/TodayPage';
+import PersonHitlistPage, { HitlistIndex, HomeRedirect } from '@/pages/hitlist/PersonHitlistPage';
+import TeamHitlistPage from '@/pages/hitlist/TeamHitlistPage';
 import ArrivalPage from '@/pages/intake/ArrivalPage';
 import LabelQueuePage from '@/pages/intake/LabelQueuePage';
 import OutboxPage from '@/pages/intake/OutboxPage';
@@ -150,7 +151,10 @@ export default function App() {
             <Route path="evidence" element={<RwEvidencePage />} />
             <Route path="testing" element={<RwTestingQueuePage />} />
             <Route path="testing/test/:jobId" element={<RwTestingTestPage />} />
-            <Route path="today" element={<TodayPage />} />
+            <Route path="today" element={<HitlistIndex />} />
+            <Route path="hitlist" element={<HitlistIndex />} />
+            <Route path="hitlist/:slug" element={<PersonHitlistPage />} />
+            <Route path="hitlist/:slug/team" element={<TeamHitlistPage />} />
             <Route path="*" element={<Navigate to="/rw" replace />} />
           </Route>
           {/* E13 — RGTime phone time-clock (own remembered session) and the public walk-in kiosk (no session, no chrome) */}
@@ -181,8 +185,13 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<TierGate />}>
               <Route index element={<Dashboard />} />
-              <Route path="/today" element={<TodayPage />} />
+              <Route path="/home" element={<HomeRedirect />} />
+              <Route path="/today" element={<HitlistIndex />} />
               <Route path="/hit-list" element={<Navigate to="/today" replace />} />
+              <Route path="/hitlist" element={<HitlistIndex />} />
+              <Route path="/hitlist/owner" element={<HitlistPage />} />
+              <Route path="/hitlist/:slug" element={<PersonHitlistPage />} />
+              <Route path="/hitlist/:slug/team" element={<TeamHitlistPage />} />
               <Route path="/estimates" element={<EstimatesListPage />} />
               <Route path="/estimates/new" element={<EstimateCreatePage />} />
               <Route path="/estimates/:id" element={<EstimateDetailPage />} />
@@ -225,7 +234,6 @@ export default function App() {
               <Route path="/custody" element={<CustodyPage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/parts" element={<PartsPage />} />
-              <Route path="/hitlist" element={<HitlistPage />} />
               <Route path="/appointments" element={<SchedulePage />} />
               <Route path="/swo" element={<SwoPage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />

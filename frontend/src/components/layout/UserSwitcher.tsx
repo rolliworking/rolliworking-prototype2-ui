@@ -2,6 +2,7 @@ import { ArrowLeftRight, ChevronDown, LogOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
+import { homeRouteFor } from '@/api/hitlist';
 import type { User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { PinInput } from '@/components/auth/PinInput';
@@ -28,7 +29,7 @@ export const UserSwitcher = () => {
   const doSwitch = async (pin: string) => {
     await switchWithPin(target!.id, pin);
     setOpen(false);
-    navigate('/', { replace: true });
+    navigate(homeRouteFor(target!), { replace: true });
   };
 
   const signInOther = async () => {

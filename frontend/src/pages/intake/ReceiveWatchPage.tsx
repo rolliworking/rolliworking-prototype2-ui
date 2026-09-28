@@ -1,9 +1,11 @@
-import { AlertTriangle, ArrowLeft, Camera, Check, MessageSquareQuote, Printer, ScanLine, Tags } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Camera, Check, Flag, MessageSquareQuote, Printer, ScanLine, Tags } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import * as hl from '@/api/hitlist';
+import { FlagToPicker, flagAssignee } from '@/components/today/FlagTo';
 import type { DeptCode, PackagePhoto, ReceiveWatchInput, ReceiveWatchResult, WatchMatch } from '@/api/client';
 import { InspectionCameraFlow } from '@/components/inspection/InspectionCameraFlow';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
@@ -35,6 +37,7 @@ export default function ReceiveWatchPage() {
   const [result, setResult] = useState<ReceiveWatchResult | null>(null); const [printDialog, setPrintDialog] = useState(false); const [printedIds, setPrintedIds] = useState<string[]>([]);
   const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
   const [photos, setPhotos] = useState<PackagePhoto[]>([]); const [cam, setCam] = useState(false); const [photoScan, setPhotoScan] = useState(''); const [photoErr, setPhotoErr] = useState<string | null>(null); const [lastAttach, setLastAttach] = useState<string | null>(null);
+  const [flag, setFlag] = useState(''); const [flagNote, setFlagNote] = useState(''); const [flagBusy, setFlagBusy] = useState(false); const [flagMsg, setFlagMsg] = useState<string | null>(null);
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
   useEffect(() => {
@@ -219,6 +222,11 @@ export default function ReceiveWatchPage() {
         {photoErr && <p data-testid="rw-photo-error" className="mt-1 text-xs text-rose-700">{photoErr}</p>}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-500"><span data-testid="rw-photo-summary">{photoSummary}</span>{lastAttach && <span data-testid="rw-photo-attached" className="rounded-sm bg-moss-50 px-1.5 py-0.5 font-medium text-moss-700">attached to {lastAttach}</span>}{!lastAttach && photos.length > 0 && <span className="text-ink-400">saved on {pkg.subNumber} · cascades to the job when it’s opened</span>}</div>
         {photos.length > 0 && <div className="mt-2"><PhotoStrip photos={photos} /></div>}
+        {photos.length > 0 && !readOnly && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          <FlagToPicker value={flag} onChange={setFlag} note={flagNote} onNote={setFlagNote} testId="rw-flag-to" />
+          {flag && <Button size="sm" variant="primary" data-testid="rw-flag-send" disabled={flagBusy} onClick={async () => { const to = flagAssignee(flag); if (!to) return; setFlagBusy(true); try { const last = photos[photos.length - 1]; await hl.flagToHitlist({ to, text: flagNote || `Inspection photo · ${estimate.number} ${reference} / ${serial}`, photo: last, jobId: estimate.jobId }); setFlagMsg(`Latest shot flagged to ${api.assigneeLabel(to).split(' →')[0]} — on their Hitlist inbox`); setFlag(''); setFlagNote(''); } finally { setFlagBusy(false); } }}><Flag size={12} /> Send latest shot</Button>}
+          {flagMsg && <span data-testid="rw-flag-msg" className="rounded-sm bg-moss-50 px-1.5 py-0.5 text-xs font-medium text-moss-700">{flagMsg}</span>}
+        </div>}
       </Card>
 
       <Card title="8 · Date received" testId="rw-date-card"><div className="text-sm text-ink" data-testid="rw-date-received">{fmtDate(pkg.processedAt ?? pkg.arrivedAt)} {fmtTime(pkg.processedAt ?? pkg.arrivedAt)} <span className="text-xs text-ink-400">· auto-filled from the receive timestamp · {pkg.carrier} {pkg.trackingNumber ?? ''}</span></div></Card>
