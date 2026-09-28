@@ -2938,7 +2938,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
 }
 
 // ---- E9 RS modules ---------------------------------------------------------------------------------
-import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateKey, UserAdminInput, Vendor } from './types';
+import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateKey, UserAdminInput, Vendor, VendorInput, VendorPartRow, VendorSummary } from './types';
 
 const rs = {
   vendors: fx.vendors.map((v): Vendor => ({ ...v })),
@@ -2976,13 +2976,33 @@ const poRefs = (p: PurchaseOrder): PurchaseOrderWithRefs => ({ ...p, vendor: byI
 const poTotal = (p: PurchaseOrder) => { p.total = p.lines.reduce((t, l) => t + l.qty * l.unitCost, 0); };
 export async function getVendors(): Promise<Vendor[]> { return resolve([...rs.vendors]); }
 export async function getVendor(id: string): Promise<Vendor | null> { return resolve(rs.vendors.find((v) => v.id === id) ?? null); }
-export async function saveVendor(input: Omit<Vendor, 'id' | 'active'> & { id?: string }): Promise<Vendor> {
+// ONE vendor record — created here, via CSV import or auto-catalog on a PO line: same fields, same id, referenced by parts / POs / price history
+export async function saveVendor(input: VendorInput): Promise<Vendor> {
   if (!input.name.trim()) throw new Error('Vendor name is required');
+  const dup = rs.vendors.find((v) => v.id !== input.id && v.name.trim().toLowerCase() === input.name.trim().toLowerCase()); if (dup) throw new Error(`A vendor named "${dup.name}" already exists`);
   const existing = input.id ? rs.vendors.find((v) => v.id === input.id) : undefined;
-  const v: Vendor = existing ? Object.assign(existing, { ...input }) : { ...input, id: newId('v'), active: true };
+  const { id: _id, ...fields } = input; void _id;
+  const v: Vendor = existing ? Object.assign(existing, fields, { name: input.name.trim() }) : { ...fields, name: input.name.trim(), id: newId('v'), active: input.active ?? true, createdVia: 'vendors_screen' };
   if (!existing) rs.vendors.push(v);
   rsStamp('purchasing', `Vendor ${existing ? 'updated' : 'created'} · ${v.name}`);
   return resolve({ ...v });
+}
+const vendorLinkedParts = (vendorId: string) => { ensurePartsModule(); const ids = new Set(store.parts.filter((p) => p.vendorIds?.includes(vendorId)).map((p) => p.id)); inv.history.filter((h) => h.vendorId === vendorId).forEach((h) => ids.add(h.partId)); return [...ids]; };
+const vendorTurnaround = (vendorId: string): number | undefined => { const d = rs.pos.filter((p) => p.vendorId === vendorId && p.sentAt && p.receivedAt).map((p) => (new Date(p.receivedAt!).getTime() - new Date(p.sentAt!).getTime()) / 86_400_000); return d.length ? Math.round((d.reduce((a, b) => a + b, 0) / d.length) * 10) / 10 : undefined; };
+const vendorLastOrder = (vendorId: string): string | undefined => [...rs.pos.filter((p) => p.vendorId === vendorId && p.status !== 'cancelled').map((p) => p.sentAt ?? p.createdAt), ...inv.history.filter((h) => h.vendorId === vendorId).map((h) => h.at)].sort().pop();
+export async function getVendorSummaries(): Promise<VendorSummary[]> {
+  return resolve(rs.vendors.map((v): VendorSummary => ({ vendor: { ...v }, partsLinked: vendorLinkedParts(v.id).length, lastOrderAt: vendorLastOrder(v.id), avgTurnaroundDays: vendorTurnaround(v.id), openPos: vendorOpenPos(v.id) })).sort((a, b) => Number(b.vendor.active) - Number(a.vendor.active) || a.vendor.name.localeCompare(b.vendor.name)));
+}
+export interface VendorDetail { summary: VendorSummary; parts: VendorPartRow[]; openPos: PurchaseOrderWithRefs[]; pastPos: PurchaseOrderWithRefs[]; history: (PurchaseHistoryRow & { partNumber: string; partName: string })[] }
+// Detail = every vendor-scoped thing already built, rolled up: parts ranked by last price paid (pricing intelligence), open / past POs, purchase history
+export async function getVendorDetail(id: string): Promise<VendorDetail> {
+  const v = byId(rs.vendors, id); const s = (await getVendorSummaries()).find((x) => x.vendor.id === id)!;
+  const parts = vendorLinkedParts(id).map((pid): VendorPartRow => { const p = byId(store.parts, pid); const pr = partPricingSync(pid); const mine = pr.vendors.find((x) => x.vendorId === id); const other = pr.vendors.filter((x) => x.vendorId !== id).sort((a, b) => a.lastPrice - b.lastPrice)[0]; return { partId: pid, partNumber: p.partNumber, name: p.name, lastPrice: mine?.lastPrice, lastAt: mine?.lastAt, buys: mine?.buys ?? 0, avgCost: pr.avgCost, cheapestElsewhere: other && mine && other.lastPrice < mine.lastPrice ? { vendorName: other.vendorName, price: other.lastPrice } : undefined }; })
+    .sort((a, b) => (b.lastPrice ?? -1) - (a.lastPrice ?? -1) || a.partNumber.localeCompare(b.partNumber));
+  const pos = rs.pos.filter((p) => p.vendorId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(poRefs);
+  const isOpen = (p: PurchaseOrder) => p.status === 'draft' || p.status === 'sent' || p.status === 'partially_received';
+  void v;
+  return resolve({ summary: s, parts, openPos: pos.filter(isOpen), pastPos: pos.filter((p) => !isOpen(p)), history: vendorHistory(id).map((h) => { const p = store.parts.find((x) => x.id === h.partId); return { ...h, partNumber: p?.partNumber ?? h.partId, partName: p?.name ?? '' }; }) });
 }
 export async function setVendorActive(id: string, active: boolean): Promise<Vendor> { const v = byId(rs.vendors, id); v.active = active; rsStamp('purchasing', `Vendor ${active ? 'reactivated' : 'retired'} · ${v.name}`); return resolve({ ...v }); }
 export async function getPurchaseOrders(): Promise<PurchaseOrderWithRefs[]> { return resolve([...rs.pos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(poRefs)); }
@@ -3012,7 +3032,7 @@ export async function cancelPurchaseOrder(id: string, reason: string): Promise<P
 export async function receivePurchaseOrder(id: string, qtyByLine: Record<string, number>, putawayLocationId?: string): Promise<PurchaseOrderWithRefs> {
   const p = byId(rs.pos, id); if (!['sent', 'partially_received'].includes(p.status)) throw new Error('PO must be sent before receiving');
   let any = false; const dest = putawayLocationId ?? p.locationId; const a0 = actor();
-  p.lines.forEach((l) => { const want = qtyByLine[l.id] ?? 0; const q = Math.min(want, l.qty - l.receivedQty); if (want > l.qty - l.receivedQty) rsStamp('purchasing', `${p.number} · ${l.partNumber} OVERAGE: ${want} arrived vs ${l.qty - l.receivedQty} open — flagged`); if (q > 0) { l.receivedQty += q; any = true; move('receipt', l.partId, dest, q, `Received against ${p.number}`, { ref: p.number, poId: p.id }); inv.history.push({ id: newId('ph'), at: new Date().toISOString(), vendorId: p.vendorId, partId: l.partId, qty: q, unitPrice: l.unitCost, poNumber: p.number });
+  p.lines.forEach((l) => { const want = qtyByLine[l.id] ?? 0; const q = Math.min(want, l.qty - l.receivedQty); if (want > l.qty - l.receivedQty) rsStamp('purchasing', `${p.number} · ${l.partNumber} OVERAGE: ${want} arrived vs ${l.qty - l.receivedQty} open — flagged`); if (q > 0) { l.receivedQty += q; any = true; move('receipt', l.partId, dest, q, `Received against ${p.number}`, { ref: p.number, poId: p.id }); inv.history.push({ id: newId('ph'), at: new Date().toISOString(), vendorId: p.vendorId, partId: l.partId, qty: q, unitPrice: Math.round(l.unitCost * 100), poNumber: p.number });
     if (l.requestId) { const r = store.partsRequests.find((x) => x.id === l.requestId); if (r && r.status !== 'received') { r.status = 'received'; partsStamp(r, `received against ${p.number} · +${q} at ${byId(rs.locations, dest).name}`); const j = getJobRow(r.jobId); const h = activeHold(j); if (h && h.reason.includes(r.number)) { h.releasedAt = new Date().toISOString(); h.releasedBy = a0.by; } const requester = fx.users.find((u) => u.shortName === r.requestedBy); store.pinned.unshift({ id: newId('pin'), title: `Parts received · ${r.number} ${l.partNumber} for ${j.number} — back on the bench`, assignedTo: requester ? { type: 'user', shortName: requester.shortName } : { type: 'role', role: 'manager' }, createdBy: a0.by, jobId: j.id, createdAt: new Date().toISOString(), station: a0.station, division: j.division }); } }
     inv.needs = inv.needs.filter((n) => n.partId !== l.partId); } });
   if (!any) throw new Error('Enter a quantity to receive');
@@ -3955,12 +3975,16 @@ const minutesSincePayment = (o: SalesOrder): number | undefined => { const last 
 const logBypass = (e: Omit<BypassEvent, 'id' | 'by' | 'station' | 'at'>) => { const a = actor(); const row: BypassEvent = { id: newId('byp'), by: a.by, station: a.station, at: new Date().toISOString(), ...e }; bypasses.unshift(row); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `BYPASS · ${row.kind.replace(/_/g, ' ')} · ${row.jobNumber ?? ''} · ${row.reason}` }); return row; };
 export interface AssetValueRow { jobId: string; jobNumber: string; client: string; watch: string; holders: string[]; value: number; source: 'insurance' | 'dropoff' | 'none' }
 export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[] }
+// Owner-only: the bypass feed tracks staff who may themselves hold manager access, so it is MH's account specifically — not the manager tier
+export const OWNER_USER_ID = 'u-michael';
+export const isOwnerSync = (): boolean => currentUserSync()?.id === OWNER_USER_ID;
 // Seed (once): insured declared values for a spread of in-custody jobs via arrived inbound shipments; two jobs came in as drop-offs (no insurance → $0)
 let assetSeeded = false; const DROPOFF_SEED = new Set(['E02012', 'E02024', 'E02020']);
 const seedAssetValues = () => { if (assetSeeded) return; assetSeeded = true; const vals: Record<string, number> = { E02013: 14_500, E02015: 9_800, E02026: 38_000, E02027: 12_200, E02032: 4_600, E02033: 27_500, E02011: 11_900, E02014: 16_750, E02031: 8_900, E02016: 21_000, E02023: 6_400, E02007: 13_300 };
   Object.entries(vals).forEach(([num, v]) => { const j = store.jobs.find((x) => x.number === num); if (!j?.estimateId || shp.rows.some((r) => r.estimateId === j.estimateId)) return; const c = byId(fx.clients, j.clientId); shp.rows.push({ id: newId('sh'), direction: 'inbound', estimateId: j.estimateId, clientId: j.clientId, stage: 'arrived', carrier: 'UPS', service: 'UPS Next Day Air', serviceLevel: '1_day', declaredValue: v, destinationState: c.state, requestedAt: hAgo(9 * 24), labelSentAt: hAgo(8 * 24), trackingNumber: `1Z${num}SEED`, arrivedAt: hAgo(6 * 24), events: [], stamps: [], emailIds: [] }); });
   ['E02012', 'E02024'].forEach((num) => { const j = store.jobs.find((x) => x.number === num); const pk = j?.packageId ? store.packages.find((p) => p.id === j.packageId) : undefined; if (pk) { pk.source = 'walk_in'; pk.trackingNumber = undefined; } }); };
 export async function getHitlist(): Promise<Hitlist> {
+  if (!isOwnerSync()) throw new Error('MH Hitlist is owner-only');
   seedAssetValues(); const people = await getCustodyByPerson(); const byJob = new Map<string, AssetValueRow>();
   people.forEach((g) => g.items.forEach((it) => { let row = byJob.get(it.jobId); if (!row) { const j = getJobRow(it.jobId); const pk = j.packageId ? store.packages.find((p) => p.id === j.packageId) : undefined; const sh = shp.rows.find((r) => r.estimateId === j.estimateId && r.direction === 'inbound' && (r.trackingNumber || r.stage === 'arrived')); const value = sh?.declaredValue ?? 0; row = { jobId: j.id, jobNumber: j.number, client: `${it.clientLastName}`, watch: it.watchLabel, holders: [], value, source: sh ? 'insurance' : pk?.source === 'walk_in' || DROPOFF_SEED.has(j.number) ? 'dropoff' : 'none' }; byJob.set(it.jobId, row); } if (!row.holders.includes(g.name)) row.holders.push(g.name); }));
   const assets = [...byJob.values()].sort((a, b) => b.value - a.value);
@@ -4652,7 +4676,8 @@ const inv = {
 const onHandOf = (partId: string) => rs.stock.filter((x) => x.partId === partId).reduce((t, x) => t + x.onHand, 0);
 const onOrderOf = (partId: string) => rs.pos.filter((p) => p.status === 'sent' || p.status === 'partially_received').reduce((t, p) => t + p.lines.filter((l) => l.partId === partId).reduce((q, l) => q + (l.qty - l.receivedQty), 0), 0);
 export const partPricingSync = (partId: string): PartPricing => {
-  const rows = inv.history.filter((h) => h.partId === partId).sort((a, b) => b.at.localeCompare(a.at)); const units = rows.reduce((t, r) => t + r.qty, 0);
+  // history rows store unitPrice in CENTS; pricing intelligence speaks DOLLARS (same scale as PO line unitCost)
+  const rows = inv.history.filter((h) => h.partId === partId).sort((a, b) => b.at.localeCompare(a.at)).map((h) => ({ ...h, unitPrice: h.unitPrice / 100 })); const units = rows.reduce((t, r) => t + r.qty, 0);
   const avg = units ? Math.round((rows.reduce((t, r) => t + r.qty * r.unitPrice, 0) / units) * 100) / 100 : null; const last = rows[0];
   const byVendor = new Map<string, { lastPrice: number; lastAt: string; buys: number }>(); rows.forEach((r) => { const v = byVendor.get(r.vendorId); if (!v) byVendor.set(r.vendorId, { lastPrice: r.unitPrice, lastAt: r.at, buys: 1 }); else v.buys += 1; });
   return { partId, avgCost: avg, last: last ? { price: last.unitPrice, at: last.at, vendorId: last.vendorId, vendorName: byId(rs.vendors, last.vendorId).name } : undefined, vendors: [...byVendor.entries()].map(([vendorId, v]) => ({ vendorId, vendorName: byId(rs.vendors, vendorId).name, ...v })).sort((a, b) => a.lastPrice - b.lastPrice) };
@@ -4722,7 +4747,7 @@ export async function generatePoLabel(id: string, service = 'UPS 2nd Day Air'): 
 export async function uploadPoLabel(id: string, dataUrl: string): Promise<PurchaseOrderWithRefs> { const p = byId(rs.pos, id); p.labelUrl = dataUrl; p.labelSource = 'upload'; p.labelService = 'uploaded label'; rsStamp('purchasing', `${p.number} · shipping label uploaded`); return resolve(poRefs(p)); }
 export async function importPurchaseCsv(text: string): Promise<{ vendors: number; rows: number }> {
   let vendors = 0, rows = 0;
-  text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((line) => { const c = line.split(',').map((x) => x.trim()); if (c[0].toLowerCase() === 'vendor' && c.length >= 3) { if (!rs.vendors.some((v) => v.name.toLowerCase() === c[1].toLowerCase())) { rs.vendors.push({ id: newId('v'), name: c[1], contact: c[2] ?? '', email: c[3] ?? '', phone: c[4] ?? '', terms: c[5] ?? 'Net 30', division: 'rolliworks', active: true }); vendors += 1; } }
+  text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((line) => { const c = line.split(',').map((x) => x.trim()); if (c[0].toLowerCase() === 'vendor' && c.length >= 3) { if (!rs.vendors.some((v) => v.name.toLowerCase() === c[1].toLowerCase())) { rs.vendors.push({ id: newId('v'), name: c[1], contact: c[2] ?? '', email: c[3] ?? '', phone: c[4] ?? '', terms: c[5] ?? 'Net 30', division: 'rolliworks', active: true, createdVia: 'csv_import' }); vendors += 1; } }
     else if (c.length >= 5 && /^\d{4}-\d{2}-\d{2}/.test(c[0])) { const v = rs.vendors.find((x) => x.name.toLowerCase() === c[1].toLowerCase()); const pt = store.parts.find((x) => x.partNumber.toLowerCase() === c[2].toLowerCase()); if (v && pt) { inv.history.push({ id: newId('ph'), at: new Date(c[0]).toISOString(), vendorId: v.id, partId: pt.id, qty: Number(c[3]) || 1, unitPrice: Math.round((Number(c[4]) || 0) * 100) }); rows += 1; } } });
   rsStamp('purchasing', `CSV import · ${vendors} vendor(s) · ${rows} purchase-history row(s)`); return resolve({ vendors, rows });
 }

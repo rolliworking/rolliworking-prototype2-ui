@@ -25,8 +25,8 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert } from 'lucide-react';
-import type { AccessTier } from '@/api/client';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2 } from 'lucide-react';
+import { OWNER_USER_ID, type AccessTier, type User } from '@/api/client';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
 // Expandable sidebar groups. `path` = the header itself is a page (Intake → /intake); no path = pure folder (RW).
@@ -44,6 +44,7 @@ export interface NavItem {
   path: string;
   icon: LucideIcon;
   tiers: AccessTier[];
+  ownerOnly?: boolean;
   pinned?: boolean;
   group?: NavGroupKey;
   built?: boolean;
@@ -68,11 +69,12 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'supervisor', label: 'Supervisor', path: '/supervisor', icon: ClipboardCheck, tiers: MGR, group: 'rw', built: true, blurb: 'Assign watchmakers, approve parts, park holds, QC queue.' },
   { key: 'floor', label: 'Shop Floor', path: '/floor', icon: Map, tiers: MGR, group: 'rw', built: true, blurb: 'Station map — WATCH / BRACELET tracks, manager safes, gate scans, Bulk assign, Component lookup.' },
   { key: 'assign-move', label: 'Assign / Move', path: '/assign', icon: MousePointerClick, tiers: MGR, built: true, blurb: 'Click a destination on the map, scan labels, commit — moves jobs without the detail board.' },
-  { key: 'hitlist', label: 'MH Hitlist', path: '/hitlist', icon: ShieldAlert, tiers: ['manager'], built: true, blurb: 'Owner accountability: live client-asset $ on premises + every bypass use.' },
+  { key: 'hitlist', label: 'MH Hitlist', path: '/hitlist', icon: ShieldAlert, tiers: ['manager'], ownerOnly: true, built: true, blurb: 'Owner accountability (MH only): live client-asset $ on premises + every bypass use.' },
   { key: 'custody', label: 'Custody', path: '/custody', icon: Hand, tiers: MGR, built: true, blurb: 'Who physically holds which watch head / case / bracelet right now, grouped by person.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, group: 'clients', built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, group: 'parts', built: true, blurb: 'Parts, stock levels and reorder alerts.' },
   { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, group: 'parts', built: true, blurb: 'Purchase orders, vendors and receiving.' },
+  { key: 'vendors', label: 'Vendors', path: '/purchasing/vendors', icon: Building2, tiers: MGR, group: 'parts', built: true, blurb: 'Vendor list, add / edit, detail roll-up: linked parts by last price, POs, purchase history.' },
   { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, group: 'parts', built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
   { key: 'parts-catalog', label: 'Parts', path: '/parts', icon: Tag, tiers: MGR, group: 'parts', built: true, blurb: 'One part record · one stock count · one reorder rule · one caliber table · one search.' },
   { key: 'bill-audit', label: 'Bill Audit', path: '/shipping/bill-audit', icon: Receipt, tiers: MGR, group: 'intake', built: true, blurb: 'Carrier bill vs our label ledger — variances, voided-but-billed, disputes.' },
@@ -100,7 +102,9 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { key: 'pickup', label: 'Pickup', path: '/sales/pickup', icon: PackageCheck, blurb: 'Release a finished watch to its owner.' },
 ];
 
+export const canAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => i.tiers.includes(user.accessTier) && (!i.ownerOnly || user.id === OWNER_USER_ID);
 export const navForTier = (tier: AccessTier) => NAV_ITEMS.filter((i) => i.tiers.includes(tier));
+export const navForUser = (user: Pick<User, 'id' | 'accessTier'>) => NAV_ITEMS.filter((i) => canAccess(i, user));
 
 export const findNavItem = (pathname: string) =>
-  NAV_ITEMS.find((i) => (i.path === '/' ? pathname === '/' : pathname === i.path || pathname.startsWith(i.path + '/')));
+  NAV_ITEMS.filter((i) => (i.path === '/' ? pathname === '/' : pathname === i.path || pathname.startsWith(i.path + '/'))).sort((a, b) => b.path.length - a.path.length)[0];

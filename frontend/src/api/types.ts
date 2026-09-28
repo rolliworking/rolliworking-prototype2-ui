@@ -952,7 +952,10 @@ export interface StaffInboxThread { client: Client; messages: Message[]; unread:
 
 // ---- E9 RS modules: purchasing, inventory, templates, users admin, evidence ----------------------
 
-export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string }
+export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line' }
+export interface VendorInput { id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string }
+export interface VendorSummary { vendor: Vendor; partsLinked: number; lastOrderAt?: string; avgTurnaroundDays?: number; openPos: number }
+export interface VendorPartRow { partId: string; partNumber: string; name: string; lastPrice?: number; lastAt?: string; buys: number; avgCost: number | null; cheapestElsewhere?: { vendorName: string; price: number } }
 
 export type POStatus = 'draft' | 'sent' | 'partially_received' | 'received' | 'cancelled';
 export interface POLine { id: string; partId: string; partNumber: string; description: string; qty: number; unitCost: number; receivedQty: number; requestId?: string; avgAtOrder?: number | null }

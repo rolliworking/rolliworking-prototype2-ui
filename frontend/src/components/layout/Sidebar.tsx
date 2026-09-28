@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
-import { NAV_GROUPS, navForTier, type NavGroup, type NavItem } from '@/config/navigation';
+import { NAV_GROUPS, navForUser, type NavGroup, type NavItem } from '@/config/navigation';
 
 const rowCls = (active: boolean) => clsx('group relative flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13px] transition-colors duration-150', active ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06] hover:text-white');
 const childCls = ({ isActive }: { isActive: boolean }) => clsx('flex h-7 items-center gap-2 rounded-sm px-2 text-[12px]', isActive ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06] hover:text-white');
@@ -22,7 +22,7 @@ const Group = ({ g, items, pathname }: { g: NavGroup; items: NavItem[]; pathname
 
 export const Sidebar = () => {
   const { user } = useAuth(); const { pathname } = useLocation();
-  const all = navForTier(user!.accessTier);
+  const all = navForUser(user!);
   // A group renders where its first member sits; everything else stays a flat item
   const rows: (NavItem | NavGroup)[] = []; all.forEach((i) => { if (i.group) { const g = NAV_GROUPS.find((x) => x.key === i.group)!; if (!rows.includes(g)) rows.push(g); } else rows.push(i); });
   return (

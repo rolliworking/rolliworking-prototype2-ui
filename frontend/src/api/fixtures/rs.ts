@@ -8,6 +8,7 @@ export const vendors: Vendor[] = [
   { id: 'v-gold', name: 'Goldsmith & Co. Plating', contact: 'Ruben Katz', email: 'ruben@goldsmithco.example.com', phone: '(718) 555-0142', terms: 'Due on receipt', division: 'rolliworks', active: true, notes: 'Outsource vendor for PM bezel work' },
   { id: 'v-ap', name: 'AP Boutique Supply', contact: 'Trade desk', email: 'trade@ap-supply.example.com', phone: '(646) 555-0143', terms: 'Prepaid', division: 'rollishop', active: true },
   { id: 'v-old', name: 'Crystal Source Ltd (retired)', contact: '—', email: 'sales@crystalsource.example.com', phone: '(800) 555-0144', terms: 'Net 15', division: 'rolliworks', active: false },
+  { id: 'v-swiss', name: 'Swiss Supply Geneva', contact: 'Marc Dubois', email: 'orders@swiss-supply.example.com', phone: '(212) 555-0199', terms: 'Net 45', division: 'rolliworks', active: true, accountRef: 'RG-4471', minOrder: 'CHF 250', preferredMethod: 'Email PO (PDF)', leadTimeDays: 12, shippingNotes: 'Ships DHL Express from Geneva · consolidate orders Fridays', notes: 'Added manually via the Vendors screen (no CSV / PO first)', createdVia: 'vendors_screen' },
 ];
 
 export const locations: StockLocation[] = [

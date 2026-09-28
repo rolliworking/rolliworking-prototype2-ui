@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams 
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import AppShell from '@/components/layout/AppShell';
 import IntakeLayout from '@/components/intake/IntakeLayout';
-import { findNavItem } from '@/config/navigation';
+import { canAccess, findNavItem } from '@/config/navigation';
 import AuditLogPage from '@/pages/AuditLogPage';
 import ClientsPage from '@/pages/clients/ClientsPage';
 import Client360Page from '@/pages/clients/Client360Page';
@@ -83,6 +83,7 @@ import PartsKnowledgePage from '@/pages/workshop/PartsKnowledgePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
+import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
 import InventoryPage from '@/pages/rs/InventoryPage';
 import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
@@ -101,7 +102,7 @@ function TierGate() {
   const { user } = useAuth();
   const { pathname } = useLocation();
   const item = findNavItem(pathname);
-  if (item && !item.tiers.includes(user!.accessTier)) return <RestrictedPage label={item.label} />;
+  if (item && !canAccess(item, user!)) return <RestrictedPage label={item.label} />;
   return <Outlet />;
 }
 
@@ -222,6 +223,8 @@ export default function App() {
               <Route path="/parts" element={<PartsPage />} />
               <Route path="/hitlist" element={<HitlistPage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
+              <Route path="/purchasing/vendors" element={<VendorsPage />} />
+              <Route path="/purchasing/vendors/:id" element={<VendorDetailPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/inventory/count" element={<CycleCountPage />} />
               <Route path="/labels" element={<LabelsPage />} />

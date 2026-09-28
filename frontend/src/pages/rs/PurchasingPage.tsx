@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PartForm } from '@/pages/rs/PartsPage';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Part, PurchaseOrderWithRefs, StockLocation, Vendor } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
@@ -20,8 +20,7 @@ export default function PurchasingPage() {
   const { data, error, msg, run } = useLoad(load);
   const [params, setParams] = useSearchParams();
   const [create, setCreate] = useState(!!params.get('part'));
-  const [open, setOpen] = useState<string | null>(null);
-  const [vendorForm, setVendorForm] = useState<{ name: string; contact: string; email: string; phone: string; terms: string } | null>(null);
+  const [open, setOpen] = useState<string | null>(params.get('po'));
   if (!data) return <div className="text-xs text-ink-400">Loading…</div>;
   const po = data.pos.find((p) => p.id === open);
   return (
@@ -36,16 +35,12 @@ export default function PurchasingPage() {
             {!data.pos.length && <EmptyRow colSpan={6} text="No purchase orders" />}
           </tbody></Table>
         </Card>
-        <Card title="Vendors" subtitle={`${data.vendors.filter((v) => v.active).length} active`} action={<Button size="sm" data-testid="vendor-new" onClick={() => setVendorForm({ name: '', contact: '', email: '', phone: '', terms: 'Net 30' })}>Add</Button>} bodyClassName="p-0" testId="vendor-list">
-          <ul className="divide-y divide-line/70">{data.vendors.map((v) => <li key={v.id} data-testid={`vendor-${v.id}`} className={`flex items-center justify-between px-4 py-2 text-xs ${v.active ? '' : 'opacity-50'}`}><div><div className="font-medium text-ink">{v.name}</div><div className="text-[11px] text-ink-400">{v.contact} · {v.email} · {v.terms} · <span className="capitalize">{v.division}</span></div></div><Button size="sm" variant="ghost" data-testid={`vendor-toggle-${v.id}`} onClick={() => run(() => api.setVendorActive(v.id, !v.active), v.active ? 'Vendor retired' : 'Vendor reactivated')}>{v.active ? 'Retire' : 'Restore'}</Button></li>)}</ul>
+        <Card title="Vendors" subtitle={`${data.vendors.filter((v) => v.active).length} active · click a vendor for parts / POs / history`} action={<Link to="/purchasing/vendors" data-testid="vendors-manage-link" className="text-xs font-medium text-ink underline">Manage vendors →</Link>} bodyClassName="p-0" testId="vendor-list">
+          <ul className="divide-y divide-line/70">{data.vendors.map((v) => <li key={v.id} data-testid={`vendor-${v.id}`} className={`flex items-center justify-between px-4 py-2 text-xs ${v.active ? '' : 'opacity-50'}`}><Link to={`/purchasing/vendors/${v.id}`} className="min-w-0 hover:underline"><div className="font-medium text-ink">{v.name}</div><div className="truncate text-[11px] text-ink-400">{v.contact} · {v.email} · {v.terms} · <span className="capitalize">{v.division}</span></div></Link><Button size="sm" variant="ghost" data-testid={`vendor-toggle-${v.id}`} onClick={() => run(() => api.setVendorActive(v.id, !v.active), v.active ? 'Vendor set inactive' : 'Vendor reactivated')}>{v.active ? 'Set inactive' : 'Reactivate'}</Button></li>)}</ul>
         </Card>
       </div>
       {po && <PoModal po={po} locations={data.locations} onClose={() => setOpen(null)} run={run} />}
       {create && <CreatePoModal data={data} presetPart={params.get('part') ?? undefined} onClose={() => { setCreate(false); setParams({}); }} run={run} />}
-      {vendorForm && <Modal testId="vendor-modal" title="New vendor" onClose={() => setVendorForm(null)}>
-        <div className="grid grid-cols-2 gap-2">{(['name', 'contact', 'email', 'phone', 'terms'] as const).map((k) => <label key={k} className="text-xs text-ink-500 capitalize">{k}<input data-testid={`vendor-${k}`} value={vendorForm[k]} onChange={(e) => setVendorForm({ ...vendorForm, [k]: e.target.value })} className={`${field} mt-1 block w-full`} /></label>)}</div>
-        <div className="mt-3 flex justify-end gap-2"><Button onClick={() => setVendorForm(null)}>Cancel</Button><Button variant="primary" data-testid="vendor-save" onClick={() => run(async () => { await api.saveVendor({ ...vendorForm, division: api.getSessionDivision() }); setVendorForm(null); }, 'Vendor created')}>Save</Button></div>
-      </Modal>}
     </div>
   );
 }

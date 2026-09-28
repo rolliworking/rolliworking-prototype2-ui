@@ -12,8 +12,9 @@ const legit = (e: BypassEvent) => e.kind === 'payment_release' && e.context.minu
 
 // Owner accountability surface — the first real instance of the "manager hit list": live client-asset $ on premises + every bypass use, newest first.
 export default function HitlistPage() {
-  const { data, reload } = useAsync(() => api.getHitlist());
+  const { data, error, reload } = useAsync(() => api.getHitlist());
   useEffect(() => { const t = window.setInterval(reload, 15_000); return () => window.clearInterval(t); }, [reload]);
+  if (error) return <div data-testid="hitlist-restricted" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error} — this page is restricted to MH's account.</div>;
   if (!data) return null;
   return <div data-testid="hitlist-page" className="space-y-4">
     <div><h1 className="text-xl font-semibold tracking-tight text-ink">MH Hitlist</h1><p className="mt-0.5 text-xs text-ink-500">Live — recomputed from custody + shipping on every load (refreshes every 15 s). Bypasses are a visibility feed, not an approval gate: the override already happened, this makes sure it's seen.</p></div>
