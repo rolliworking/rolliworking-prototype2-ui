@@ -75,6 +75,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, group: 'clients', built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, group: 'parts', built: true, blurb: 'Parts, stock levels and reorder alerts.' },
   { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, group: 'parts', built: true, blurb: 'Purchase orders, vendors and receiving.' },
+  { key: 'swo', label: 'Shop Work Orders', path: '/swo', icon: Truck, tiers: MGR, group: 'parts', built: true, blurb: 'Outsourced plating / refinish at outside vendors — 5-stage board, labels both ways, Paid independent of receipt.' },
   { key: 'vendors', label: 'Vendors', path: '/purchasing/vendors', icon: Building2, tiers: MGR, group: 'parts', built: true, blurb: 'Vendor list, add / edit, detail roll-up: linked parts by last price, POs, purchase history.' },
   { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, group: 'parts', built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
   { key: 'parts-catalog', label: 'Parts', path: '/parts', icon: Tag, tiers: MGR, group: 'parts', built: true, blurb: 'One part record · one stock count · one reorder rule · one caliber table · one search.' },

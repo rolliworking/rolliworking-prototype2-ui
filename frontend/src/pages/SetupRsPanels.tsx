@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { AccessTier, CatalogService, DeptCode, Division, LineType, MessageTemplate, PersonalTemplate, Role, User } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
@@ -36,6 +36,7 @@ export function SetupRsPanels() {
       <ul className="divide-y divide-line/70">{data.templates.filter((t: MessageTemplate) => (showRetired || t.active !== false) && (!tq.trim() || [t.name, t.subject, t.usedBy ?? '', t.audience ?? ''].join(' ').toLowerCase().includes(tq.trim().toLowerCase()))).map((t: MessageTemplate) => <li key={t.key} data-testid={`template-${t.key}`} data-active={t.active !== false} className={`flex items-start justify-between gap-3 px-4 py-2 text-xs ${t.active === false ? 'opacity-50' : ''}`}><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5 font-medium text-ink">{t.name} <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase ${t.audience === 'vendor' ? 'bg-amber-50 text-amber-900' : t.audience === 'internal' ? 'bg-canvas text-ink-600' : 'bg-sky-50 text-sky-800'}`}>{t.audience ?? 'client'}</span>{t.active === false && <span className="rounded-sm bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">RETIRED</span>}<span className="font-normal text-ink-400">· {t.subject}</span></div><div className="text-[11px] text-ink-500">used by: {t.usedBy ?? '—'}</div><div className="mt-0.5 flex flex-wrap gap-1">{t.mergeFields.map((f) => <span key={f} className="rounded bg-canvas px-1 font-mono text-[10px] text-ink-500">{f}</span>)}</div><TemplateVariants rows={data.variants.filter((v: PersonalTemplate) => v.key === t.key)} tkey={t.key} /><div className="text-[11px] text-ink-400">updated {fmtDate(t.at)} by {t.updatedBy}</div></div><div className="flex shrink-0 gap-1"><Button size="sm" variant="ghost" data-testid={`template-edit-${t.key}`} onClick={() => setTf(t)}>Edit</Button><Button size="sm" variant="ghost" data-testid={`template-toggle-${t.key}`} onClick={() => run(() => api.setTemplateActive(t.key, t.active === false), t.active === false ? 'Template reactivated' : 'Template retired — history kept')}>{t.active === false ? 'Reactivate' : 'Retire'}</Button></div></li>)}</ul>
     </Card>
     <BookingRulesCard />
+    <FeatureSwitchesCard />
     <div className="grid grid-cols-2 gap-4">
       <Card title="Locations" subtitle="Stock locations · division-stamped" bodyClassName="p-0" testId="setup-locations-card"><ul className="divide-y divide-line/70">{data.locations.map((l) => <li key={l.id} className="flex justify-between px-4 py-2 text-xs"><span>{l.name}</span><span className="capitalize text-ink-500">{l.kind} · {l.division}</span></li>)}</ul><p className="px-4 py-2 text-[11px] text-ink-400">Add / edit locations <Provisional note="stub — not built" /></p></Card>
       <Card title="Printers" subtitle="Label & receipt printers" testId="setup-printers-card"><ul className="space-y-1 text-xs"><li className="flex justify-between"><span>Front Desk label printer (PDF417)</span><span className="text-amber-800">mock</span></li><li className="flex justify-between"><span>Receipt printer</span><span className="text-amber-800">mock</span></li></ul><p className="mt-2 text-[11px] text-ink-400">Print jobs set a flag in the Label Queue <Provisional note="stub — no driver" /></p></Card>
@@ -72,3 +73,14 @@ const TemplateVariants = ({ rows, tkey }: { rows: PersonalTemplate[]; tkey: stri
     {rows.length > 0 && <ul className="mt-1 space-y-1">{rows.map((v) => <li key={v.owner} data-testid={`template-variant-${tkey}-${v.owner}`} className="rounded-sm border border-amber-200 bg-amber-50/60 p-2"><div className="font-medium text-amber-900">{v.owner}’s version <span className="font-normal text-ink-400">· {fmtDate(v.updatedAt)}</span></div><div className="text-ink-700">{v.subject}</div><pre className="mt-1 whitespace-pre-wrap font-sans text-[11px] text-ink-500">{v.body}</pre></li>)}</ul>}
   </details>
 );
+
+// Feature switches — manager-level on/off without a code change
+export const FeatureSwitchesCard = () => {
+  const [flags, setFlags] = useState<Record<api.FeatureKey, boolean> | null>(null); const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { void api.getFeatureFlags().then(setFlags); }, []);
+  if (!flags) return null;
+  return <Card title="Feature switches" subtitle="Turn client-facing behaviour on/off — off falls back to the staff flow, no gap" testId="feature-switches-card">
+    <ul className="divide-y divide-line/70 text-xs">{(Object.keys(flags) as api.FeatureKey[]).map((k) => <li key={k} data-testid={`feature-${k}`} data-on={flags[k]} className="flex items-start justify-between gap-3 py-2"><div><div className="font-medium text-ink">{api.FEATURE_META[k].label}</div><div className="text-ink-500">{api.FEATURE_META[k].blurb}</div></div><button data-testid={`feature-toggle-${k}`} role="switch" aria-checked={flags[k]} onClick={() => void api.setFeatureFlag(k, !flags[k]).then((f) => { setFlags(f); setMsg(`${api.FEATURE_META[k].label}: ${f[k] ? 'ON' : 'OFF'}`); setTimeout(() => setMsg(null), 2000); })} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${flags[k] ? 'bg-moss-600' : 'bg-ink-300'}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${flags[k] ? 'left-[22px]' : 'left-0.5'}`} /></button></li>)}</ul>
+    {msg && <div data-testid="feature-flash" className="mt-2 rounded-md bg-moss-50 px-3 py-1.5 text-xs text-moss-700">{msg}</div>}
+  </Card>;
+};

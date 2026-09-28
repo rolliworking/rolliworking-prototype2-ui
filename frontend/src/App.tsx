@@ -85,6 +85,7 @@ import SetupPage from '@/pages/SetupPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
 import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
 import SchedulePage from '@/pages/SchedulePage';
+import SwoPage from '@/pages/rs/SwoPage';
 import InventoryPage from '@/pages/rs/InventoryPage';
 import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
@@ -224,6 +225,7 @@ export default function App() {
               <Route path="/parts" element={<PartsPage />} />
               <Route path="/hitlist" element={<HitlistPage />} />
               <Route path="/appointments" element={<SchedulePage />} />
+              <Route path="/swo" element={<SwoPage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/purchasing/vendors" element={<VendorsPage />} />
               <Route path="/purchasing/vendors/:id" element={<VendorDetailPage />} />

@@ -57,7 +57,9 @@ export type AuditEventType =
   | 'rollitime'
   | 'rgtime'
   | 'kiosk'
-  | 'appointments';
+  | 'appointments'
+  | 'settings'
+  | 'shipping';
 
 export interface AuditEvent {
   id: string;
@@ -155,7 +157,8 @@ export interface EstimateRevision {
   requiresApproval?: boolean;
   engagement?: EngagementEvent[];
   supersededById?: string;
-  sendIntent?: { kind: 'label' | 'drop_off'; at: string; shipmentId?: string };
+  sendIntent?: { kind: 'label' | 'drop_off' | 'label_created'; at: string; shipmentId?: string };
+  inboundDeclaredValue?: number;
   clientNotes: string;
   messageNotes: string;
   internalNotes: string;
@@ -181,7 +184,8 @@ export interface Estimate {
   requiresApproval?: boolean;
   engagement?: EngagementEvent[];
   supersededById?: string;
-  sendIntent?: { kind: 'label' | 'drop_off'; at: string; shipmentId?: string };
+  sendIntent?: { kind: 'label' | 'drop_off' | 'label_created'; at: string; shipmentId?: string };
+  inboundDeclaredValue?: number;
   clientNotes: string;
   messageNotes: string;
   internalNotes: string;
@@ -308,6 +312,7 @@ export interface Job {
   inspection?: InspectionReport;
   components?: JobComponent[];
   clientRequests?: ClientRequest[];
+  inboundDeclaredValue?: number;
 }
 
 // Client request notes — what the client asked for; surfaced on pad/wm cards, popped on every label scan, enforced at QC
@@ -788,13 +793,13 @@ export interface LabelRequestDetails { name: string; street: string; city: strin
 export interface InboundShipment {
   id: string; direction: 'inbound' | 'outbound'; estimateId: string; clientId: string; stage: ShipStage; carrier: ShipCarrierName; service: string;
   declaredValue: number; destinationState: string; requestedAt: string; labelSentAt?: string; trackingNumber?: string; labelUrl?: string; cost?: number;
-  request?: LabelRequestDetails; serviceLevel?: ShipServiceLevel; confirmationId?: string;
+  request?: LabelRequestDetails; serviceLevel?: ShipServiceLevel; confirmationId?: string; clientCreated?: { suggestedValue: number; quotedCost: number; changedValue: boolean };
   events: TrackingEvent[]; eta?: string; deliveredAt?: string; arrivedAt?: string; reissued?: boolean; stamps: ShipStamp[]; emailIds: string[];
 }
 export interface ShipmentWithRefs extends InboundShipment { estimate: Estimate; client: Client; watch?: Watch; ageDays: number; outstandingDays: number; lastEvent?: TrackingEvent; arrivingToday: boolean; unscannedHours: number }
 export interface InboundCounts { label_requested: number; label_sent: number; in_transit: number; delivered_unscanned: number; red30: number; arrivingToday: number }
 export interface ShipAddress { name: string; street: string; city: string; state: string; zip?: string }
-export interface LabelPrep { shipment: ShipmentWithRefs; recipient: ShipAddress; validation: { valid: boolean; cleaned: ShipAddress; riskFlag?: string }; declaredValue: number }
+export interface LabelPrep { shipment: ShipmentWithRefs; recipient: ShipAddress; validation: { valid: boolean; cleaned: ShipAddress; riskFlag?: string }; declaredValue: number; refSuggestion: { reference: string; value: number; count: number } | null; quotedShipping: number }
 
 export interface SearchHit {
   kind: IdentifierKind;
@@ -957,8 +962,9 @@ export interface StaffInboxThread { client: Client; messages: Message[]; unread:
 
 // ---- E9 RS modules: purchasing, inventory, templates, users admin, evidence ----------------------
 
-export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line' }
-export interface VendorInput { id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string }
+export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line'; kind?: VendorKind; country?: string }
+export type VendorKind = 'parts' | 'outsource';
+export interface VendorInput { id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; kind?: VendorKind; country?: string }
 export interface VendorSummary { vendor: Vendor; partsLinked: number; lastOrderAt?: string; avgTurnaroundDays?: number; openPos: number }
 export interface VendorPartRow { partId: string; partNumber: string; name: string; lastPrice?: number; lastAt?: string; buys: number; avgCost: number | null; cheapestElsewhere?: { vendorName: string; price: number } }
 
@@ -992,7 +998,7 @@ export interface CycleCountLine { partId: string; expected: number; counted?: nu
 export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number; gainLoss?: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
-export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted';
+export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted' | 'swo_outbound' | 'swo_return_label';
 export type TemplateAudience = 'client' | 'vendor' | 'internal';
 export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string; audience?: TemplateAudience; usedBy?: string; active?: boolean }
 

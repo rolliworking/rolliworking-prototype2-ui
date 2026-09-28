@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 const TERMS = ['Net 30', 'Net 15', 'Net 45', 'Net 60', 'Due on receipt', 'Prepaid', 'Credit card on file'];
 const METHODS = ['Email PO (PDF)', 'Vendor portal', 'Phone', 'Fax', 'EDI'];
 const L = ({ k, label, children }: { k: string; label: string; children: ReactNode }) => <label className="block text-xs text-ink-500" data-testid={`vendor-field-${k}`}>{label}{children}</label>;
-const blank = (): VendorInput => ({ name: '', contact: '', email: '', phone: '', terms: 'Net 30', division: api.getSessionDivision(), active: true, accountRef: '', minOrder: '', preferredMethod: 'Email PO (PDF)', leadTimeDays: undefined, shippingNotes: '', notes: '' });
+const blank = (): VendorInput => ({ kind: 'parts', country: 'US', name: '', contact: '', email: '', phone: '', terms: 'Net 30', division: api.getSessionDivision(), active: true, accountRef: '', minOrder: '', preferredMethod: 'Email PO (PDF)', leadTimeDays: undefined, shippingNotes: '', notes: '' });
 
 // One form for add + edit — the record it writes is the same one CSV import / PO auto-catalog create (no second vendor "type")
 export const VendorForm = ({ vendor, onClose, onSaved }: { vendor?: Vendor; onClose: () => void; onSaved: (v: Vendor) => void }) => {
@@ -20,6 +20,8 @@ export const VendorForm = ({ vendor, onClose, onSaved }: { vendor?: Vendor; onCl
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <L k="name" label="Vendor name *"><input data-testid="vendor-name" value={f.name} onChange={(e) => set({ name: e.target.value })} className={`${field} mt-1 block w-full`} /></L>
+        <L k="kind" label="Vendor kind"><select data-testid="vendor-kind" value={f.kind ?? 'parts'} onChange={(e) => set({ kind: e.target.value as VendorInput['kind'] })} className={`${field} mt-1 block w-full`}><option value="parts">Parts supplier</option><option value="outsource">Outsource work (plating / refinish)</option></select></L>
+        <L k="country" label="Country (ISO-2 · non-US = international / customs)"><input data-testid="vendor-country" value={f.country ?? 'US'} onChange={(e) => set({ country: e.target.value.toUpperCase().slice(0, 2) })} className={`${field} mt-1 block w-full font-mono`} /></L>
         <L k="division" label="Division"><select data-testid="vendor-division" value={f.division} onChange={(e) => set({ division: e.target.value as VendorInput['division'] })} className={`${field} mt-1 block w-full`}><option value="rolliworks">rolliworks</option><option value="rollishop">rollishop</option></select></L>
       </div>
       <div><div className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Contact</div><div className="mt-1 grid grid-cols-3 gap-2">

@@ -7,6 +7,7 @@ import { parcelProMode } from '@/api/carriers/parcelpro';
 import type { InboundCounts, ShipStage, ShipmentWithRefs } from '@/api/client';
 import { AgeChip, CreateLabelSheet, TrackingPanel } from '@/components/shipping/ShippingBits';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { fmtDate, fmtMoney, fmtTime, fullName } from '@/lib/format';
 
 const STAGES: { key: ShipStage; label: string }[] = [{ key: 'label_requested', label: '1 · Label Requests' }, { key: 'label_sent', label: '2 · Labels Sent (outstanding)' }, { key: 'in_transit', label: '3 · In Transit' }, { key: 'delivered_unscanned', label: '4 · Delivered — awaiting arrival scan' }];
@@ -46,7 +47,17 @@ export default function InboundShippingPage() {
       </Row>)}
       {!list.length && <tr><td colSpan={8} className="px-3 py-8 text-center text-xs text-ink-400">{stage === 'delivered_unscanned' ? 'Nothing delivered without a check-in — the way it should be by end of day.' : 'Nothing in this stage.'}</td></tr>}
     </tbody></table></div>
+    <ClientLabelLogCard />
     {create && <CreateLabelSheet id={create} onClose={() => setCreate(null)} onDone={(m) => { void load(); setFlash(m); setTimeout(() => setFlash(null), 4000); go({ stage: 'label_sent' }); }} />}
     {track && <TrackingPanel id={track} onClose={() => { go({ track: undefined }); void load(); }} />}
   </div>;
+}
+
+// Audit trail for client-created labels (same pattern as the Hitlist bypass log): who · job · values · whether the suggested value was changed
+function ClientLabelLogCard() {
+  const [rows, setRows] = useState<api.ClientLabelLogRow[]>([]);
+  useEffect(() => { void api.getClientLabelLog().then(setRows); }, []);
+  return <Card title={`Client-created labels · ${rows.length}`} subtitle="labels the client created themselves from the estimate page — tracking auto-tied to the job · declared value stored for the return label" bodyClassName="p-0" testId="client-label-log">
+    <ul className="divide-y divide-line/70 text-xs">{rows.map((r) => <li key={r.id} data-testid={`client-label-${r.shipmentId}`} data-changed={r.changedValue} className="flex flex-wrap items-center gap-2 px-4 py-2"><span className="text-ink-400">{fmtDate(r.at)}</span><span className="font-medium text-ink">{r.client}</span><span className="font-mono">{r.estimateNumber}{r.jobNumber ? ` / ${r.jobNumber}` : ''}</span><span className="font-mono text-ink-500">{r.carrier} {r.tracking}</span><span>declared <b>{fmtMoney(r.declaredValue)}</b></span><span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${r.changedValue ? 'bg-amber-100 text-amber-900' : 'bg-moss-50 text-moss-700'}`}>{r.changedValue ? `CHANGED from suggested ${fmtMoney(r.suggestedValue)}` : 'suggested value accepted'}</span><span className="ml-auto text-ink-500">shipping {fmtMoney(r.cost)}</span></li>)}{!rows.length && <li className="px-4 py-3 text-ink-400">None yet.</li>}</ul>
+  </Card>;
 }

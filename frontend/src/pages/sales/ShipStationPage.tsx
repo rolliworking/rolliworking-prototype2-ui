@@ -39,7 +39,7 @@ export default function ShipStationPage() {
   useEffect(() => { const so = params.get('so'); if (so) api.getSalesOrder(so).then((o) => o && pick(o)); }, [params]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!q.trim()) return setHits([]); const t = setTimeout(() => api.findSalesOrders(q).then((r) => setHits(r.filter((o) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)))), 120); return () => clearTimeout(t); }, [q]);
 
-  const pick = (o: SalesOrderWithRefs) => { setOrder(o); setAddr(o.shippingAddress ?? { name: fullName(o.client), street: o.client.street, city: o.client.city, state: o.client.state }); setDeclared(String(o.total)); setStep(1); setError(null); };
+  const pick = (o: SalesOrderWithRefs) => { setOrder(o); setAddr(o.shippingAddress ?? { name: fullName(o.client), street: o.client.street, city: o.client.city, state: o.client.state }); setDeclared(String(o.job?.inboundDeclaredValue ?? o.total)); setStep(1); setError(null); };
   const refreshOrder = async () => { if (order) setOrder(await api.getSalesOrder(order.id)); };
   const declaredNormalized = api.normalizeDeclaredValue(Number(declared) || 0);
 
