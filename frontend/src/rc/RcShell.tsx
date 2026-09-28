@@ -20,7 +20,7 @@ function Frame() {
   const { client, viewAs, loading, signOut } = useRcSession();
   const { pathname, search } = useLocation(); const nav = useNavigate();
   const docType = api.rcDocTypeForPath(pathname);
-  const isPublic = AUTH_ROUTES.includes(pathname) || (docType !== null && api.rcDocAccess()[docType] === 'public');
+  const isPublic = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/rc/auth/') || (docType !== null && api.rcDocAccess()[docType] === 'public');
   if (loading) return null;
   const wall = !client && !isPublic;
   return (
