@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
 import * as api from '@/api/client';
+import { AppointmentsTodayCard } from '@/pages/SchedulePage';
 import type { TodayRow, TodaySource, TodayView } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { NewTaskForm } from '@/components/today/NewTaskForm';
@@ -63,6 +64,8 @@ export default function TodayPage() {
       </div>
 
       {flash && <div data-testid="today-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
+
+      <AppointmentsTodayCard />
 
       <Card title="Pinned" subtitle="Manual layer — added by you or others · dismiss when done · never hides the derived rows below" testId="today-pinned-card" bodyClassName="p-0" className="border-l-[3px] border-amber-500">
         {view && view.pinned.length === 0 ? <p data-testid="pinned-empty" className="px-4 py-3 text-xs text-ink-400">Nothing pinned for you.</p> : <PinnedList items={view?.pinned ?? []} onDismiss={dismiss} />}

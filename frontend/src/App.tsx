@@ -84,6 +84,7 @@ import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from 
 import SetupPage from '@/pages/SetupPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
 import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
+import SchedulePage from '@/pages/SchedulePage';
 import InventoryPage from '@/pages/rs/InventoryPage';
 import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
@@ -222,6 +223,7 @@ export default function App() {
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/parts" element={<PartsPage />} />
               <Route path="/hitlist" element={<HitlistPage />} />
+              <Route path="/appointments" element={<SchedulePage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/purchasing/vendors" element={<VendorsPage />} />
               <Route path="/purchasing/vendors/:id" element={<VendorDetailPage />} />

@@ -1,8 +1,8 @@
-import { Archive, Check, Mail, PackageOpen, ScanLine, UserRound } from 'lucide-react';
+import { Archive, Camera, Check, Mail, PackageOpen, ScanLine, Trash2, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { Client, PackageCustody, PackageScan, PackageWithRefs, ShelfRow } from '@/api/client';
+import type { ArrivalCommitResult, ArrivalRow, Carrier, Client, PackageCustody, PackageScan, PackageWithRefs, ShelfRow } from '@/api/client';
 import { ScanInput } from '@/components/intake/IntakeBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -30,12 +30,27 @@ export const ShelveCard = ({ pkg, clients, onDone }: { pkg: PackageWithRefs; cli
   </Card>;
 };
 
-// Scan 2 — end-of-day batch: bin, tracking # or SUB# → open event → Stage 2 (Receive Package) for that package
+// Scan 1 · ARRIVAL — bulk session: scan, scan, scan → Commit. Nothing is logged/shelved until Commit (same pattern as the Assign/Move click map).
+export const ArrivalSession = ({ clients, carrier, signature, onCommitted }: { clients: Client[]; carrier: Carrier | 'auto'; signature: boolean; onCommitted: (r: ArrivalCommitResult[]) => void }) => {
+  const [rows, setRows] = useState<ArrivalRow[]>([]); const [results, setResults] = useState<ArrivalCommitResult[] | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const add = async (t: string) => { setErr(null); setResults(null); if (rows.some((r) => r.tracking === t.trim())) { setErr(`${t} is already in this session`); return; } setRows((rs) => [api.previewArrival(t, carrier === 'auto' ? undefined : carrier), ...rs]); };
+  const commit = async () => { setBusy(true); try { const res = await api.commitArrivals([...rows].reverse(), signature); setResults(res); setRows(res.filter((x) => !x.ok).map((x) => x.row)); onCommitted(res); } finally { setBusy(false); } };
+  const ready = rows.filter((r) => r.matched !== 'duplicate');
+  return <div data-testid="arrival-session">
+    <ScanInput label="Tracking number — keep scanning, field re-arms after each Enter" testId="arrival-tracking-input" onScan={add} error={err} placeholder="Scan tracking… Enter … next" />
+    <ul data-testid="arrival-session-rows" className="mt-2 max-h-72 space-y-1 overflow-y-auto text-xs">{rows.map((r, i) => <li key={r.id} data-testid={`arrival-session-row-${r.id}`} data-matched={r.matched} className={`flex flex-wrap items-center gap-2 rounded-sm border px-2 py-1 ${r.matched === 'duplicate' ? 'border-rose-200 bg-rose-50/60' : r.matched === 'label_request' ? 'border-moss-200 bg-moss-50/50' : 'border-amber-200 bg-amber-50/50'}`}><span className="w-5 text-right font-mono text-ink-400">{rows.length - i}</span><span className="font-mono font-semibold">{r.tracking}</span><span className="text-ink-500">{r.carrier}</span>{r.matched === 'label_request' ? <span className="text-moss-800">→ {r.clientName}{r.estimateNumber && <span className="ml-1 font-mono">{r.estimateNumber}</span>}</span> : r.matched === 'duplicate' ? <span className="font-semibold text-rose-700">already logged — will be skipped</span> : <select data-testid={`arrival-session-client-${r.id}`} value={r.manualClientId ?? ''} onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, manualClientId: e.target.value || undefined } : x)))} className={`${sel} h-6 text-[11px]`}><option value="">no label match — unknown client</option>{clients.map((c) => <option key={c.id} value={c.id}>{fullName(c)}</option>)}</select>}<button data-testid={`arrival-session-remove-${r.id}`} onClick={() => setRows((rs) => rs.filter((x) => x.id !== r.id))} className="ml-auto text-ink-400 hover:text-rose-700"><Trash2 size={12} /></button></li>)}{!rows.length && !results && <li className="py-2 text-center text-ink-400">Session empty — scan the first package.</li>}</ul>
+    <div className="mt-2 flex items-center gap-2"><Button variant="primary" data-testid="arrival-commit" disabled={busy || !ready.length} onClick={() => void commit()}><Archive size={13} /> Commit {ready.length ? `${ready.length} package${ready.length === 1 ? '' : 's'}` : ''}</Button>{rows.length > 0 && <Button size="sm" variant="ghost" data-testid="arrival-session-clear" onClick={() => setRows([])}>Clear</Button>}<span className="ml-auto text-[11px] text-ink-400">Commit = match · client · bin · who/station/time for every row at once</span></div>
+    {results && <ul data-testid="arrival-commit-results" className="mt-2 space-y-0.5 text-xs">{results.map((x) => <li key={x.row.id} data-testid={`arrival-result-${x.row.id}`} data-ok={x.ok} className={x.ok ? 'text-moss-800' : 'text-rose-700'}>{x.ok ? <><Check size={11} className="inline" /> {x.pkg?.subNumber} · <b className="font-mono">{x.bin}</b> · {x.pkg?.client ? fullName(x.pkg.client) : 'unknown client'}{x.pkg?.client ? ' · notified' : ''}</> : <>✕ {x.row.tracking} · {x.error}</>}</li>)}</ul>}
+  </div>;
+};
+
+// Scan 2 · OPEN — deliberately one at a time: each scan opens THAT package and launches the IPEVO capture flow (2 shots + microscope) before the next scan
 export const OpenScanCard = ({ compact = false }: { compact?: boolean }) => {
   const nav = useNavigate(); const [err, setErr] = useState<string | null>(null);
-  const scan = async (q: string) => { try { setErr(null); const p = await api.openScan(q); nav(`/intake/receive/${p.id}`); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } };
-  return <Card title="Scan 2 · Open" subtitle={compact ? undefined : 'End of day: scan the bin or tracking # as you open each package → Stage 2'} testId="open-scan-card" className="border-l-[3px] border-violet-400">
+  const scan = async (q: string) => { try { setErr(null); const p = await api.openScan(q); nav(`/intake/receive/${p.id}?camera=1`); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } };
+  return <Card title="Scan 2 · Open" subtitle={compact ? 'One package at a time → IPEVO camera' : 'One at a time: scan the bin / tracking / SUB# → that package opens and the IPEVO capture starts (2 shots, SPACE = shutter, then microscope) → finish before the next scan'} testId="open-scan-card" className="border-l-[3px] border-violet-400">
     <ScanInput label="Bin · tracking · SUB#" testId="open-scan-input" placeholder="BIN-03 or tracking… then Enter" onScan={scan} error={err} />
+    <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-400"><Camera size={11} /> Not bulk — each item needs its own photo pair.</p>
   </Card>;
 };
 

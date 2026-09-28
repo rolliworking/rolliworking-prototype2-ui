@@ -25,7 +25,7 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2 } from 'lucide-react';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays } from 'lucide-react';
 import { OWNER_USER_ID, type AccessTier, type User } from '@/api/client';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
@@ -62,6 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'inbound', label: 'Shipping', path: '/shipping/inbound', icon: Truck, tiers: ALL, group: 'intake', built: true, blurb: 'Pre-arrival shipping: label requests, outstanding labels, in transit, delivered-unscanned. Track a package for a caller.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, group: 'intake', built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, group: 'intake', built: true, blurb: 'Quotes awaiting approval and approved work.' },
+  { key: 'appointments', label: 'Schedule', path: '/appointments', icon: CalendarDays, tiers: ALL, group: 'intake', built: true, blurb: 'Drop-off & pick-up appointments on the calendar — same booking rules as the public link.' },
   { key: 'clients', label: 'Clients', path: '/clients', icon: Users, tiers: ALL, group: 'clients', built: true, blurb: 'Client 360 — search any identifier, see their whole world.' },
   { key: 'jobs', label: 'Jobs', path: '/jobs', icon: Wrench, tiers: MGR, group: 'clients', built: true, blurb: 'Bench work in progress across departments.' },
   { key: 'all-jobs', label: 'All Jobs', path: '/jobs/all', icon: ListChecks, tiers: MGR, group: 'clients', built: true, blurb: 'Every job across the shop with combinable quick filters.' },

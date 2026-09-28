@@ -2939,7 +2939,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
 }
 
 // ---- E9 RS modules ---------------------------------------------------------------------------------
-import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateKey, UserAdminInput, Vendor, VendorInput, VendorPartRow, VendorSummary } from './types';
+import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, Vendor, VendorInput, VendorPartRow, VendorSummary } from './types';
 
 const rs = {
   vendors: fx.vendors.map((v): Vendor => ({ ...v })),
@@ -3033,7 +3033,7 @@ export async function cancelPurchaseOrder(id: string, reason: string): Promise<P
 export async function receivePurchaseOrder(id: string, qtyByLine: Record<string, number>, putawayLocationId?: string): Promise<PurchaseOrderWithRefs> {
   const p = byId(rs.pos, id); if (!['sent', 'partially_received'].includes(p.status)) throw new Error('PO must be sent before receiving');
   let any = false; const dest = putawayLocationId ?? p.locationId; const a0 = actor();
-  p.lines.forEach((l) => { const want = qtyByLine[l.id] ?? 0; const q = Math.min(want, l.qty - l.receivedQty); if (want > l.qty - l.receivedQty) rsStamp('purchasing', `${p.number} · ${l.partNumber} OVERAGE: ${want} arrived vs ${l.qty - l.receivedQty} open — flagged`); if (q > 0) { l.receivedQty += q; any = true; move('receipt', l.partId, dest, q, `Received against ${p.number}`, { ref: p.number, poId: p.id }); inv.history.push({ id: newId('ph'), at: new Date().toISOString(), vendorId: p.vendorId, partId: l.partId, qty: q, unitPrice: Math.round(l.unitCost * 100), poNumber: p.number });
+  p.lines.forEach((l) => { const want = qtyByLine[l.id] ?? 0; const q = Math.min(want, l.qty - l.receivedQty); if (want > l.qty - l.receivedQty) rsStamp('purchasing', `${p.number} · ${l.partNumber} OVERAGE: ${want} arrived vs ${l.qty - l.receivedQty} open — flagged`); if (q > 0) { l.receivedQty += q; any = true; move('receipt', l.partId, dest, q, `Received against ${p.number}`, { ref: p.number, poId: p.id }); inv.history.push({ id: newId('ph'), at: new Date().toISOString(), vendorId: p.vendorId, partId: l.partId, qty: q, unitPrice: l.unitCost, poNumber: p.number });
     if (l.requestId) { const r = store.partsRequests.find((x) => x.id === l.requestId); if (r && r.status !== 'received') { r.status = 'received'; partsStamp(r, `received against ${p.number} · +${q} at ${byId(rs.locations, dest).name}`); const j = getJobRow(r.jobId); const h = activeHold(j); if (h && h.reason.includes(r.number)) { h.releasedAt = new Date().toISOString(); h.releasedBy = a0.by; } const requester = fx.users.find((u) => u.shortName === r.requestedBy); store.pinned.unshift({ id: newId('pin'), title: `Parts received · ${r.number} ${l.partNumber} for ${j.number} — back on the bench`, assignedTo: requester ? { type: 'user', shortName: requester.shortName } : { type: 'role', role: 'manager' }, createdBy: a0.by, jobId: j.id, createdAt: new Date().toISOString(), station: a0.station, division: j.division }); } }
     inv.needs = inv.needs.filter((n) => n.partId !== l.partId); } });
   if (!any) throw new Error('Enter a quantity to receive');
@@ -3155,7 +3155,9 @@ export async function retireCatalogService(id: string, retired = true): Promise<
   rsStamp('setup', `Catalog service ${retired ? 'retired' : 'restored'} · ${row.name}`); return resolve(undefined);
 }
 export { MERGE_FIELDS } from './fixtures/rs';
-export async function getTemplates(): Promise<MessageTemplate[]> { return resolve(rs.templates.map((t) => ({ ...t }))); }
+const TEMPLATE_META: Record<string, { audience: TemplateAudience; usedBy: string }> = { intake_confirmation: { audience: 'client', usedBy: 'Receive Package (Stage 2)' }, estimate_sent: { audience: 'client', usedBy: 'Estimate → Send' }, job_in_progress: { audience: 'client', usedBy: 'Job status change' }, back_in_progress: { audience: 'client', usedBy: 'QC fail → rework' }, ready_for_pickup: { audience: 'client', usedBy: 'Job finished · pickup channel' }, shipped: { audience: 'client', usedBy: 'Ship Station confirm' }, inspection_ready: { audience: 'client', usedBy: 'Issue inspection report' }, invoice_ready: { audience: 'client', usedBy: 'Sales order → Send invoice' }, evidence_available: { audience: 'client', usedBy: 'QC pass · evidence' }, shipping_dispute: { audience: 'vendor', usedBy: 'Bill audit → dispute report' }, po_email: { audience: 'vendor', usedBy: 'Purchasing → Send PO' }, receiving_report: { audience: 'internal', usedBy: 'Purchasing → Receive against PO' }, appointment_confirmation: { audience: 'client', usedBy: 'Schedule / booking page' }, package_accepted: { audience: 'client', usedBy: 'Scan 1 → shelved' } };
+export async function getTemplates(): Promise<MessageTemplate[]> { return resolve(rs.templates.map((t) => ({ ...t, ...TEMPLATE_META[t.key], active: t.active ?? true }))); }
+export async function setTemplateActive(key: TemplateKey, active: boolean): Promise<MessageTemplate> { const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); t.active = active; rsStamp('setup', `Template ${active ? 'reactivated' : 'retired'} · ${t.name}`); return resolve({ ...t, ...TEMPLATE_META[t.key], active }); }
 export async function saveTemplate(key: TemplateKey, subject: string, body: string): Promise<MessageTemplate> {
   const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required'); const a = actor();
   Object.assign(t, { subject: subject.trim(), body: body.trim(), mergeFields: fx.MERGE_FIELDS.filter((f) => body.includes(f) || subject.includes(f)), at: new Date().toISOString(), by: a.by, station: a.station, updatedBy: a.by });
@@ -4658,7 +4660,7 @@ export async function resolveMissedCall(id: string, resolution: 'called_back' | 
 // ---- INVENTORY DEEP SESSION — pricing intelligence · needs-ordering · auto-PO · PO labels · receiving flips · cycle-count lock/queue/variance $ ----
 import type { CountQueueRow, NeedsOrderingRow, PartPricing, PriceColor, PurchaseHistoryRow, ReorderRule, VarianceReport, VarianceRow } from './types';
 const dAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
-const H = (id: string, d: number, vendorId: string, partId: string, qty: number, unitPrice: number, po?: string): PurchaseHistoryRow => ({ id, at: dAgo(d), vendorId, partId, qty, unitPrice: Math.round(unitPrice * 100), poNumber: po });
+const H = (id: string, d: number, vendorId: string, partId: string, qty: number, unitPrice: number, po?: string): PurchaseHistoryRow => ({ id, at: dAgo(d), vendorId, partId, qty, unitPrice, poNumber: po });
 // Imported purchase history (CSV in the prototype) — enough rows that averages are believable and all three price colours appear on a draft PO
 const inv = {
   history: [
@@ -4672,13 +4674,12 @@ const inv = {
   ] as PurchaseHistoryRow[],
   reorder: new Map<string, ReorderRule>([['pt-01', { partId: 'pt-01', min: 3, orderUpTo: 8 }], ['pt-02', { partId: 'pt-02', min: 2, orderUpTo: 6 }], ['pt-03', { partId: 'pt-03', min: 4, orderUpTo: 12 }], ['pt-04', { partId: 'pt-04', min: 2, orderUpTo: 6 }], ['pt-05', { partId: 'pt-05', min: 3, orderUpTo: 6 }], ['pt-06', { partId: 'pt-06', min: 5, orderUpTo: 20 }], ['pt-07', { partId: 'pt-07', min: 1, orderUpTo: 2 }], ['pt-08', { partId: 'pt-08', min: 2, orderUpTo: 6 }], ['pt-09', { partId: 'pt-09', min: 1, orderUpTo: 3 }], ['pt-10', { partId: 'pt-10', min: 1, orderUpTo: 3 }], ['pt-11', { partId: 'pt-11', min: 2, orderUpTo: 4 }], ['pt-12', { partId: 'pt-12', min: 2, orderUpTo: 4 }], ['pt-13', { partId: 'pt-13', min: 1, orderUpTo: 2 }], ['pt-16', { partId: 'pt-16', min: 4, orderUpTo: 10 }], ['pt-17', { partId: 'pt-17', min: 2, orderUpTo: 4 }]]),
   needs: [{ id: 'no-01', partId: 'pt-16', reason: 'pick_short', qty: 2, at: dAgo(1), jobNumber: 'E02016' }, { id: 'no-02', partId: 'pt-03', reason: 'out_of_stock', qty: 2, at: dAgo(0.5), requestId: 'pr-20', jobNumber: 'E02011' }] as { id: string; partId: string; reason: 'out_of_stock' | 'pick_short'; qty: number; at: string; requestId?: string; jobNumber?: string }[],
-  varianceThreshold: 15000,
 };
 const onHandOf = (partId: string) => rs.stock.filter((x) => x.partId === partId).reduce((t, x) => t + x.onHand, 0);
 const onOrderOf = (partId: string) => rs.pos.filter((p) => p.status === 'sent' || p.status === 'partially_received').reduce((t, p) => t + p.lines.filter((l) => l.partId === partId).reduce((q, l) => q + (l.qty - l.receivedQty), 0), 0);
 export const partPricingSync = (partId: string): PartPricing => {
-  // history rows store unitPrice in CENTS; pricing intelligence speaks DOLLARS (same scale as PO line unitCost)
-  const rows = inv.history.filter((h) => h.partId === partId).sort((a, b) => b.at.localeCompare(a.at)).map((h) => ({ ...h, unitPrice: h.unitPrice / 100 })); const units = rows.reduce((t, r) => t + r.qty, 0);
+  // every price store is DOLLARS (history included) — same scale as Part.price and PO line unitCost
+  const rows = inv.history.filter((h) => h.partId === partId).sort((a, b) => b.at.localeCompare(a.at)); const units = rows.reduce((t, r) => t + r.qty, 0);
   const avg = units ? Math.round((rows.reduce((t, r) => t + r.qty * r.unitPrice, 0) / units) * 100) / 100 : null; const last = rows[0];
   const byVendor = new Map<string, { lastPrice: number; lastAt: string; buys: number }>(); rows.forEach((r) => { const v = byVendor.get(r.vendorId); if (!v) byVendor.set(r.vendorId, { lastPrice: r.unitPrice, lastAt: r.at, buys: 1 }); else v.buys += 1; });
   return { partId, avgCost: avg, last: last ? { price: last.unitPrice, at: last.at, vendorId: last.vendorId, vendorName: byId(rs.vendors, last.vendorId).name } : undefined, vendors: [...byVendor.entries()].map(([vendorId, v]) => ({ vendorId, vendorName: byId(rs.vendors, vendorId).name, ...v })).sort((a, b) => a.lastPrice - b.lastPrice) };
@@ -4749,7 +4750,7 @@ export async function uploadPoLabel(id: string, dataUrl: string): Promise<Purcha
 export async function importPurchaseCsv(text: string): Promise<{ vendors: number; rows: number }> {
   let vendors = 0, rows = 0;
   text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((line) => { const c = line.split(',').map((x) => x.trim()); if (c[0].toLowerCase() === 'vendor' && c.length >= 3) { if (!rs.vendors.some((v) => v.name.toLowerCase() === c[1].toLowerCase())) { rs.vendors.push({ id: newId('v'), name: c[1], contact: c[2] ?? '', email: c[3] ?? '', phone: c[4] ?? '', terms: c[5] ?? 'Net 30', division: 'rolliworks', active: true, createdVia: 'csv_import' }); vendors += 1; } }
-    else if (c.length >= 5 && /^\d{4}-\d{2}-\d{2}/.test(c[0])) { const v = rs.vendors.find((x) => x.name.toLowerCase() === c[1].toLowerCase()); const pt = store.parts.find((x) => x.partNumber.toLowerCase() === c[2].toLowerCase()); if (v && pt) { inv.history.push({ id: newId('ph'), at: new Date(c[0]).toISOString(), vendorId: v.id, partId: pt.id, qty: Number(c[3]) || 1, unitPrice: Math.round((Number(c[4]) || 0) * 100) }); rows += 1; } } });
+    else if (c.length >= 5 && /^\d{4}-\d{2}-\d{2}/.test(c[0])) { const v = rs.vendors.find((x) => x.name.toLowerCase() === c[1].toLowerCase()); const pt = store.parts.find((x) => x.partNumber.toLowerCase() === c[2].toLowerCase()); if (v && pt) { inv.history.push({ id: newId('ph'), at: new Date(c[0]).toISOString(), vendorId: v.id, partId: pt.id, qty: Number(c[3]) || 1, unitPrice: Number(c[4]) || 0 }); rows += 1; } } });
   rsStamp('purchasing', `CSV import · ${vendors} vendor(s) · ${rows} purchase-history row(s)`); return resolve({ vendors, rows });
 }
 export const vendorOpenPos = (vendorId: string) => rs.pos.filter((p) => p.vendorId === vendorId && (p.status === 'sent' || p.status === 'partially_received')).length;
@@ -4770,7 +4771,7 @@ export async function postCycleCountV2(id: string, counted: Record<string, numbe
   c.variances = 0; let dollars = 0;
   c.lines.filter((l) => !l.skipped).forEach((l) => { const d = (l.counted ?? 0) - l.expected; if (d !== 0) { c.variances += 1; dollars += d * (l.unitCost ?? 0); move('count', l.partId, c.locationId, d, `Cycle count ${c.number} variance ${d > 0 ? '+' : ''}${d}`, { ref: c.number, countId: c.id }); } });
   c.status = 'posted'; c.postedAt = new Date().toISOString(); c.postedBy = a.by;
-  if (Math.abs(dollars) >= inv.varianceThreshold) store.pinned.unshift({ id: newId('pin'), title: `Inventory variance · ${loc.name} · ${c.number}: ${dollars < 0 ? '−' : '+'}${fmtMoney(Math.abs(dollars))} across ${c.variances} part(s) — counted by ${a.by}`, assignedTo: { type: 'role', role: 'manager' }, createdBy: a.by, createdAt: c.postedAt, station: a.station, division: loc.division });
+  c.gainLoss = Math.round(dollars * 100) / 100; // plain gain/loss report for the session — no threshold, no gate, no hit-list pin
   rsStamp('inventory', `${c.number} posted · ${loc.name} · ${c.variances} variance(s) · ${dollars < 0 ? '−' : '+'}${fmtMoney(Math.abs(dollars))}`); return resolve({ ...c });
 }
 export async function getVarianceReport(f: { from?: string; to?: string; locationId?: string; partId?: string; counter?: string } = {}): Promise<VarianceReport> {
@@ -4836,7 +4837,7 @@ const baStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'ac
 export function getLabelLedger(): LedgerLabel[] {
   const rows: LedgerLabel[] = [];
   shp.rows.filter((s) => s.trackingNumber).forEach((s) => rows.push({ trackingNumber: s.trackingNumber!, ref: byId(store.estimates, s.estimateId).number, kind: s.direction, carrier: s.carrier, service: s.service, cost: s.cost ?? 0, createdAt: s.labelSentAt ?? s.requestedAt, voided: false, who: s.stamps.find((x) => x.action.includes('label created'))?.by, path: `/shipping/inbound?track=${s.trackingNumber}` }));
-  rs.pos.filter((p) => p.trackingNumber).forEach((p) => rows.push({ trackingNumber: p.trackingNumber!, ref: p.number, kind: 'po', carrier: p.labelService?.startsWith('FedEx') ? 'FedEx' : 'UPS', service: p.labelService ?? 'UPS 2nd Day Air', cost: Math.round(p.total * 0.012 + 2400) / 100, createdAt: p.createdAt, voided: false, who: p.createdBy, path: '/purchasing' }));
+  rs.pos.filter((p) => p.trackingNumber).forEach((p) => rows.push({ trackingNumber: p.trackingNumber!, ref: p.number, kind: 'po', carrier: p.labelService?.startsWith('FedEx') ? 'FedEx' : 'UPS', service: p.labelService ?? 'UPS 2nd Day Air', cost: Math.round((p.total * 0.012 + 24) * 100) / 100, createdAt: p.createdAt, voided: false, who: p.createdBy, path: '/purchasing' }));
   store.salesOrders.filter((o) => o.shipment).forEach((o) => rows.push({ trackingNumber: o.shipment!.tracking, ref: o.number, kind: 'outbound', carrier: o.shipment!.carrier, service: o.shipment!.service, cost: o.shippingAmount || 0, createdAt: o.shipment!.at, voided: false, who: o.shipment!.by, path: `/sales/${o.id}` }));
   fx.EXTRA_LEDGER_SEED.forEach((x) => rows.push({ ...x, voided: false, path: '/shipping/inbound' }));
   rows.push(...ba.voided);
@@ -5197,3 +5198,39 @@ export const applySheetSuggestion = (f: InspectionForm, s: SheetSuggestion, acce
 };
 void AUTHENTICITY; void BRACELET_LINES; void INSPECTION_COMPONENTS;
 export const shortNameOf = (userId: string) => fx.users.find((u) => u.id === userId)?.shortName ?? userId;
+
+// ---- Appointments bridge (data module lives in ./appointments.ts; these expose the store bits it needs) ----
+export const actorInfo = () => actor();
+export const auditAppointments = (detail: string) => appendAudit({ type: 'appointments', stationName: actor().station, userShortName: actor().user?.shortName, detail });
+export interface ApptRefLookup { ref: string; clientId: string; clientName: string; email: string; phone: string; watch?: string; kind: 'estimate' | 'sales_order' }
+// Drop-off books against an estimate #; pick-up against a sales order # (or the SO's job #)
+export const lookupApptRef = (type: 'drop_off' | 'pick_up', raw: string): ApptRefLookup | null => {
+  const q = raw.trim().toUpperCase().replace(/^EST-?/, 'E');
+  if (!q) return null;
+  if (type === 'drop_off') { const e = store.estimates.find((x) => x.number.toUpperCase() === q); if (!e) return null; const c = byId(fx.clients, e.clientId); const w = e.watchId ? fx.watches.find((x) => x.id === e.watchId) : undefined; return { ref: e.number, clientId: c.id, clientName: fullNameOf(c), email: c.email, phone: c.phone, watch: w ? `${w.brand} ${w.model}` : undefined, kind: 'estimate' }; }
+  const o = store.salesOrders.find((x) => x.number.toUpperCase() === q || (x.jobId && store.jobs.find((j) => j.id === x.jobId)?.number.toUpperCase() === q)); if (!o) return null; const c = byId(fx.clients, o.clientId); const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; const w = j?.watchId ? fx.watches.find((x) => x.id === j.watchId) : undefined;
+  return { ref: o.number, clientId: c.id, clientName: fullNameOf(c), email: c.email, phone: c.phone, watch: w ? `${w.brand} ${w.model}` : undefined, kind: 'sales_order' };
+};
+export const clientBrief = (clientId: string) => { const c = fx.clients.find((x) => x.id === clientId); return c ? { clientName: fullNameOf(c), email: c.email, phone: c.phone } : null; };
+
+// ---- Scan 1 · Arrival as a bulk session: scan, scan, scan → Commit (same pattern as the Assign/Move click map). Nothing is logged until Commit.
+export interface ArrivalRow { id: string; tracking: string; carrier: Carrier; matched: 'label_request' | 'known' | 'none' | 'duplicate'; clientId?: string; clientName?: string; estimateNumber?: string; manualClientId?: string }
+export const previewArrival = (raw: string, carrier?: Carrier): ArrivalRow => {
+  const tracking = raw.trim(); const dup = store.packages.find((p) => p.trackingNumber === tracking);
+  const sh = shp.rows.find((r) => r.trackingNumber === tracking && r.direction === 'inbound'); const c = sh ? fx.clients.find((x) => x.id === sh.clientId) : undefined; const est = sh ? store.estimates.find((e) => e.id === sh.estimateId) : undefined;
+  return { id: `ar-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, tracking, carrier: carrier ?? detectCarrier(tracking), matched: dup ? 'duplicate' : sh ? 'label_request' : 'none', clientId: c?.id, clientName: c ? fullNameOf(c) : undefined, estimateNumber: est?.number };
+};
+export interface ArrivalCommitResult { row: ArrivalRow; ok: boolean; pkg?: PackageWithRefs; bin?: string; error?: string }
+export async function commitArrivals(rows: ArrivalRow[], signature: boolean): Promise<ArrivalCommitResult[]> {
+  const out: ArrivalCommitResult[] = [];
+  for (const row of rows) {
+    try {
+      const pkg = await logArrival({ source: 'carrier', trackingNumber: row.tracking, carrier: row.carrier, signatureNoted: signature });
+      const free = SHELF_BINS.find((b) => !store.packages.some((p) => p.status === 'arrived' && p.shelfBin === b)); if (!free) throw new Error('No free shelf bin');
+      const shelved = await shelvePackage(pkg.id, { shelfBin: free, clientId: !pkg.clientId && row.manualClientId ? row.manualClientId : undefined });
+      out.push({ row, ok: true, pkg: shelved, bin: shelved.shelfBin });
+    } catch (e) { out.push({ row, ok: false, error: e instanceof Error ? e.message : 'Failed' }); }
+  }
+  const a = actor(); appendAudit({ type: 'intake', stationName: a.station, userShortName: a.user?.shortName, detail: `Scan 1 · bulk commit · ${out.filter((x) => x.ok).length}/${rows.length} packages shelved` });
+  return resolve(out);
+}

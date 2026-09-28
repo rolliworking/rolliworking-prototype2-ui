@@ -6,7 +6,9 @@ import type { BillExtraction } from '@/api/ai';
 import * as api from '@/api/client';
 import type { BillAudit, BillAuditLine, BillBucket, BillLine } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
-import { field, Flash, Head } from '@/components/rs/RsBits';
+import { field, Flash, Head, Tabs } from '@/components/rs/RsBits';
+import { JobTemplateManager } from '@/components/setup/JobTemplateManager';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
@@ -23,6 +25,12 @@ const REASONS = { accept: ['Legit surcharge (address correction)', 'Legit surcha
 
 // Manager tier (dollars). Upload → parsed lines for a human eye (correctable) → match → buckets → Accept / Dispute → dispute report via Outbox template
 export default function BillAuditPage() {
+  const [sp, setSp] = useSearchParams(); const tab = sp.get('tab') === 'templates' ? 'templates' : 'bill';
+  if (tab === 'templates') return <div data-testid="bill-audit-page" className="space-y-4"><Head title="Bill Audit · Job templates" sub="Job Template Manager — 100+ legacy templates: search / filter, lines, W/B/P/PM flags (applying one sets the job's chips, VB10-04), create · edit · duplicate · archive, one-time migration review" /><Tabs prefix="ba" active={tab} tabs={[{ key: 'bill', label: 'Shipping bill audit' }, { key: 'templates', label: 'Job templates' }]} onChange={(k) => setSp(k === 'bill' ? {} : { tab: k })} /><JobTemplateManager /></div>;
+  return <BillAuditBody onTab={(k) => setSp(k === 'bill' ? {} : { tab: k })} />;
+}
+
+function BillAuditBody({ onTab }: { onTab: (k: string) => void }) {
   const [audits, setAudits] = useState<BillAudit[]>([]); const [open, setOpen] = useState<BillAudit | null>(null); const [parsed, setParsed] = useState<BillExtraction | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [msg, setMsg] = useState<string | null>(null);
   const reload = () => api.getBillAudits().then((a) => { setAudits(a); if (open) setOpen(a.find((x) => x.id === open.id) ?? null); });
   useEffect(() => { void api.getBillAudits().then(setAudits); }, []);
@@ -32,6 +40,7 @@ export default function BillAuditPage() {
   const match = () => parsed && run(async () => { const b = await api.createBillAudit(parsed.lines, parsed.fileName); setParsed(null); setOpen(b); }, 'Matched against the label ledger');
   return <div data-testid="bill-audit-page" className="space-y-4">
     <Head title="Shipping bill audit" sub={<>Carrier / Parcel Pro invoice vs every label we generated · matched by tracking # · Accept / Dispute · dispute letter via Outbox <Provisional note="Parcel Pro bill is a MOCK; PDF/image bills go to Claude (suggest → verify), CSV parses locally" /></>} action={<label className="inline-flex cursor-pointer items-center gap-1 rounded-sm border border-line bg-surface px-3 py-1.5 text-xs font-medium hover:bg-canvas"><FileUp size={13} /> Upload bill (PDF / CSV)<input data-testid="bill-upload" type="file" accept=".pdf,.csv,.txt,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>} />
+    <Tabs prefix="ba" active="bill" tabs={[{ key: 'bill', label: 'Shipping bill audit' }, { key: 'templates', label: 'Job templates' }]} onChange={onTab} />
     <Flash error={error} msg={msg} />
     {busy && <div data-testid="bill-extracting" className="inline-flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><Sparkles size={13} className="animate-pulse" /> Claude is reading the bill…</div>}
     {parsed && <ParsedLines x={parsed} onChange={setParsed} onCancel={() => setParsed(null)} onMatch={match} />}

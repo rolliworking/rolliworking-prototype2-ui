@@ -75,7 +75,7 @@ export function VendorDetailPage() {
     </div>
     <Card title={`Purchase history · ${data.history.length}`} subtitle="every receipt / imported row for this vendor, newest first" bodyClassName="p-0" testId="vendor-history-card">
       <Table><thead><tr><Th>Date</Th><Th>Part</Th><Th className="text-right">Qty</Th><Th className="text-right">Unit price</Th><Th>PO</Th></tr></thead><tbody>
-        {data.history.map((h) => <tr key={h.id} data-testid={`vendor-hist-${h.id}`}><Td className="text-xs">{fmtDate(h.at)}</Td><Td><span className="font-mono text-xs">{h.partNumber}</span> <span className="text-xs text-ink-500">{h.partName}</span></Td><Td className="tabular text-right text-xs">{h.qty}</Td><Td className="tabular text-right text-xs">{fmtMoneyCents(h.unitPrice / 100)}</Td><Td className="font-mono text-xs text-ink-500">{h.poNumber ?? '—'}</Td></tr>)}
+        {data.history.map((h) => <tr key={h.id} data-testid={`vendor-hist-${h.id}`}><Td className="text-xs">{fmtDate(h.at)}</Td><Td><span className="font-mono text-xs">{h.partNumber}</span> <span className="text-xs text-ink-500">{h.partName}</span></Td><Td className="tabular text-right text-xs">{h.qty}</Td><Td className="tabular text-right text-xs">{fmtMoneyCents(h.unitPrice)}</Td><Td className="font-mono text-xs text-ink-500">{h.poNumber ?? '—'}</Td></tr>)}
         {!data.history.length && <EmptyRow colSpan={5} text="No purchase history" />}
       </tbody></Table>
     </Card>

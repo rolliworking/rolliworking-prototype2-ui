@@ -56,7 +56,8 @@ export type AuditEventType =
   | 'comms'
   | 'rollitime'
   | 'rgtime'
-  | 'kiosk';
+  | 'kiosk'
+  | 'appointments';
 
 export interface AuditEvent {
   id: string;
@@ -984,11 +985,12 @@ export interface StockMovement extends Stamp {
   reason: string; ref?: string; poId?: string; jobId?: string; countId?: string; division: Division;
 }
 export interface CycleCountLine { partId: string; expected: number; counted?: number; skipped?: boolean; unitCost?: number }
-export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number }
+export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number; gainLoss?: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
-export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute';
-export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string }
+export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted';
+export type TemplateAudience = 'client' | 'vendor' | 'internal';
+export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string; audience?: TemplateAudience; usedBy?: string; active?: boolean }
 
 export interface UserAdminInput { firstName: string; shortName: string; dutyLabel: string; accessTier: AccessTier; roles: Role[]; division: Division | 'both'; password: string; pin: string }
 

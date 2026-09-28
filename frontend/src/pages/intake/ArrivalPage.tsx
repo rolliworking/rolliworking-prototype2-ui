@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Carrier, PackageWithRefs, ShelfRow } from '@/api/client';
-import { ScanInput, Stamp } from '@/components/intake/IntakeBits';
-import { OpenScanCard, ShelfBoard, ShelveCard } from '@/components/intake/TwoScanBits';
+import { Stamp } from '@/components/intake/IntakeBits';
+import { ArrivalSession, OpenScanCard, ShelfBoard, ShelveCard } from '@/components/intake/TwoScanBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -34,15 +34,7 @@ export default function ArrivalPage() {
     setTimeout(() => setFlash(null), 3500);
   };
 
-  const scan = async (tracking: string) => {
-    try {
-      const pkg = await api.logArrival({ source: 'carrier', trackingNumber: tracking, carrier: carrier === 'auto' ? undefined : carrier, signatureNoted: signature });
-      after(pkg, pkg.client ? `Scan 1 · matched ${fullName(pkg.client)} — assign a bin` : 'Scan 1 · no label match — assign client + bin');
-      setPending(pkg);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not log package');
-    }
-  };
+  const committed = (res: Awaited<ReturnType<typeof api.commitArrivals>>) => { const ok = res.filter((r) => r.ok); setFlash(`Committed ${ok.length}/${res.length} · ${ok.map((r) => `${r.pkg?.subNumber} → ${r.bin}`).join(', ')}`); reload(); void reloadShelf(); refreshCounts(); setTimeout(() => setFlash(null), 6000); };
 
   const walkIn = async () => {
     const pkg = await api.logArrival({ source: 'walk_in', signatureNoted: false, clientId: walkInClient === 'unknown' ? undefined : walkInClient });
@@ -54,9 +46,8 @@ export default function ArrivalPage() {
   return (
     <div data-testid="arrival-page" className="grid grid-cols-[380px_1fr] gap-4">
       <div className="space-y-4">
-        <Card title="Scan 1 · Arrival" subtitle="Scan the carrier tracking # as packages hit the door → matched to the client's label request → shelf bin" testId="arrival-scan-card">
-          <ScanInput label="Tracking number" testId="arrival-tracking-input" onScan={scan} error={error} placeholder="Scan tracking… then Enter" />
-          <div className="mt-3 flex items-center gap-3">
+        <Card title="Scan 1 · Arrival" subtitle="Bulk: scan every package as it hits the door → one Commit matches, assigns bins and logs who / station / time for the whole batch" testId="arrival-scan-card">
+          <div className="mb-3 flex items-center gap-3">
             <label className="flex items-center gap-1.5 text-xs text-ink-700">
               <input type="checkbox" data-testid="arrival-signature" checked={signature} onChange={(e) => setSignature(e.target.checked)} className="accent-ink" />
               Signature given to carrier
@@ -68,6 +59,8 @@ export default function ArrivalPage() {
               ))}
             </select>
           </div>
+          <ArrivalSession clients={clients ?? []} carrier={carrier} signature={signature} onCommitted={committed} />
+          {error && <div className="mt-2 text-xs text-rose-700">{error}</div>}
           {flash && (
             <div data-testid="arrival-flash" className="mt-3 flex items-center gap-1.5 rounded-sm bg-moss-50 px-2.5 py-1.5 text-xs font-medium text-moss-700 animate-rise">
               <Check size={12} strokeWidth={3} /> {flash}

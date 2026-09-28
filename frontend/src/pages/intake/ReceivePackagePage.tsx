@@ -1,6 +1,7 @@
 import { ArrowLeft, Check, Mail } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { InspectionCameraFlow } from '@/components/inspection/InspectionCameraFlow';
 import * as api from '@/api/client';
 import type { Client, EstimateWithRefs, PackagePhoto } from '@/api/client';
 import { NoEstimatePanel } from '@/components/intake/NoEstimatePanel';
@@ -18,6 +19,8 @@ import { fmtDate, fmtMoneyCents, fullName } from '@/lib/format';
 export default function ReceivePackagePage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const [sp, setSp] = useSearchParams(); const [cam, setCam] = useState(sp.get('camera') === '1');
+  const closeCam = () => { setCam(false); if (sp.get('camera')) { sp.delete('camera'); setSp(sp, { replace: true }); } };
   const { user, station } = useAuth();
   const { refreshCounts } = useIntakeCounts();
   const { data: pkg, loading } = useAsync(() => api.getPackage(id), [id]);
@@ -153,7 +156,8 @@ export default function ReceivePackagePage() {
             {b2b && !estimate && <p data-testid="b2b-linked" className="mt-2 text-xs text-ink-700">{b2b.client ? <>No estimate · client <b>{fullName(b2b.client)}</b> linked via {b2b.tier} · label <span className="font-mono">{b2b.code}</span></> : <>No estimate · <b>SUB# only</b> · label <span className="font-mono">{b2b.code}</span> — resolve at the desk</>}</p>}
           </Card>
 
-          <Card title="Photos" subtitle="Webcam capture and file upload — multiple" testId="receive-photos-card">
+          <Card title="Photos" subtitle="IPEVO capture (Scan 2 launches it) · webcam · upload" testId="receive-photos-card" action={!readOnly ? <Button size="sm" data-testid="receive-ipevo-start" onClick={() => setCam(true)}>IPEVO capture</Button> : undefined}>
+            {cam && !readOnly && <InspectionCameraFlow onShot={async (p) => { setPhotos((prev) => [...prev, { id: `ph-${Date.now().toString(36)}-${prev.length}`, source: 'camera', dataUrl: p.dataUrl, slot: p.source === 'ipevo' ? 'IPEVO' : 'Microscope' }]); }} onDone={closeCam} onClose={closeCam} />}
             {!readOnly && <PhotoCapture onAdd={(p) => setPhotos((prev) => [...prev, ...p])} />}
             <div className={readOnly ? '' : 'mt-3 border-t border-line pt-3'}>
               <PhotoStrip photos={photos} onRemove={readOnly ? undefined : (pid) => setPhotos((prev) => prev.filter((p) => p.id !== pid))} />
