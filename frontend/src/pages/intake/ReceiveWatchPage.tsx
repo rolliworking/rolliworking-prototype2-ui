@@ -10,6 +10,7 @@ import type { DeptCode, PackagePhoto, ReceiveWatchInput, ReceiveWatchResult, Wat
 import { InspectionCameraFlow } from '@/components/inspection/InspectionCameraFlow';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
 import { LabelPrintDialog } from '@/components/intake/LabelBits';
+import { MultiItemPanel } from '@/components/estimates/MultiItemBits';
 import { ComponentChecklist, LineChecklist, SameWatchFork } from '@/components/intake/InspectionBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
@@ -40,6 +41,7 @@ export default function ReceiveWatchPage() {
   const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
   const [photos, setPhotos] = useState<PackagePhoto[]>([]); const [cam, setCam] = useState(false); const [photoScan, setPhotoScan] = useState(''); const [photoErr, setPhotoErr] = useState<string | null>(null); const [lastAttach, setLastAttach] = useState<string | null>(null);
   const [targetWeeks, setTargetWeeks] = useState(6); const [targetDate, setTargetDate] = useState(addWeeks(6));
+  const [selItem, setSelItem] = useState<string | null>(null); const [itemsReceived, setItemsReceived] = useState<string[]>([]);
   const [flag, setFlag] = useState(''); const [flagNote, setFlagNote] = useState(''); const [flagBusy, setFlagBusy] = useState(false); const [flagMsg, setFlagMsg] = useState<string | null>(null);
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
@@ -50,6 +52,7 @@ export default function ReceiveWatchPage() {
     setSerial(ctx.estimate.watch!.serial);
     setWorkflow(ctx.suggestedWorkflow);
     setPhotos(ctx.pkg.photos.filter(api.isInspectionPhoto));
+    setItemsReceived(ctx.pkg.itemsReceived ?? []);
     if (ctx.pkg.targetDate) { setTargetWeeks(ctx.pkg.targetWeeks ?? 6); setTargetDate(ctx.pkg.targetDate); }
   }, [ctx]);
 
@@ -195,6 +198,9 @@ export default function ReceiveWatchPage() {
         {pkg.photos.length > 0 && <div className="mt-3 border-t border-line pt-3"><PhotoStrip photos={pkg.photos} size="sm" /></div>}
       </Card>
 
+      {(estimate.items?.length ?? 0) > 1 && <Card title="3b · Which item are you logging?" subtitle="Item count, numbering and flow tags come straight from the estimate — nothing re-entered here" testId="rw-items-card">
+        <MultiItemPanel title={`Multi-item estimate · ${estimate.number}`} items={estimate.items!} lines={estimate.lines} selected={selItem ?? estimate.items![0].id} onSelect={setSelItem} received={itemsReceived} onToggleReceived={readOnly ? undefined : (id, v) => void api.setItemReceived(pkg.id, id, v).then((p) => setItemsReceived(p.itemsReceived ?? []))} testId="rw-items" />
+      </Card>}
       <Card title="4 · Inspector’s confirmation — what is physically in hand" subtitle="Tap each item you are holding right now; this is compared against what was recorded as received above" testId="inspection-components-card" accent="moss">
         <div data-testid="box-pills" className="mb-3 flex flex-wrap gap-1.5">{Array.from(new Set([...ctx.expectedComponents, ...pkg.contents])).map((c) => { const exp = ctx.expectedComponents.includes(c); const rec = pkg.contents.includes(c); const ver = components.includes(c); return <button key={c} type="button" data-testid={`box-pill-${c.replace(/\s+/g, '-')}`} data-verified={ver} disabled={readOnly} onClick={() => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors ${ver ? 'border-moss bg-moss text-white' : exp && rec ? 'border-line bg-surface text-ink' : exp ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>{c}<span className={`font-mono text-[9px] uppercase ${ver ? 'text-white/70' : 'text-ink-400'}`}>{exp ? 'exp' : 'not exp'} · {rec ? 'rec' : 'not rec'}</span></button>; })}</div>
         <ComponentChecklist expected={ctx.expectedComponents} received={components} onToggle={(c) => setComponents((v) => (v.includes(c) ? v.filter((x) => x !== c) : [...v, c]))} />

@@ -137,6 +137,7 @@ export interface EstimateLine {
   type: LineType;
   catalogId?: string;
   partNumber?: string;
+  itemId?: string;
 }
 
 export interface Address {
@@ -169,6 +170,7 @@ export interface EstimateRevision {
 export interface Estimate {
   id: string;
   number: string;
+  items?: import('./items').EstimateItem[];
   targetWeeks?: number;
   targetDate?: string;
   revision: number;
@@ -481,6 +483,7 @@ export interface Package {
   photos: PackagePhoto[];
   receiptPrinted: boolean;
   processedAt?: string;
+  itemsReceived?: string[];
   targetWeeks?: number;
   targetDate?: string;
   processedBy?: string;

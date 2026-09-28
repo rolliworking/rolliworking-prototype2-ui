@@ -1,10 +1,11 @@
 import type { DeptCode, LineType } from './types';
+import type { ItemFlow } from './items';
 import { actorInfo, auditAppointments as audit } from './client';
 
 // ---- Job templates — built for volume (legacy has 100+). Applying one sets the job's W/B/P/PM chips (VB10-04); legacy imports carry inferred flags until a human confirms.
-export interface JobTemplateLine { id: string; description: string; dept: DeptCode; type: LineType; qty: number; unitPrice: number }
-export interface JobTemplate { id: string; name: string; category: string; depts: DeptCode[]; inferredDepts: DeptCode[]; lines: JobTemplateLine[]; source: 'legacy' | 'new'; reviewed: boolean; reviewedBy?: string; reviewedAt?: string; archived: boolean; createdAt: string; updatedAt: string; updatedBy: string; usedCount: number }
-export interface JobTemplateInput { id?: string; name: string; category: string; depts: DeptCode[]; lines: Omit<JobTemplateLine, 'id'>[] }
+export interface JobTemplateLine { id: string; description: string; dept: DeptCode; type: LineType; qty: number; unitPrice: number; item?: number }
+export interface JobTemplate { items?: { flow: ItemFlow; label: string }[]; id: string; name: string; category: string; depts: DeptCode[]; inferredDepts: DeptCode[]; lines: JobTemplateLine[]; source: 'legacy' | 'new'; reviewed: boolean; reviewedBy?: string; reviewedAt?: string; archived: boolean; createdAt: string; updatedAt: string; updatedBy: string; usedCount: number }
+export interface JobTemplateInput { items?: { flow: ItemFlow; label: string }[]; id?: string; name: string; category: string; depts: DeptCode[]; lines: Omit<JobTemplateLine, 'id'>[] }
 export interface JobTemplateFilter { q?: string; category?: string; dept?: DeptCode; unreviewedOnly?: boolean; includeArchived?: boolean }
 
 export const JOB_TEMPLATE_CATEGORIES = ['Complete service', 'Movement', 'Case & refinish', 'Bracelet', 'Battery / quartz', 'Water resistance', 'Vintage', 'Trade / B2B'];
@@ -18,6 +19,8 @@ const T = (id: string, name: string, category: string, lines: JobTemplateLine[],
   return { id, name, category, depts: o.depts ?? inferred, inferredDepts: inferred, lines, source: o.source ?? 'legacy', reviewed, reviewedBy: reviewed ? 'MH' : undefined, reviewedAt: reviewed ? dAgo(4) : undefined, archived: o.archived ?? false, createdAt: dAgo(400), updatedAt: dAgo(reviewed ? 4 : 30), updatedBy: reviewed ? 'MH' : 'legacy import', usedCount: o.used ?? 0 };
 };
 const templates: JobTemplate[] = [
+  // Seeded 2-item template — Item 1 full watch service, Item 2 band-only (separate bracelet dropped off with it)
+  { ...T('jt-multi', 'Watch service + separate bracelet', 'Complete service', [{ ...L('Complete movement service — cal. 3135', 'W', 1250), item: 1 }, { ...L('Gasket set', 'W', 45, 'part'), item: 1 }, { ...L('Bracelet refinish — second Oyster bracelet', 'P', 220), item: 2 }, { ...L('Re-pin stretched links', 'B', 180), item: 2 }], { depts: ['W', 'B', 'P'] }), items: [{ flow: 'W', label: 'Rolex Submariner' }, { flow: 'B', label: 'Spare Oyster bracelet' }] },
   T('jt-01', 'Complete service — cal. 3135', 'Complete service', [L('Complete movement service — cal. 3135', 'W', 1250), L('Gasket set', 'W', 45, 'part'), L('Pressure test', 'W', 0), L('Case & bracelet refinish', 'P', 320)], { reviewed: true, used: 212 }),
   T('jt-02', 'Complete service — cal. 3235', 'Complete service', [L('Complete movement service — cal. 3235', 'W', 1350), L('Gasket set', 'W', 45, 'part'), L('Case & bracelet refinish', 'P', 320)], { reviewed: true, used: 148 }),
   T('jt-03', 'Complete service — cal. 4130 (Daytona)', 'Complete service', [L('Complete movement service — cal. 4130', 'W', 1650), L('Chronograph adjustment', 'W', 0), L('Case & bracelet refinish', 'P', 360)], { reviewed: true, used: 61 }),
@@ -52,8 +55,8 @@ export async function saveJobTemplate(i: JobTemplateInput): Promise<JobTemplate>
   const dup = templates.find((t) => t.id !== i.id && !t.archived && t.name.trim().toLowerCase() === i.name.trim().toLowerCase()); if (dup) throw new Error(`A template named "${dup.name}" already exists`);
   const a = actorInfo(); const now = new Date().toISOString(); const lines = i.lines.map((l) => ({ ...l, id: lid() }));
   const ex = i.id ? templates.find((t) => t.id === i.id) : undefined;
-  if (ex) { Object.assign(ex, { name: i.name.trim(), category: i.category, depts: i.depts, lines, updatedAt: now, updatedBy: a.by, reviewed: true, reviewedBy: a.by, reviewedAt: now }); audit(`Job template updated · ${ex.name}`); return resolve({ ...ex }); }
-  const t: JobTemplate = { id: `jt-${Date.now().toString(36)}`, name: i.name.trim(), category: i.category, depts: i.depts, inferredDepts: inferDepts(lines), lines, source: 'new', reviewed: true, reviewedBy: a.by, reviewedAt: now, archived: false, createdAt: now, updatedAt: now, updatedBy: a.by, usedCount: 0 };
+  if (ex) { Object.assign(ex, { name: i.name.trim(), category: i.category, depts: i.depts, lines, items: i.items, updatedAt: now, updatedBy: a.by, reviewed: true, reviewedBy: a.by, reviewedAt: now }); audit(`Job template updated · ${ex.name}`); return resolve({ ...ex }); }
+  const t: JobTemplate = { id: `jt-${Date.now().toString(36)}`, name: i.name.trim(), category: i.category, depts: i.depts, inferredDepts: inferDepts(lines), lines, items: i.items, source: 'new', reviewed: true, reviewedBy: a.by, reviewedAt: now, archived: false, createdAt: now, updatedAt: now, updatedBy: a.by, usedCount: 0 };
   templates.push(t); audit(`Job template created · ${t.name}`); return resolve({ ...t });
 }
 export async function duplicateJobTemplate(id: string): Promise<JobTemplate> { const s = templates.find((t) => t.id === id); if (!s) throw new Error('Template not found'); const a = actorInfo(); const now = new Date().toISOString(); const t: JobTemplate = { ...s, id: `jt-${Date.now().toString(36)}`, name: `${s.name} (copy)`, lines: s.lines.map((l) => ({ ...l, id: lid() })), source: 'new', reviewed: true, reviewedBy: a.by, reviewedAt: now, archived: false, createdAt: now, updatedAt: now, updatedBy: a.by, usedCount: 0 }; templates.push(t); audit(`Job template duplicated · ${s.name} → ${t.name}`); return resolve({ ...t }); }

@@ -163,6 +163,8 @@ const store = {
   magicLinks: readJson<MagicLink[]>('rollisuite.rc.magicLinks', []),
   counters: { sub: 314, label: 3, estimate: 1058, job: Math.max(2030, ...fx.jobs.map((j) => Number(j.number.replace(/\D/g, '')) || 0)), so: 107, pr: 44 },
 };
+// Seeded multi-item estimate — E01053: Item 1 full watch service, Item 2 band-only; pk-06 already has Item 1 in hand
+(() => { const e = store.estimates.find((x) => x.number === 'E01053'); if (!e) return; const items: EstimateItem[] = [{ id: 'it-e13-1', flow: 'W', label: `${store.watches.find((w) => w.id === e.watchId)?.brand ?? ''} ${store.watches.find((w) => w.id === e.watchId)?.model ?? ''}`.trim() }, { id: 'it-e13-2', flow: 'B', label: 'Separate Oyster bracelet' }]; e.items = items; e.lines.forEach((l) => { l.itemId = items[0].id; }); e.lines.push({ id: 'ln-e13-band', description: 'Re-pin stretched links — spare bracelet', qty: 1, unitPrice: 180, dept: 'B', taxable: true, type: 'service', itemId: items[1].id }); const p = store.packages.find((x) => x.id === 'pk-06'); if (p) p.itemsReceived = [items[0].id]; })();
 
 const byId = <T extends { id: string }>(rows: T[], id: string): T => {
   const row = rows.find((r) => r.id === id);
@@ -830,6 +832,11 @@ export const parseRefSerial = (raw: string): { reference: string; serial: string
   return null;
 };
 
+export async function setItemReceived(packageId: string, itemId: string, received: boolean): Promise<PackageWithRefs> {
+  const pkg = getPkg(packageId); const cur = pkg.itemsReceived ?? []; pkg.itemsReceived = received ? Array.from(new Set([...cur, itemId])) : cur.filter((x) => x !== itemId);
+  const est = pkg.estimateId ? store.estimates.find((e) => e.id === pkg.estimateId) : undefined; const n = est?.items ? est.items.findIndex((i) => i.id === itemId) + 1 : 0;
+  stamp(`Item ${n} of ${est?.items?.length ?? 1} ${received ? 'in hand' : 'unmarked'}`, pkg.subNumber); return resolve(pkgWithRefs(pkg));
+}
 export const isInspectionPhoto = (p: PackagePhoto) => !!p.slot?.startsWith('inspection-');
 export async function addPackageInspectionPhoto(packageId: string, p: { source: 'ipevo' | 'microscope'; dataUrl: string }): Promise<{ pkg: PackageWithRefs; photo: PackagePhoto; attachedToJob?: string }> {
   const pkg = getPkg(packageId); const a = actor();
@@ -934,6 +941,7 @@ export async function createWatch(clientId: string, input: NewWatchInput): Promi
 }
 
 export interface EstimateInput {
+  items?: EstimateItem[];
   clientId: string;
   watchId?: string;
   requestId?: string;
@@ -964,6 +972,7 @@ export async function createEstimate(input: EstimateInput): Promise<EstimateWith
     department: 'watchmaking',
     status: 'draft',
     lines,
+    items: input.items && input.items.length > 1 ? input.items.map((i) => ({ ...i })) : undefined,
     subtotal: 0, shippingAmount: 0, taxAmount: 0, total: 0,
     validUntil: input.validUntil,
     clientNotes: input.clientNotes,
@@ -5351,6 +5360,8 @@ export const applySheetSuggestion = (f: InspectionForm, s: SheetSuggestion, acce
 void AUTHENTICITY; void BRACELET_LINES; void INSPECTION_COMPONENTS;
 export const shortNameOf = (userId: string) => fx.users.find((u) => u.id === userId)?.shortName ?? userId;
 
+export type { EstimateItem, ItemFlow } from './items';
+import type { EstimateItem } from './items';
 // ---- Appointments bridge (data module lives in ./appointments.ts; these expose the store bits it needs) ----
 export const actorInfo = () => actor();
 // ---- Hitlist bridge (per-person hit lists, inbox, supervisor rollup live in ./hitlist.ts) ----
