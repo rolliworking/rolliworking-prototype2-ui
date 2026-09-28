@@ -118,7 +118,8 @@ function RwManagerOnly({ label, children }: { label: string; children: JSX.Eleme
   return user?.accessTier === 'manager' ? children : <RwRestricted label={label} />;
 }
 
-const InspectionRedirect = () => { const { id } = useParams(); return <Navigate to={`/intake/inspect/${id}`} replace />; };
+const InspectionRedirect = () => { const { id } = useParams(); const { search } = useLocation(); return <Navigate to={`/intake/inspect/${id}${search}`} replace />; };
+const InspectionNewRedirect = () => { const { search } = useLocation(); return <Navigate to={`/intake/inspect/new${search}`} replace />; };
 const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`/rw/testing/test/${jobId}`} replace />; };
 
 export default function App() {
@@ -201,7 +202,7 @@ export default function App() {
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/jobs/new" element={<JobCreatePage />} />
               <Route path="/jobs/all" element={<AllJobsPage />} />
-              <Route path="/inspection/new" element={<Navigate to="/intake/inspect/new" replace />} />
+              <Route path="/inspection/new" element={<InspectionNewRedirect />} />
               <Route path="/inspection/:id" element={<InspectionRedirect />} />
               <Route path="/inspection-photos" element={<Navigate to="/intake/photos" replace />} />
               <Route path="/jobs/shop-time" element={<ShopTimePage />} />

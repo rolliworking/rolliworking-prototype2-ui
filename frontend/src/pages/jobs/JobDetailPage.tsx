@@ -14,6 +14,7 @@ import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, Ow
 import { JobTimeline } from '@/components/jobs/JobTimeline';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
+import { BenchTestsPanel } from '@/components/jobs/BenchTestsPanel';
 import { InspectionReportPanel } from '@/components/jobs/InspectionReportPanel';
 import { TimingCard } from '@/components/jobs/TimingCard';
 import { ComponentsPanel } from '@/components/jobs/ComponentBits';
@@ -132,6 +133,7 @@ export default function JobDetailPage() {
           <TimingCard jobId={j.id} watchId={j.watchId} status={j.status} />
           <Card title="Service evidence" subtitle="Four QC slots · filed by scanning the watch label · keyed to watch AND job" testId="job-evidence-card"><EvidencePanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
+          <Card title="Bench tests" subtitle="Before / after timing + Proofmaster pressure + Witschi Chronoscope · tolerance sheet with caliber match · one photo in, structured readings out (mock extraction)" testId="job-bench-tests-card"><BenchTestsPanel jobId={j.id} /></Card>
           <Card title="Parts requests" subtitle="Chat-style lookup → attach → supervisor approval" testId="job-parts-card" bodyClassName="p-0">
             <ul className="divide-y divide-line/70">{prs.map((r) => <li key={r.id}><button type="button" data-testid={`job-pr-${r.id}`} onClick={() => setOpenPr(r)} className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-canvas"><span className="font-mono font-medium">{r.number}</span><span className="font-mono text-ink">{r.part?.partNumber ?? '—'}</span><span className="truncate text-ink-700">{r.part?.name ?? 'no part attached'}</span><span className="ml-auto text-ink-400">{r.requestedBy}</span><PartsRequestPill status={r.status} /></button></li>)}{prs.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">No parts requests — open one from the actions bar.</li>}</ul>
           </Card>

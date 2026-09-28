@@ -34,7 +34,7 @@ export default function RcEstimatePage() {
         <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Estimate {e.number}{e.revision > 1 ? ` · revision ${e.revision}` : ''}</div>
         <h1 className="mt-1 font-serif text-4xl font-light tracking-tight">{e.watch ? `${e.watch.brand} ${e.watch.model}` : 'Your estimate'}</h1>
         <p className="mt-2 font-serif text-lg italic text-rc-ink" data-testid="rc-estimate-status">{PLAIN_STATUS[e.status] ?? e.status}</p>
-        {e.watch && <p className="text-sm text-rc-muted">Ref. {e.watch.reference} · Sent {e.sentAt ? rcDate(e.sentAt) : rcDate(e.createdAt)} · Valid until {rcDate(e.validUntil)}</p>}
+        {e.watch && <p className="text-sm text-rc-muted">Ref. {e.watch.reference} · Sent {e.sentAt ? rcDate(e.sentAt) : rcDate(e.createdAt)} · Valid until {rcDate(e.validUntil)}{e.targetDate && <> · <span data-testid="rc-estimate-target">Target completion {rcDate(e.targetDate)}</span></>}</p>}
       </div>
 
       {newer && <div data-testid="rc-estimate-superseded" className="rounded-lg border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900">A newer estimate replaces this one. <Link to={`/rc/estimates/${newer}`} data-testid="rc-estimate-newer-link" className="font-medium underline">Open the current estimate →</Link></div>}

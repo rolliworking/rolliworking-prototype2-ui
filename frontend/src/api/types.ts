@@ -169,6 +169,8 @@ export interface EstimateRevision {
 export interface Estimate {
   id: string;
   number: string;
+  targetWeeks?: number;
+  targetDate?: string;
   revision: number;
   revisions: EstimateRevision[];
   clientId: string;
@@ -479,6 +481,8 @@ export interface Package {
   photos: PackagePhoto[];
   receiptPrinted: boolean;
   processedAt?: string;
+  targetWeeks?: number;
+  targetDate?: string;
   processedBy?: string;
   workOrderAt?: string;
   workOrderBy?: string;
@@ -544,6 +548,8 @@ export interface InspectionContext {
 
 export interface ReceiveWatchInput {
   itemLabel?: string;
+  targetWeeks?: number;
+  targetDate?: string;
   reference: string;
   serial: string;
   linesVerified: number[];

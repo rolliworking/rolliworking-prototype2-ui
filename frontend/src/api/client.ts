@@ -761,6 +761,8 @@ export async function receiveWatch(packageId: string, input: ReceiveWatchInput):
   pkg.workflow = [...input.workflow];
   pkg.componentsVerified = [...input.componentsReceived];
   pkg.notes = input.notes || pkg.notes; pkg.itemLabel = input.itemLabel?.trim() || pkg.itemLabel;
+  // Target completion is set ONCE, here — the inspection form, estimate and client report read it from the estimate
+  if (input.targetDate) { pkg.targetWeeks = input.targetWeeks; pkg.targetDate = input.targetDate; const e0 = store.estimates.find((e) => e.id === ctx.estimate.id); if (e0) { e0.targetWeeks = input.targetWeeks; e0.targetDate = input.targetDate; } }
 
   const watch = store.watches.find((w) => w.id === ctx.estimate.watchId);
   if (watch) {
@@ -850,7 +852,7 @@ export async function getIntakeHistory(q = ''): Promise<IntakeHistoryRow[]> {
 }
 export async function getLabelsForPackage(packageId: string): Promise<LabelJob[]> { return resolve(store.labels.filter((l) => l.packageId === packageId)); }
 
-export interface IntakeEditInput { reference: string; serial: string; itemLabel?: string; notes?: string; componentsVerified: string[]; workflow: DeptCode[] }
+export interface IntakeEditInput { reference: string; serial: string; itemLabel?: string; notes?: string; componentsVerified: string[]; workflow: DeptCode[]; targetWeeks?: number; targetDate?: string }
 export async function updateIntakeRecord(packageId: string, input: IntakeEditInput): Promise<PackageWithRefs> {
   const pkg = getPkg(packageId); if (!pkg.inspectedAt) throw new Error('Watch has not been received yet');
   const ref = input.reference.trim().toUpperCase(); const ser = input.serial.trim().toUpperCase();
@@ -863,6 +865,7 @@ export async function updateIntakeRecord(packageId: string, input: IntakeEditInp
   if ((pkg.componentsVerified ?? []).join() !== input.componentsVerified.join()) { changes.push(`components ${input.componentsVerified.join(', ') || '—'}`); pkg.componentsVerified = [...input.componentsVerified]; }
   if ((pkg.itemLabel ?? '') !== (input.itemLabel ?? '').trim()) { changes.push(`item label "${(input.itemLabel ?? '').trim()}"`); pkg.itemLabel = input.itemLabel?.trim() || undefined; }
   if ((pkg.notes ?? '') !== (input.notes ?? '').trim()) { changes.push('notes'); pkg.notes = input.notes?.trim() || undefined; }
+  if (input.targetDate && input.targetDate !== pkg.targetDate) { changes.push(`target ${pkg.targetDate ?? '—'}→${input.targetDate}`); pkg.targetWeeks = input.targetWeeks; pkg.targetDate = input.targetDate; if (est) { est.targetWeeks = input.targetWeeks; est.targetDate = input.targetDate; } insp.forms.filter((f) => f.jobId && est?.jobId === f.jobId).forEach((f) => { f.targetTo = input.targetDate; f.targetWeeks = input.targetWeeks ?? f.targetWeeks; }); }
   if (est && watch) { const c = fx.clients.find((x) => x.id === est.clientId); store.labels.filter((l) => l.packageId === pkg.id).forEach((l) => { if (l.type === 'ref_serial') { l.payload = `${ref} / ${ser}`; l.lines = watchLabelLines(est.number, c?.lastName ?? '', watch, ref, ser); } else { l.payload = `${est.number}|${pkg.subNumber}|${ref}|${ser}|${(pkg.workflow ?? []).join(',')}`; l.lines[3] = `Workflow ${(pkg.workflow ?? []).join(' · ')}`; } }); }
   stamp(`Intake record edited · ${changes.join(' · ') || 'no changes'}`, pkg.subNumber);
   return resolve(pkgWithRefs(pkg));
@@ -5327,6 +5330,7 @@ export async function newInspectionForm(seed?: { jobId?: string; estimateNumber?
   const e = j?.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : seed?.estimateNumber ? store.estimates.find((x) => x.number.toUpperCase() === seed.estimateNumber!.toUpperCase()) : undefined;
   const w = j ? store.watches.find((x) => x.id === j.watchId) : e?.watchId ? store.watches.find((x) => x.id === e.watchId) : undefined; const c = j ? fx.clients.find((x) => x.id === j.clientId) : e ? fx.clients.find((x) => x.id === e.clientId) : undefined;
   if (j || e) f = { ...f, jobId: j?.id, token: `INSP-${(j?.number ?? e?.number ?? id).toUpperCase()}-${Date.now().toString(36).slice(-3).toUpperCase()}`, customer: c ? { name: fullNameOf(c), email: c.email, phone: c.phone } : f.customer, brand: w?.brand ?? '', model: w?.model ?? '', reference: w?.reference ?? '', estimateNumber: e?.number ?? j?.number ?? '', deptTags: [...(j?.workflow ?? (e ? estimateComponentCodes(e).codes : []))], jobType: j ? j.kind.replace('_', ' ') : 'Service' };
+  if (e?.targetDate) { const pk = store.packages.find((p) => p.estimateId === e.id && p.inspectedAt); f = { ...f, targetWeeks: e.targetWeeks ?? f.targetWeeks, targetFrom: (pk?.inspectedAt ?? e.createdAt).slice(0, 10), targetTo: e.targetDate, targetSource: 'receive' }; }
   insp.forms.unshift(f); return resolve({ ...f });
 }
 export async function saveInspectionForm(form: InspectionForm, commit: boolean): Promise<InspectionForm> {
@@ -5356,6 +5360,8 @@ export const hitlistBridge = {
   audit: (detail: string) => appendAudit({ type: 'pin', stationName: actor().station, userShortName: actor().user?.shortName, userDisplayName: actor().user?.displayName, detail }),
   jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
 };
+// ---- Bench-test capture bridge (before/after timing + pressure slips, tolerance sheet — ./benchTests.ts) ----
+export const benchBridge = { job: (id: string) => store.jobs.find((j) => j.id === id), watch: (id?: string) => store.watches.find((w) => w.id === id), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); } };
 export const auditAppointments = (detail: string) => appendAudit({ type: 'appointments', stationName: actor().station, userShortName: actor().user?.shortName, detail });
 export interface ApptRefLookup { ref: string; clientId: string; clientName: string; email: string; phone: string; watch?: string; kind: 'estimate' | 'sales_order' }
 // Drop-off books against an estimate #; pick-up against a sales order # (or the SO's job #)

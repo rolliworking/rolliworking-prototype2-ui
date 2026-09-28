@@ -33,7 +33,7 @@ export const BRACELET_LINES: BraceletRepairLine[] = [
 ];
 export interface InspComponentEntry { component: InspComponent; condition?: Condition; authenticity?: Authenticity; notes: number[]; otherNote?: string; waiver: boolean; price: number; yesNo: boolean; extraNotes: string[]; retailPolish?: boolean; caseRestorationPrice?: number; weldingPrice?: number; polishUpPrice?: number; polishUpYesNo?: boolean; dialVariants?: string[] }
 export interface InspectionForm {
-  id: string; token: string; jobId?: string; customer: { name: string; email?: string; phone?: string }; brand: string; model: string; reference: string; estimateNumber: string; targetWeeks: number; targetFrom?: string; targetTo?: string;
+  id: string; token: string; jobId?: string; customer: { name: string; email?: string; phone?: string }; brand: string; model: string; reference: string; estimateNumber: string; targetWeeks: number; targetFrom?: string; targetTo?: string; targetSource?: 'receive';
   deptTags: string[]; inspectionType: string; jobType: string; components: InspComponentEntry[]; bracelet: BraceletRepairLine[]; overall: { notes: string; quickTags: string[]; price: number; yesNo: boolean; waiver: boolean };
   photos: { id: string; source: 'ipevo' | 'microscope'; dataUrl: string; at: string }[]; status: 'draft' | 'saved'; total: number; createdAt: string; savedAt?: string; savedBy?: string; station?: string; sheetScan?: { at: string; by: string; confidence: number | null };
 }
@@ -42,7 +42,7 @@ export const blankForm = (id: string, token: string): InspectionForm => ({ id, t
 
 // Seeded, fully-filled example (roughly what the reference screenshots show) so the report preview has real content
 export const seededForm: InspectionForm = {
-  ...blankForm('insp-01', 'INSP-E02040-V1-CALLOWAY'), jobId: 'j-r3', customer: { name: 'Robert Calloway', email: 'robert.calloway@example.com', phone: '(212) 555-0130' }, brand: 'Rolex', model: 'Datejust 36', reference: '1601', estimateNumber: 'E02040', targetWeeks: 8, deptTags: ['W', 'P'], inspectionType: 'Complete Watch', jobType: 'Service',
+  ...blankForm('insp-01', 'INSP-E02040-V1-CALLOWAY'), jobId: 'j-r3', customer: { name: 'Robert Calloway', email: 'robert.calloway@example.com', phone: '(212) 555-0130' }, brand: 'Rolex', model: 'Datejust 36', reference: '1601', estimateNumber: 'E02040', targetWeeks: 8, targetFrom: new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10), targetTo: new Date(Date.now() + 53 * 864e5).toISOString().slice(0, 10), targetSource: 'receive', deptTags: ['W', 'P'], inspectionType: 'Complete Watch', jobType: 'Service',
   components: [
     { component: 'Dial', condition: 'good', authenticity: 'genuine', notes: [0, 1], waiver: true, price: 0, yesNo: false, extraNotes: ['Lume plots slightly uneven — original'], dialVariants: ['SIGMA'] },
     { component: 'Hands', condition: 'fair', authenticity: 'genuine_not_correct', notes: [0], otherNote: 'Hands from a later reference — genuine but not correct', waiver: false, price: 180, yesNo: true, extraNotes: [] },

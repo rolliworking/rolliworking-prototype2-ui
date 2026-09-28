@@ -18,6 +18,8 @@ import { StatusPill } from '@/components/ui/Pills';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtMoney, fmtTime, fullName } from '@/lib/format';
 
+const addWeeks = (w: number) => new Date(Date.now() + w * 7 * 864e5).toISOString().slice(0, 10);
+
 export default function ReceiveWatchPage() {
   const { id = '' } = useParams();
   const { refreshCounts } = useIntakeCounts();
@@ -37,6 +39,7 @@ export default function ReceiveWatchPage() {
   const [result, setResult] = useState<ReceiveWatchResult | null>(null); const [printDialog, setPrintDialog] = useState(false); const [printedIds, setPrintedIds] = useState<string[]>([]);
   const [scanQ, setScanQ] = useState(''); const [scanErr, setScanErr] = useState<string | null>(null); const nav = useNavigate();
   const [photos, setPhotos] = useState<PackagePhoto[]>([]); const [cam, setCam] = useState(false); const [photoScan, setPhotoScan] = useState(''); const [photoErr, setPhotoErr] = useState<string | null>(null); const [lastAttach, setLastAttach] = useState<string | null>(null);
+  const [targetWeeks, setTargetWeeks] = useState(6); const [targetDate, setTargetDate] = useState(addWeeks(6));
   const [flag, setFlag] = useState(''); const [flagNote, setFlagNote] = useState(''); const [flagBusy, setFlagBusy] = useState(false); const [flagMsg, setFlagMsg] = useState<string | null>(null);
 
   // Trickle-down: pre-populate from the estimate; the operator verifies rather than re-enters
@@ -47,6 +50,7 @@ export default function ReceiveWatchPage() {
     setSerial(ctx.estimate.watch!.serial);
     setWorkflow(ctx.suggestedWorkflow);
     setPhotos(ctx.pkg.photos.filter(api.isInspectionPhoto));
+    if (ctx.pkg.targetDate) { setTargetWeeks(ctx.pkg.targetWeeks ?? 6); setTargetDate(ctx.pkg.targetDate); }
   }, [ctx]);
 
   // Mandatory same-watch check whenever ref + serial settle
@@ -67,7 +71,7 @@ export default function ReceiveWatchPage() {
   }, [ctx, reference, serial]);
 
   const input: ReceiveWatchInput | null = ctx
-    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined }
+    ? { reference, serial, linesVerified, componentsReceived: components, extraWatch, workflow, sameWatchDecision: match ? decision : 'n/a', notes: notes || undefined, itemLabel: itemLabel || undefined, targetWeeks, targetDate }
     : null;
   const discrepancies = useMemo(() => (ctx && input ? api.computeDiscrepancies(ctx, input) : []), [ctx, input]);
   const forkPending = !!match && decision === 'n/a';
@@ -149,7 +153,7 @@ export default function ReceiveWatchPage() {
                 <Link to="/intake/inspection" data-testid="inspection-result-back"><Button>Back to bins</Button></Link>
                 {!hold && <Link to="/intake/labels" data-testid="inspection-result-labels-link"><Button>Open Label Queue</Button></Link>}
                 {!hold && <Link to="/intake/history" data-testid="inspection-result-history-link"><Button>Intake History</Button></Link>}
-                {!hold && <Link to={`/inspection/new?est=${encodeURIComponent(estimate.number)}`} data-testid="inspection-result-start-inspection"><Button variant="primary">Start inspection form →</Button></Link>}
+                {!hold && <Link to={`/intake/inspect/new?est=${encodeURIComponent(estimate.number)}`} data-testid="inspection-result-start-inspection"><Button variant="primary">Start inspection form →</Button></Link>}
               </div>
             </div>
           </div>
@@ -209,6 +213,14 @@ export default function ReceiveWatchPage() {
           <div><label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Reference</label><input data-testid="identity-reference" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} disabled={readOnly} className="h-11 w-full rounded-sm border border-line bg-canvas px-3 font-mono text-[15px] tracking-wide focus:border-ink focus:bg-surface focus:outline-none" /><p className="mt-1 text-[11px] text-ink-400">Estimate says <span className="font-mono">{expWatch.reference}</span></p></div>
         </div>
         {decoded.confidence !== 'none' && <div data-testid="serial-decode" data-confidence={decoded.confidence} className="mt-3 flex flex-wrap items-center gap-2 rounded-sm bg-canvas px-3 py-2 text-xs"><span className="font-semibold text-ink-500">Decoded:</span><span data-testid="serial-decode-brand" className="font-semibold text-ink">{decoded.brand}</span><span data-testid="serial-decode-model" className="text-ink-700">{decoded.model}</span><span data-testid="serial-decode-caliber" className="font-mono text-ink-700">{decoded.caliber}</span>{decoded.era && <span className="text-ink-400">{decoded.era}</span>}{decoded.model && expWatch.model && !decoded.model.toLowerCase().includes(expWatch.model.split(' ')[0].toLowerCase()) && <span data-testid="serial-decode-mismatch" className="rounded-sm bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">≠ estimate watch ({expWatch.model})</span>}<span className="ml-auto text-[10px] uppercase text-ink-400">{decoded.confidence === 'reference' ? 'from our records' : 'prefix lookup · provisional'}</span></div>}
+        <div data-testid="rw-target-card" className="mt-4 rounded-sm border border-line bg-canvas/60 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-ink">Target completion</span><span className="text-ink-400">· set once here · flows to the inspection form, estimate and client report</span>
+            <span className="ml-2 inline-flex items-center gap-1" data-testid="rw-target-weeks">{[2, 4, 6, 8, 12].map((w) => <button key={w} type="button" data-testid={`rw-target-week-${w}`} aria-pressed={targetWeeks === w} disabled={readOnly} onClick={() => { setTargetWeeks(w); setTargetDate(addWeeks(w)); }} className={`h-8 rounded-full border px-3 font-medium transition-colors ${targetWeeks === w ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink-700 hover:border-ink-300'}`}>{w} wk</button>)}</span>
+            <label className="inline-flex items-center gap-1 text-ink-500">Date<input type="date" data-testid="rw-target-date" value={targetDate} disabled={readOnly} onChange={(e) => { if (e.target.value) { setTargetDate(e.target.value); setTargetWeeks(Math.max(1, Math.round((new Date(e.target.value).getTime() - Date.now()) / (7 * 864e5)))); } }} className="h-8 rounded-sm border border-line bg-surface px-2 text-xs focus:border-ink focus:outline-none" /></label>
+            <span data-testid="rw-target-summary" className="rounded-sm bg-moss-50 px-2 py-0.5 font-medium text-moss-700">Target {fmtDate(targetDate)} · {targetWeeks} week{targetWeeks === 1 ? '' : 's'}</span>
+          </div>
+        </div>
         {match && <div className="mt-4"><SameWatchFork match={match} expectedClientId={estimate.clientId} decision={decision} onDecide={setDecision} /></div>}
         {!match && serial && serial !== 'NS' && <p data-testid="same-watch-clear" className="mt-3 inline-flex items-center gap-1 text-xs text-moss-700"><Check size={12} /> No prior history for this reference + serial.</p>}
       </Card>

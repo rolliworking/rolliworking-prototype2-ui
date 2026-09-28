@@ -144,7 +144,7 @@ export default function EstimateDetailPage() {
       {revising && <div data-testid="revising-banner" className="rounded-sm bg-amber-50 px-3 py-1.5 text-xs text-amber-900">Revising a sent estimate — saving creates rev {e.revision + 1}; rev {e.revision} is kept and viewable below. Send again to deliver the new version.</div>}
 
       <Card title="Watch" subtitle={editing ? 'Existing or new' : undefined} testId="detail-watch-card">
-        {editing ? <WatchPicker clientId={e.clientId} value={form.watch} onChange={(w) => change({ watch: w })} /> : e.watch ? <div className="text-[13px]">{e.watch.brand} {e.watch.model} <span className="font-mono text-xs text-ink-500">Ref {e.watch.reference} · Serial {e.watch.serial}</span></div> : <span className="text-xs text-ink-400">No watch on this estimate.</span>}
+        {editing ? <WatchPicker clientId={e.clientId} value={form.watch} onChange={(w) => change({ watch: w })} /> : e.watch ? <div className="text-[13px]">{e.watch.brand} {e.watch.model} <span className="font-mono text-xs text-ink-500">Ref {e.watch.reference} · Serial {e.watch.serial}</span>{e.targetDate && <span data-testid="estimate-target" className="ml-2 rounded-sm bg-moss-50 px-1.5 py-0.5 text-xs font-medium text-moss-700">Target {fmtDate(e.targetDate)} · {e.targetWeeks} wk · set at Receive Watch</span>}</div> : <span className="text-xs text-ink-400">No watch on this estimate.</span>}
       </Card>
 
       <Card title="Lines" subtitle={editing ? 'Drag or use arrows to reorder · edit amount to back-calc rate · ≥2 blank rows kept' : 'Read-only in this status'} testId="detail-lines-card">
