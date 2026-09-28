@@ -5,7 +5,7 @@ import * as api from '@/api/client';
 import type { Address, Client, DeptCode, EstimateLine, QuoteContext, RequestPrefill, Watch } from '@/api/client';
 import { ComponentCodeChips } from '@/components/estimates/ComponentChain';
 import { Provisional, QuoteContextStrip } from '@/components/estimates/EstimateBits';
-import { ClientPicker, EstimateMeta, ShippingCalculator, WatchPicker } from '@/components/estimates/EstimateForm';
+import { ClientPicker, EstimateAddresses, EstimateMeta, ShippingCalculator, WatchPicker } from '@/components/estimates/EstimateForm';
 import { blankLine, LineEditor } from '@/components/estimates/LineEditor';
 import { Button, PageHeader } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -72,6 +72,7 @@ export default function EstimateCreatePage() {
         <div className="space-y-4">
           <Card title="Customer" subtitle="Required to save — no customer, nothing saves" testId="create-customer-card">
             <ClientPicker value={client} onChange={setClient} />
+            {client && <div className="mt-4"><EstimateAddresses billing={meta.billing} shipping={meta.shipping} mirror={meta.mirror} onChange={(p) => setMeta((m) => ({ ...m, ...p }))} /></div>}
             {client && (
               <div className="mt-4">
                 <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Watch <span className="font-normal normal-case text-ink-400">optional · existing or new</span></div>
@@ -83,8 +84,8 @@ export default function EstimateCreatePage() {
           {ctx && client && <QuoteContextStrip clientEstimates={ctx.clientEstimates} watchEstimates={ctx.watchEstimates} clientName={fullName(client)} />}
 
           <Card title="Lines" subtitle="Pick from the catalog — department tag is inherited; custom lines pick their own" testId="create-lines-card">
+            <div className="mb-3 rounded-md border border-line bg-canvas/60 p-2.5"><div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Component codes · what we expect in the box</div><ComponentCodeChips value={shownCodes} inferred={codes === null} onToggle={(c) => setCodes(shownCodes.includes(c) ? shownCodes.filter((x) => x !== c) : [...shownCodes, c])} /></div>
             <LineEditor lines={lines} onChange={setLines} blankTaxableDefault={false} />
-            <div className="mt-3 rounded-md border border-line bg-canvas/60 p-2.5"><div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Component codes · what we expect in the box</div><ComponentCodeChips value={shownCodes} inferred={codes === null} onToggle={(c) => setCodes(shownCodes.includes(c) ? shownCodes.filter((x) => x !== c) : [...shownCodes, c])} /></div>
             <div className="mt-4"><ShippingCalculator onAddLine={(amount, label) => setLines((ls) => [...ls.filter((l) => l.description.trim() || l.unitPrice), { ...blankLine(false), description: label, unitPrice: amount, type: 'shipping', dept: 'W' }])} /></div>
           </Card>
 

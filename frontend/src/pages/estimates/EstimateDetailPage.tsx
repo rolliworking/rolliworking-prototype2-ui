@@ -5,7 +5,7 @@ import * as api from '@/api/client';
 import { LegacyBadge, LegacyBanner } from '@/components/LegacyBits';
 import type { Address, EstimateLine, EstimateWithRefs, Watch } from '@/api/client';
 import { EstimateStatusPill, Provisional } from '@/components/estimates/EstimateBits';
-import { EstimateMeta, WatchPicker } from '@/components/estimates/EstimateForm';
+import { EstimateAddresses, EstimateMeta, WatchPicker } from '@/components/estimates/EstimateForm';
 import { DeclineModal, RevisionHistory, SendModal } from '@/components/estimates/EstimateModals';
 import { LineEditor } from '@/components/estimates/LineEditor';
 import { ChainForEstimate, ComponentCodeChips } from '@/components/estimates/ComponentChain';
@@ -135,6 +135,10 @@ export default function EstimateDetailPage() {
       </div>
       <LegacyBanner kind="estimate" id={e.id} legacy={e.legacy} convertedFrom={e.convertedFromLegacy} />
 
+      <Card title="Billing & shipping" testId="detail-addresses-card">
+        <EstimateAddresses billing={form.billing} shipping={form.shipping} mirror={form.mirror} readOnly={!editing} onChange={(p) => change(p)} />
+      </Card>
+
       {flash && <div data-testid="estimate-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
       {error && <div data-testid="estimate-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
       {revising && <div data-testid="revising-banner" className="rounded-sm bg-amber-50 px-3 py-1.5 text-xs text-amber-900">Revising a sent estimate — saving creates rev {e.revision + 1}; rev {e.revision} is kept and viewable below. Send again to deliver the new version.</div>}
@@ -154,7 +158,7 @@ export default function EstimateDetailPage() {
       </Card>
 
       <Card title="Details" testId="detail-meta-card">
-        <EstimateMeta validUntil={form.validUntil} clientNotes={form.clientNotes} messageNotes={form.messageNotes} internalNotes={form.internalNotes} billing={form.billing} shipping={form.shipping} mirror={form.mirror} readOnly={!editing} onChange={(p) => change(p)} />
+        <EstimateMeta validUntil={form.validUntil} clientNotes={form.clientNotes} messageNotes={form.messageNotes} internalNotes={form.internalNotes} readOnly={!editing} onChange={(p) => change(p)} />
       </Card>
 
       <Card title="Revisions" subtitle="Prior versions are never overwritten" testId="detail-revisions-card">

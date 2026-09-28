@@ -1055,12 +1055,13 @@ export async function convertEstimate(id: string, target: 'job' | 'sales_order' 
   throw new Error('Use convertEstimateToSalesOrder for sales orders');
 }
 
-export interface ShippingCalcInput { units: number; hiAk: boolean; saturday: boolean }
-// Display-only legacy calculator (UNKNOWN whether it persists) — never written on save
+export interface ShippingCalcInput { units: number; hiAk: boolean; saturday: boolean; serviceLevel?: import('./types').ShipServiceLevel }
+// Display-only legacy calculator (UNKNOWN whether it persists) — never written on save. 2-day is the base; 1-day (overnight) +25 — chosen, or forced when insured value > $25k (units > 25)
 export function calcShipping(i: ShippingCalcInput) {
-  const overnight = i.units > 25;
+  const forcedOvernight = i.units > 25;
+  const overnight = forcedOvernight || i.serviceLevel === '1_day';
   const amount = 35 + (overnight ? 25 : 0) + i.units * 1.5 + (i.hiAk ? 30 : 0) + (i.saturday ? 20 : 0);
-  return { amount, overnight, insuredValue: i.units * 1000 };
+  return { amount, overnight, forcedOvernight, serviceLevel: (overnight ? '1_day' : '2_day') as import('./types').ShipServiceLevel, insuredValue: i.units * 1000 };
 }
 
 // ---- Jobs (E4) — state machine per PROMPT-PACK-jobs.md ------------------------

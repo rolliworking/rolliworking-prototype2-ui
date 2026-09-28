@@ -128,18 +128,9 @@ const AddrFields = ({ a, onChange, testId, disabled }: { a: Address; onChange: (
   </div>
 );
 
-export const EstimateMeta = ({ validUntil, clientNotes, messageNotes, internalNotes, billing, shipping, mirror, readOnly, onChange }: NotesProps) => (
-  <div className="grid grid-cols-2 gap-4" data-testid="estimate-meta">
-    <div className="space-y-3">
-      <div>
-        <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Valid until</label>
-        <input type="date" data-testid="valid-until" disabled={readOnly} value={validUntil.slice(0, 10)} onChange={(e) => onChange({ validUntil: new Date(e.target.value + 'T12:00:00').toISOString() })} className="h-8 rounded-sm border border-line bg-canvas px-2 text-[13px]" />
-        <span className="ml-2 text-[11px] text-ink-400">default today + 30</span>
-      </div>
-      <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Client notes</label><textarea data-testid="client-notes" disabled={readOnly} rows={2} value={clientNotes} onChange={(e) => onChange({ clientNotes: e.target.value })} placeholder="What the client told us" className="w-full rounded-sm border border-line bg-canvas px-2 py-1.5 text-[13px]" /></div>
-      <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Message on estimate</label><input data-testid="message-notes" disabled={readOnly} value={messageNotes} onChange={(e) => onChange({ messageNotes: e.target.value })} className="h-8 w-full rounded-sm border border-line bg-canvas px-2 text-[13px]" /></div>
-      <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Internal notes <span className="font-normal normal-case text-ink-400">staff only</span></label><textarea data-testid="internal-notes" disabled={readOnly} rows={2} value={internalNotes} onChange={(e) => onChange({ internalNotes: e.target.value })} className="w-full rounded-sm border border-amber-200 bg-amber-50/40 px-2 py-1.5 text-[13px]" /></div>
-    </div>
+// Billing / shipping — sits directly under the client name at the top of the estimate
+export const EstimateAddresses = ({ billing, shipping, mirror, readOnly, onChange }: Pick<NotesProps, 'billing' | 'shipping' | 'mirror' | 'readOnly' | 'onChange'>) => (
+  <div data-testid="estimate-addresses">
     <div className="grid grid-cols-2 gap-3">
       <div><div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Billing</div><AddrFields a={billing} onChange={(a) => onChange({ billing: a })} testId="billing" disabled={readOnly} /></div>
       <div>
@@ -150,21 +141,38 @@ export const EstimateMeta = ({ validUntil, clientNotes, messageNotes, internalNo
   </div>
 );
 
+export const EstimateMeta = ({ validUntil, clientNotes, messageNotes, internalNotes, readOnly, onChange }: Omit<NotesProps, 'billing' | 'shipping' | 'mirror'>) => (
+  <div data-testid="estimate-meta">
+    <div className="space-y-3">
+      <div>
+        <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Valid until</label>
+        <input type="date" data-testid="valid-until" disabled={readOnly} value={validUntil.slice(0, 10)} onChange={(e) => onChange({ validUntil: new Date(e.target.value + 'T12:00:00').toISOString() })} className="h-8 rounded-sm border border-line bg-canvas px-2 text-[13px]" />
+        <span className="ml-2 text-[11px] text-ink-400">default today + 30</span>
+      </div>
+      <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Client notes</label><textarea data-testid="client-notes" disabled={readOnly} rows={2} value={clientNotes} onChange={(e) => onChange({ clientNotes: e.target.value })} placeholder="What the client told us" className="w-full rounded-sm border border-line bg-canvas px-2 py-1.5 text-[13px]" /></div>
+      <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Message on estimate</label><input data-testid="message-notes" disabled={readOnly} value={messageNotes} onChange={(e) => onChange({ messageNotes: e.target.value })} className="h-8 w-full rounded-sm border border-line bg-canvas px-2 text-[13px]" /></div>
+      <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-500">Internal notes <span className="font-normal normal-case text-ink-400">staff only</span></label><textarea data-testid="internal-notes" disabled={readOnly} rows={2} value={internalNotes} onChange={(e) => onChange({ internalNotes: e.target.value })} className="w-full rounded-sm border border-amber-200 bg-amber-50/40 px-2 py-1.5 text-[13px]" /></div>
+    </div>
+  </div>
+);
+
 export const ShippingCalculator = ({ onAddLine }: { onAddLine?: (amount: number, label: string) => void }) => {
   const [units, setUnits] = useState(5);
   const [hiAk, setHiAk] = useState(false);
   const [sat, setSat] = useState(false);
-  const r = api.calcShipping({ units, hiAk, saturday: sat });
+  const [level, setLevel] = useState<api.ShipServiceLevel>('2_day');
+  const r = api.calcShipping({ units, hiAk, saturday: sat, serviceLevel: level });
   return (
     <div data-testid="shipping-calc" className="rounded-sm border border-dashed border-amber-300 bg-amber-50/30 p-3 text-xs">
       <div className="mb-2 flex items-center gap-2 font-semibold text-ink-700">Shipping calculator (display) <Provisional note="Legacy calculator — not written on save" /></div>
       <div className="flex flex-wrap items-center gap-3">
+        <div data-testid="ship-service-level" role="radiogroup" className="inline-flex overflow-hidden rounded-sm border border-line">{(['2_day', '1_day'] as const).map((l) => { const on = r.serviceLevel === l; return <button key={l} type="button" role="radio" aria-checked={on} data-testid={`ship-level-${l}`} disabled={r.forcedOvernight && l === '2_day'} onClick={() => setLevel(l)} className={`h-7 px-2.5 text-xs font-medium ${on ? 'bg-ink text-white' : 'bg-surface text-ink-600 hover:bg-canvas'} disabled:cursor-not-allowed disabled:opacity-40`}>{l === '1_day' ? '1-day' : '2-day'}</button>; })}</div>
         <label className="inline-flex items-center gap-1.5">Insurance units <input type="number" min={0} data-testid="ship-units" value={units} onChange={(e) => setUnits(Number(e.target.value))} className="h-7 w-16 rounded-sm border border-line bg-surface px-1.5 text-right" /></label>
         <label className="inline-flex items-center gap-1"><input type="checkbox" data-testid="ship-hiak" checked={hiAk} onChange={(e) => setHiAk(e.target.checked)} className="accent-ink" /> HI / AK +30</label>
         <label className="inline-flex items-center gap-1"><input type="checkbox" data-testid="ship-sat" checked={sat} onChange={(e) => setSat(e.target.checked)} className="accent-ink" /> Saturday +20</label>
-        <span className="text-ink-500">base 35 · {r.overnight ? 'overnight +25 (units > 25)' : 'no overnight'} · insured value ${r.insuredValue.toLocaleString()}</span>
+        <span className="text-ink-500" data-testid="ship-breakdown">base 35 · {r.overnight ? `1-day +25${r.forcedOvernight ? ' (required over $25k insured)' : ''}` : '2-day · no overnight'} · insured value ${r.insuredValue.toLocaleString()}</span>
         <span className="ml-auto tabular font-semibold text-ink" data-testid="ship-amount">${r.amount.toFixed(2)}</span>
-        {onAddLine && <Button size="sm" data-testid="ship-add-line" onClick={() => onAddLine(r.amount, `Insured shipping (${units} units${hiAk ? ', HI/AK' : ''}${sat ? ', Saturday' : ''})`)}>Add as shipping line</Button>}
+        {onAddLine && <Button size="sm" data-testid="ship-add-line" onClick={() => onAddLine(r.amount, `Insured shipping · ${r.serviceLevel === '1_day' ? '1-day' : '2-day'} (${units} units${hiAk ? ', HI/AK' : ''}${sat ? ', Saturday' : ''})`)}>Add as shipping line</Button>}
       </div>
     </div>
   );
