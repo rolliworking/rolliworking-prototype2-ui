@@ -14,6 +14,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
   method?: SignInMethod;
   cameraStatus?: CameraStatus;
   photoDataUrl?: string;
+  onBehalfOf?: string;
   detail: string;
 ```
 
@@ -23,31 +24,36 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 
 | type | emitted by (function / stamp helper in client.ts) | UI filter chip |
 |---|---|---|
-| `sign_in` | `stationName`, `u` | Sign-ins (with sign_in_failed, sign_out) |
-| `sign_in_failed` | `stationName`, `u` | All only |
-| `sign_out` | `user` | All only |
-| `station_registered` | `st` | Station (all station_*) |
-| `station_renamed` | `actor` | All only |
-| `station_reset` | `actor` | All only |
-| `intake` | `a` | Intake |
-| `estimate` | `a` | Estimates |
-| `job` | `a`, `i`, `pin`, `prev`, `startAudit`, `u`, `why` | Jobs (with task, pin, parts) |
-| `task` | `a` | All only |
-| `pin` | `a`, `p` | All only |
-| `sales` | `a` | Sales |
-| `parts` | `a`, `j` | All only |
-| `portal` | `c`, `m` | RolliConnect |
+| `sign_in` | `benchPinIn`, `signInWithPasswordMock`, `switchUserWithPin` | Sign-ins (with sign_in_failed, sign_out) |
+| `sign_in_failed` | `benchPinIn`, `signInWithPasswordMock`, `switchUserWithPin` | All only |
+| `sign_out` | `signOut` | All only |
+| `station_registered` | `readStation`, `registerStation` | Station (all station_*) |
+| `station_renamed` | `renameStation` | All only |
+| `station_reset` | `resetDeviceRegistration` | All only |
+| `intake` | `commitArrivals`, `shipStamp`, `stamp` | Intake |
+| `estimate` | `closeRequest`, `convertLegacy`, `estStamp`, `overrideSoScanGate`, `setKioskRequired`, `writeClientRef` | Estimates |
+| `job` | `advanceSwo`, `bulkCommit`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `saveShopWorkOrder`, `scanTech`, `startAudit`, `undoOutbox` | Jobs (with task, pin, parts) |
+| `task` | `taskStamp` | All only |
+| `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
+| `sales` | `convertLegacy`, `soStamp` | Sales |
+| `parts` | `approvalAction`, `partsStamp` | All only |
+| `portal` | `portalStamp`, `replyToClient` | RolliConnect |
 | `purchasing` | `rsStamp` | All only |
-| `inventory` | `j` | All only |
-| `setup` | `c`, `setAuditStaleDays` | All only |
+| `inventory` | `pickAction` | All only |
+| `setup` | `addGradeCategory`, `setAuditStaleDays`, `toggleGradeCategory` | All only |
 | `evidence` | (stamp helper — see below) | All only |
 | `labels` | (stamp helper — see below) | All only |
-| `accounting` | (stamp helper — see below) | All only |
-| `companion` | `a` | All only |
-| `comms` | `a`, `c`, `i`, `outcome`, `session`, `to` | All only |
-| `rollitime` | `a` | All only |
+| `accounting` | `baStamp`, `deleteSalesOrder`, `qboLog`, `zeroBalanceNoSync` | All only |
+| `companion` | `cpStamp` | All only |
+| `comms` | `clearMessage`, `cxStamp`, `deletePersonalTemplate`, `exitViewAsClient`, `learnDialVariant`, `learnInspectionNote`, `receiveInboundCall`, `saveInspectionForm`, `savePersonalTemplate`, `setClientRating`, `startViewAsClient`, `submitClientReview` | All only |
+| `rollitime` | `rtStamp`, `setTechGoal` | All only |
 | `rgtime` | `rgAudit` | RGTime |
-| `kiosk` | `c`, `kioskAudit`, `saveBenchSettings` | Kiosk |
+| `kiosk` | `kioskAudit`, `resolveKioskMatch`, `saveBenchSettings` | Kiosk |
+| `appointments` | `auditAppointments` | All only |
+| `settings` | `rcResetAccount`, `setFeatureFlag`, `setRcDocAccess` | All only |
+| `shipping` | `portalCreateLabel` | All only |
+| `view_as_started` | `startViewAs` | All only |
+| `view_as_ended` | `startViewAs`, `stopViewAs` | All only |
 
 ## Stamp helpers (one type each, called from many functions)
 
@@ -83,3 +89,21 @@ The prototype did **not** add enum values for these — they ride on existing ty
 | 37 | hit-list pin from mention | `pin` (row created without appendAudit in `routeMessage`) | `postJobMessage` → `routeMessage` | `⚠ DRIFT`: the auto-pin has no audit row (manual `pinToHitList` does) |
 | 38 | bench kiosk | `kiosk`, `sign_in`, `sign_in_failed` | `saveBenchSettings`, `benchPinIn` | settings saved `{bench_name, idle_minutes, offline_sim}`; PIN in/out with station = bench name; idle re-lock is **not** audited (`⚠ DRIFT`) |
 | 39 | colleague inbox opened | `comms` | `getColleagueInbox` (read — no row in prototype) | `⚠ DRIFT`: reading another person's inbox should be a telemetry read event in KEEPER |
+
+## Post-refresh event families (2026-09-27 → 2026-09-29; numbering continues: 40+)
+
+`view_as_started` / `view_as_ended` ARE new enum values; the rest still ride on existing types (`⚠ DRIFT` → own `type` in KEEPER). New field on every row: `onBehalfOf?: string` (set while the owner is in View-as; `userShortName` is then the REAL actor).
+
+| # | family | prototype type | emitted by | payload KEEPER needs |
+|---|---|---|---|---|
+| 40 | sign-in (method + photo) | `sign_in` / `sign_in_failed` / `sign_out` | `signInWithPassword`, `switchUserWithPin`, `benchPinIn`, `signOut`, `rgAudit` | `{user, station, device_id, method: password_photo\|pin_switch\|bench_pin\|rg_pin, camera_status, photo_blob_ref}` |
+| 41 | session invalidated | — (not built) | — | `{user, old_session, new_session, reason: signed_in_elsewhere\|idle\|admin}` — single-session rule (Q95) |
+| 42 | **View-as started / ended** | `view_as_started`, `view_as_ended` | `startViewAs`, `stopViewAs`, `signOut` (implicit end) | `{actor: MH, on_behalf_of, station, at, reason?: switch\|exit\|sign_out}`; every row written in between carries `onBehalfOf` (D-361) |
+| 43 | reception-mode toggled | — (station flag seeded; `?reception=` override not audited) | — | `{station, on\|off, by, at}` when a manager flips the station flag (Q93) |
+| 44 | label created / voided / tracking event | `intake` stamps on `InboundShipment.stamps[]`, `sales` for outbound | `createInboundLabel`, `voidAndReissue`, `simulateTrackingEvent`, `confirmShipment`, SWO label fns | `{shipment, carrier, tracking, label_url, cost, insured_value, event_status, source: webhook\|manual}` |
+| 45 | invoice finalized / synced / conflict / bypass | `sales` (`soStamp`), `accounting` | `sendInvoice`, `recordPayment`, `qboSyncInvoice`, `qboResolveConflict`, `zeroBalanceNoSync`, `confirmShipment` (bypass), `overrideScanGate` | `{so, qbo_invoice_id, sync_token, direction, conflict_resolution, bypass_reason, minutes_since_payment}` |
+| 46 | page started / ended (intercom) | — (in memory only) | `intercom.ring/hangUp/pageAll` | `{from_station, to_station, started_at, ended_at, text?}` |
+| 47 | photo set completed (WM kiosk) | `evidence` / `job` (`jobStamp`) | WM kiosk submit fns (`WmKioskPage`) | `{job, set_kind: wm_kiosk, slots[], by, station, mentions[]}` |
+| 48 | hitlist claim / reassign | `pin` / `task` | `hl.reassign`, `pinToHitList`, `setTaskDone` | `{item, from_assignee, to_assignee, by, at}` |
+| 49 | scan-gate override | `estimate` | `overrideScanGate` | `{so, by, reason, at}` |
+| 50 | client reference set | `estimate` | `setClientRef` | `{estimate\|job, before, after, by}` |

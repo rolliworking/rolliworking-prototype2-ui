@@ -22,12 +22,25 @@ for line in client.split('\n'):
         for n in m.group(1).split(','):
             entries.append((cur, n.strip(), 'const', 'fixture re-export'))
 BASE = set(open(f'{OUT}/_baseline_e16.txt').read().split()) if os.path.exists(f'{OUT}/_baseline_e16.txt') else set()
+REFRESH = set(open(f'{OUT}/_baseline_refresh.txt').read().split()) if os.path.exists(f'{OUT}/_baseline_refresh.txt') else set()
+REAL_NAMES = set(re.findall(r"^\s+([A-Za-z0-9_]+): 'real'", open(f'{ROOT}/api/config.ts').read(), re.M))
 src_files = {}
 for f in glob.glob(f'{ROOT}/**/*.tsx', recursive=True):
     src_files[f.replace(ROOT + '/', '')] = open(f).read()
 def callers(name):
     out = [f for f, s in src_files.items() if re.search(r'\bapi\.' + re.escape(name) + r'\b', s)]
     return ', '.join(sorted(out)) or '— (internal / other client.ts functions only)'
+# Best reading of what the real endpoint must require (auth expected). Order matters: first match wins.
+AUTH_RULES = [
+    (r'^(rc|portal|issueRc|verifyRc|getRc|rcSign|rcTotp|rcVerify|payViaLink|getPayPage|getPortal|portalDeepLink|portalRevoke|soRecordsLink)', 'client-portal'),
+    (r'^(kiosk|rgKiosk|rgClock|rgPunch|rgTag|benchPinIn|getBenchBoard|getBenchSettings|saveBenchSettings|wmKiosk|getWmKiosk|submitWmKiosk|captureWmKiosk)', 'station'),
+    (r'^(simulateTrackingEvent|simulateClient|onInboundCall|receiveInboundCall|qboSyncInvoice|simulate)', 'webhook'),
+    (r'^(getStations?|registerStation|renameStation|resetDevice|getCurrentUser|hasSignedInToday|getUsersSignedInToday|signInWithPassword|switchUserWithPin|isReceptionMode|receptionSource|getViewAs)$', 'none'),
+]
+def auth_expected(name):
+    for rx, v in AUTH_RULES:
+        if re.search(rx, name): return v
+    return 'staff'
 def side_effects(name):
     body = ''
     idx = client.find(f' {name}(')
@@ -44,18 +57,21 @@ def side_effects(name):
     return ', '.join(fx) or 'none (read)'
 lines = ['# 05 — API CONTRACT (target surface for the real backend)', '',
          'Every exported function of `src/api/client.ts`, generated from the code (`_gen.py`). Screens only ever call these. In KEEPER each `async` entry becomes an HTTP endpoint (or RPC); each `sync` helper becomes either a server-computed field or a shared pure function.',
-         '', 'Columns: **kind** (async = crosses the wire; sync = pure/derived; const = lookup table) · **signature** as written · **side effects** detected in the body (audit rows, Outbox email, comms thread, job status change, label queue, localStorage) · **callers** (screens / components that call `api.<name>`).',
+         '', 'Columns: **kind** (async = crosses the wire; sync = pure/derived; const = lookup table) · **signature** as written · **source** = `real` when `API_SOURCE[name] === \'real\'` in `src/api/config.ts` (served by `realClient.ts`, mock fallback on failure) else `mock` · **auth expected** = best reading of what the real endpoint must require: `staff` (device session + role check) · `station` (station token — kiosks/pads) · `client-portal` (RolliConnect session or deep-link token) · `webhook` (provider → server, signed) · `none` · **side effects** detected in the body · **callers**.', '', 'Tags: **[post-E16]** = not in the E16 baseline; **[post-refresh]** = added after the 2026-09-26 refresh (see `_baseline_refresh.txt`).',
          '', 'Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md` for what "audit" means per call.', '']
 last = None
 for cur, name, kind, sig in entries:
     if cur != last:
-        lines += ['', f'## {cur}', '', '| export | kind | signature | side effects | callers |', '|---|---|---|---|---|']
+        lines += ['', f'## {cur}', '', '| export | kind | signature | source | auth expected | side effects | callers |', '|---|---|---|---|---|---|---|']
         last = cur
     esc = sig.replace('|', '\\|')
     tag = '' if name in BASE else ' **[post-E16]**'
-    lines.append(f'| `{name}`{tag} | {kind} | `{esc}` | {side_effects(name)} | {callers(name)} |')
+    if name not in REFRESH: tag += ' **[post-refresh]**'
+    src = 'real' if name in REAL_NAMES else 'mock'
+    lines.append(f'| `{name}`{tag} | {kind} | `{esc}` | {src} | {auth_expected(name)} | {side_effects(name)} | {callers(name)} |')
 new = [n for _, n, _, _ in entries if n not in BASE]
-lines += ['', f'_Total exports: {len(entries)} · baseline at E16: {len(BASE)} · **[post-E16] new: {len(new)}**._', '', 'Post-E16 exports (diff list for coverage): ' + ', '.join(f'`{n}`' for n in new)]
+newr = [n for _, n, _, _ in entries if n not in REFRESH]
+lines += ['', f'_Total exports: {len(entries)} · baseline at E16: {len(BASE)} · **[post-E16] new: {len(new)}** · baseline at 2026-09-26 refresh: {len(REFRESH)} · **[post-refresh] new: {len(newr)}**._', '', 'Post-refresh exports: ' + ', '.join(f'`{n}`' for n in newr), '', 'Post-E16 exports (diff list for coverage): ' + ', '.join(f'`{n}`' for n in new)]
 open(f'{OUT}/05-API-CONTRACT.md', 'w').write('\n'.join(lines))
 
 # ---------- 08-AUDIT-TAXONOMY ----------
@@ -68,7 +84,7 @@ for t in atypes:
     for mm in re.finditer(r"type: '" + t + r"'", client):
         # find enclosing function name
         pre = client[:mm.start()]
-        fn = re.findall(r'(?:export )?(?:async )?(?:function|const) ([A-Za-z0-9_]+)', pre)
+        fn = re.findall(r'^(?:export )?(?:async )?(?:function|const) ([A-Za-z0-9_]+)', pre, re.M)
         hits.add(fn[-1] if fn else '?')
     emitters[t] = sorted(hits)
 lines = ['# 08 — AUDIT TAXONOMY', '', 'Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: … })` site in `client.ts`. The prototype keeps the last 60 events in `localStorage` (`rollisuite.prototype.auditLog`); KEEPER writes every event to an append-only ledger (see `04-DATA-MODEL-VS-KEEPER.md` → telemetry).', '',
@@ -98,7 +114,21 @@ lines += ['', '## Stamp helpers (one type each, called from many functions)', ''
           '| 36 | message posted / reply / routed | `job` (`jobStamp`) | `postJobMessage` | `{job, message_id, parent_id?, by, mentions[], notify[], has_photo}`; **message read** is stored on `JobMessage.readBy[]` only (`⚠ DRIFT`: not audited — KEEPER should log reads per person for accountability) |',
           '| 37 | hit-list pin from mention | `pin` (row created without appendAudit in `routeMessage`) | `postJobMessage` → `routeMessage` | `⚠ DRIFT`: the auto-pin has no audit row (manual `pinToHitList` does) |',
           '| 38 | bench kiosk | `kiosk`, `sign_in`, `sign_in_failed` | `saveBenchSettings`, `benchPinIn` | settings saved `{bench_name, idle_minutes, offline_sim}`; PIN in/out with station = bench name; idle re-lock is **not** audited (`⚠ DRIFT`) |',
-          '| 39 | colleague inbox opened | `comms` | `getColleagueInbox` (read — no row in prototype) | `⚠ DRIFT`: reading another person\'s inbox should be a telemetry read event in KEEPER |']
+          '| 39 | colleague inbox opened | `comms` | `getColleagueInbox` (read — no row in prototype) | `⚠ DRIFT`: reading another person\'s inbox should be a telemetry read event in KEEPER |',
+          '', '## Post-refresh event families (2026-09-27 → 2026-09-29; numbering continues: 40+)', '',
+          '`view_as_started` / `view_as_ended` ARE new enum values; the rest still ride on existing types (`⚠ DRIFT` → own `type` in KEEPER). New field on every row: `onBehalfOf?: string` (set while the owner is in View-as; `userShortName` is then the REAL actor).', '',
+          '| # | family | prototype type | emitted by | payload KEEPER needs |', '|---|---|---|---|---|',
+          '| 40 | sign-in (method + photo) | `sign_in` / `sign_in_failed` / `sign_out` | `signInWithPassword`, `switchUserWithPin`, `benchPinIn`, `signOut`, `rgAudit` | `{user, station, device_id, method: password_photo\\|pin_switch\\|bench_pin\\|rg_pin, camera_status, photo_blob_ref}` |',
+          '| 41 | session invalidated | — (not built) | — | `{user, old_session, new_session, reason: signed_in_elsewhere\\|idle\\|admin}` — single-session rule (Q95) |',
+          '| 42 | **View-as started / ended** | `view_as_started`, `view_as_ended` | `startViewAs`, `stopViewAs`, `signOut` (implicit end) | `{actor: MH, on_behalf_of, station, at, reason?: switch\\|exit\\|sign_out}`; every row written in between carries `onBehalfOf` (D-361) |',
+          '| 43 | reception-mode toggled | — (station flag seeded; `?reception=` override not audited) | — | `{station, on\\|off, by, at}` when a manager flips the station flag (Q93) |',
+          '| 44 | label created / voided / tracking event | `intake` stamps on `InboundShipment.stamps[]`, `sales` for outbound | `createInboundLabel`, `voidAndReissue`, `simulateTrackingEvent`, `confirmShipment`, SWO label fns | `{shipment, carrier, tracking, label_url, cost, insured_value, event_status, source: webhook\\|manual}` |',
+          '| 45 | invoice finalized / synced / conflict / bypass | `sales` (`soStamp`), `accounting` | `sendInvoice`, `recordPayment`, `qboSyncInvoice`, `qboResolveConflict`, `zeroBalanceNoSync`, `confirmShipment` (bypass), `overrideScanGate` | `{so, qbo_invoice_id, sync_token, direction, conflict_resolution, bypass_reason, minutes_since_payment}` |',
+          '| 46 | page started / ended (intercom) | — (in memory only) | `intercom.ring/hangUp/pageAll` | `{from_station, to_station, started_at, ended_at, text?}` |',
+          '| 47 | photo set completed (WM kiosk) | `evidence` / `job` (`jobStamp`) | WM kiosk submit fns (`WmKioskPage`) | `{job, set_kind: wm_kiosk, slots[], by, station, mentions[]}` |',
+          '| 48 | hitlist claim / reassign | `pin` / `task` | `hl.reassign`, `pinToHitList`, `setTaskDone` | `{item, from_assignee, to_assignee, by, at}` |',
+          '| 49 | scan-gate override | `estimate` | `overrideScanGate` | `{so, by, reason, at}` |',
+          '| 50 | client reference set | `estimate` | `setClientRef` | `{estimate\\|job, before, after, by}` |']
 open(f'{OUT}/08-AUDIT-TAXONOMY.md', 'w').write('\n'.join(lines))
 
 # ---------- 09-TEST-INVENTORY ----------

@@ -101,3 +101,16 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | Job page omission list in RW | `/rw/jobs/:id` | see rolliworking.md | |
 | RolliTime QC-queue handoff (status stays testing) | `/rt` PASS | flag only | |
 | Q91 · Bench techs counting drawers | `/inventory/count` | MGR tier only (Inventory gate); variance $ manager-only inside | yes → open the count page to concierge tier, keep variance report manager-only / no → as is | |
+
+## Added 2026-09-29
+| question | where it shows | what the prototype does | recommended default |
+|---|---|---|---|
+| Q92 · Which pad does JV land on — `/rw/pad` (WM room board) or `/rw/band` (band/polish board)? | JV sign-in | `roleKind = supervisor → /rw/pad` (WM room) | land JV on `/rw/band`; `/rw/pad` stays for a future WM-room supervisor |
+| Q93 · Reception mode on Front Desk 1 & 2 also hides badges for managers on those PCs | TopBar RECEPTION badge, search | station flag, role-independent; `?reception=0` to see | keep station-only (as ruled); add a manager "peek" toggle in the station badge |
+| Q94 · Reception 5-minute idle sign-out — per station or per role? | not built | nothing | station policy: `idle_minutes` on the station record (reception PCs 5, pads 10, desktop none) |
+| Q95 · Single-session: when MH's real sign-in exists on two devices, which one wins? | not built | both stay | newest sign-in wins; older session sees "signed in elsewhere" |
+| Q96 · View-as: may MH complete a component / QC while viewing as a tech, or should completion writes be blocked? | View-as banner | allowed; recorded "MH (as MM)", never credited | allow (owner is accountable); KEEPER shows both names on the timeline |
+| Q97 · View-as on the Choose-a-view screen: should kiosks (front-desk check-in, photo) open in a locked kiosk mode or the normal route? | `/choose-view` tiles | plain navigation to `/kiosk`, `/wm-kiosk` | open with the station token of that kiosk (locked mode) |
+| Q98 · Concierge scope (item 7): cycle count without dollars — page opens for concierge, variance $ manager-only? | `/inventory/count` (MGR today) | concierge blocked entirely | open to concierge; hide $ via MoneyContext |
+| Q99 · `/rw/assign` manager-only for supervisors too, or JV keeps "limited Assign with locked stations"? | `/rw/assign` | open to every RW tier | JV: limited (his stations only); concierge: none; watchmakers: none |
+| Q100 · MAM is part-time — does he count toward JV's team goals when absent? | Pad Team tab, reports | counted like any tech | flag `part_time`, exclude from run-rate when no punches in the month |

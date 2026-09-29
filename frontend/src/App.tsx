@@ -98,6 +98,8 @@ import InventoryPage from '@/pages/rs/InventoryPage';
 import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
 import SignInPage from '@/pages/SignInPage';
+import ChooseViewPage from '@/pages/ChooseViewPage';
+import { ViewAsBanner } from '@/components/layout/ViewAs';
 import StationSetupPage from '@/pages/StationSetupPage';
 
 function RequireAuth() {
@@ -146,9 +148,11 @@ export default function App() {
     <BrowserRouter>
       <ToastHost />
       <AuthProvider>
+        <ViewAsBanner />
         <Routes>
           <Route path="/station-setup" element={<StationSetupPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
+          <Route path="/choose-view" element={<ChooseViewPage />} />
           {/* RolliConnect — client portal. Separate shell, separate session, no staff routes reachable. */}
           {/* E11 — RolliWorking standalone: workshop route-space, own shell, RS routes not reachable (access boundary) */}
           <Route path="/rw" element={<RwRoleGuard><RwShell /></RwRoleGuard>}>

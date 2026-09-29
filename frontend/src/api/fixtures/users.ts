@@ -89,5 +89,6 @@ export const users: User[] = [
   // JV's team — band techs + polishers (iPad-only benches)
   { id: 'u-dre', roles: ['polisher'], firstName: 'dre', shortName: 'Dre', displayName: 'Dre — Polisher', dutyLabel: 'Polisher', accessTier: 'concierge', division: 'rolliworks', password: 'dre123', pin: '1234' },
   { id: 'u-sam', roles: ['band_tech'], firstName: 'sam', shortName: 'Sam', displayName: 'Sam — Band tech', dutyLabel: 'Band tech', accessTier: 'concierge', division: 'rolliworks', password: 'sam123', pin: '1234' },
+  { id: 'u-mam', roles: ['band_tech'], firstName: 'matthew', shortName: 'MAM', displayName: 'MAM — Band tech (part-time) · Matthew Monteverde', dutyLabel: 'Band tech (part-time)', accessTier: 'concierge', division: 'rolliworks', password: 'matthew123', pin: '1234' },
   { id: 'u-nico', roles: ['polisher', 'band_tech'], firstName: 'nico', shortName: 'Nico', displayName: 'Nico — Polisher · Band tech', dutyLabel: 'Polisher · Band tech', accessTier: 'concierge', division: 'rolliworks', password: 'nico123', pin: '1234' },
 ];

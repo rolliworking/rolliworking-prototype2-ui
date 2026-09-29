@@ -66,3 +66,19 @@ Everything below exists in the prototype **only** to make behaviour visible. Eac
 
 ## What IS inheritable (behaviour, not code)
 State machines and guards (`source/STATE-MACHINES.md`), field lists and validations (module specs), the API contract shape (`05`), audit taxonomy (`08`), templates and portal-first rule (`07`), rulings (`02`), and the regression checklist (`09`).
+
+## Added 2026-09-29 (role landings · corrections · View-as · reception · integrations census sessions)
+| prototype scaffolding | where | replacement |
+|---|---|---|
+| **Device-type heuristic** (touch + width ≤ 1366) and **`?device=ipad\|desktop` session override** | `src/config/device.ts`, `ChooseViewPage`, `SignInPage` | device type from the registered station record (D-384); a desktop browser narrowed to tablet width must NOT become a pad; the Choose-a-view screen keys off the same station field |
+| `?reception=1\|0` query override (`sessionStorage receptionOverride`) | `client.ts isReceptionMode` | station record flag only |
+| View-as in `sessionStorage` (`viewAsUserId`), owner check against the constant `OWNER_USER_ID` | `client.ts`, `ViewAs.tsx` | server-side impersonation on the session; owner flag on the user record |
+| "Simulate" buttons: Simulate call (known/unknown/missed), Simulate tracking event, Simulate client parts decision, Simulate client reply (work queue), Simulate offline (bench) | `CallPop.tsx`, `InboundShippingPage`, pad Review, `RwWorkQueuePage`, bench settings | webhooks / real clients |
+| Demo toggles: `API_MODE` banner flip, `KIOSK_OFFLINE`, RG `simulateOffsite/simulateOffline` | `config.ts`, `client.ts` | none |
+| Mock object-URL / data-URL photos and `picsum.photos` seed images (inbox, kiosk, pad) | `hitlist.ts`, fixtures | object storage |
+| `setTimeout` call state (intercom ringing → connected; `latency()` in Parcel Pro; `resolve()` LATENCY_MS) | `intercom.ts`, `parcelpro.ts`, `client.ts` | real transport |
+| `localStorage` session state (`currentUserId`, stations registry, audit log cap 60, `rollisuite.api.token`, RG punches, RC accounts) | `client.ts KEYS`, `realClient.ts`, RG/RC blocks | server sessions + DB |
+| Seeded call logs, bypass events, asset values (`seedAssetValues`), zero-balance rows | `client.ts` | none |
+| Browser print dialog (`window.print()`) for SO print/PDF, appraisal, inspection form, RC estimate; **label "printing" = mock printer list + `setLabelPrinted`** | `LabelBits.tsx`, print views | printer agent / PDF service |
+| Mock TOTP `000000`, mocked RC verification link in the Outbox, mock pay page `/pay/:token` | RC block, `PayPage` | real TOTP + email + payment host |
+| Cloudflare / Vite dev-server 429s during testing | environment | n/a |

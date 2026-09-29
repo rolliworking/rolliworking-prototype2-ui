@@ -54,3 +54,21 @@ A **seam** is a place where the prototype fakes an outside system behind a `clie
 
 ## 8. Other small seams
 - **Timing machine import** (Witschi export → `TimingInput`, Q49). **Camera** for sign-in photo (real device permission flow already modelled). **Universal search** → indexed search service. **Magic links / report tokens** → portal grants (D-E) with real email delivery.
+
+## Seam index (2026-09-29) → full census in `11-INTEGRATIONS.md`, gaps in `13-INTEGRATION-GAPS.md`
+| seam | pointer |
+|---|---|
+| Client seam (staging API, `API_SOURCE`, fallback, banner/toast, switch-user token) | 11 §1 |
+| QuickBooks Online (invoice queue, zero-balance skip, payment gate + bypass log) | 11 §2 |
+| Parcel Pro / shipping adapter (`parcelpro.ts`, both label paths, simulate tracking, aging) | 11 §3 |
+| Outbox / email (queue, template list, personal templates) | 11 §4 |
+| Intercom + paging (`intercom.ts`, Daily.co TODO) | 11 §5 |
+| AI seam (`ai.ts` → `/api/ai/*`, suggest → verify → write) | 11 §6 |
+| M3KE (suggestions, aliases, learned resolutions, `m3keEvents`) | 11 §7 |
+| Camera / photo capture (`useCamera`, pad + kiosk photos, auth capture) | 11 §8 |
+| Label printing (`LabelPrintDialog`, PDF417 band exception, mock printers) | 11 §9 |
+| Scanner input (keyboard wedge, accepted formats) | 11 §10 |
+| Sign-in / stations / kiosks (password+photo, PIN, bench lock; WebAuthn + station tokens not built) | 11 §11 |
+| Notifications / push (none) | 11 §12 |
+| Telephony (Vonage mock); Google Home/Nest, Microsoft Graph (nothing) | 11 §13 |
+| Kiosk check-in, RGTime | 11 §14 |

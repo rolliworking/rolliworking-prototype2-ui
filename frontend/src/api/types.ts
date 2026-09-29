@@ -22,6 +22,7 @@ export interface Station {
   name: string;
   division: Division;
   receptionMode?: boolean;
+  deviceType?: 'desktop' | 'pad' | 'kiosk';
 }
 
 export type CameraStatus = 'captured' | 'no_camera' | 'denied';
@@ -60,7 +61,9 @@ export type AuditEventType =
   | 'kiosk'
   | 'appointments'
   | 'settings'
-  | 'shipping';
+  | 'shipping'
+  | 'view_as_started'
+  | 'view_as_ended';
 
 export interface AuditEvent {
   id: string;
@@ -72,6 +75,7 @@ export interface AuditEvent {
   method?: SignInMethod;
   cameraStatus?: CameraStatus;
   photoDataUrl?: string;
+  onBehalfOf?: string;
   detail: string;
 }
 

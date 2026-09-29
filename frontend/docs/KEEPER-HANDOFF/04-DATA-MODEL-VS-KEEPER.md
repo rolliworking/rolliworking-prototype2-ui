@@ -63,3 +63,28 @@ Legend for the "shortcut" column: **M** in-memory mutable copy · **LS** localSt
 
 ## What must not be inherited from this model
 Text ids as keys · plaintext credentials · **embedded arrays for moves / acks / reads / stamps (all append-only tables in KEEPER)** · `localStorage` bench identity · `both` literal without a join decision · current-owner fields · inline base64 photos · 60-row audit cap · `localStorage` anything · fixture-only lifecycles (requests create/quote, expired estimates) · fake external ids (`QBO-STUB-…`, tracking, labels).
+
+## Entities added 2026-09-27 → 2026-09-29 (post-refresh)
+Disposition: **K** keep as-is · **C** keep with changes · **P** prototype-only.
+
+| entity (prototype) | disp. | KEEPER shape / note |
+|---|---|---|
+| **Station** `{id, name, division, receptionMode?, deviceType?: 'desktop' \| 'pad' \| 'kiosk'}` (`fixtures/stations.ts`; localStorage registry `rollisuite.prototype.stations`) | C | `station {id, name, entity_id, device_type, reception_mode, registered_at, registered_by}` + **station token** (D-384) issued at registration; WM 1–8 are stations, never users |
+| Station token | — | not built; KEEPER: `station_token {station_id, token_hash, issued_at, revoked_at}` presented by kiosks/pads |
+| Reception flag (`Station.receptionMode` + `sessionStorage receptionOverride`) | C | on the station record only; the query override is P |
+| Session (`localStorage currentUserId`; `realClient` token `rollisuite.api.token` + `deviceId`) | C | `session {id, user_id, station_id, device_id, started_at, ended_at, method, invalidated_by?}`; single active session per user |
+| **View-as audit** (`AuditEvent.onBehalfOf`, types `view_as_started/ended`, `sessionStorage viewAsUserId`) | C | every write row carries `actor_id` + `on_behalf_of_id`; impersonation stored server-side on the session, never on the device |
+| `InboundShipment` / `ShipmentWithRefs` `{id, estimateId, direction, stage: ShipStage, carrier, trackingNumber, labelUrl, cost, insuredValue, events: TrackingEvent[], eta, deliveredAt, emailIds[], stamps[]}` | C | `shipment` + append-only `tracking_event {shipment_id, at, status, location, source: webhook \| manual}` + `label {shipment_id, url, cost, voided_at}` |
+| Label request (`createInboundLabel` inputs; SWO labels `SwoLabel`) | C | `label_request {shipment_id, requested_by, recipient, declared_value, service_level, quoted_cost}` |
+| QBO sync fields: `SalesOrder.qboInvoiceId`, `qboStatus: 'not_queued' \| 'queued' \| 'excluded'`; `QboSetup.links Map<clientId, qboCustomerId>`; zero-balance log rows | C | add `sync_token`, `last_synced_at`, `last_error` on invoice/customer/item; `zero_balance_exclusion {so_id, reason, notes, by, at}` |
+| Bypass log `BypassEvent {id, kind, by, station, at, jobNumber?, orderId?, reason, context}` | K | append-only `bypass_event`; feeds owner accountability |
+| Intercom calls/pages (`IntercomCall`, `StorePage`, in memory) | C | `intercom_call {from_station, to_station, started_at, ended_at, state}`, `page {by, text, division, at}`; provider room ids |
+| Photo sets (WM kiosk `KioskPhotoSet` guided 4-step + ad-hoc with @-mentions; pad photos; auth capture `AuthSession/AuthShot`) | C | `photo {id, watch_id, job_id?, slot, blob_ref, client_visible, by, station, at}`; `photo_set {job_id, kind: 'wm_kiosk', completed_at}`; `auth_session/auth_shot` with camera role |
+| Camera map | — | not built; KEEPER: `station_camera {station_id, role: 'ipevo' \| 'microscope' \| 'signin', device_label}` |
+| Hitlist tasks / inbox / claims (`Task`, `PinnedItem`, `InboxItem {to, from, text?, photo?, jobId?, replyToId?, readBy[]}`, `TEAM_MAP`) | C | `task`, `pin`, `inbox_message` + `inbox_read {message_id, user_id, at}`; team = `supervises {supervisor_id, role}` table, not a constant |
+| Appraisals (`appraisals.ts`: `Appraisal {number, jobId, signerId, insuredValue placeholder, status}`, signer selector with stored signatures) | C | `appraisal` + `signer {user_id, entity_id, signature_blob_ref}` entity-scoped |
+| Estimate items (`items.ts EstimateItem {id, label, components?, componentsOverride}` + per-item trickle-down chains) | K | `estimate_item` with `component_set` + override stamp |
+| Client reference (`Estimate.clientRef` / `Job.clientRef`, subject prefix `[REF:…]`) | K | `client_reference` on estimate, copied to jobs |
+| Scan-gate override (`overrideScanGate` audit) | K | `gate_override {so_id, by, reason, at}` |
+| Call ledger `CallEvent`, `CallNote`, `ClientRating {attitude, communication, history[]}` | K | `call_event`, `call_note`, `client_rating_change` |
+| Device override (`sessionStorage deviceOverride`) | P | delete at cut-over (D-384) |

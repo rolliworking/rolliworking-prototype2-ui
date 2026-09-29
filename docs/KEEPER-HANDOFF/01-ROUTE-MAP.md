@@ -1,86 +1,91 @@
-# 01 — ROUTE MAP (all six route-spaces)
+# 01 — ROUTE MAP (all route-spaces, with access) — refreshed 2026-09-29
 
-Legend — **who**: `any` = both tiers (manager + concierge); `mgr` = manager tier only; `client` = portal session; `public` = no session. **division**: `session` = data walled to the station's division; `all` = not walled (⚠ DRIFT where a wall is expected); `tag`/`brand` = division comes from the NFC tag / brand pick. Routes come from `frontend/src/App.tsx`; nav from `config/navigation.ts` (RS) and `RW_NAV` (RW).
+Legend — **landing for**: which role kinds land here right after sign-in (`roleKind()` in `src/config/roles.ts`: `watchmaker` · `supervisor` · `concierge` · `manager`; `owner` = MH only). **guard**: what is evaluated on route load, before data — `RequireAuth` (session + station + `desktopAllowed(roleKind)`), `TierGate` (`canAccess(navItem, user)` = `tiers` list + `ownerOnly`), `RwRoleGuard` (`rwAllowed` — concierge bounced; `pad` → `padAllowed`), `RwManagerOnly` (`accessTier === 'manager'`), `station` (device registration only), `owner` (`OWNER_USER_ID`), `portal` (RolliConnect session), `none`. **data scope**: what the signed-in identity filters — `own` (own jobs / own list), `team` (supervisor rollup), `division` (station division wall), `all`. With **View-as (D-385)** active every guard evaluates the VIEWED identity.
 
-## A. RolliSuite staff app `/` (station-bound; sign-in required; sidebar nav)
-| route | purpose | who | division | entry points | primary flow |
-|---|---|---|---|---|---|
-| `/station-setup` | register this device as a station (name + division), rename, reset | mgr (password) | — | first load (auto-registers `st-01` — mock), Setup | pick station → manager card → password → registered |
-| `/sign-in` | staff sign-in: card → password + camera photo (first of day) or PIN (later) | any | staff list = station division | unauthenticated visit; "Switch user" | pick card → password (+photo, camera optional) → dashboard |
-| `/` | Dashboard: stats cards, activity feed, mini today | any | session | sidebar | read-only glance → click through |
-| `/today` (`/hit-list` redirects) | derived hit list (owner actions, bench, holds, discrepancies, tasks, replies) + pinned layer + send task + waiting-on | any | session | sidebar (pinned), Alt+T quick-add | filter chips → act on row → pin/dismiss → send task |
-| `/requests` | service requests queue; kiosk match actions | any | session (`division ?? rolliworks`) | sidebar | Open/All → Confirm link / Not the same → Client 360 |
-| `/inbox` | Comms hub: client conversations, views, composer | any | session | sidebar, job/estimate reply indicators, Client 360 | pick view → open thread → reply with template → Outbox |
-| `/intake` | Arrival (log package / walk-in) | any | all ⚠ | sidebar, Drop-off quick action | source → tracking → SUB# |
-| `/intake/receive`, `/intake/receive/:id` | packages arrived → receive (contents, photos, estimate link) | any | all ⚠ | Intake tabs, job "package" link | list → open → contents pills → photos → receive (✉) |
-| `/intake/work-order` | assign bin → awaiting inspection | any | all ⚠ | Intake tabs | processed list → bin → record |
-| `/intake/inspection`, `/intake/inspection/:id` | receive watch: ref/serial, workflow depts, same-watch fork, discrepancies | any | all ⚠ | Intake tabs, `/today` discrepancy rows | enter ref/serial → depts → received (labels queued) or discrepancy hold |
-| `/intake/outbox` | pending client emails (nothing sends) | any | all ⚠ | Intake tabs, every "email queued" flash | inspect / mark sent (mock) |
-| `/intake/labels` | label queue (bag tags, ref/serial) | any | all ⚠ | Intake tabs, receive watch | print (mock) |
-| `/estimates`, `/estimates/new`, `/estimates/:id` | estimate list / create / detail (lines, revisions, send, approve, decline, convert, print) | any | all ⚠ | sidebar, Estimate quick action, Client 360, job link | draft lines → send (✉) → approve/decline → convert to job/intake/SO |
-| `/jobs` | jobs board (lanes incl. **Awaiting components**, On hold), list view, filters | mgr | all ⚠ | sidebar | filter → card → detail |
-| `/jobs/new` | create job directly (client, watch, kind, workflow) | mgr | session (stamped) | Jobs tab | pick client → watch → kind → create at intake |
-| `/jobs/shop-time` | log minutes against on-hand jobs | mgr | all ⚠ | Jobs tab, job shop-time card | job → minutes → note |
-| `/jobs/:id` | job detail: actions, watch, lines (money), **components**, inspection, notes, report-to-client, timing, evidence, photos, parts, shop time, timeline, owner, assignees, holds, details, invoice | mgr | — | everywhere a job number is a link | legal action buttons → modals for reasons/holds |
-| `/bench` | My bench: my jobs + next action, my holds, pull-next, my parts requests, inline component done | any | session (pull-next) | sidebar | act from row → pull next |
-| `/supervisor` | assign techs, parts approval queue, holds parked under me, QC queue, completions/month | mgr | all ⚠ | sidebar | toggle tech chips → approve/reject parts → QC |
-| `/floor` | nine-lane floor map (Intake → … → Out) | any (concierge chips → Client 360) | all ⚠ | sidebar | read → click chip |
-| `/parts/knowledge` | learned part↔reference confirmations & aliases | mgr | all | sidebar | read |
-| `/clients`, `/clients/:id` | universal search; Client 360 (watches, requests, estimates, jobs, invoices, notes, emails, custody, evidence, documents) | any | all ⚠ | sidebar, global search box, every client link | search → resolve → dense record → `?hit=` deep link highlights a row |
-| `/sales`, `/sales/new`, `/sales/:id` | sales orders list / detail: lines, payments, channel, pickup code, shipping address, cancel | any | all ⚠ | sidebar, job "Create invoice", estimate convert | open SO (✉) → payment → fulfil → pickup/ship station |
-| `/sales/pickup` | Pickup Station: code or proxy+ID photo, photos, partial lines, bypass | any | all ⚠ | Pickup quick action | enter code → verify → photos → confirm (✉, custody closed) |
-| `/sales/ship` | Ship Station: address, carrier, declared value, photos, label, bypass | any | all ⚠ | Ship quick action | address → carrier → photos → label → confirm (✉) |
-| `/purchasing` | vendors, purchase orders, receiving | mgr | all | sidebar | PO draft → send → receive lines |
-| `/inventory` | stock levels by location, movements, low stock, cycle counts | mgr | all (cross-division rules amber) | sidebar | adjust / count / post |
-| `/labels` | label templates + printers + queue | any | all | sidebar | pick → print (mock) |
-| `/reports` | funnel, throughput, aging, P&L, **tech completions**; CSV | mgr | all | sidebar | tab → table → export |
-| `/accounting` | invoice/payment registers, QBO queue (stub) | mgr | all | sidebar | export CSV (stub) |
-| `/setup`, `/setup/audit-log` | users, catalog, templates, locations, printers, stations; audit log with type filters | mgr | all | sidebar | edit rows → audited |
-| `/integrations`, `/help` | integration health tiles (all stub); help pages | mgr / any | — | sidebar | read |
-| `/actions/*` | quick-action redirects/placeholders (`ship`, `pickup` redirect; others placeholder) | any | — | top bar | — |
-| `/inspection-photos` | placeholder (not built) | mgr | — | sidebar | — |
-| `/shipping/inbound` **[post-E16]** | inbound shipping board: Label Requests → Labels Sent → In Transit → Delivered-unscanned; KPI strip; create/resend/void+reissue labels via the Parcel Pro adapter; tracking panel | mgr / concierge | session | sidebar "Inbound" | tab → row → action sheet (`modules/shipping-inbound.md`) |
+⚠ UNGUARDED = reachable without a session (or without the role check the screen's content implies). This list is what the lockdown build consumes.
 
-Global RS chrome (post-E16): universal search also returns a **SHIPMENTS** group → tracking panel; Client 360 header and Inbox thread header carry the **Track** button; `/today` pins may come from job-message mentions (message icon → `/jobs/:id#msg-<id>`); every job page's Notes card is now **Messages**. Global RS chrome: top search box (universal search), quick actions (Drop-off, Request, Estimate, Ship, Pickup), station badge with division, `+` quick-add (Alt+T), Companion panel button (Alt+M), user menu (Switch user → PIN). Route tiers are enforced by `TierGate` (shows a Restricted page) — **UI only** (`⚠ DRIFT`: no server tier check exists).
+## A. RolliSuite desktop `/` — all inside `RequireAuth` → `TierGate` (`src/App.tsx`)
+`RequireAuth`: no station → `/station-setup`; no session → `/sign-in`; `roleKind === 'watchmaker'` → bounced to `/rw/bench` (toast). `TierGate`: nav item `tiers` (`ALL` = manager+concierge, `MGR` = manager) + `ownerOnly`.
 
-## B. RolliWorking `/rw` (bench app; sign-in inside the shell; dark, dense) — post-E16: FOUR surfaces on one scan ledger (desktop · Supervisor Pad · Bench Pads · station scanners), see `modules/rolliworking.md`
-| route | purpose | who | division | flow |
+| route | purpose | landing for | guard | data scope |
 |---|---|---|---|---|
-| `/rw` | My Bench (same component as `/bench`) | any (bench roles centred) | session | act from rows; "<Component> done" inline |
-| `/rw/jobs`, `/rw/jobs/:id` | jobs lookup (scope banner) and bench job page — **no money** | any | session | search → open → actions/components/evidence |
-| `/rw/parts` | my parts requests, start one from my jobs, chat assistant, shop-wide list | any | session | select job → Open → chat → attach → submit |
-| `/rw/qc` | QC lane: testing jobs, evidence n/required, Pass (gated) / Fail (reason) | mgr | session | pass/fail from the row |
-| `/rw/supervisor` | same as `/supervisor` | mgr | all ⚠ | — |
-| `/rw/floor` | two-lane legacy floor (head / band → Final assembly; Into safe: awaiting components, holds, approval, ready) | any | session | read → chip → job |
-| `/rw/evidence` | evidence capture station: scan label → four QC slots | any | session (queue) | scan → slot → photo → save |
-| `/rw/today` | same as `/today` | any | session | — |
-| `/rw/queue` **[post-E16]** | work queue: one row per open job, oldest first, overdue + client-replied flags, per-part chips | any | session | row → `/rw/jobs/:id` (`modules/rw-shop-floor.md`) |
-| `/rw/bulk` **[post-E16]** | Bulk Assign: scan `TECH-<short>` then labels → custody + assign + start; courtesy email with 30-min Undo | mgr | session | scan tech → scan labels → undo (`modules/rw-bulk-assign.md`) |
-| `/rw/wm` **[post-E16]** | Watchmaker Room bench mode for the signed-in tech: cards, request part, → safe, send-by-scan, **Messages** block | any | session | PIN switch → act on own cards |
-| `/rw/station` **[post-E16]** | station scanner: pick station → scan labels; parts move like registered mail | any | session | station → scan |
-| `/rw/pad` **[post-E16]** | **Supervisor Pad** (iPad): Jobs / Parts / Review tabs, stage fwd/back with reasons, reassign, three-tier parts composer, M3KE, camera, parts history, job messages | mgr | session | scan → card / composer (`modules/rw-supervisor-pad.md`) |
-| `/rw/picking` **[post-E16]** | picking queue: location, on-hand vs to-pick, picked / short / found-elsewhere | any | session | tap or bin scan (`modules/rw-picking.md`) |
-| `/rw/bench` **[post-E16]** | **Bench Pad** (kiosked iPad per bench): PIN lock → per-tech board (in progress · attention · splits · outsourced · messages · completed · goals); idle re-lock; offline banner; long-press settings | any (own board) | station | card + PIN → board (`modules/rw-bench-pad.md`) — **renders without a signed-in shell user** |
-Boundary: any link to an RS path is rewritten (`/jobs/:id` → `/rw/jobs/:id`) or blocked with an inline notice. In KEEPER the boundary is authentication, not link handling.
+| `/station-setup` | register/rename/reset this device as a station (`deviceType` desktop/pad/kiosk, `receptionMode`) | — | station (manager password to register) | — |
+| `/sign-in` | staff card → password + camera photo (first of day) or PIN; **owner on a pad → `/choose-view`** | — | none (public by design) | staff list = station division |
+| `/choose-view` | **View-as picker (pad)** — tiles for pad accounts + kiosks + "My own view" | owner (pad sign-in) | owner (`realUser.id === OWNER_USER_ID`; non-owner → `/`) | all |
+| `/` | Dashboard | manager, concierge | RequireAuth + TierGate(ALL) | division |
+| `/home` | `HomeRedirect` → `homeRouteFor(user)` | — | RequireAuth | — |
+| `/today`, `/hitlist`, `/hit-list` | own Hitlist (redirects to `/hitlist/<slug>`) | manager, concierge (home-screen pref) | RequireAuth | own |
+| `/hitlist/owner` | MH Accountability (asset $ on hand, bypass feed, zero-balance log) | owner | TierGate `ownerOnly` + `isOwnerSync()` in `getHitlist` | all |
+| `/hitlist/:slug` | any person's Hitlist | — | RequireAuth; person switcher only for manager/concierge | own (of slug) |
+| `/hitlist/:slug/team` | supervisor team rollup (JV → Dre/Sam/Nico/MAM) | — | RequireAuth; `isSupervisor(slug)` else notice | team |
+| `/requests` | service requests queue | manager, concierge | TierGate(ALL) | division |
+| `/inbox` | comms hub | manager, concierge | TierGate(ALL) | division |
+| `/shipping/inbound` | inbound shipping stages / labels / tracking | manager, concierge | TierGate(ALL) | all |
+| `/shipping/bill-audit` | carrier bill audit (dollars) | manager | TierGate(MGR) | all |
+| `/intake` (+ `receive`, `receive/:id`, `work-order`, `inspection`, `inspection/:id`, `history`, `photos`, `inspect`, `inspect/new`, `inspect/:id`, `awaiting-approval`, `outbox`, `labels`, `trade`) | arrival → receive → work order → receive watch → inspection → outbox / label queue / trade scan-in | manager, concierge | TierGate(ALL) | all ⚠ (no division wall) |
+| `/estimates`, `/estimates/new`, `/estimates/:id` | estimates | manager, concierge | TierGate(ALL) | all ⚠ |
+| `/jobs`, `/jobs/all`, `/jobs/new`, `/jobs/shop-time`, `/jobs/:id`, `/jobs/:jobId/appraisal/:id` | jobs board / list / detail / appraisal (signer selector) | manager | TierGate(MGR) | all |
+| `/inspection/new`, `/inspection/:id`, `/inspection-photos` | redirects into `/intake/inspect*` | — | RequireAuth | — |
+| `/clients`, `/clients/:id` | universal search, Client 360 (in-house badge hidden in reception mode) | manager, concierge | TierGate(ALL) | all |
+| `/appointments` | schedule | manager, concierge | TierGate(ALL) | division |
+| `/bench` | My bench (desktop) | manager, concierge | TierGate(ALL) | own |
+| `/supervisor` | supervisor board | manager | TierGate(MGR) | all |
+| `/floor`, `/floor/lanes` | floor map | manager | TierGate(MGR) | all |
+| `/assign` | Assign / Move | manager | TierGate(MGR) | all |
+| `/custody` | unified custody view | manager | TierGate(MGR) | all |
+| `/parts`, `/parts/knowledge` | parts catalog, learned knowledge | manager | TierGate(MGR) | all |
+| `/inventory`, `/inventory/count` | inventory, cycle count (variance $ = `accessTier === 'manager'` in `getVarianceReport`) | manager | TierGate(MGR) | all |
+| `/purchasing`, `/purchasing/vendors`, `/purchasing/vendors/:id` | purchasing | manager | TierGate(MGR) | all |
+| `/swo` | shipping work orders | manager | TierGate(MGR) | all |
+| `/labels` | label queue + printers | manager, concierge | TierGate(ALL) | all |
+| `/reports` | reports | manager | TierGate(MGR) | all |
+| `/accounting` | accounting / QBO queue | manager | TierGate(MGR) | all |
+| `/integrations`, `/integrations/quickbooks` | integration tiles, QBO setup | manager | TierGate(MGR) | all |
+| `/setup`, `/setup/audit-log` | users, catalog, templates, printers, audit log (shows `as <viewed>` chip) | manager | TierGate(MGR) | all |
+| `/help` | help | manager, concierge | TierGate(ALL) | — |
+| `/sales`, `/sales/new`, `/sales/:id`, `/sales/pickup`, `/sales/ship` | sales orders, pickup station, ship station (scan gate + manager override) | manager, concierge | TierGate(ALL) | all ⚠ |
+| `/wm-kiosk` | **Watchmaker-room photo kiosk** (common area, guided 4-step + ad-hoc) | — | RequireAuth only ⚠ UNGUARDED for role — any signed-in tier | all |
+| `/actions/:action`, section placeholders, `*` | placeholders / not found | — | RequireAuth | — |
 
-## C. RolliConnect `/rc` (client portal; magic-link session; warm skin)
-| route | purpose | who | flow |
+## B. RolliWorking bench app `/rw` — `RwRoleGuard` → `RwShell` (MoneyContext = `roleKind !== 'watchmaker'`)
+| route | purpose | landing for | guard | data scope |
+|---|---|---|---|---|
+| `/rw` (index) | Bench (desktop-style) | — | RwRoleGuard | own |
+| `/rw/bench` | **Bench Pad** (kiosked, PIN board, idle re-lock) | watchmaker (Leo, MM, Dre, Sam, Nico, MAM) | RwRoleGuard | own |
+| `/rw/pad` | **Supervisor Pad** (WM room) | supervisor (JV) | RwRoleGuard `pad` (`padAllowed` = supervisor/manager) | room |
+| `/rw/band` | Band Pad (`RwPadPage room="band"`) | — | RwRoleGuard only ⚠ UNGUARDED for pad tier (watchmakers reach it; $ hidden by MoneyContext) | room |
+| `/rw/hitlist`, `/rw/today`, `/rw/hitlist/:slug`, `/rw/hitlist/:slug/team` | Hitlist inside the RW shell (no $ for watchmakers) | — | RwRoleGuard | own / team |
+| `/rw/jobs`, `/rw/jobs/:id` | jobs, job detail (hide-money) | — | RwRoleGuard | all |
+| `/rw/parts` | parts | — | RwRoleGuard | all |
+| `/rw/qc` | QC lane | — | RwManagerOnly | all |
+| `/rw/supervisor` | supervisor board | — | RwManagerOnly | all |
+| `/rw/bulk` | Bulk Assign (scan) | — | RwManagerOnly | all |
+| `/rw/floor` | shop floor + manager gate scan (`accessTier === 'manager'` inside `gateScan`) | — | RwRoleGuard; gate action manager-only in API | all |
+| `/rw/assign`, `/rw/queue`, `/rw/wm`, `/rw/station`, `/rw/history`, `/rw/reports`, `/rw/picking`, `/rw/evidence` | assign/move, work queue, WM room, station scan, history lookup, reports, picking, evidence | — | RwRoleGuard only ⚠ (Assign/Move is NOT manager-only here — spec item 7 pending) | all |
+| `/rw/testing`, `/rw/testing/test/:jobId` (`/rt*` redirect here) | timing bench (RolliTime) | — | RwRoleGuard | all |
+
+## C. Public / station / token routes
+| route | purpose | landing for | guard | data scope |
+|---|---|---|---|---|
+| `/kiosk` | **Front-desk check-in kiosk** (walk-in) | — | none ⚠ UNGUARDED (intended public; needs station token in prod) | none |
+| `/rg/kiosk` | RGTime walk-in time-clock kiosk | — | none ⚠ UNGUARDED (station token intended) | none |
+| `/rg`, `/rg/clock`, `/rg/week`, `/rg/manager` | RGTime phone PWA (own remembered session, name+PIN) | — | own PIN session; `/rg/manager` = concierge+ card + PIN | own / all |
+| `/pay/:token` | mock payment page from invoice email | — | token ⚠ (token is a mock string, never expires) | one SO |
+| `/track`-style public page | **not built** (spec item "public track page" pending) | — | — | — |
+
+## D. RolliConnect client portal `/rc`
+| route | purpose | guard | data scope |
 |---|---|---|---|
-| `/rc` | request magic link by email (link shown on screen — mock) | public | email → link → `/rc/auth/:token` |
-| `/rc/auth/:token` | redeem link → client session | public | auto-redirect home |
-| `/rc/home` | my watches with plain-language status, requests card, messages, estimates awaiting me | client | click through |
-| `/rc/estimates/:id` | approve / decline (reason) an estimate | client | decision → job/estimate status flips, comms threaded |
-| `/rc/invoices/:id` | invoice, balance, pickup code / shipping address, schedule pickup window | client | address or window → staff task/notification |
-| `/rc/watches/:id` | watch page: status, history, timing/evidence summary | client | read |
-| `/rc/report/:token` | inspection report (grades, photos, notes) with approve/decline; superseded → forward | public link, owner-checked | decide once |
-| `/rc/messages` | threads with staff | client | send → Comms hub |
-| `/rc/*` | not found | — | — |
+| `/rc` (login), `/rc/signup`, `/rc/auth/:token` | email+password+TOTP (`000000`), signup with mocked verification link | none (public) | — |
+| `/rc/home`, `/rc/account`, `/rc/estimates/:id`, `/rc/invoices/:id`, `/rc/watches/:id`, `/rc/messages` | portal | portal session (`rcSession`) | one client |
+| `/rc/report/:token`, `/rc/inspection/:token` | tokened deep links (report approvals, inspection form) | token (`portalDeepLink`, revocable) | one client |
 
-## D. RolliTime — re-homed into RW (2026-09-27)
-`/rt` and `/rt/test/:jobId` **redirect** to `/rw/testing` and `/rw/testing/test/:jobId`. Testing is an RW surface (nav “Testing”, both tiers; PIN switch; no money): queue + label scan (= custody transfer of every part to the **Testing** station) → six-position Witschi-style test → PASS (Q47 flag → RW QC queue lane) / REJECT (reason → qc_fail). Also new in RW: `/rw/station` Audit mode, `/rw/pad` Audit tab; RS: `/intake/trade` trade scan-in, Dashboard Trade review queue, Setup → Audits.
-
-## E. RGTime `/rg` (phone PWA; remembered per-device login)
-`/rg` status + today's punches + Simulate NFC tap picker → `/rg/clock?tag=<id>` one-button clock in/out (division from tag) → `/rg/manager` card + password, manager tier: week grid. All staff on the card list (a phone is not station-bound).
-
-## F. Kiosk `/kiosk` (public, full-screen, no session)
-idle → brand pick (Rolliworks / RolliShop) → services (multi, optional) → form (first/last/email/phone required, notes) → thank-you (5 s). Creates a `kiosk` service request landing in RS `/requests`; matches existing clients by email or phone.
+## ⚠ UNGUARDED list (consumed by the lockdown build)
+1. `/kiosk` — public by design; production needs a station token (D-384) so a laptop can't pretend to be the kiosk.
+2. `/rg/kiosk` — same.
+3. `/pay/:token` — mock token, no expiry, no rate limit.
+4. `/wm-kiosk` — any signed-in tier (concierge included) can open the watchmaker-room photo kiosk; intended: kiosk station or RW roles.
+5. `/rw/band` — no `pad` guard (watchmakers can open the Band Pad; money is hidden but Assign/Advance actions are only API-gated).
+6. `/rw/assign`, `/rw/queue`, `/rw/bulk`(manager-only ✔), `/rw/station` — Assign is not manager-only for concierge/supervisor (spec item 7).
+7. `/hitlist/:slug` — any manager/concierge can read any person's list (ruled OK for admin assistants; concierge scope pending item 7).
+8. Division wall missing on `/intake/*`, `/estimates/*`, `/sales/*` (pre-existing ⚠).

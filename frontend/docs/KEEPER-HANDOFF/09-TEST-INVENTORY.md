@@ -426,3 +426,224 @@ _Action items raised (fixed in the following commit unless noted in SESSION-LOG)
 - Ensure transitionJob('trade_accept') links the newly-created SO back to the job so [data-testid="act-open-so"] renders on /jobs/j-t2 (currently only act-invoice fallback appears / SO not linked to job).
 - In StationScannerPage, hide/defer the 'Client requests' modal until the 10s complete-undo window has elapsed, or ensure the undo/toast row remains above z-70 so users can undo without dismissing.
 - Verify the rw-qc-timing-pass-<jobId> badge is rendered in /rw/qc after a passed timing test (spelling / rendering may be missing).
+
+## Iteration 36
+
+_Frontend-only end-to-end verification of iteration-36 features (Estimate-URL portal + label request, Inspection approval in portal, Call ledger, Missed-calls inbox). All 4 acceptance flows PASS. A few minor discrepancies vs. the acceptance-spec text are documented; no functional bugs._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Add unique key to the mapped items in /app/frontend/src/rc/RcDecisionRecord.tsx (React key warning).
+- Reconcile CallHistoryModal <li> count with CallCounter total — either the modal filters or the counter aggregates additional events; make them consistent, or document that the counter excludes voicemail/system events.
+- Investigate why logCall (call-log-save) appears to add 2 <li> rows instead of 1 (possible duplicate insert or note rendered as separate li).
+- Ensure that after linking a call to a job via call-note-prompt (chip call-note-job-j-r3), the CallHistoryModal row renders the job number chip (e.g. 'E02040') via a call-<id>-job link.
+- Verify receiveInboundCall(missed) pushes a MissedCall record so the /inbox missed-calls panel shows the newly simulated call (either as a distinct row or by re-opening the existing row).
+
+## Iteration 37
+
+_Iteration 37: tested the Inventory Deep Session (cycle-count + purchasing) and the Claude Vision evidence pipeline end-to-end. Backend AI endpoints (extract-sheet, status-line) all pass (6/6 pytest). Frontend cycle-count locking, scan-part before lock, unknown-part message, part-scan/qty variance flow, switch-prompt, variance-report gating, Inventory Cycle counts + Movements tabs all work. Purchasing needs-ordering → Generate PO, PO modal (price cell + deep bar), vendor cards, CSV import UI, po-new all present and clickable. Claude Vision pressure-test extraction: loading → ready state, confidence chip, tap-to-correct depth, result select, confirm → depth field filled in evidence form. Regre…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Investigate cc-confirm enablement: after zeroing every uncounted row without leaving the location, the button should become enabled. May be a re-collect issue after list mutation.
+- Decide access-tier policy for /inventory/count: either allow concierge into the page and only hide the manager-only Variance report card (matches spec), or remove /inventory/count from concierge nav.
+- Consider surfacing an already-drafted example of 'Draft with Claude' in a seeded in-transit shipment for easier verification of the AI status-line UI wiring.
+
+## Iteration 38
+
+_Iteration 38 — E2E tested the five new briefs (RGTime, Shipping Bill audit, SO print/PDF QR, Create-estimate-from-request, Legacy archive) plus regression smoke. Backend: 11/11 pytest pass (added /api/ai/extract-bill CSV+image+data-URL tests and PWA manifest/sw asset checks). Frontend: RGTime tap flow (sign-in → PIN → clock in → done greeting → 'Main door'), offline queue (banner, queued chip, /rg queued count, back-online sync banner), offsite banner (2.3 km, flagged for a manager), My Week (total + 7 day cards + prev/next), Manager gate for Rosa (concierge+), Week grid, Flags list w/ resolve, Export download btn, Settings inputs (lat/lng/radius/save/locate) with 'Saved' msg, Kiosk lock + s…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix duplicate React key in PinPad (RgBits.tsx line 89) to silence the console warning.
+- Investigate on-clock persistence: after successful clock-IN, reloading /rg/clock?station=door-main should present 'CLOCK OUT' (nextKind='out'). Verify rgLoad() runs before getClockState() reads and that rgLast filters correctly on hydrated punches.
+
+## Iteration 39
+
+_Iteration 39 regression check after refactor of /app/backend/ai_routes.py extract_bill (single message/text assignment path) and test-file type-hint tidies. Ran the AI endpoint suite against public REACT_APP_BACKEND_URL and confirmed the legacy suite still collects. All 16 tests in test_ai_endpoints.py pass (25.74s), including 3 new brief-specific tests: (a) CSV with tracking 1Z7A3B9C0412345678 → 200 with lines/carrier/invoiceNumber/confidence/raw and tracking preserved in output, (b) PDF with garbage bytes → 400 'Could not read PDF' (not 500), (c) real 1-page PDF generated via PIL Image.save(...,'PDF') → 200 with lines array. Existing checks re-verified: extract-sheet (timing/pressure/bad-k…_
+
+
+## Iteration 40
+
+_E17 hybrid routing verified end-to-end via the public REACT_APP_BACKEND_URL. Sign-in as MH (michael123, skip camera) correctly performs POST fly.dev/auth/sign-in (401) → POST /auth/switch-user (200), sets localStorage 'rollisuite.api.token', and lands at the app with banner 'PROTOTYPE — FAKE DATA · LIVE API' + [data-testid=prototype-banner-source][data-source=live]. Dashboard renders LIVE data — Watches in house=50, Revenue this month=$3,130, Recent activity SO-2374/2373/… with actor 'API' — driven by GET /today?user_id=michael, /estimates, /jobs, /sales-orders. Sales list shows live SO-2374 with Shipped=17 and Picked up=33; sales detail /sales/21f0f942-8b29-420a-a025-df20cc08ecaa renders SO…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- In realClient.ts getPackages (and any other 'real' client function that soft-handles 4xx), make sure a non-2xx response throws so routing.ts route() enters the catch branch and toasts + calls noteRealFail — otherwise the /intake fallback is silent and the banner will never turn 'live-degraded' rose.
+- Confirm the intended label for API estimate status 'closed/converted' on the detail view; today 303613 shows 'Closed' where the brief expected 'converted'.
+- Optional: dedupe in-flight GETs on detail pages (StrictMode currently fires the same fly.dev GET 2–4 times per mount).
+
+## Iteration 41
+
+_Frontend-only iPad-viewport (1024x768) exercise of the RW Supervisor Pad (/rw/pad). Signed in as MM (mm123) in a single in-memory session and verified: Dashboard tab renders pad-title 'Watchmaker Room' with 6-tab bar (Dashboard/Jobs 21/Parts 3/Requests 10/Audit/Picking 4). Dept goal card shows dept-actual $6,450, dept-projected $7,167, dept-pace 'behind', dept-history with 4 months (data-hit true/false/true/false, Sep 'in progress'); dept-goal-edit → dept-goal-input '30000' → dept-goal-save flips goal text to $30,000 (pace recomputed). Tech strip pace chips for Rosa/MM/MH/Walter all render — but the testids are dash-pace-u-<slug> where MH uses 'michael' (not 'mh'). dash-funnel = 21 dept jobs…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix Rosa role gate so the concierge/watchmaker tier lands on the pad with pad-tab-review + pad-review-readonly containing parts-history and no manager sections (as specified). Today Rosa is blocked entirely.
+- Normalise tech-strip testid slugs: either use full first-name for all four (rosa/matthew/michael/walter) or the shorthand for all four (rosa/mm/mh/walter). Currently mh is the odd one out (uses 'michael').
+- Optional: emit qa-returned-<part-id> (or add data-part-id to the returned line) so automation can correlate the returned notice with the originating qa-part row.
+
+## Iteration 42
+
+_Frontend-only end-to-end sweep of the RolliSuite iteration-42 feature batch (15 items). Signed in via localStorage rollisuite.api.mode='mock' + context.add_init_script; each browser_automation session executes a full flow. QUICK-FIX button order verified in two places: RS Dashboard TradeReviewPanel trade-send-back-e-r2 at x=1046 is left of trade-accept-e-r2 at x=1166; on /rw/pad Jobs tab pad-sendback-j-10 x=41 is left of pad-advance-j-10 x=233. Rosa role-gate P0 FIXED: /rw/pad as Rosa mounts rw-pad-page with pad-title 'Parts request history', pad-room 'Watchmaker Room · read-only', tabs = [pad-tab-review, pad-tab-picking] only, pad-review-readonly + parts-history-list present, NO manager sec…_
+
+
+## Iteration 43
+
+_Frontend-only validation of the RolliSuite batch after the Rosa→Chyna/Leo rename. All 9 acceptance surfaces exercised in mock mode against the public preview URL. RESULTS: (1) Seed rename — no 'Rosa' text anywhere; RS /sign-in grid shows staff-card-chyna (Concierge Tier) + staff-card-leo (Watchmaker) + Joseph; /rw/pad card grid shows rw-card-u-chyna and rw-card-u-leo (no rosa); Jobs board rows E02031 → Leo/Walter, E02032 → MM/Walter, E02050 → Leo, no Chyna assignee. (2) /rw/pad MM dashboard tech chips = dash-pace-u-leo (Leo 8/18 behind), -u-mm (MM 17/20 on pace), -u-michael (MH 1/16 behind), -u-walter (Walter 11/24 behind); no rosa chip. (3) Concierge open question — Chyna signed into /rw/pa…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- OPTIONAL: Hide pad-tab-picking for concierge tier so Chyna truly only sees the read-only Requests tab (spec: 'Requests only').
+- OPTIONAL: Rename the audit location shown to 'Concierge inspection bin' (drop the '/ ') to match the spec label exactly.
+
+## Iteration 44
+
+_Frontend-only sweep of iteration-44 batch (LIVE flip + corner lookup + Inbox threads/Clear + Receive Watch redesign + New Inspection form + camera + tokened client report + real Claude Vision Scan Sheet). 7 of 9 acceptance surfaces pass end-to-end. Two functional bugs found: (a) HIGH — /rc/inspection/:token redirects to RolliConnect sign-in instead of rendering the tokened report because RcShell.tsx PUBLIC allow-list is missing this path; rc-inspection-missing also never renders for a bad token because of the same redirect; (b) MEDIUM — LIVE estimate-detail page does not surface the 'Valid until' date anywhere in the body text (spec required an example like 10/26/2026); no field/label contai…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- HIGH: Add pathname.startsWith('/rc/inspection/') to the PUBLIC check in /app/frontend/src/rc/RcShell.tsx (line 11) so the tokened /rc/inspection/:token report renders for signed-out clients; without this fix the whole tokened-report surface is unreachable and rc-inspection-missing cannot render for 
+- MEDIUM: Verify LIVE estimate detail wiring — validUntil from realClient.estimate() should render as 'Valid until <date>' on the detail page.
+- MEDIUM: Verify LIVE /requests wiring — realClient.getRequests → /intake/leads returned 0 rows and the page shows no request-row-* testids; spec expected ~intake-leads list with Blake Rivera / Casey Kim / RQ- numbers.
+- LOW: ReceiveWatchPage serial-decode should decode the entered serial (1601 → Datejust · cal. 1570) rather than echoing the package's expected watch.
+- LOW: insp-scan-label 'E02040' does not prefill a new form — confirm findInspectionPackage/searchJobs recognise E02040 → j-r3.
+
+## Iteration 45
+
+_Frontend-only sweep of iteration-45 batch (WM pad list toggle · partial convert · intake step relocation · simpleStatus LIVE mapping). 4 of 4 primary acceptance surfaces essentially PASS end-to-end. Minor gaps: (a) intake-approval-report-<id> testid not rendered in /intake/awaiting-approval rows (approve + job-link exist, report link missing); (b) 'leftover estimate line added' timeline stamp text not present in job body after 2nd intake convert (the job DOES receive the leftover line — job-line-* went 1→2 and same job URL — but the audit/stamp text spec-required is not visible in the body). Item 1 (WM pad list toggle): /rw/pad as MM shows pad-view-switch with pad-view-cards aria-pressed=tru…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- MEDIUM: Render intake-approval-report-<jobId> link in /intake/awaiting-approval rows (should route to /rc/inspection/<token>). Currently only approve + job-link render.
+- LOW: Surface the 'leftover estimate line added' timeline/audit stamp on the job detail page after a 2nd act-convert-intake appends a leftover line (the append itself works).
+
+## Iteration 46
+
+_Re-tested the two iteration-45 fixes on RolliSuite prototype (mock mode). FIX 2 (leftover-line append note) verified END-TO-END: on /estimates/e-05 (Approved · 2 lines), unchecking line-select-1 → act-convert-intake produces a new job with 1 line (j-muk4lnlq-4j2 / E02052). SPA-nav back to the estimate → act-convert-intake again → same job URL, job-line-* count went 1→2, and the body now contains the text 'leftover estimate line added from E01045' (i.e. from the estimate's number) plus the appended line description. The estimate transitions to 'converted' after the 2nd convert. The note IS being pushed into j.notes (client.ts leftover branch confirms j.notes.push with note-<id>). Body text ma…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- MEDIUM: Investigate why clicking insp-save on a new inspection form at /intake/inspect/new?job=<id> does not flip insp-status to 'saved' in the mock (no toast/error shown either). Once fixed, the LINK variant of intake-approval-report-<jobId> (which is already coded correctly in IntakeStepPages.tsx)
+- LOW: Ensure the notes-panel on the job-detail page is visible without scroll/tab-switch after 2nd convert, so testers can locate the note-<id> element with the leftover stamp text directly. Body text already contains 'leftover estimate line added from E01045' — the note DOM node just wasn't in the i
+
+## Iteration 47
+
+_Frontend-only end-to-end testing of RolliSuite iteration 47 (Parcel Pro label request + two-scan receive + regressions). Executed all A/B/C/D flows via one goto + SPA navigation, and A1 portal in a separate browser context. 100% of required assertions passed. No functional bugs found._
+
+
+## Iteration 48
+
+_Frontend-only mock-mode E2E testing of the new /rw/floor station map (WATCH + BRACELET tracks with manager-gated Polish off-ramps). Covered map render, seed counts, manager gate IN/OUT (case + band), gate guards, custody history slide-over, component lookup, bulk assign tab embed, drag/slide-over lane guard, regression on /rw/station /rw/pad /rw/wm, and iteration_47 smoke on /shipping/inbound and /intake. All 12 test buckets passed._
+
+
+## Iteration 49
+
+_Frontend-only mock-mode E2E for the rebuilt Bulk Assign + Component Lookup tabs on /rw/floor. Covered B1–B6 (bulk map-pick → scan → remove → commit; gate destinations with hand-to; band leg), L1–L2 (type-ahead by name partial, click populates result, badges 'W · Leo / B · Joseph / P · Walter / W · MM', map dot focus/dim, clear resets, estimate lookup with item label 1/2, ref# 116610LN, QQQQ error), R1 (rw-item-label placeholder '1/3', value save), and G1 regression on /rw/station and /rw/pad. All flows pass._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Minor: review spec references 'lookup-suggest-c-14' but Naomi Castellanos fixture id is c-10. Either update review request or align fixture — code is correct.
+- Minor wording: 'Morning handout' capitalized only appears on the switch-link; the handout panel body uses lowercase 'morning handout'. Cosmetic — main agent may standardize wording.
+
+## Iteration 50
+
+_Full E2E for iter50 — AI client-update summary (Claude template-fill + rule-based fallback), corner History lookup inline expand + embedded destination map, /assign map restructure (nodes removed / BRA merge / lookup bar), Bulk assign flow, and R1 /rw/floor regression. Backend S1 (2/2 pytest passes). Frontend S2, S3, A1, A2, R1 all pass. No blocking issues._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- None blocking. Optional: on shared Emergent Claude key rate-limit (HTTP 429), fallback path to Rule-based draft is working as designed. If bursty tests trigger 429, consider retry-with-jitter server-side.
+- Minor spec drift: spec asked for 'no marks for other jobs' inside corner map; implementation also renders destination-node highlights alongside the 3 job-part marks — these are for the same job and are semantically correct (part destinations). Selector-wise, [data-testid^=dest-mark-j-30-] alone is t
+
+## Iteration 51
+
+_Iter51 — Full E2E of MH-only Hitlist restriction, bypass logging end-to-end (receiving-camera + payment-release at Ship + Pickup), and new /purchasing/vendors screen (list, add w/ duplicate guard, edit propagation, active toggle drop-from-picker, detail roll-up, Swiss Supply Geneva seed). All 12 scenarios (H1-H5, V1-V6, R1) PASS. No blocking issues._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- (Minor / optional) R1: Generate PO toast text is 'Updated' rather than including the newly-created PO number. Spec expected 'message with PO number' — consider making the rs-msg include e.g. 'PO-26-0028 created'.
+- (Minor / optional) H4: seeded 'paid $1,000 two days ago' actually renders as ~2067 min (~34.5 h). The RED classification and 'beyond sync lag' verdict are correct, but the seed fixture is closer to 1.4 days than 2 days.
+- (Minor / cosmetic) H1: [data-testid=bypass-card] is attached to the asset-value card and not to the individual bypass feed rows (those use [data-testid^=bypass-byp-]). Consider renaming or dual-tagging so the spec's '4 seeded bypass-card' phrasing lines up with the actual selector.
+
+## Iteration 52
+
+_Iter52 (frontend-only) — E2E of Schedule / Appointments (S1, S2, S5, S6 partial), Email Template Manager presence (T1), Job Template Manager under Bill Audit (T2, T3 core), Purchasing price units + Generate PO (P1), and Cycle Count gain/loss (C1). 10 of the 13 scenarios in scope were exercised and PASS. Deep flows for A1/A2 camera + scan, S3 status actions, S4 close-day, S5 multi-user, T1 edit/retire, T3 CRUD, and R1 regression were not fully re-run this iteration but all foundational testids and structures are correct._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- P1 data seeding: PO-26-0022 currently has lines '24-7030-0 ×2, 25-16610 ×2 ($550)'. Spec expected a 3285-310 crown/barrel line at $210 to demonstrate the RED (>3× avg) coloring + 'acknowledge to Send' gate. Either add that line back to PO-26-0022 or update the spec to point at a different PO where t
+- (Non-blocking) The Confirm-count button on Cycle Count is disabled until every line in the locked location is counted / zeroed / skipped. Consider surfacing this in the button tooltip or hint so testers/users don't miss it (currently silent grey state).
+
+## Iteration 53
+
+_Iter53 (frontend-only) — Comprehensive E2E of Receive Watch (/intake/inspection/pk-08), IPEVO→Microscope InspectionCameraFlow, Save & Print Intake Labels dialog (7/14/13 presets + custom copies), Watch Intake History (search, Edit dialog, Reprint dialog with 1/2/3/5 presets, Open→read-only), and regressions on /rs/swo and /intake/labels 'Print all unprinted'. ALL exercised scenarios PASS. No frontend bugs found._
+
+
+## Iteration 54
+
+_Iter54 — Frontend-only E2E of STAFF HITLIST: per-person /hitlist/<slug> URLs, Inbox (photo lightbox, mark read/unread, job link), Pinned/Derived per-person seed rows (Dre/Sam/Nico + team pins/tasks), Supervisor Team rollup (/hitlist/joseph/team, /hitlist/mm/team) with inline reassign propagating to individual lists, drill-in and non-supervisor guard, Setup home-screen toggle + persistence + badge, MH-only /hitlist/owner accountability page with sidebar 'MH Accountability' entry, Receive Watch Flag-to (user + role:polisher) creating inbox+pinned rows on the target's Hitlist, RW shell nav rw-nav-hitlist 'Hitlist' → /rw/hitlist/<slug> and /rw/hitlist/joseph/team, and regression on staff-hitlist…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- FIX PinBits.PinnedList to render p.photo thumbnail (mirror TeamHitlistPage line 57 pattern) so Flag-to-photo pins show the thumbnail on the target's Hitlist as the spec requires.
+- Self-verify sign-in landing after setting home-screen-team / home-screen-hitlist / home-screen-default (Cloudflare blocked repeated automated re-signins during this run). localStorage + homeRouteFor logic looks correct in code.
+- Best-effort self-verify /rw/pad Pad camera Flag-to sheet (pad-flag-to-select + pad-photo-confirm) — same flagToHitlist backend as the verified RW path.
+- Best-effort self-verify /audit-log 'Reassigned pin …' and 'Flagged photo to …' entries.
+
+## Iteration 55
+
+_Iter55 — Frontend-only E2E of RolliConnect account-based auth (magic-link retired), TOTP + 8 backup codes, per-doc gating (login-vs-public), Setup RcAccessCard + Accounts, staff per-photo lock on /jobs/j-r1 photos panel, portal photo sections with privateCount, and staff View-as-client into /rc. 23/24 executed scenarios PASS. ONE HIGH-priority BUG confirmed by real browser navigation: navigating to /rc/auth/<anything> renders the RolliConnect LockWall (Sign in to view this) instead of redirecting to /rc — the retired magic-link route is not actually redirecting._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- FIX /rc/auth/:token redirect. The RcShell shows LockWall for any pathname not in AUTH_ROUTES = ['/rc','/rc/','/rc/signup'] before the nested <Navigate to='/rc' replace/> can execute. Options: (a) add '/rc/auth' as a public prefix check in RcShell, (b) short-circuit the wall when pathname starts with
+
+## Iteration 56
+
+_Iter56 — Frontend-only E2E of (1) BENCH TESTS panel on Job page and (2) TARGET COMPLETION DATE moved to Receive Watch (Card 6). All bench-panel UI/data checks, caliber override recomputation, sample capture, delete, empty state, hidden file input, and end-to-end Target flow (Receive Watch → fork-returning → commit → inspection form read-only → estimate detail → intake history → Intake History Edit editing target updates all downstream) PASS. Seeded insp-01 read-only target and legacy /inspection/new?est=… → /intake/inspect/… (query preserved, brand prefilled) PASS. ONE HIGH-priority BUG: bench test job stamps are NOT appearing on the Job Status timeline card — the spec-required strings 'Benc…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- FIX bench-test Status-timeline visibility. Either (a) extend JobTimeline.tsx to also render entries from j.notes (or from the audit log filtered by job number/type), or (b) push bench events to j.timeline (or a new 'bench' row-kind) instead of only appendAudit. Required strings per spec: 'Bench test
+- OPTIONAL: for consistency, verify that overrideBenchCaliber also updates the caliber card's 'corrected by …' timestamp on re-selecting the same spec (currently reselecting rlx-31xx after 3235 returns caliber to matched header state; verify no residual 'corrected by' banner).
+
+## Iteration 57
+
+_Iter57 — Frontend-only E2E for (A) GUIDED AUTHENTICATION 11-step capture and (B) MULTI-ITEM ESTIMATES + Job Templates + Receive Watch item picker. All spec assertions that were reachable via public URL passed. Auth overlay is opaque (rgba(0,0,0,0.9)) — the tailwind fix from bg-black/92 → bg-black/90 is confirmed. Camera auto→manual mode transition could not be exercised because Playwright's headless environment exposes only one fake device, but the wiring is verified in source (setManual on select change, reset on step advance). Job Template Manager UI could not be located via a URL sweep (/setup, /setup/bill-audit, /setup/job-templates, /setup/audit, /setup/billing, /bill-audit all rendered…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Optional: expose the Job Template Manager route via a discoverable /setup entry (or add a stable /setup/bill-audit or /setup/job-templates route with data-testid on the nav link) so automated testing can reach jt-* controls without hunting through Setup subtabs.
+
+## Iteration 58
+
+_Iter58 — Frontend-only E2E for APPRAISAL CREATION TOOL on j-08 (Naomi Castellanos · Rolex OP 41 ref 124300). Almost every spec assertion passes: seed row APR-2026-0032 draft $6,175, create-appraisal disabled on non-completed jobs (j-01), new draft APR-2026-0033 with today's long-form date, Insurance purpose, single-paragraph description containing 41 mm Oystersteel / twinlock / sapphire crystal / Turquoise / Oyster bracelet / self-winding cal. 3235 · 31 jewels · 28,800 vph (4 Hz), authenticity 'all 11 components examined under guided capture ... no flags' (confirms main-agent fix #2), condition = 'Excellent — serviced; case and bracelet refinished' (contains no 'Appraisal' — confirms main-ag…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- FIX apr-photo-after fresh-draft flag: prevent the seed IIFE in /app/frontend/src/api/appraisals.ts (L62) from persisting the seeded after-work photo onto job.photos, OR have createAppraisal() leave afterPhotoUrl undefined regardless of any pre-existing after-work photo (only attachAfterPhoto should 
+- FIX apr-field-style-no testid: strip trailing hyphen in the transform on AppraisalPage.tsx L22 (e.g. `.replace(/[^a-z]+/g,'-').replace(/^-|-$/g,'')`), or hard-code the testid map. Currently emitted as 'apr-field-style-no-'.
+
+## Iteration 59
+
+_Full frontend UI test of RolliSuite FEATURE A (B2B Client Reference # on Receive Watch + email subject threading + pills on Estimate/Job Detail + inline edit) and FEATURE B (Band-only label queue, scan-to-client on Estimate/Job/Sales pickers, duplicate-name warning toast). Tested against http://localhost:3000 (Vite dev, in-memory mock). Multi-step flows executed within a single page session using SPA (pushState) navigation since page reload/goto resets the in-memory store. Login michael/michael123 works; all A1-A5 and B1-B8 assertions passed. B9 partially passed (regression flows load; Save-draft button click timed out but that's a locator-side issue, not a feature bug)._
+
+
+## Iteration 60
+
+_Full frontend test of RolliSuite multi-item estimates (A1-A10), scan gate on invoicing (B1-B7), email subject regression (C1), and light regressions (R1). Ran against http://localhost:3000 with localStorage.rollisuite.api.mode='mock'. Used SPA (pushState + PopStateEvent) navigation to preserve in-memory mock state across multi-step flows. Login michael/michael123 (manager) and vienna/vienna123 (concierge) verified. Result: A1, A2, A3, A4, A5, A6, A7, A8, B1, B2, B3, B4, B5, B6, C1 all PASS. A9 could not be executed as scripted (commit button state disabled — see notes). A10 verified indirectly (remove UI is only present in edit mode; approved e-13 has no remove buttons; draft new estimate do…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Investigate A9: inspection-commit button is disabled with 'Save' text when Item 1 is selected on pk-06 after Vienna's seeded Scan 1. If commit requires certain fields, add a tooltip or hint. If commit for a partial item should be allowed, verify enablement conditions.
+- A7: Add [data-testid=jt-items] badge (e.g. '2 items') on Job Template rows in the Job Templates panel (/shipping/bill-audit?tab=templates) to match the review-request contract.
+- A7 seed check: template jt-multi item 2 currently infers 'P+B'. Review whether item 2 should have only a B line per the review-request expectation of item-2 data-codes='B'.
+
+## Iteration 61
+
+_Frontend-only verification of the new Watchmaker-room Photo Kiosk feature (K1–K9) plus R1 regressions on RolliSuite (in-memory mock, localhost:3000). All 10 scenarios pass end-to-end. Verified admin toggle, hitlist/team derivations, scan-lookup (job # + ref-serial), guided 4-step capture with correct data-cam per step and Finished button on step 4, clearing of derived tasks on /hitlist/mm, /rw/hitlist/mm and rw-kiosk-requirement banner (both j-16 after live capture and j-04 seeded), ad-hoc photo with @-mention chips (MH pre-selected, Vienna label '(VC)'), inbox from='MM' (assigned watchmaker, NOT MH the sender), unread-count increment, reply from Inbox routing to /rw/hitlist/mm Inbox+Pinned …_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Optional: verify intended read/unread default for seed ib-10 (currently shows Unread on /hitlist/michael).
+- Optional: double-check wmk-camera-select → wmk-camera-mode text flip to 'manual' on human interaction.

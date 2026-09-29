@@ -7,6 +7,11 @@ export const stations: Station[] = [
   { id: 'st-04', name: 'Watchmaker Room', division: 'rolliworks' },
   { id: 'st-05', name: 'Shipping',        division: 'rolliworks' },
   { id: 'st-rs', name: 'RS Counter',      division: 'rollishop'  },
+  // WM 1–8 are the bench iPads (device records, personal login for whichever watchmaker sits there) — NOT people
+  ...Array.from({ length: 8 }, (_, i) => ({ id: `st-wm${i + 1}`, name: `WM ${i + 1}`, division: 'rolliworks' as const, deviceType: 'pad' as const })),
+  { id: 'st-jv-pad', name: 'Workshop pad (JV)', division: 'rolliworks', deviceType: 'pad' },
+  { id: 'st-kiosk-fd', name: 'Front-desk check-in kiosk', division: 'rolliworks', deviceType: 'kiosk' },
+  { id: 'st-kiosk-wm', name: 'WM room photo kiosk', division: 'rolliworks', deviceType: 'kiosk' },
 ];
 
 // The device this prototype runs on is mocked as already registered to this station.

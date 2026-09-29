@@ -12,6 +12,8 @@ import { fmtDate, fmtTime, humanize } from '@/lib/format';
 
 const TYPE_TONE: Record<AuditEventType, string> = {
   sign_in: 'bg-moss-50 text-moss-700',
+  view_as_started: 'bg-amber-100 text-amber-900',
+  view_as_ended: 'bg-amber-50 text-amber-800',
   purchasing: 'bg-teal-50 text-teal-800',
   companion: 'bg-violet-50 text-violet-700',
   comms: 'bg-sky-50 text-sky-700',
@@ -120,7 +122,7 @@ export default function AuditLogPage() {
                 <Td>
                   <span className={clsx('inline-flex rounded-sm px-1.5 py-0.5 text-[11px] font-medium', TYPE_TONE[e.type])}>{humanize(e.type)}</span>
                 </Td>
-                <Td className="font-medium text-ink">{e.userShortName ?? <span className="text-ink-300">—</span>}</Td>
+                <Td className="font-medium text-ink">{e.userShortName ?? <span className="text-ink-300">—</span>}{e.onBehalfOf && <span data-testid={`audit-obo-${e.id}`} className="ml-1 rounded-sm bg-amber-100 px-1 py-px text-[10px] font-semibold text-amber-900">as {e.onBehalfOf}</span>}</Td>
                 <Td className="text-ink-700">{e.stationName}</Td>
                 <Td className="text-ink-500">
                   {e.method ? (e.method === 'pin_switch' ? 'PIN switch' : 'Password + photo') : '—'}

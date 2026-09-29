@@ -222,7 +222,9 @@ const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toD
 const readStations = (): Station[] => {
   const saved = readJson<Station[] | null>(KEYS.stations, null);
   // Backfill division for stations saved before the division feature was added
-  if (saved) return saved.map((s) => ({ ...s, division: s.division ?? 'rolliworks', receptionMode: s.receptionMode ?? fx.stations.find((f) => f.id === s.id)?.receptionMode }));
+  if (saved) return [...saved, ...fx.stations.filter((f) => !saved.some((x) => x.id === f.id))].map((s) => ({ ...s, division: s.division ?? 'rolliworks', receptionMode: s.receptionMode ?? fx.stations.find((f) => f.id === s.id)?.receptionMode, deviceType: s.deviceType ?? fx.stations.find((f) => f.id === s.id)?.deviceType }));
+  // Seed-only stations added after this device saved its registry (WM 1–8 pads, kiosks) are merged in by id
+
   writeJson(KEYS.stations, fx.stations);
   return fx.stations;
 };
@@ -317,6 +319,9 @@ const readAudit = (): AuditEvent[] => readJson<AuditEvent[]>(KEYS.audit, []);
 // RolliConnect writes are replayed from localStorage on load (see replayRcEvents); the audit log is already persisted, so skip stamping during replay
 let replaying = false;
 function appendAudit(e: Omit<AuditEvent, 'id' | 'timestamp'>): AuditEvent {
+  // D-385 / D-361: while the owner is in View-as, every event is written actor = real user, on-behalf-of = viewed user — both names on the record, no credit to the viewed user
+  const va = viewAsSync(); const real = realUserSync();
+  if (va && real && e.type !== 'view_as_started' && e.type !== 'view_as_ended') e = { ...e, userShortName: real.shortName, userDisplayName: `${real.displayName} (as ${va.shortName})`, onBehalfOf: va.shortName };
   const event: AuditEvent = { ...e, id: `ev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, timestamp: new Date().toISOString() };
   if (!replaying) writeJson(KEYS.audit, [event, ...readAudit()].slice(0, AUDIT_CAP));
   return event;
@@ -328,10 +333,37 @@ export async function getAuditLog(): Promise<AuditEvent[]> {
 
 // ---- Auth / users -----------------------------------------------------------
 
-const currentUserSync = (): User | null => {
+// Real sign-in (localStorage, the device session) vs. the VIEWED identity (D-385 owner View-as, sessionStorage — this tab only, never touches the viewed user's own session)
+export const OWNER_USER_ID = 'u-michael';
+const VIEW_AS_KEY = 'rollisuite.prototype.viewAsUserId';
+const realUserSync = (): User | null => {
   const id = localStorage.getItem(KEYS.currentUser);
   return id ? fx.users.find((u) => u.id === id) ?? null : null;
 };
+const viewAsSync = (): User | null => {
+  const real = realUserSync(); if (!real || real.id !== OWNER_USER_ID) return null;
+  const id = sessionStorage.getItem(VIEW_AS_KEY);
+  return id && id !== real.id ? fx.users.find((u) => u.id === id) ?? null : null;
+};
+// Everything below (guards, scoping, hidden fields, landings, permission checks) reads the VIEWED user — exactly as if they had signed in
+const currentUserSync = (): User | null => viewAsSync() ?? realUserSync();
+export const isOwnerSync = (): boolean => realUserSync()?.id === OWNER_USER_ID && !viewAsSync();
+export interface ViewAsState { real: User; viewing: User | null }
+export async function getViewAs(): Promise<ViewAsState | null> { const real = realUserSync(); return resolve(real ? { real, viewing: viewAsSync() } : null); }
+export async function startViewAs(userId: string): Promise<User> {
+  const real = realUserSync(); if (!real || real.id !== OWNER_USER_ID) throw new Error('View-as is owner-only (MH)');
+  const target = byId(fx.users, userId); if (target.id === real.id) { await stopViewAs(); return real; }
+  const prev = viewAsSync(); if (prev) appendAudit({ type: 'view_as_ended', stationName: stationNameOrUnknown(), userShortName: real.shortName, userDisplayName: real.displayName, onBehalfOf: prev.shortName, detail: `View-as ended · ${real.shortName} stopped viewing as ${prev.shortName} (switched to ${target.shortName})` });
+  sessionStorage.setItem(VIEW_AS_KEY, target.id);
+  appendAudit({ type: 'view_as_started', stationName: stationNameOrUnknown(), userShortName: real.shortName, userDisplayName: real.displayName, onBehalfOf: target.shortName, detail: `View-as started · ${real.shortName} viewing as ${target.shortName} (${target.dutyLabel}) · actions recorded as ${real.shortName} (as ${target.shortName})` });
+  return resolve({ ...target });
+}
+export async function stopViewAs(): Promise<void> {
+  const real = realUserSync(); const prev = viewAsSync();
+  sessionStorage.removeItem(VIEW_AS_KEY);
+  if (real && prev) appendAudit({ type: 'view_as_ended', stationName: stationNameOrUnknown(), userShortName: real.shortName, userDisplayName: real.displayName, onBehalfOf: prev.shortName, detail: `View-as ended · ${real.shortName} back to own view (was viewing as ${prev.shortName})` });
+  return resolve(undefined);
+}
 
 const signedInTodaySync = (userId: string) =>
   readAudit().some((e) => e.type === 'sign_in' && e.method === 'password_photo' && e.userShortName === byId(fx.users, userId).shortName && isToday(e.timestamp));
@@ -387,7 +419,8 @@ export async function switchUserWithPin(userId: string, pin: string): Promise<Us
 }
 
 export async function signOut(): Promise<void> {
-  const user = currentUserSync();
+  sessionStorage.removeItem(VIEW_AS_KEY);
+  const user = realUserSync();
   if (user) appendAudit({ type: 'sign_out', stationName: stationNameOrUnknown(), userShortName: user.shortName, userDisplayName: user.displayName, detail: 'Signed out' });
   localStorage.removeItem(KEYS.currentUser);
   return resolve(undefined);
@@ -511,7 +544,8 @@ export { CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './fi
 let portalActor: { by: string; station: string } | null = null;
 const actor = () => {
   if (portalActor) return { by: portalActor.by, station: portalActor.station, user: undefined };
-  const u = currentUserSync();
+  const u = currentUserSync(); const va = viewAsSync(); const real = realUserSync();
+  if (va && real) return { by: `${real.shortName} (as ${va.shortName})`, station: stationNameOrUnknown(), user: u, onBehalfOf: va.shortName };
   return { by: u?.shortName ?? 'Unknown', station: stationNameOrUnknown(), user: u };
 };
 
@@ -4303,8 +4337,6 @@ const logBypass = (e: Omit<BypassEvent, 'id' | 'by' | 'station' | 'at'>) => { co
 export interface AssetValueRow { jobId: string; jobNumber: string; client: string; watch: string; holders: string[]; value: number; source: 'insurance' | 'dropoff' | 'none' }
 export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[]; zeroBalances: ZeroBalanceRow[] }
 // Owner-only: the bypass feed tracks staff who may themselves hold manager access, so it is MH's account specifically — not the manager tier
-export const OWNER_USER_ID = 'u-michael';
-export const isOwnerSync = (): boolean => currentUserSync()?.id === OWNER_USER_ID;
 // Seed (once): insured declared values for a spread of in-custody jobs via arrived inbound shipments; two jobs came in as drop-offs (no insurance → $0)
 let assetSeeded = false; const DROPOFF_SEED = new Set(['E02012', 'E02024', 'E02020']);
 const seedAssetValues = () => { if (assetSeeded) return; assetSeeded = true; const vals: Record<string, number> = { E02013: 14_500, E02015: 9_800, E02026: 38_000, E02027: 12_200, E02032: 4_600, E02033: 27_500, E02011: 11_900, E02014: 16_750, E02031: 8_900, E02016: 21_000, E02023: 6_400, E02007: 13_300 };

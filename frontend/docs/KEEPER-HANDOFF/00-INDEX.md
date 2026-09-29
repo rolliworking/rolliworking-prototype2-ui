@@ -11,7 +11,7 @@
 | file | contains |
 |---|---|
 | `00-INDEX.md` | this page; vocabulary |
-| `01-ROUTE-MAP.md` | every route in all six route-spaces: purpose, who reaches it (tier + division), entry points, primary flow in steps |
+| `01-ROUTE-MAP.md` | every route: purpose, **landing for**, **guard**, **data scope**; ⚠ UNGUARDED list for the lockdown build (refreshed 2026-09-29) |
 | `modules/auth-stations.md` | device/station registration, staff sign-in (password + photo, PIN fast-switch), sessions, divisions, tiers |
 | `modules/dashboard-today.md` | dashboard stats, `/today` derived hit list, pins, tasks, `@mention` quick-add, staff hit-list viewer |
 | `modules/intake.md` | arrival → receive package → work order → receive watch (discrepancies), drop-off, outbox, label queue |
@@ -47,8 +47,14 @@
 | `08-AUDIT-TAXONOMY.md` | every audit type, fields, emitters (generated) |
 | `09-TEST-INVENTORY.md` | every testing iteration restated as a checklist (generated) |
 | `10-NOT-KEEPER.md` | do-not-inherit list with replacements |
+| `11-INTEGRATIONS.md` **[2026-09-29]** | integrations census — one section per seam: file, exports + exact signatures, request/response TS shapes, mock behaviour, TODO markers, swap point, callers |
+| `12-ROLES-AND-ACCESS.md` **[2026-09-29]** | role model as implemented: `roleKind`, guards, manager/MH-only checks, concierge restrictions, reception mode, sessions, View-as (D-385), seed identities + stations, ⚠ DRIFT list |
+| `13-INTEGRATION-GAPS.md` **[2026-09-29]** | one line per seam: what the real implementation needs that the prototype does not know (Cursor reads this first) |
 | `source/` | verbatim copies of the working docs the package consolidates (STATE-MACHINES, DATA-MODEL, API-SURFACE, SEED-DATA, DESIGN-PRINCIPLES, SESSION-LOG, DECISIONS) — cited by section number from the module specs |
-| `_gen.py` | regenerates 02/05/08/09 from the code; run after any prototype change. `_baseline_e16.txt` = the 296 exports at E16 — everything else is tagged **[post-E16]** in `05` |
+| `_gen.py` | regenerates 02/05/08/09 from the code; run after any prototype change. `_baseline_e16.txt` = the 296 exports at E16 (**[post-E16]**); `_baseline_refresh.txt` = the 461 exports at the 2026-09-26 refresh (**[post-refresh]**). 05 now carries `source` (real \| mock) and `auth expected` **[post-E16]** in `05` |
+
+## Refresh 2026-09-29 (documentation-only session, after the build queue: role landings · corrections batch · View-as · reception stub)
+Added `11-INTEGRATIONS.md`, `12-ROLES-AND-ACCESS.md`, `13-INTEGRATION-GAPS.md`; rewrote `01-ROUTE-MAP.md` with landing/guard/scope + ⚠ UNGUARDED; appended post-refresh entities to `04`, seam index to `06`, event families 40–50 to `08`, Q92–Q100 to `03`, the 2026-09-29 rulings block to `02` (via `docs/DECISIONS.md`), iterations 59–61 to `09`, scaffolding to `10`. Every ⚠ DRIFT is listed in `12 §8` and inline. Vocabulary addendum: **owner** = MH (`OWNER_USER_ID`), **View-as** = owner impersonation of a view with dual attribution (actor / on-behalf-of), **station** now carries `deviceType` (desktop · pad · kiosk) and `receptionMode`; **WM 1–8 are stations (bench iPads), not people**.
 
 ## Post-E16 refresh (2026-09-26, documentation session)
 Covers everything built after the package was created: E18 RW deep build part 1 (shop floor, bulk assign, station scanner, WM room, work queue), Supervisor Pad v1/v2 (+ history, camera), client request notes, Inbox Staff section, inbound shipping + Parcel Pro adapter + Track a package, Bench Pad + kiosk contract + goal history, Job Messages. **Not built** (queued, not amber): Job Story (VB3-13), Job Lookup (VB3-12), View as client (VB3-14), client-facing photo organisation (VB3-15), E18 part 2. New vocabulary: **Part** (a component with a floor position), **Lane** (head / band / shared), **Custody** (the tech holding a part), **Pad** (Supervisor Pad), **Bench Pad** (kiosked iPad per bench; device = station, PIN = person), **M3KE event** (a manager's resolution/selection recorded as training data), **Client request** (job-attached instruction), **Hit-list pin from a mention**.
