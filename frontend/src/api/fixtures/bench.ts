@@ -2,7 +2,7 @@ import type { ComponentKey, JobMessage } from '../types';
 import { daysAgo } from './time';
 
 // Monthly component goal per tech (own numbers only — never a leaderboard)
-export const techGoals: Record<string, number> = { Leo: 18, MM: 20, MH: 16, Walter: 24, Joseph: 22 };
+export const techGoals: Record<string, number> = { Leo: 18, MM: 20, MH: 16, Walter: 24, JV: 22 };
 
 // Prior-month completions, relative to today (monthsAgo 1 = last month). Leo: hit 4, missed 2 — one near-miss (17/18), one real miss (11/18).
 // `byType` sums to `actual`; weeks are distributed by the board from `weekShape` (fractions of the month).
@@ -26,7 +26,7 @@ export const goalHistorySeeds: Record<string, GoalSeed[]> = {
   ],
 };
 // Completions already booked this month before the prototype snapshot (added to live component completions)
-export const currentMonthBase: Record<string, { actual: number; byType: Record<ComponentKey, number> }> = { Leo: { actual: 7, byType: { head: 5, case: 1, band: 1 } }, MM: { actual: 9, byType: { head: 7, case: 1, band: 1 } }, Joseph: { actual: 11, byType: { head: 0, case: 3, band: 8 } } };
+export const currentMonthBase: Record<string, { actual: number; byType: Record<ComponentKey, number> }> = { Leo: { actual: 7, byType: { head: 5, case: 1, band: 1 } }, MM: { actual: 9, byType: { head: 7, case: 1, band: 1 } }, JV: { actual: 11, byType: { head: 0, case: 3, band: 8 } } };
 
 // Seed thread on Leo's in-progress split job (E02031): Leo → @MM (manager → hit list) → MM reply @Vienna (manager → hit list; Leo re-notified → her Messages)
 export const jobMessages: JobMessage[] = [

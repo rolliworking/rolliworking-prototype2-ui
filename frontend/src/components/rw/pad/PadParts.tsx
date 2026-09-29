@@ -6,7 +6,8 @@ import { ScanInput } from '@/components/rw/RwBits';
 import { Big, Chip, Price, STATUS_LABEL, statusTone } from './PadBits';
 import { PadHistory, PastOnJob } from './PadHistory';
 import { PadQuickAdd } from './PadQuickAdd';
-import { fmtMoney, fmtTime } from '@/lib/format';
+import { fmtTime } from '@/lib/format';
+import { useFmtMoney } from '@/components/MoneyContext';
 
 type Say = (m: string, tone?: 'ok' | 'learn' | 'err') => void;
 
@@ -21,6 +22,7 @@ const SuggestionRow = ({ s, onPick, testId }: { s: PadSuggestion; onPick: () => 
 
 // The request composer: scan → job / reference / caliber chip → caliber query (automatic) → reference-scoped description search → generic fallback
 export const PadParts = ({ ctx, onCtx, say, requests, reload, isManager }: { ctx: PadPartsContext | null; onCtx: (c: PadPartsContext | null) => void; say: Say; requests: PartsRequestWithRefs[]; reload: () => void; isManager: boolean }) => {
+  const fmtMoney = useFmtMoney();
   const [q, setQ] = useState(''); const [items, setItems] = useState<PartsRequestItem[]>([]); const [busy, setBusy] = useState(false); const [seg, setSeg] = useState<'new' | 'history'>('new');
   const tick = requests.length;
   useEffect(() => { setItems([]); setQ(''); }, [ctx?.job.id]);

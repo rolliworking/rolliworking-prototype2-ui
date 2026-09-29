@@ -8,10 +8,9 @@ export const slugOf = (u: User) => u.firstName.toLowerCase();
 export const userBySlug = (slug: string): User | undefined => b.users().find((u) => slugOf(u) === slug.toLowerCase() || u.shortName.toLowerCase() === slug.toLowerCase());
 export const hitlistPath = (u: User) => `/hitlist/${slugOf(u)}`;
 
-// Supervisors and the roles they roll up
+// Supervisors and the roles they roll up — the watchmaker room has no supervisor yet (slot intentionally empty)
 export const TEAM_MAP: Record<string, { roles: Role[]; label: string }> = {
-  Joseph: { roles: ['band_tech', 'polisher'], label: 'Band / Polish room' },
-  JV: { roles: ['watchmaker'], label: 'Watchmaker room' },
+  JV: { roles: ['band_tech', 'polisher'], label: 'Workshop · band / polish' },
 };
 export const isSupervisor = (u: User | null | undefined) => !!u && !!TEAM_MAP[u.shortName];
 export const getTeam = (sup: User): User[] => { const t = TEAM_MAP[sup.shortName]; return t ? b.users().filter((u) => u.id !== sup.id && (u.division === 'both' || u.division === sup.division || sup.division === 'both') && u.roles.some((r) => t.roles.includes(r))) : []; };
@@ -22,15 +21,15 @@ export interface InboxItem { id: string; to: Assignee; from: string; text?: stri
 export interface InboxRow extends InboxItem { unread: boolean; jobNumber?: string; jobLabel?: string }
 const img = (seed: string): PackagePhoto => ({ id: `ibph-${seed}`, source: 'camera', dataUrl: `https://picsum.photos/seed/${seed}/640/480`, slot: 'workbench' });
 const inbox: InboxItem[] = [
-  { id: 'ib-01', to: { type: 'user', shortName: 'Joseph' }, from: 'MM', text: 'Clasp weld on the Sub bracelet looks thin on the 6 o’clock side — your call before Sam re-pins it.', photo: img('rs-clasp-weld'), jobId: 'j-05', createdAt: daysAgo(0, 8.7), station: 'Watchmaker Room', readBy: [] },
-  { id: 'ib-02', to: { type: 'user', shortName: 'Joseph' }, from: 'MH', text: 'Client asked for brushed-only on the Explorer case sides. No high polish.', jobId: 'j-03', createdAt: daysAgo(0, 9.1), station: 'Front Desk 1', readBy: [] },
+  { id: 'ib-01', to: { type: 'user', shortName: 'JV' }, from: 'MM', text: 'Clasp weld on the Sub bracelet looks thin on the 6 o’clock side — your call before Sam re-pins it.', photo: img('rs-clasp-weld'), jobId: 'j-05', createdAt: daysAgo(0, 8.7), station: 'Watchmaker Room', readBy: [] },
+  { id: 'ib-02', to: { type: 'user', shortName: 'JV' }, from: 'MH', text: 'Client asked for brushed-only on the Explorer case sides. No high polish.', jobId: 'j-03', createdAt: daysAgo(0, 9.1), station: 'Front Desk 1', readBy: [] },
   { id: 'ib-03', to: { type: 'role', role: 'polisher' }, from: 'Walter', text: 'Reference finish for the Oyster bracelet — match this grain.', photo: img('rs-oyster-grain'), jobId: 'j-05', createdAt: daysAgo(0, 10.2), station: 'Inspection Bench', readBy: [] },
-  { id: 'ib-04', to: { type: 'user', shortName: 'Sam' }, from: 'Joseph', text: 'Two stretched links between 4 and 6 — swap from the parts bin, don’t re-pin.', photo: img('rs-stretched-links'), jobId: 'j-05', createdAt: daysAgo(0, 11), station: 'Band Room', readBy: [] },
+  { id: 'ib-04', to: { type: 'user', shortName: 'Sam' }, from: 'JV', text: 'Two stretched links between 4 and 6 — swap from the parts bin, don’t re-pin.', photo: img('rs-stretched-links'), jobId: 'j-05', createdAt: daysAgo(0, 11), station: 'Band Room', readBy: [] },
   { id: 'ib-05', to: { type: 'user', shortName: 'MM' }, from: 'Leo', text: 'Hairspring on the Lady-Datejust after QC fail — see the kink at the stud.', photo: img('rs-hairspring'), jobId: 'j-16', createdAt: daysAgo(0, 13.4), station: 'Bench 1', readBy: [] },
   { id: 'ib-06', to: { type: 'user', shortName: 'Leo' }, from: 'MM', text: 'Take the GMT next — parts landed this morning.', jobId: 'j-04', createdAt: daysAgo(0, 8.2), station: 'Watchmaker Room', readBy: ['Leo'] },
   { id: 'ib-07', to: { type: 'user', shortName: 'Vienna' }, from: 'MH', text: 'Receipt printer paper — order two cases, not one.', createdAt: daysAgo(1, 16), station: 'Front Desk 1', readBy: ['Vienna'] },
-  { id: 'ib-08', to: { type: 'user', shortName: 'MH' }, from: 'Joseph', text: 'Polish room QC tray — all six bracelets passed brush check.', photo: img('rs-qc-tray'), createdAt: daysAgo(0, 15.5), station: 'Polish Room', readBy: [] },
-  { id: 'ib-09', to: { type: 'user', shortName: 'Dre' }, from: 'Joseph', text: 'Clasp + end links on E02013 — satin, then hand to Sam.', photo: img('rs-clasp-satin'), jobId: 'j-03', createdAt: daysAgo(0, 8.1), station: 'Polish Room', readBy: [] },
+  { id: 'ib-08', to: { type: 'user', shortName: 'MH' }, from: 'JV', text: 'Polish room QC tray — all six bracelets passed brush check.', photo: img('rs-qc-tray'), createdAt: daysAgo(0, 15.5), station: 'Polish Room', readBy: [] },
+  { id: 'ib-09', to: { type: 'user', shortName: 'Dre' }, from: 'JV', text: 'Clasp + end links on E02013 — satin, then hand to Sam.', photo: img('rs-clasp-satin'), jobId: 'j-03', createdAt: daysAgo(0, 8.1), station: 'Polish Room', readBy: [] },
   // WM-room kiosk ad-hoc photo: Leo documents pre-existing damage on E02026 and tags @MH; MH's reply pings Leo's bench iPad, not the kiosk
   { id: 'ib-10', to: { type: 'user', shortName: 'MH' }, from: 'Leo', text: 'Pre-existing scratch across the case back at 4 o’clock — photographed BEFORE I opened it. Logging so it isn’t pinned on the bench later.', photo: img('rs-caseback-scratch'), jobId: 'j-16', createdAt: daysAgo(0, 7.4), station: 'Watchmaker Room Kiosk', readBy: ['MH'] },
   { id: 'ib-11', to: { type: 'user', shortName: 'Leo' }, from: 'MH', text: 'Re: Pre-existing scratch — noted and logged on the job, you’re covered. Carry on.', jobId: 'j-16', replyToId: 'ib-10', createdAt: daysAgo(0, 7.1), station: 'Front Desk 1', readBy: [] },

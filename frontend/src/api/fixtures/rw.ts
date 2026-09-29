@@ -39,7 +39,7 @@ export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: R
   'j-03': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'MM' }, case: { station: 'safe_await_head', status: 'waiting', tech: 'Walter' } },
   'j-06': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'MM' }, case: { station: 'mgr_safe_polish_in', status: 'waiting', tech: 'Vienna' } },
   'j-17': { case: { station: 'polish_room', status: 'in_progress', tech: 'Walter' } },
-  'j-30': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'Leo' }, case: { station: 'mgr_safe_polish_out', status: 'waiting', tech: 'Vienna' }, band: { station: 'band_mgr_safe_in', status: 'waiting', tech: 'Joseph' } },
+  'j-30': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'Leo' }, case: { station: 'mgr_safe_polish_out', status: 'waiting', tech: 'Vienna' }, band: { station: 'band_mgr_safe_in', status: 'waiting', tech: 'JV' } },
   'j-32': { head: { station: 'safe_await_band', status: 'waiting', tech: 'Leo' }, case: { station: 'safe_await_band', status: 'waiting', tech: 'Walter' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Walter' } },
   'j-05': { band: { station: 'final_assembly', status: 'reunited', tech: 'Walter' }, case: { station: 'final_assembly', status: 'reunited', tech: 'Walter' } },
   'j-r3': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'MM' }, band: { station: 'safe_await_head', status: 'waiting', tech: 'Leo' } },

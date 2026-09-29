@@ -1,8 +1,8 @@
 import type { Station } from '../types';
 
 export const stations: Station[] = [
-  { id: 'st-01', name: 'Front Desk 1',    division: 'rolliworks' },
-  { id: 'st-02', name: 'Front Desk 2',    division: 'rolliworks' },
+  { id: 'st-01', name: 'Front Desk 1',    division: 'rolliworks', receptionMode: true },
+  { id: 'st-02', name: 'Front Desk 2',    division: 'rolliworks', receptionMode: true },
   { id: 'st-03', name: 'Inspection Bench',division: 'rolliworks' },
   { id: 'st-04', name: 'Watchmaker Room', division: 'rolliworks' },
   { id: 'st-05', name: 'Shipping',        division: 'rolliworks' },

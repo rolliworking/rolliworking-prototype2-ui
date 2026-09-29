@@ -3,13 +3,15 @@ import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { JobPartsView, PadPartsContext } from '@/api/client';
 import { ScanInput } from '@/components/rw/RwBits';
-import { fmtMoney, fmtTime } from '@/lib/format';
+import { fmtTime } from '@/lib/format';
+import { useFmtMoney } from '@/components/MoneyContext';
 import { Big } from './PadBits';
 
 type Say = (m: string, tone?: 'ok' | 'learn' | 'err') => void;
 
 // Quick Add — the fast, no-approval path: watch already scanned (ctx) → scan part → saved. Over-allowance additions route to pending approval.
 export const PadQuickAdd = ({ ctx, say, tick, isManager }: { ctx: PadPartsContext; say: Say; tick: number; isManager: boolean }) => {
+  const fmtMoney = useFmtMoney();
   const [v, setV] = useState<JobPartsView | null>(null); const [note, setNote] = useState(''); const [returning, setReturning] = useState<string | null>(null); const [allow, setAllow] = useState('');
   const load = () => api.getJobParts(ctx.job.id).then(setV);
   useEffect(() => { void load(); }, [ctx.job.id, tick]);

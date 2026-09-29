@@ -3,7 +3,7 @@ import * as api from '@/api/client';
 import type { Assignee, Division, Role } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 
-// "Flag to" picker — person or role (#polisher / @Joseph — same mention pattern as Pinned). Value '' = don't flag.
+// "Flag to" picker — person or role (#polisher / @JV — same mention pattern as Pinned). Value '' = don't flag.
 export const flagAssignee = (v: string): Assignee | null => { if (!v) return null; const [t, x] = v.split(':'); return t === 'role' ? { type: 'role', role: x as Role } : { type: 'user', shortName: x }; };
 export const FlagToPicker = ({ value, onChange, note, onNote, dark, testId = 'flag-to' }: { value: string; onChange: (v: string) => void; note: string; onNote: (v: string) => void; dark?: boolean; testId?: string }) => {
   const { station, user } = useAuth(); const div: Division = station?.division ?? 'rolliworks';

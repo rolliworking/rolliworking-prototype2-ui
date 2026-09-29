@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
-import { fmtMoney } from '@/lib/format';
+import { useFmtMoney } from '@/components/MoneyContext';
 
 // Tablet-native primitives for the Supervisor Pad — iOS feel: 44px+ targets, sheets, large titles. Nothing from the desktop shell.
 export const Big = ({ children, onClick, tone = 'ghost', testId, disabled, title, type = 'button', full }: { children: ReactNode; onClick?: () => void; tone?: 'primary' | 'ghost' | 'danger' | 'warn' | 'quiet'; testId: string; disabled?: boolean; title?: string; type?: 'button' | 'submit'; full?: boolean }) => (
@@ -25,7 +25,7 @@ export const Sheet = ({ title, sub, onClose, children, testId, wide }: { title: 
   </div>;
 };
 
-export const Price = ({ value, testId }: { value?: number; testId?: string }) => <span data-testid={testId} className={`font-mono text-base ${value === undefined ? 'text-slate-500' : 'text-white'}`}>{value === undefined ? 'no price' : fmtMoney(value)}</span>;
+export const Price = ({ value, testId }: { value?: number; testId?: string }) => { const fmtMoney = useFmtMoney(); return <span data-testid={testId} className={`font-mono text-base ${value === undefined ? 'text-slate-500' : 'text-white'}`}>{value === undefined ? 'no price' : fmtMoney(value)}</span>; };
 
 export const Toast = ({ text, tone = 'ok' }: { text: string; tone?: 'ok' | 'learn' | 'err' }) => (
   <div data-testid={`pad-toast-${tone}`} className={`pointer-events-none fixed left-1/2 top-24 z-[80] -translate-x-1/2 rounded-2xl px-5 py-3 text-base font-semibold shadow-2xl animate-rise ${tone === 'learn' ? 'bg-violet-600 text-white' : tone === 'err' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>{text}</div>

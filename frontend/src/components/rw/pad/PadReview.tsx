@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { M3keEvent, PartsRequestWithRefs } from '@/api/client';
 import { Big, Chip, Price, Sheet, STATUS_LABEL, statusTone } from './PadBits';
-import { fmtDate, fmtMoney, fmtTime } from '@/lib/format';
+import { fmtDate, fmtTime } from '@/lib/format';
+import { useFmtMoney } from '@/components/MoneyContext';
 
 type Say = (m: string, tone?: 'ok' | 'learn' | 'err') => void;
 type Queue = Awaited<ReturnType<typeof api.getReviewQueue>>;
@@ -24,6 +25,7 @@ const ReviewLine = ({ r, i, say, reload }: { r: PartsRequestWithRefs; i: number;
 };
 
 const ReviewCard = ({ r, say, reload }: { r: PartsRequestWithRefs; say: Say; reload: () => void }) => {
+  const fmtMoney = useFmtMoney();
   const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0); const ready = (r.items ?? []).every((i) => i.price !== undefined);
   return <article data-testid={`review-card-${r.id}`} className="space-y-3 rounded-[28px] border border-white/10 bg-[#1f2630] p-5">
     <div className="flex flex-wrap items-center gap-3"><span className="font-mono text-2xl font-bold text-white">{r.number}</span><Chip tone={statusTone(r.status)}>{STATUS_LABEL[r.status]}</Chip><span className="text-sm text-slate-400">{r.requestedBy} · {fmtTime(r.requestedAt)} · <span className="font-mono">{r.job.number}</span> · {r.watch.brand} {r.watch.model} <span className="font-mono">{r.reference}</span>{r.caliber && ` · cal. ${r.caliber}`}</span></div>
@@ -34,6 +36,7 @@ const ReviewCard = ({ r, say, reload }: { r: PartsRequestWithRefs; say: Say; rel
 };
 
 const M3keSheet = ({ onClose }: { onClose: () => void }) => {
+  const fmtMoney = useFmtMoney();
   const [rows, setRows] = useState<M3keEvent[]>([]); useEffect(() => { api.getM3keEvents().then(setRows); }, []);
   return <Sheet wide testId="m3ke-sheet" title="M3KE learning log" sub="Append-only · every manager resolution and supervisor selection · inspectable training data" onClose={onClose}>
     <table className="w-full text-sm"><thead><tr className="text-left text-xs uppercase text-slate-500"><th className="py-2">when</th><th>kind</th><th>description</th><th>reference</th><th>caliber</th><th>part #</th><th>price</th><th>by</th></tr></thead>
@@ -44,6 +47,7 @@ const M3keSheet = ({ onClose }: { onClose: () => void }) => {
 // Manager gate: price + part# per line → Send for client approval → (simulated) client decision → allocate to picking
 const HISTORY_CHIPS: [string, string[]][] = [['All', []], ['Pending', ['pending_review', 'pending', 'draft']], ['Awaiting client', ['awaiting_client']], ['Approved', ['approved', 'on_order', 'received']], ['Picked', ['picked', 'allocated']], ['Declined', ['declined', 'rejected']]];
 const RequestHistory = () => {
+  const fmtMoney = useFmtMoney();
   const [rows, setRows] = useState<PartsRequestWithRefs[]>([]); const [chip, setChip] = useState('All');
   useEffect(() => { api.getPartsRequests().then(setRows); }, []);
   const sel = HISTORY_CHIPS.find((c) => c[0] === chip)?.[1] ?? []; const list = rows.filter((r) => !sel.length || sel.includes(r.status) || (chip === 'Picked' && !!r.allocatedAt));

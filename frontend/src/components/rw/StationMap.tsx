@@ -18,13 +18,13 @@ export const NODES: MapNode[] = [
   { id: 'parts', keys: ['parts_approval'], label: 'Parts approval', row: 'wat', col: 10 },
   { id: 'recase', keys: ['recase_test'], label: 'Recase + test', row: 'wat', col: 11 },
   { id: 'safe_head', keys: ['into_safe_head', 'safe_await_band'], label: 'Manager safe', row: 'wat', col: 12, lock: true, owner: 'MM', sub: 'head waits here for the bracelet' },
-  { id: 'band_pre', keys: ['band_pre_queue'], label: 'Pre-queue', row: 'bra', col: 3, lock: true, owner: 'Joseph', sub: 'in safe · awaiting band tech' },
+  { id: 'band_pre', keys: ['band_pre_queue'], label: 'Pre-queue', row: 'bra', col: 3, lock: true, owner: 'JV', sub: 'in safe · awaiting band tech' },
   { id: 'assign_band', keys: ['band_assign'], label: 'Assign band tech', row: 'bra', col: 4, assign: true },
-  { id: 'band_safe_in', keys: ['band_mgr_safe_in'], label: 'Manager safe', row: 'bra_ramp', col: 6, lock: true, owner: 'Joseph', sub: 'waiting · scan OUT to refinisher' },
+  { id: 'band_safe_in', keys: ['band_mgr_safe_in'], label: 'Manager safe', row: 'bra_ramp', col: 6, lock: true, owner: 'JV', sub: 'waiting · scan OUT to refinisher' },
   { id: 'refinish', keys: ['refinish'], label: 'Assign refinisher', row: 'bra_ramp', col: 7, assign: true, sub: 'Polish Room · bracelet (split jobs)' },
-  { id: 'band_safe_out', keys: ['band_mgr_safe_out'], label: 'Manager safe', row: 'bra_ramp', col: 8, lock: true, owner: 'Joseph', sub: 'waiting · scan OUT back to band tech' },
+  { id: 'band_safe_out', keys: ['band_mgr_safe_out'], label: 'Manager safe', row: 'bra_ramp', col: 8, lock: true, owner: 'JV', sub: 'waiting · scan OUT back to band tech' },
   { id: 'band_qc', keys: ['band_qc'], label: 'QC inspect', row: 'bra', col: 9 },
-  { id: 'safe_band', keys: ['into_safe_band', 'safe_await_head'], label: 'Manager safe', row: 'bra', col: 12, lock: true, owner: 'Joseph', sub: 'bracelet waits here for the head' },
+  { id: 'safe_band', keys: ['into_safe_band', 'safe_await_head'], label: 'Manager safe', row: 'bra', col: 12, lock: true, owner: 'JV', sub: 'bracelet waits here for the head' },
 ];
 const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4 };
 const TRACK_LINES: string[][] = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band']];

@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { DeptDashboard, PadCard, PadRoom, PaceStatus } from '@/api/client';
 import { ScanInput } from '@/components/rw/RwBits';
-import { fmtMoney } from '@/lib/format';
+import { useFmtMoney } from '@/components/MoneyContext';
 import { Chip } from './PadBits';
 
 const PACE: Record<PaceStatus, { label: string; cls: string }> = { ahead: { label: 'ahead', cls: 'bg-emerald-700 text-emerald-50' }, on_pace: { label: 'on pace', cls: 'bg-sky-700 text-sky-50' }, behind: { label: 'behind', cls: 'bg-rose-700 text-rose-50' } };
 
 // Reusable department goal tracker (gauge + history hit/miss) — same component for WM and Band rooms, re-parameterised
 export const DeptGoalTracker = ({ d, onChanged }: { d: DeptDashboard; onChanged: () => void }) => {
+  const fmtMoney = useFmtMoney();
   const g = d.goals; const pct = Math.min(100, Math.round((g.actualMtd / g.goal) * 100)); void onChanged;
   return <section data-testid="dept-goal" className="rounded-[28px] border border-white/10 bg-[#1f2630] p-5">
     <div className="flex flex-wrap items-center gap-3"><Target size={20} className="text-amber-400" /><h2 className="text-xl font-bold text-white">{d.label} · {g.history.at(-1)?.label} revenue</h2><span data-testid="dept-pace" className={`rounded-full px-3 py-1 text-sm font-bold uppercase ${PACE[g.pace].cls}`}>{PACE[g.pace].label}</span>
@@ -55,6 +56,7 @@ export const PadDashboard = ({ tick, room = 'wm' }: { tick: number; room?: PadRo
 
 // Team tab — each member's individual monthly $ goal is editable here; the department goal above is their sum (read-only, recomputed live)
 export const PadTeam = ({ room, onChanged }: { room: PadRoom; onChanged: () => void }) => {
+  const fmtMoney = useFmtMoney();
   const [t, setT] = useState<Awaited<ReturnType<typeof api.getTeamGoals>> | null>(null); const [edit, setEdit] = useState<string | null>(null); const [v, setV] = useState(''); const [err, setErr] = useState<string | null>(null);
   const load = () => api.getTeamGoals(room).then(setT);
   useEffect(() => { void load(); }, [room]); // eslint-disable-line react-hooks/exhaustive-deps

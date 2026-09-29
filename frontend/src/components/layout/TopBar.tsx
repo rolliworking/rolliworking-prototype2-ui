@@ -1,3 +1,4 @@
+import * as api from '@/api/client';
 import { Bot, MonitorSmartphone, Plus, UserRound } from 'lucide-react';
 import { SimulateCallMenu } from '@/components/layout/CallPop';
 import { IntercomButton } from '@/components/layout/IntercomPanel';
@@ -56,6 +57,11 @@ export const TopBar = () => {
           <span className={`rounded-sm border px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${DIVISION_CLS[div]}`}>
             {DIVISION_LABEL[div]}
           </span>
+          {api.isReceptionMode() && (
+            <span data-testid="header-reception-badge" data-source={api.receptionSource() ?? undefined} title="Reception mode — station flag: search shows no in-house badge or estimate numbers (?reception=0 to clear for this session)" className="rounded-sm border border-amber-400 bg-amber-50 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+              Reception
+            </span>
+          )}
         </span>
 
         {/* Global quick-add */}

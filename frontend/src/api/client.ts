@@ -222,7 +222,7 @@ const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toD
 const readStations = (): Station[] => {
   const saved = readJson<Station[] | null>(KEYS.stations, null);
   // Backfill division for stations saved before the division feature was added
-  if (saved) return saved.map((s) => ({ ...s, division: s.division ?? 'rolliworks' }));
+  if (saved) return saved.map((s) => ({ ...s, division: s.division ?? 'rolliworks', receptionMode: s.receptionMode ?? fx.stations.find((f) => f.id === s.id)?.receptionMode }));
   writeJson(KEYS.stations, fx.stations);
   return fx.stations;
 };
@@ -241,6 +241,12 @@ const readStation = (): Station | null => {
 };
 
 const stationNameOrUnknown = () => readStation()?.name ?? 'Unregistered device';
+
+// Reception mode — a STATION flag (front-desk PCs), not a role: search shows no IN-HOUSE badge and no estimate numbers. `?reception=1|0` overrides for this browser session so the view can be tested from any station.
+const RECEPTION_OVERRIDE = 'rollisuite.prototype.receptionOverride';
+(() => { try { const v = new URLSearchParams(window.location.search).get('reception'); if (v !== null) sessionStorage.setItem(RECEPTION_OVERRIDE, v === '0' || v === 'false' ? '0' : '1'); } catch { /* non-browser */ } })();
+export const isReceptionMode = (): boolean => { const o = sessionStorage.getItem(RECEPTION_OVERRIDE); if (o !== null) return o === '1'; return !!readStation()?.receptionMode; };
+export const receptionSource = (): 'query' | 'station' | null => (sessionStorage.getItem(RECEPTION_OVERRIDE) !== null ? 'query' : readStation()?.receptionMode ? 'station' : null);
 
 // Sync helper — division of the current session (station-bound)
 export const getSessionDivision = (): Division => readStation()?.division ?? 'rolliworks';
@@ -2481,6 +2487,7 @@ async function resolveIdentifierMock(query: string): Promise<SearchResults> {
   const estD = estimateDigits(raw);
   const hits: SearchHit[] = [];
   if (!q) return resolve({ query: raw, groups: [], total: 0 });
+  const reception = isReceptionMode();
 
   fx.clients.forEach((c) => {
     const name = fullNameOf(c).toLowerCase();
@@ -2488,7 +2495,7 @@ async function resolveIdentifierMock(query: string): Promise<SearchResults> {
     if (!matched) return;
     const inHouseJobs = store.jobs.filter((j) => j.clientId === c.id && j.simpleStatus === 'on_hand');
     const estimateNumbers = uniq(inHouseJobs.map((j) => (j.estimateId ? store.estimates.find((e) => e.id === j.estimateId)?.number : undefined) ?? j.number));
-    hits.push({ kind: 'client', id: c.id, hitKey: 'top', label: fullNameOf(c), detail: [c.company, c.email, c.phone].filter(Boolean).join(' · '), matched, clientId: c.id, clientName: fullNameOf(c), path: `/clients/${c.id}`, inHouse: inHouseJobs.length ? { estimateNumbers } : undefined });
+    hits.push({ kind: 'client', id: c.id, hitKey: 'top', label: fullNameOf(c), detail: [c.company, c.email, c.phone].filter(Boolean).join(' · '), matched, clientId: c.id, clientName: fullNameOf(c), path: `/clients/${c.id}`, inHouse: !reception && inHouseJobs.length ? { estimateNumbers } : undefined });
   });
   // In-house customers float to the top of the client group; everything else keeps its order
   hits.sort((a, b) => Number(!!b.inHouse) - Number(!!a.inHouse));
@@ -3233,7 +3240,7 @@ const rs = {
   counts: fx.cycleCounts.map((c): CycleCount => ({ ...c, lines: c.lines.map((l) => ({ ...l })) })),
   templates: fx.templates.map((t): MessageTemplate => ({ ...t, mergeFields: [...t.mergeFields] })),
   // Seed: Vienna's personal estimate email (warmer opener, mentions the watch) so both paths — shop default vs personal — are visible
-  personalTemplates: [{ key: 'estimate_sent', owner: 'Vienna', subject: 'Your estimate {{estimate.number}} — {{watch.brand}} {{watch.model}}', body: 'Dear {{client.first_name}},\n\nIt was a pleasure looking after your {{watch.brand}} {{watch.model}}. Your estimate {{estimate.number}} is ready — you can review and approve it here, or call me directly with any questions:\n\n{{portal.link}}\n\nWarm regards,\nVienna · Concierge', updatedAt: new Date(Date.now() - 12 * 86_400_000).toISOString() }] as PersonalTemplate[],
+  personalTemplates: [{ key: 'estimate_sent', owner: 'Vienna', subject: 'Your estimate {{estimate.number}} — {{watch.brand}} {{watch.model}}', body: 'Dear {{client.first_name}},\n\nIt was a pleasure looking after your {{watch.brand}} {{watch.model}}. Your estimate {{estimate.number}} is ready — you can review and approve it here, or call me directly with any questions:\n\n{{portal.link}}\n\nWarm regards,\nVienna · Operations Manager', updatedAt: new Date(Date.now() - 12 * 86_400_000).toISOString() }] as PersonalTemplate[],
   evidence: fx.evidence.map((e): EvidenceItem => ({ ...e })),
   catalog: fx.catalog.map((c) => ({ ...c, retired: false as boolean })),
   counters: { po: 25, cc: 3, ev: 12 },
@@ -4311,7 +4318,7 @@ export async function getHitlist(): Promise<Hitlist> {
   return resolve({ assetTotal: assets.reduce((t, r) => t + r.value, 0), assets, bypasses: [...bypasses].sort((a, b) => b.at.localeCompare(a.at)), zeroBalances: zeroBalanceLog() });
 }
 export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
-export const POLISHERS = ['Walter', 'Joseph', 'Leo'];
+export const POLISHERS = ['Walter', 'JV', 'Leo'];
 
 // -- Bulk assign (scan-driven): TECH-<short> then watch labels
 export const parseTechCode = (code: string): User | undefined => { const m = /^TECH-(.+)$/i.exec(code.trim()); return m ? fx.users.find((u) => u.shortName.toLowerCase() === m[1].toLowerCase()) : undefined; };
@@ -4377,7 +4384,7 @@ export async function stationScan(station: RwStationKey, label: string): Promise
 const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship'];
 const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', awaiting_manager_review: 'Manager review', ready_to_ship: 'Finished' };
 export type PadRoom = 'wm' | 'band';
-export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MM', 'JV', 'MH', 'Walter'], band: ['Joseph', 'Leo'] };
+export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MM', 'MH', 'Walter'], band: ['JV', 'Leo'] };
 export const ROOM_LABEL: Record<PadRoom, string> = { wm: 'Watchmaker Room', band: 'Band / Polish Room' };
 const inRoom = (j: Job, room: PadRoom) => room === 'wm' || j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
 export async function getPadBoard(room: PadRoom = 'wm'): Promise<PadCard[]> {
@@ -4810,7 +4817,7 @@ const AUDIT_SCOPES: Record<Exclude<AuditScope, 'full'>, { keys: AuditLocationKey
   wm: { keys: ['into_safe_head', 'safe_await_band', 'safe_await_head', 'wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'stuck_parts_bin', 'testing', 'finished', 'pre_queue', 'uncase', 'mgr_safe_polish_in', 'polish_room', 'mgr_safe_polish_out', 'movement_service', 'parts_approval', 'recase_test'], relabel: { finished: 'MM Inspection · finished, awaiting inspection', pre_queue: 'Pre-queue · in safe, awaiting bench pickup' } },
   band: { keys: ['band_pre_queue', 'band_assign', 'band_mgr_safe_in', 'refinish', 'band_mgr_safe_out', 'band_qc', 'polish_room', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly'], relabel: { final_assembly: 'Band handoff · final assembly' } },
 };
-export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' || /Watchmaker Room Supervisor/i.test(u.dutyLabel) ? 'wm' : u.id === 'u-joseph' || /Band/i.test(u.dutyLabel) ? 'band' : 'full');
+export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' || /Watchmaker Room Supervisor/i.test(u.dutyLabel) ? 'wm' : u.id === 'u-jv' || /Band|Workshop Supervisor/i.test(u.dutyLabel) ? 'band' : 'full');
 export async function getAuditLocations(scope: AuditScope = 'full'): Promise<AuditLocationStatus[]> {
   const sc = scope === 'full' ? null : AUDIT_SCOPES[scope];
   return resolve((sc ? sc.keys.map((k) => ({ ...auditLoc(k), label: sc.relabel[k] ?? auditLoc(k).label })) : fx.AUDIT_LOCATIONS).map((location) => { const last = auditStore.sessions.filter((a) => a.location === location.key).sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0]; const daysSince = last ? Math.floor((Date.now() - new Date(last.finishedAt).getTime()) / 86_400_000) : undefined; return { location, expected: expectedAt(location.key).length, lastAudited: last?.finishedAt, lastResult: last ? (last.missing.length ? 'missing' : 'clean') : undefined, stale: daysSince === undefined || daysSince > auditStore.staleDays, daysSince }; }));
@@ -5012,7 +5019,7 @@ export const PART_CATEGORIES = ['Vintage Parts', 'Crystals', 'Crowns', 'Inserts'
 const LEGACY_CATEGORY: Record<string, string> = { crystal: 'Crystals', crown: 'Crowns', insert: 'Inserts', movement: 'Mov-Parts', gasket: 'crystal gaskets', bezel: 'Bezels', spring_bar: 'Spring bar', mainspring: 'Main Springs', vintage: 'Vintage Parts', resale: 'Unique Resale', tube: 'Crowns', bracelet: 'Unique Resale', hands: 'Mov-Parts', dial: 'Vintage Parts' };
 export const canonicalCategory = (c: string): string => (PART_CATEGORIES.includes(c) ? c : LEGACY_CATEGORY[c] ?? (c.includes('spring') && !c.includes('bar') ? 'Main Springs' : c.includes('crystal') ? 'Crystals' : 'Mov-Parts'));
 // Location = a manager's safe → a bin/drawer inside it (same safe concept as Assign/Move + Custody). No free text.
-export const PART_SAFES: PartSafe[] = [{ id: 'safe-mm', name: "MM's safe", owner: 'MM', bins: ['A1', 'A2', 'A3', 'B1', 'B2'] }, { id: 'safe-vienna', name: "Vienna's safe", owner: 'Vienna', bins: ['P1', 'P2', 'P3'] }, { id: 'safe-joseph', name: "Joseph's safe", owner: 'Joseph', bins: ['S1', 'S2'] }];
+export const PART_SAFES: PartSafe[] = [{ id: 'safe-mm', name: "MM's safe", owner: 'MM', bins: ['A1', 'A2', 'A3', 'B1', 'B2'] }, { id: 'safe-vienna', name: "Vienna's safe", owner: 'Vienna', bins: ['P1', 'P2', 'P3'] }, { id: 'safe-joseph', name: "JV's safe", owner: 'JV', bins: ['S1', 'S2'] }];
 const calibers: Caliber[] = [
   { id: 'cal-3135', brand: 'Rolex', number: '3135', spec: 'Automatic · 31 jewels · 28,800 vph · 48 h · date' }, { id: 'cal-3235', brand: 'Rolex', number: '3235', spec: 'Automatic · Chronergy escapement · 70 h · date' }, { id: 'cal-3285', brand: 'Rolex', number: '3285', spec: 'Automatic · GMT · 70 h' },
   { id: 'cal-4130', brand: 'Rolex', number: '4130', spec: 'Automatic chronograph · column wheel · 72 h' }, { id: 'cal-2235', brand: 'Rolex', number: '2235', spec: 'Automatic · ladies · 31 jewels · date' }, { id: 'cal-mt5602', brand: 'Tudor', number: 'MT5602', spec: 'Automatic · silicon hairspring · 70 h' }, { id: 'cal-mt5612', brand: 'Tudor', number: 'MT5612', spec: 'Automatic · date · 70 h' }, { id: 'cal-1570', brand: 'Rolex', number: '1570', spec: 'Vintage automatic · 26 jewels · 19,800 vph (placeholder spec — reconcile)' },
@@ -5247,7 +5254,7 @@ const deptMonth = (monthsAgo: number) => { const d = new Date(); d.setDate(1); d
 const lineDollars = (p: number) => (p >= 20_000 ? p / 100 : p);
 const deptRevenueMtd = (d: 'wm' | 'band') => { const mk = deptMonth(0).key; const depts = d === 'wm' ? ['W'] : ['B', 'P']; return store.jobs.filter((j) => ['ready_to_ship', 'closed', 'awaiting_manager_review', 'testing'].includes(j.status) && (j.timeline.at(-1)?.at ?? j.createdAt).startsWith(mk)).reduce((t, j) => t + j.lines.filter((l) => depts.includes(l.dept)).reduce((s, l) => s + l.qty * lineDollars(l.unitPrice), 0), 0) + Object.values(rwParts.byJob).flat().filter((p) => p.at.startsWith(mk)).reduce((t, p) => t + p.price * p.qty, 0); };
 // Team goals — each team member has an individual monthly $ goal; the department goal is DERIVED (sum of the team), never typed directly
-const techRevenueGoals: Record<string, number> = { Leo: 12_000, MM: 14_000, MH: 10_000, Walter: 12_000, Joseph: 14_000 };
+const techRevenueGoals: Record<string, number> = { Leo: 12_000, MM: 14_000, MH: 10_000, Walter: 12_000, JV: 14_000 };
 export const techRevenueGoal = (short: string) => techRevenueGoals[short] ?? 10_000;
 export const getDeptGoal = (d: 'wm' | 'band') => ROOM_TECHS[d].reduce((t, s) => t + techRevenueGoal(s), 0);
 export interface TeamGoalRow { user: User; goal: number; actualMtd: number; pace: PaceStatus; activeJobs: number }

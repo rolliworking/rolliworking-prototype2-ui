@@ -5,6 +5,7 @@ import * as api from '@/api/client';
 import type { AccessTier, User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { MoneyContext } from '@/components/MoneyContext';
+import { roleKind } from '@/config/roles';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { IntercomButton } from '@/components/layout/IntercomPanel';
@@ -51,7 +52,7 @@ export default function RwShell() {
     setBlocked(p);
   };
   return (
-    <MoneyContext.Provider value={false}>
+    <MoneyContext.Provider value={!!user && roleKind(user) !== 'watchmaker'}>
       <div data-testid="rw-shell" onClickCapture={guard} className="flex h-full flex-col bg-[#161b22] text-slate-100">
         {!fullscreen && <header className="flex items-center gap-4 border-b border-white/10 bg-[#0f131a] px-4 py-2">
           <NavLink to="/rw" data-testid="rw-brand" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white"><Hammer size={16} className="text-amber-400" /> RolliWorking <span className="text-[10px] font-normal text-white/50">workshop · {station?.name ?? 'unregistered'} · {station ? api.RG_DIVISION_LABEL[station.division] : ''}</span></NavLink>

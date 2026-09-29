@@ -23,7 +23,7 @@ const Reassign = ({ team, current, onPick, testId }: { team: TeamHitlist; curren
   </select>;
 };
 
-// Supervisor rollup — one merged queue across the team (Joseph → band techs + polishers · MM → watchmakers). Each row is tagged with the tech; click the tag to drill into their own Hitlist.
+// Supervisor rollup — one merged queue across the team (JV → band techs + polishers · MM → watchmakers). Each row is tagged with the tech; click the tag to drill into their own Hitlist.
 export default function TeamHitlistPage() {
   const { slug = '' } = useParams(); const { base } = useHitlistBase();
   const sup = hl.userBySlug(slug);

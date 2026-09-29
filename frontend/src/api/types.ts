@@ -21,6 +21,7 @@ export interface Station {
   id: string;
   name: string;
   division: Division;
+  receptionMode?: boolean;
 }
 
 export type CameraStatus = 'captured' | 'no_camera' | 'denied';
