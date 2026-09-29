@@ -23,7 +23,7 @@ export default function ConciergePage() {
   const [view, setViewState] = useState<View>(() => (localStorage.getItem(viewKey) as View) || 'track'); const setView = (v: View) => { setViewState(v); localStorage.setItem(viewKey, v); };
   const [lanes, setLanes] = useState<ConciergeLane[]>([]); const [sp, setSp] = useSearchParams();
   const [panel, setPanel] = useState<PanelState>(() => { const l = sp.get('lane'); const st = sp.get('stage') as SwoStage | null; const swo = sp.get('swo'); return swo ? { kind: 'lookup', swoIds: [swo], title: 'Shop work order' } : l && st ? { kind: 'stage', vendorId: l, stage: st } : null; });
-  const [form, setForm] = useState<Partial<SwoInput> | null>(null); const [vendorForm, setVendorForm] = useState(false); const [msg, setMsg] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null); const [form, setForm] = useState<Partial<SwoInput> | null>(null); const [vendorForm, setVendorForm] = useState(false); const [msg, setMsg] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => { cz.syncConciergeAlerts(); setLanes(await api.getConciergeBoard()); }, []);
   useEffect(() => { void load(); }, [load]);
   const run: Run = async (fn, m) => { try { setError(null); await fn(); await load(); setMsg(m); setTimeout(() => setMsg(null), 3500); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } };
@@ -52,9 +52,9 @@ export default function ConciergePage() {
               </button>; })}
             </div>
           </section>; })}
-      </div> : <ActionMap lanes={lanes} run={run} onLookup={(ids, title) => setPanel({ kind: 'lookup', swoIds: ids, title })} />}
+      </div> : <ActionMap lanes={lanes} run={run} onLookup={(ids, title) => setPanel({ kind: 'lookup', swoIds: ids, title })} onOpenStage={openStage} pickedId={picked} onPickedConsumed={() => setPicked(null)} />}
     </div>
-    <SlidePanel state={panel} lanes={lanes} run={run} onClose={closePanel} />
+    <SlidePanel state={panel} lanes={lanes} run={run} onClose={closePanel} onPick={view === 'action' ? (w) => { setPicked(w.id); closePanel(); } : undefined} />
     {form && <SwoForm init={form} onClose={() => setForm(null)} onSaved={(m) => { setForm(null); void run(async () => undefined, m); }} />}
     {vendorForm && <VendorQuickForm onClose={() => setVendorForm(false)} onSaved={(m) => { setVendorForm(false); void run(async () => undefined, m); }} />}
   </div>;

@@ -1,4 +1,4 @@
-import { ClipboardCheck, Hammer, ListChecks, Camera, MessageSquare, Users, ListOrdered, MousePointerClick } from 'lucide-react';
+import { ClipboardCheck, Hammer, ListChecks, Camera, MessageSquare, Users, ListOrdered, MousePointerClick, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import * as hl from '@/api/hitlist';
@@ -17,7 +17,7 @@ export const roleTabs = (u: User): Tab[] => {
   if (k === 'watchmaker') return [{ key: 'bench', label: 'Bench', to: '/rw/bench', icon: Hammer }, hit, photos, msgs];
   if (k === 'band_tech') return [{ key: 'band', label: 'Band pad', to: '/rw/band', icon: Hammer }, hit, photos, msgs];
   const pad = u.roles.some((r) => r === 'band_tech' || r === 'polisher') && !u.roles.includes('watchmaker') && !u.roles.includes('supervisor') ? '/rw/band' : '/rw/pad';
-  return [{ key: 'pad', label: 'Pad', to: pad, icon: ClipboardCheck, match: (p) => p === '/rw/pad' || p === '/rw/band' }, { key: 'team', label: 'Team hitlist', to: `/rw/hitlist/${slug}/team`, icon: Users }, { key: 'queue', label: 'Queue', to: '/rw/queue', icon: ListOrdered }, { key: 'assign', label: 'Assign', to: '/rw/assign', icon: MousePointerClick }, msgs];
+  return [{ key: 'pad', label: 'Pad', to: pad, icon: ClipboardCheck, match: (p) => p === '/rw/pad' || p === '/rw/band' }, { key: 'team', label: 'Team hitlist', to: `/rw/hitlist/${slug}/team`, icon: Users }, { key: 'queue', label: 'Queue', to: '/rw/queue', icon: ListOrdered }, { key: 'assign', label: 'Assign', to: '/rw/assign', icon: MousePointerClick }, { key: 'vendors', label: 'Vendors', to: '/rw/concierge', icon: Truck }, msgs];
 };
 export const ROLE_TABBAR_H = 64;
 export const RoleTabBar = () => {

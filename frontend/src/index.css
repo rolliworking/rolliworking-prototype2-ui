@@ -147,3 +147,7 @@ body {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+/* Concierge action map: the job's current node pulses */
+@keyframes node-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--accent-rgb) / 0.55); } 60% { box-shadow: 0 0 0 10px rgb(var(--accent-rgb) / 0); } }
+.node-pulse { animation: node-pulse 1.4s ease-out infinite; }

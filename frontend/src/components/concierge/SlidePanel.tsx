@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { MousePointerClick, X } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import * as api from '@/api/client';
 import type { ConciergeLane, SwoStage, SwoWithRefs } from '@/api/client';
@@ -8,7 +8,7 @@ import { SwoCard, type Run } from './SwoCard';
 
 // Slide-out from the right edge: one third of the screen on desktop (board stays visible + scrollable), full-width sheet on a pad. Esc closes.
 export type PanelState = { kind: 'stage'; vendorId: string; stage: SwoStage } | { kind: 'outstanding'; vendorId: string } | { kind: 'lookup'; swoIds: string[]; title: string } | null;
-export const SlidePanel = ({ state, lanes, run, onClose }: { state: PanelState; lanes: ConciergeLane[]; run: Run; onClose: () => void }) => {
+export const SlidePanel = ({ state, lanes, run, onClose, onPick, pad }: { state: PanelState; lanes: ConciergeLane[]; run: Run; onClose: () => void; onPick?: (w: SwoWithRefs) => void; pad?: boolean }) => {
   useEffect(() => { if (!state) return; const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [state, onClose]);
   if (!state) return null;
   const lane = 'vendorId' in state ? lanes.find((l) => l.vendor.id === state.vendorId) : undefined;
@@ -17,26 +17,26 @@ export const SlidePanel = ({ state, lanes, run, onClose }: { state: PanelState; 
     const rows = lane.rows.filter((r) => api.baseStage(r.stage) === state.stage); const split = lane.vendor.ships !== false && ['sent', 'at_vendor', 'inbound'].includes(state.stage);
     title = <>{lane.vendor.name} · {api.swoStageLabel(state.stage)} · <span data-testid="panel-count">{rows.length}</span></>;
     body = split ? <>
-      <Sub label="ON TRACK" testId="group-on-track" rows={rows.filter((w) => !api.swoIsLate(w))} run={run} />
-      <Sub label="OVERDUE" testId="group-overdue" tone="text-rose-700" rows={rows.filter(api.swoIsLate)} run={run} />
-    </> : <Sub label={api.swoStageLabel(state.stage)} testId="group-stage" rows={rows} run={run} />;
+      <Sub label="ON TRACK" testId="group-on-track" rows={rows.filter((w) => !api.swoIsLate(w))} run={run} onPick={onPick} />
+      <Sub label="OVERDUE" testId="group-overdue" tone="text-rose-700" rows={rows.filter(api.swoIsLate)} run={run} onPick={onPick} />
+    </> : <Sub label={api.swoStageLabel(state.stage)} testId="group-stage" rows={rows} run={run} onPick={onPick} />;
   } else if (state.kind === 'outstanding' && lane) {
     title = <>{lane.vendor.name} · Outstanding — paid, not back</>;
     body = <Outstanding vendorId={lane.vendor.id} prepay={lane.vendor.paymentTerms === 'prepay'} run={run} lanes={lanes} />;
   } else if (state.kind === 'lookup') {
     const rows = lanes.flatMap((l) => l.rows).filter((r) => state.swoIds.includes(r.id)); title = <>{state.title} · <span data-testid="panel-count">{rows.length}</span></>;
-    body = <Sub label="Looked up" testId="group-lookup" rows={rows} run={run} />;
+    body = <Sub label="Looked up" testId="group-lookup" rows={rows} run={run} onPick={onPick} />;
   }
-  return <aside data-testid="concierge-panel" data-kind={state.kind} className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-line bg-canvas shadow-2xl transition-transform duration-200 lg:w-1/3" style={{ animation: 'slideIn 200ms ease-out' }}>
+  return <aside data-testid="concierge-panel" data-kind={state.kind} className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-line bg-canvas shadow-2xl transition-transform duration-200 ${pad ? '' : 'lg:w-1/3'}`} style={{ animation: 'slideIn 200ms ease-out' }}>
     <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
     <header className="flex items-center gap-2 border-b border-line bg-surface px-4 py-3"><h2 data-testid="panel-title" className="text-sm font-semibold text-ink">{title}</h2><button type="button" data-testid="panel-close" onClick={onClose} aria-label="Close" className="ml-auto grid h-8 w-8 place-items-center rounded-sm text-ink-500 hover:bg-canvas hover:text-ink"><X size={16} /></button></header>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">{body}</div>
   </aside>;
 };
 
-const Sub = ({ label, testId, tone, rows, run }: { label: string; testId: string; tone?: string; rows: SwoWithRefs[]; run: Run }) => <section data-testid={testId} data-count={rows.length}>
+const Sub = ({ label, testId, tone, rows, run, onPick }: { label: string; testId: string; tone?: string; rows: SwoWithRefs[]; run: Run; onPick?: (w: SwoWithRefs) => void }) => <section data-testid={testId} data-count={rows.length}>
   <h3 className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${tone ?? 'text-ink-500'}`}>{label} · {rows.length}</h3>
-  <div className="space-y-2">{rows.map((w) => <SwoCard key={w.id} w={w} run={run} compact />)}{!rows.length && <div className="text-[11px] text-ink-300">none</div>}</div>
+  <div className="space-y-2">{rows.map((w) => <div key={w.id}>{onPick && <button type="button" data-testid={`panel-pick-${w.id}`} onClick={() => onPick(w)} className="mb-0.5 inline-flex min-h-[32px] items-center gap-1 rounded-sm border border-line bg-surface px-2 text-[11px] font-semibold text-ink-700 hover:border-ink-400 hover:bg-canvas"><MousePointerClick size={12} /> Load {w.jobNumber.replace(/^E/, '')} into the lookup strip</button>}<SwoCard w={w} run={run} compact /></div>)}{!rows.length && <div className="text-[11px] text-ink-300">none</div>}</div>
 </section>;
 
 const Outstanding = ({ vendorId, prepay, run, lanes }: { vendorId: string; prepay: boolean; run: Run; lanes: ConciergeLane[] }) => {
