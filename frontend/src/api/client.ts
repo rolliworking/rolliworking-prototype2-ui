@@ -352,6 +352,8 @@ const currentUserSync = (): User | null => viewAsSync() ?? realUserSync();
 export const isOwnerSync = (): boolean => realUserSync()?.id === OWNER_USER_ID && !viewAsSync();
 export interface ViewAsState { real: User; viewing: User | null }
 export async function getViewAs(): Promise<ViewAsState | null> { const real = realUserSync(); return resolve(real ? { real, viewing: viewAsSync() } : null); }
+// "Continue as MH" on the mandatory entry screen (D-385 amendment) — logged so every MH session records its choice
+export async function continueAsSelf(): Promise<void> { const real = realUserSync(); if (!real) return; if (viewAsSync()) await stopViewAs(); appendAudit({ type: 'session_continued_as_self', stationName: stationNameOrUnknown(), userShortName: real.shortName, userDisplayName: real.displayName, detail: `Entry screen · continued as ${real.shortName} (own view)` }); }
 export async function startViewAs(userId: string): Promise<User> {
   const real = realUserSync(); if (!real || real.id !== OWNER_USER_ID) throw new Error('View-as is owner-only (MH)');
   const target = byId(fx.users, userId); if (target.id === real.id) { await stopViewAs(); return real; }
@@ -528,18 +530,21 @@ const DEPARTMENTS: { key: Department; name: string }[] = [
 const OPEN_ESTIMATE: Estimate['status'][] = ['draft', 'sent'];
 const ACTIVE_JOB: Job['status'][] = ['approved', 'in_service', 'testing'];
 
+// Q5 as AMENDED (MH 2026-09-29): SALES are dated by the FIRST INVOICE SEND (Outbox timestamp); re-sends / edits never re-date — an edit that changes the total adjusts the sale in the original month (we read the CURRENT total against the first-send date). Payment date drives A/R, the ship/pickup gate and cash reporting only. Zero-total / zero-balance orders have no invoice → never in Sales (they still count in Completions). COMPLETIONS = work, dated by completedAt. Lines up with QBO invoice date under invoice-first (VB4-03).
+export const saleDateOf = (o: SalesOrder): string | undefined => (o.zeroBalance || o.total <= 0 || o.status === 'draft' || o.status === 'cancelled' ? undefined : o.invoiceSends[0]?.at ?? o.invoiceSentAt ?? o.orderDate /* STAND-IN for seeded orders without a recorded send */);
+const salesThisMonth = () => store.salesOrders.filter((o) => isThisMonth(saleDateOf(o))).map((o) => ({ amount: o.total, job: store.jobs.find((j) => j.id === o.jobId) }));
 async function getDashboardStatsMock(): Promise<DashboardStats> {
-  const completedThisMonth = store.jobs.filter((j) => isThisMonth(j.finishedAt));
+  const paid = salesThisMonth();
   return resolve({
     watchesInHouse: store.watches.filter((w) => w.status !== 'released' && w.status !== 'expected').length,
     openEstimates: store.estimates.filter((e) => OPEN_ESTIMATE.includes(e.status)).length,
     awaitingApproval: store.estimates.filter((e) => e.status === 'sent').length,
     inProgress: store.jobs.filter((j) => ACTIVE_JOB.includes(j.status)).length,
     awaitingPickup: store.jobs.filter((j) => j.status === 'ready_to_ship').length,
-    revenueThisMonth: completedThisMonth.reduce((t, j) => t + j.total, 0),
+    revenueThisMonth: paid.reduce((t, p) => t + p.amount, 0),
     departments: DEPARTMENTS.map((d) => ({
       ...d,
-      mtdRevenue: completedThisMonth.filter((j) => j.department === d.key).reduce((t, j) => t + j.total, 0),
+      mtdRevenue: paid.filter((p) => p.job?.department === d.key).reduce((t, p) => t + p.amount, 0),
       jobCount: store.jobs.filter((j) => j.department === d.key && j.status !== 'closed').length,
     })),
   });
@@ -1517,7 +1522,9 @@ export async function saveInspectionReport(id: string, answers: Record<string, s
   return resolve(jobRefs(j));
 }
 export const ROLES: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker', 'polisher', 'band_tech'];
-export const roleHolders = (role: Role): User[] => fx.users.filter((u) => u.roles.includes(role));
+// 'inspector' is a TASK role, not a person's role (MH ruling 2026-09-29): it resolves to manager tier or above
+const holdsRole = (u: User, r: Role) => u.roles.includes(r) || (r === 'inspector' && u.accessTier === 'manager');
+export const roleHolders = (role: Role): User[] => fx.users.filter((u) => holdsRole(u, role));
 
 export async function setJobOwner(id: string, role: Role | null): Promise<JobWithRefs> {
   const j = getJobRow(id);
@@ -1790,7 +1797,7 @@ export async function addShopTime(jobId: string, minutes: number, note: string):
 
 const userRoles = (u: User | null): Role[] => u?.roles ?? [];
 // Station target = whoever is signed in at that station right now (a message to "Front Desk 1" is for the desk, not a person)
-const assigneeMatches = (a: Assignee, u: User) => (a.type === 'user' ? a.shortName === u.shortName : a.type === 'station' ? readStation()?.id === a.stationId : u.roles.includes(a.role));
+const assigneeMatches = (a: Assignee, u: User) => (a.type === 'user' ? a.shortName === u.shortName : a.type === 'station' ? readStation()?.id === a.stationId : holdsRole(u, a.role));
 export const assigneeLabel = (a: Assignee) => (a.type === 'user' ? a.shortName : a.type === 'station' ? (fx.stations.find((s) => s.id === a.stationId)?.name ?? a.stationId) : `${a.role} role → ${roleHolders(a.role).map((u) => u.shortName).join(', ') || 'no holder'}`);
 
 const taskStamp = (t: Task, detail: string) => {
@@ -2327,7 +2334,7 @@ export async function getBenchView(userId?: string): Promise<BenchView> {
   const mine = store.jobs.filter((j) => j.assignees.includes(me.shortName) && j.status !== 'closed');
   const jobs = mine.filter((j) => !activeHold(j)).sort((a, b) => a.status.localeCompare(b.status) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9')).map((j) => { const n = nextActionLabel(j); return { ...jobRefs(j), nextAction: n.label, blocked: n.blocked }; });
   const holds = mine.filter((j) => activeHold(j)).map(jobRefs);
-  const benchRole = me.roles.includes('watchmaker') || me.roles.includes('inspector');
+  const benchRole = me.roles.includes('watchmaker') || me.accessTier === 'manager';
   const pn = benchRole ? pullNextCandidate(me.shortName) : null;
   const partsRequests = store.partsRequests.filter((r) => r.requestedBy === me.shortName && r.status !== 'draft').map(prRefs);
   return resolve({ jobs, holds, pullNext: pn ? jobRefs(pn) : null, partsRequests });
@@ -2336,7 +2343,7 @@ export async function getBenchView(userId?: string): Promise<BenchView> {
 // Pull-next = self-assign + start service, audit-stamped
 export async function pullNext(): Promise<JobWithRefs> {
   const a = actor();
-  if (!a.user || !(a.user.roles.includes('watchmaker') || a.user.roles.includes('inspector'))) throw new Error('Pull-next is for bench roles (watchmaker / inspector)');
+  if (!a.user || !(a.user.roles.includes('watchmaker') || a.user.accessTier === 'manager')) throw new Error('Pull-next is for bench roles (watchmaker / manager tier)');
   const j = pullNextCandidate(a.by);
   if (!j) throw new Error('Nothing to pull — no unassigned approved jobs on hand');
   if (!j.assignees.includes(a.by)) j.assignees.push(a.by);
@@ -2346,7 +2353,7 @@ export async function pullNext(): Promise<JobWithRefs> {
 
 export async function getSupervisorBoard(): Promise<SupervisorBoard> {
   const open = store.jobs.filter((j) => j.status !== 'closed');
-  const techs = fx.users.filter((u) => u.roles.includes('watchmaker') || u.roles.includes('inspector'));
+  const techs = fx.users.filter((u) => u.roles.includes('watchmaker') || u.accessTier === 'manager');
   return resolve({
     unassigned: open.filter((j) => j.assignees.length === 0 && BENCH_STATES.includes(j.status)).map(jobRefs),
     byTech: techs.map((user) => ({ user, jobs: open.filter((j) => j.assignees.includes(user.shortName) && BENCH_STATES.includes(j.status)).map(jobRefs) })),
@@ -3477,13 +3484,14 @@ export async function getReport(key: 'funnel' | 'throughput' | 'aging' | 'pnl' |
   if (key === 'aging') { const b = ['0–7d', '8–30d', '31–90d', '90d+']; const openJ = js.filter((j) => j.status !== 'closed'); const openE = es.filter((e) => OPEN_ESTIMATE.includes(e.status));
     return resolve({ key, title: 'Aging — open jobs & estimates', columns: ['bucket', 'open jobs', 'held jobs', 'open estimates', 'estimate value'], note: 'Age from createdAt. Open estimates = draft + sent (matches dashboard). Held = active hold.', generatedAt: now,
       rows: b.map((k) => ({ label: k, values: { bucket: k, 'open jobs': openJ.filter((j) => ageBucket(j.createdAt) === k).length, 'held jobs': openJ.filter((j) => ageBucket(j.createdAt) === k && activeHold(j)).length, 'open estimates': openE.filter((e) => ageBucket(e.createdAt) === k).length, 'estimate value': openE.filter((e) => ageBucket(e.createdAt) === k).reduce((t, e) => t + e.total, 0) } })) }); }
-  const closed = js.filter((j) => isThisMonth(j.finishedAt)); const depts: DeptCode[] = ['W', 'B', 'P', 'PM'];
-  const labor = (d: DeptCode) => closed.reduce((t, j) => t + j.lines.filter((l) => isLabor(l) && l.dept === d).reduce((s, l) => s + l.qty * l.unitPrice, 0), 0);
-  const goods = closed.reduce((t, j) => t + j.lines.filter((l) => !isLabor(l)).reduce((s, l) => s + l.qty * l.unitPrice, 0), 0);
-  return resolve({ key, title: 'Department P&L (labor only) — this month', columns: ['department', 'labor revenue', 'closed jobs'], note: 'Labor lines (type service) attribute to W/B/P/PM; parts & shipping lines are excluded as no_dept_product. Sum of all rows = dashboard "revenue this month".', generatedAt: now,
-    rows: [...depts.map((d) => ({ label: d, values: { department: `${fx.DEPT_LABEL[d]} (${d})`, 'labor revenue': labor(d), 'closed jobs': closed.filter((j) => j.lines.some((l) => isLabor(l) && l.dept === d)).length } })),
-      { label: 'no_dept_product', values: { department: 'no_dept_product (goods, excluded)', 'labor revenue': goods, 'closed jobs': closed.filter((j) => j.lines.some((l) => !isLabor(l))).length } },
-      { label: 'total', values: { department: 'Total = dashboard revenue', 'labor revenue': closed.reduce((t, j) => t + j.total, 0), 'closed jobs': closed.length } }] });
+  // Q5 (amended): Sales by FIRST INVOICE SEND date — each order invoiced this month is allocated across its job's lines pro rata (labor → W/B/P/PM, goods → no_dept_product); current total, original month
+  const paid = salesThisMonth(); const depts: DeptCode[] = ['W', 'B', 'P', 'PM']; const lineAmt = (l: { qty: number; unitPrice: number }) => l.qty * l.unitPrice;
+  const alloc = (pick: (l: Job['lines'][number]) => boolean) => paid.reduce((t, p) => { if (!p.job) return t; const all = p.job.lines.reduce((s, l) => s + lineAmt(l), 0); if (!all) return t; return t + p.amount * (p.job.lines.filter(pick).reduce((s, l) => s + lineAmt(l), 0) / all); }, 0);
+  const jobsPaid = (pick: (l: Job['lines'][number]) => boolean) => new Set(paid.filter((p) => p.job?.lines.some(pick)).map((p) => p.job!.id)).size;
+  return resolve({ key, title: 'Department sales (by invoice-sent date) — this month', columns: ['department', 'sales (invoiced)', 'orders invoiced'], note: 'Q5 (amended 2026-09-29): a sale is dated by the FIRST invoice send (Outbox timestamp); edits adjust the original month, re-sends never re-date. Each order is split across its job’s lines pro rata; labor (type service) → W/B/P/PM, parts & shipping → no_dept_product. Zero-total / zero-balance orders never appear (Completions only). Payment date is A/R + gate + cash only. Sum of all rows = dashboard "Sales this month" = QBO invoice-date view.', generatedAt: now,
+    rows: [...depts.map((d) => ({ label: d, values: { department: `${fx.DEPT_LABEL[d]} (${d})`, 'sales (invoiced)': alloc((l) => isLabor(l) && l.dept === d), 'orders invoiced': jobsPaid((l) => isLabor(l) && l.dept === d) } })),
+      { label: 'no_dept_product', values: { department: 'no_dept_product (goods + shipping)', 'sales (invoiced)': alloc((l) => !isLabor(l)), 'orders invoiced': jobsPaid((l) => !isLabor(l)) } },
+      { label: 'total', values: { department: 'Total = dashboard Sales this month', 'sales (invoiced)': paid.reduce((t, p) => t + p.amount, 0), 'orders invoiced': paid.length } }] });
 }
 export const reportToCsv = (r: Report): string => [r.columns.join(','), ...r.rows.map((row) => r.columns.map((c) => { const v = row.values[c] ?? ''; return typeof v === 'string' && /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : String(v); }).join(','))].join('\n');
 
@@ -5793,12 +5801,18 @@ export async function deleteSalesOrder(id: string): Promise<void> {
 }
 
 // ---- SHOP WORK ORDERS (SWO) — outsourced work (plating / refinish) sent to outside vendors. Linear 5-stage flow + independent Paid flag. ----
-export type SwoStage = 'queue' | 'sent' | 'at_vendor' | 'inbound' | 'received';
+// CONCIERGE board (2026-09-29) — lane shape by "do we ship to them?": ships → queue · sent(In route) · at_vendor(In progress) · inbound(Returning) · received · inspection · fulfilled; no-ship → queue · at_vendor · inspection · fulfilled
+export type SwoStage = 'queue' | 'sent' | 'at_vendor' | 'inbound' | 'received' | 'inspection' | 'fulfilled';
 export const SWO_STAGES: { key: SwoStage; label: string; blurb: string }[] = [
-  { key: 'queue', label: 'In queue', blurb: 'approved for outsource · not shipped' }, { key: 'sent', label: 'Sent', blurb: 'outbound label · in transit to vendor' }, { key: 'at_vendor', label: 'Received / In progress', blurb: 'at vendor' }, { key: 'inbound', label: 'Inbound', blurb: 'shipped back · in transit to shop' }, { key: 'received', label: 'Received', blurb: 'back at shop · custody returned' }];
+  { key: 'queue', label: 'In queue', blurb: 'approved for outsource · not yet sent / handed off' }, { key: 'sent', label: 'In route', blurb: 'outbound label created · in transit to vendor' }, { key: 'at_vendor', label: 'In progress', blurb: 'with the vendor (or in Chyna’s hands)' }, { key: 'inbound', label: 'Returning', blurb: 'return label + vendor email · in transit to shop' }, { key: 'received', label: 'Received', blurb: 'arrival scan · custody back at shop' }, { key: 'inspection', label: 'Inspection', blurb: 'shop post-return QC check' }, { key: 'fulfilled', label: 'Fulfilled', blurb: 'outsourced portion closed · item back in its job’s normal flow' },
+];
+export const SHIP_LANE: SwoStage[] = ['queue', 'sent', 'at_vendor', 'inbound', 'received', 'inspection', 'fulfilled'];
+export const NOSHIP_LANE: SwoStage[] = ['queue', 'at_vendor', 'inspection', 'fulfilled'];
+export const laneStagesFor = (v: Vendor): SwoStage[] => (v.ships === false ? NOSHIP_LANE : SHIP_LANE);
+export const swoStageLabel = (k: SwoStage) => SWO_STAGES.find((x) => x.key === k)!.label;
 export interface SwoCustoms { contents: string; value: number; hsCode: string; origin: string; incoterm: 'DAP' | 'DDP' }
 export interface SwoLabel { direction: 'outbound' | 'return'; carrier: 'FedEx' | 'UPS' | 'DHL Express'; service: string; tracking: string; international: boolean; customs?: SwoCustoms; cost: number; createdAt: string; createdBy: string; emailedAt?: string }
-export interface Swo { id: string; number: string; vendorId: string; jobId: string; components: ComponentKey[]; work: string; stage: SwoStage; paid: boolean; paidAt?: string; paidBy?: string; vendorInvoiceTotal: number; vendorInvoiceNumber?: string; qboStatus: 'not_queued' | 'queued'; qboBillId?: string; predictedCompletion?: string; sentAt?: string; atVendorAt?: string; inboundAt?: string; receivedAt?: string; outbound?: SwoLabel; returnLabel?: SwoLabel; notes?: string; createdAt: string; createdBy: string; timeline: { at: string; by: string; text: string }[] }
+export interface Swo { id: string; number: string; vendorId: string; jobId: string; components: ComponentKey[]; work: string; stage: SwoStage; stageAt?: string; paid: boolean; paidAt?: string; paidBy?: string; vendorInvoiceTotal: number; vendorInvoiceNumber?: string; qboStatus: 'not_queued' | 'queued'; qboBillId?: string; predictedCompletion?: string; sentAt?: string; atVendorAt?: string; inboundAt?: string; receivedAt?: string; outbound?: SwoLabel; returnLabel?: SwoLabel; notes?: string; createdAt: string; createdBy: string; timeline: { at: string; by: string; text: string }[] }
 export interface SwoWithRefs extends Swo { vendor: Vendor; job: JobWithRefs; jobNumber: string; clientName: string; watchLabel: string; international: boolean; custodyHolder: string; daysOut?: number; overdue: boolean }
 export interface SwoInput { id?: string; vendorId: string; jobId: string; components: ComponentKey[]; work: string; vendorInvoiceTotal: number; vendorInvoiceNumber?: string; predictedCompletion?: string; notes?: string }
 const swos: Swo[] = []; let swoSeeded = false; let swoSeq = 40;
@@ -5812,7 +5826,7 @@ const swoRefs = (w: Swo): SwoWithRefs => { const v = byId(rs.vendors, w.vendorId
 const mkSwo = (id: string, n: number, vendorId: string, jobId: string, components: ComponentKey[], work: string, stage: SwoStage, o: Partial<Swo> & { daysAgo: number }): Swo => {
   const at = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString(); const v = byId(rs.vendors, vendorId); const intl = isInternationalVendor(v);
   const w: Swo = { id, number: `SWO-26-00${n}`, vendorId, jobId, components, work, stage, paid: false, vendorInvoiceTotal: 0, qboStatus: 'not_queued', createdAt: at(o.daysAgo), createdBy: 'Walter', timeline: [{ at: at(o.daysAgo), by: 'Walter', text: 'Queued for outsource' }], ...o };
-  const idx = SWO_STAGES.findIndex((s) => s.key === stage);
+  const idx = v.ships === false ? -1 : SWO_STAGES.findIndex((s) => s.key === stage);
   if (idx >= 1 && !w.outbound) { w.sentAt ??= at(o.daysAgo - 1); w.outbound = { direction: 'outbound', carrier: intl ? 'DHL Express' : 'FedEx', service: intl ? 'Express Worldwide' : 'Priority Overnight', tracking: swoTracking(intl ? 'DHL Express' : 'FedEx'), international: intl, customs: intl ? swoCustoms(w, v) : undefined, cost: intl ? 148.2 : 62.4, createdAt: w.sentAt, createdBy: 'Vienna' }; w.timeline.unshift({ at: w.sentAt, by: 'Vienna', text: `Outbound label created · ${w.outbound.carrier} ${w.outbound.tracking}${intl ? ' · customs attached' : ''}` }); }
   if (idx >= 2) { w.atVendorAt ??= at(Math.max(0, o.daysAgo - 3)); w.timeline.unshift({ at: w.atVendorAt, by: 'System', text: `Delivered to ${v.name} — in progress` }); }
   if (idx >= 3) { w.inboundAt ??= at(Math.max(0, o.daysAgo - 9)); w.timeline.unshift({ at: w.inboundAt, by: 'System', text: `Vendor shipped back · ${w.returnLabel?.tracking ?? 'tracking pending'}` }); }
@@ -5821,19 +5835,31 @@ const mkSwo = (id: string, n: number, vendorId: string, jobId: string, component
 };
 const seedSwo = () => {
   if (swoSeeded) return; swoSeeded = true;
-  const gold = byId(rs.vendors, 'v-gold'); const gen = byId(rs.vendors, 'v-gen');
-  const retGen: SwoLabel = { direction: 'return', carrier: 'DHL Express', service: 'Express Worldwide (prepaid)', tracking: swoTracking('DHL Express'), international: true, customs: { contents: 'Returned watch case after refinishing — repair & return, no sale', value: 1200, hsCode: '9111.20', origin: 'CH', incoterm: 'DAP' }, cost: 152.7, createdAt: new Date(Date.now() - 4 * 86_400_000).toISOString(), createdBy: 'Vienna', emailedAt: new Date(Date.now() - 4 * 86_400_000 + 600_000).toISOString() };
-  const retPr: SwoLabel = { direction: 'return', carrier: 'FedEx', service: 'Priority Overnight (prepaid)', tracking: swoTracking('FedEx'), international: false, cost: 64.1, createdAt: new Date(Date.now() - 6 * 86_400_000).toISOString(), createdBy: 'Vienna', emailedAt: new Date(Date.now() - 6 * 86_400_000 + 300_000).toISOString() };
-  const d = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+  const d = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10); const ago = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+  const retIt: SwoLabel = { direction: 'return', carrier: 'DHL Express', service: 'Express Worldwide (prepaid)', tracking: swoTracking('DHL Express'), international: true, customs: { contents: 'Returned gold bracelet after repair — repair & return, no sale', value: 4200, hsCode: '9113.10', origin: 'IT', incoterm: 'DAP' }, cost: 148.2, createdAt: ago(9), createdBy: 'Vienna', emailedAt: ago(9) };
+  const retUs: SwoLabel = { direction: 'return', carrier: 'FedEx', service: 'Priority Overnight (prepaid)', tracking: swoTracking('FedEx'), international: false, cost: 64.1, createdAt: ago(5), createdBy: 'Vienna', emailedAt: ago(5) };
+  let n = 40; const mk = (vendorId: string, jobId: string, comps: ComponentKey[], work: string, stage: SwoStage, o: Partial<Swo> & { daysAgo: number }) => mkSwo(`swo-${String(++n).padStart(2, '0')}`, n, vendorId, jobId, comps, work, stage, o);
+  const cm = (jobId: string, work: string, stage: SwoStage, daysAgo: number) => mk('v-cm', jobId, ['head'], work, stage, { daysAgo, stageAt: ago(Math.max(0, daysAgo - 1)) });
   swos.push(
-    mkSwo('swo-01', 41, 'v-gold', 'j-17', ['case'], 'Bezel re-plate 18k yellow + crown polish', 'at_vendor', { daysAgo: 6, paid: true, paidAt: new Date(Date.now() - 6 * 86_400_000).toISOString(), paidBy: 'MH', vendorInvoiceTotal: 420, vendorInvoiceNumber: 'GC-7731', qboStatus: 'queued', qboBillId: 'QBO-BILL-STUB-3102', predictedCompletion: d(4), notes: `Prepaid — ${gold.name} requires payment up front on rush plating` }),
-    mkSwo('swo-02', 42, 'v-gen', 'j-06', ['case', 'band'], 'Factory-grade case & bracelet polish, satin/mirror per reference', 'sent', { daysAgo: 5, vendorInvoiceTotal: 890, predictedCompletion: d(16), returnLabel: retGen, notes: `${gen.name} — international · customs on both legs` }),
-    mkSwo('swo-03', 43, 'v-prla', 'j-03', ['case'], 'Laser-weld case lug + full refinish', 'inbound', { daysAgo: 12, vendorInvoiceTotal: 640, vendorInvoiceNumber: 'PR-2210', predictedCompletion: d(-1), returnLabel: retPr }),
-    mkSwo('swo-04', 44, 'v-hkdc', 'j-32', ['head'], 'Dial refinish — lume re-application, hands re-lume', 'queue', { daysAgo: 1, vendorInvoiceTotal: 1150, predictedCompletion: d(24) }),
-    mkSwo('swo-05', 45, 'v-prla', 'j-30', ['band'], 'Bracelet refinish + clasp re-plate', 'received', { daysAgo: 16, vendorInvoiceTotal: 380, vendorInvoiceNumber: 'PR-2188', predictedCompletion: d(-6) }),
-    mkSwo('swo-06', 46, 'v-gold', 'j-16', ['case'], 'Bezel + crown re-plate (rose gold)', 'at_vendor', { daysAgo: 4, vendorInvoiceTotal: 460, predictedCompletion: d(7) }),
+    // Claudio — California, ships (domestic)
+    mk('v-claudio', 'j-17', ['band'], 'Gold bracelet — re-tighten links, replace 2 screws', 'queue', { daysAgo: 1, vendorInvoiceTotal: 380, predictedCompletion: d(10) }),
+    mk('v-claudio', 'j-06', ['band'], 'Yellow-gold Jubilee — stretch repair + clasp re-plate', 'at_vendor', { daysAgo: 6, paid: true, paidAt: ago(6), paidBy: 'MH', vendorInvoiceTotal: 640, vendorInvoiceNumber: 'CL-1187', qboStatus: 'queued', qboBillId: 'QBO-BILL-STUB-3102', predictedCompletion: d(4), stageAt: ago(4) }),
+    mk('v-claudio', 'j-30', ['band'], 'Gold Oyster — end-link rebuild', 'received', { daysAgo: 14, vendorInvoiceTotal: 520, vendorInvoiceNumber: 'CL-1179', predictedCompletion: d(-2), returnLabel: retUs, stageAt: ago(1) }),
+    // Jacques — Italy, ships (international)
+    mk('v-jacques', 'j-03', ['band'], 'Rose-gold President — full link rebuild + solid end links', 'sent', { daysAgo: 3, vendorInvoiceTotal: 1450, predictedCompletion: d(21), stageAt: ago(2) }),
+    mk('v-jacques', 'j-05', ['band'], 'Two-tone Jubilee — gold center links replaced', 'inbound', { daysAgo: 18, vendorInvoiceTotal: 1180, vendorInvoiceNumber: 'JQ-0412', predictedCompletion: d(-1), returnLabel: retIt, stageAt: ago(8) }),
+    mk('v-jacques', 'j-16', ['band'], 'Gold clasp re-manufacture', 'fulfilled', { daysAgo: 40, paid: true, paidAt: ago(20), paidBy: 'MH', vendorInvoiceTotal: 990, vendorInvoiceNumber: 'JQ-0388', qboStatus: 'queued', qboBillId: 'QBO-BILL-STUB-3099', predictedCompletion: d(-12), stageAt: ago(11) }),
+    // James — Netherlands, ships (international)
+    mk('v-james', 'j-32', ['head'], 'Dial + hands relume — tritium-tone match', 'at_vendor', { daysAgo: 9, vendorInvoiceTotal: 720, predictedCompletion: d(9), stageAt: ago(5) }),
+    mk('v-james', 'j-04', ['head'], 'Hands relume only', 'inspection', { daysAgo: 24, vendorInvoiceTotal: 260, vendorInvoiceNumber: 'JM-2201', predictedCompletion: d(-3), stageAt: ago(2) }),
+    // Chyna (CM) — in-house concierge, no shipping: queue → in progress → inspection → fulfilled
+    cm('j-01', 'Client prep — polish cloth, box & papers check', 'queue', 0), cm('j-02', 'Pickup call + confirm appointment', 'queue', 1), cm('j-07', 'Insurance letter for client', 'queue', 2), cm('j-08', 'Photograph for client update', 'queue', 4),
+    cm('j-09', 'Sizing check with client at counter', 'at_vendor', 1), cm('j-10', 'Strap change + buckle swap (client waiting)', 'at_vendor', 2), cm('j-11', 'Box & papers reunification', 'at_vendor', 3), cm('j-12', 'Warranty card fill-in + stamp', 'at_vendor', 8),
+    cm('j-13', 'Final wipe-down + presentation tray', 'inspection', 1), cm('j-14', 'Final wipe-down + presentation tray', 'inspection', 2),
+    cm('j-15', 'Client walkthrough completed', 'fulfilled', 6), cm('j-18', 'Client walkthrough completed', 'fulfilled', 9),
   );
   swos.forEach((w) => { if (w.stage === 'sent' || w.stage === 'at_vendor' || w.stage === 'inbound') setSwoCustody(w, `vendor:${w.vendorId}`, `Out to vendor · ${w.number}`); });
+  swos.forEach((w) => { w.stageAt ??= w.receivedAt ?? w.inboundAt ?? w.atVendorAt ?? w.sentAt ?? w.createdAt; });
 };
 export async function getShopWorkOrders(): Promise<SwoWithRefs[]> { seedSwo(); return resolve([...swos].sort((a, b) => SWO_STAGES.findIndex((s) => s.key === a.stage) - SWO_STAGES.findIndex((s) => s.key === b.stage) || b.createdAt.localeCompare(a.createdAt)).map(swoRefs)); }
 export async function getShopWorkOrder(id: string): Promise<SwoWithRefs> { seedSwo(); return resolve(swoRefs(byId(swos, id))); }
@@ -5864,13 +5890,30 @@ export async function queueSwoReturnLabel(id: string, predictedCompletion?: stri
   swoStamp(w, `Return label queued · ${w.returnLabel.carrier} ${w.returnLabel.tracking} · emailed to vendor · expected ${w.predictedCompletion}`); return resolve(swoRefs(w));
 }
 export async function advanceSwo(id: string, to: SwoStage): Promise<SwoWithRefs> {
-  const w = byId(swos, id); const from = SWO_STAGES.findIndex((s) => s.key === w.stage); const idx = SWO_STAGES.findIndex((s) => s.key === to); if (idx !== from + 1) throw new Error('Stages move one step at a time'); if (to === 'sent') throw new Error('Use Create outbound label to send');
-  const now = new Date().toISOString(); const a = actor(); const v = byId(rs.vendors, w.vendorId);
-  if (to === 'at_vendor') { w.atVendorAt = now; swoStamp(w, `Delivered to ${v.name} — in progress`); }
+  const w = byId(swos, id); const v = byId(rs.vendors, w.vendorId); const lane = laneStagesFor(v); const from = lane.indexOf(w.stage); const idx = lane.indexOf(to);
+  if (idx !== from + 1) throw new Error('Stages move one step at a time'); if (to === 'sent') throw new Error('Use Create outbound label to send');
+  const now = new Date().toISOString(); const a = actor();
+  if (to === 'at_vendor') { w.atVendorAt = now; if (v.ships === false) setSwoCustody(w, `vendor:${w.vendorId}`, `Hand-off to ${v.name} · ${w.number}`); swoStamp(w, v.ships === false ? `Handed off to ${v.name} (custody scan) — in progress` : `Delivered to ${v.name} — in progress`); }
   if (to === 'inbound') { w.inboundAt = now; swoStamp(w, `Vendor shipped back · ${w.returnLabel?.tracking ?? 'vendor tracking pending'}`); }
-  if (to === 'received') { w.receivedAt = now; setSwoCustody(w, null, `Back from vendor · ${w.number}`); swoStamp(w, `Received back at shop — custody → ${a.by}`); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `${w.number} received back from ${v.name} · custody → ${a.by}` }); }
-  w.stage = to; return resolve(swoRefs(w));
+  if (to === 'received') { w.receivedAt = now; setSwoCustody(w, null, `Back from vendor · ${w.number}`); swoStamp(w, `Received back at shop (arrival scan) — custody → ${a.by}`); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `${w.number} received back from ${v.name} · custody → ${a.by}` }); }
+  if (to === 'inspection') { if (v.ships === false) setSwoCustody(w, null, `Hand-off back from ${v.name} · ${w.number}`); swoStamp(w, `Post-return inspection — shop QC check${v.ships === false ? ' (custody scan)' : ''}`); }
+  if (to === 'fulfilled') { swoStamp(w, `Fulfilled — outsourced portion closed, item back in ${w.number}'s job flow`); const j = getJobRow(w.jobId); jobStamp(j, `Outsourced work fulfilled · ${w.number} · ${v.name}`); }
+  w.stage = to; w.stageAt = now; return resolve(swoRefs(w));
 }
+export async function sendBackSwo(id: string, reason: string): Promise<SwoWithRefs> {
+  if (!reason.trim()) throw new Error('A reason is required to move back'); const w = byId(swos, id); const v = byId(rs.vendors, w.vendorId); const lane = laneStagesFor(v); const i = lane.indexOf(w.stage); if (i <= 0) throw new Error('Already at the first stage');
+  const to = lane[i - 1]; const a = actor(); swoStamp(w, `Moved back ${swoStageLabel(w.stage)} → ${swoStageLabel(to)} — ${reason.trim()}`); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `${w.number} moved back to ${swoStageLabel(to)} · ${reason.trim()}` });
+  w.stage = to; w.stageAt = new Date().toISOString(); return resolve(swoRefs(w));
+}
+// Board: one lane per active outsource vendor (concierge / no-ship lanes first), counts per stage + oldest age; amber ≥ 3 d, red ≥ 7 d (inbound-shipping thresholds)
+export interface ConciergeStageCell { key: SwoStage; label: string; count: number; oldestDays: number; tone: 'ok' | 'amber' | 'red' | 'empty' }
+export interface ConciergeLane { vendor: Vendor; stages: ConciergeStageCell[]; total: number; rows: SwoWithRefs[] }
+export const swoDaysAtStage = (w: Swo) => Math.max(0, Math.floor((Date.now() - new Date(w.stageAt ?? w.receivedAt ?? w.inboundAt ?? w.atVendorAt ?? w.sentAt ?? w.createdAt).getTime()) / 86_400_000));
+export async function getConciergeBoard(): Promise<ConciergeLane[]> {
+  seedSwo(); const vendors = rs.vendors.filter((v) => v.kind === 'outsource' && v.active).sort((a, b) => Number(b.ships === false) - Number(a.ships === false));
+  return resolve(vendors.map((v) => { const rows = swos.filter((w) => w.vendorId === v.id).map(swoRefs); const stages = laneStagesFor(v).map((k): ConciergeStageCell => { const at = rows.filter((w) => w.stage === k); const oldest = at.reduce((m, w) => Math.max(m, swoDaysAtStage(w)), 0); return { key: k, label: swoStageLabel(k), count: at.length, oldestDays: oldest, tone: !at.length ? 'empty' : k === 'fulfilled' ? 'ok' : oldest >= 7 ? 'red' : oldest >= 3 ? 'amber' : 'ok' }; }); return { vendor: v, stages, total: rows.filter((w) => w.stage !== 'fulfilled').length, rows }; }));
+}
+export const conciergeVendors = (): Vendor[] => rs.vendors.filter((v) => v.kind === 'outsource' && v.active);
 // Paid is INDEPENDENT of the stage (prepay arrangements) — and the vendor invoice total is what goes to QBO as a bill
 export async function setSwoPaid(id: string, paid: boolean): Promise<SwoWithRefs> { const w = byId(swos, id); const a = actor(); w.paid = paid; w.paidAt = paid ? new Date().toISOString() : undefined; w.paidBy = paid ? a.by : undefined; swoStamp(w, paid ? `Marked PAID · ${fmtMoney(w.vendorInvoiceTotal)}${w.stage !== 'received' ? ' (before receipt — prepay)' : ''}` : 'Payment un-marked'); return resolve(swoRefs(w)); }
 export async function pushSwoToQbo(id: string): Promise<SwoWithRefs> { const w = byId(swos, id); managerOnly(); if (!w.vendorInvoiceTotal) throw new Error('Enter the vendor invoice total first'); w.qboBillId ??= `QBO-BILL-STUB-${3000 + swos.length * 13 + Math.floor(Math.random() * 90)}`; w.qboStatus = 'queued'; const v = byId(rs.vendors, w.vendorId); qboLog(`Vendor bill · ${w.number} · ${v.name} · ${fmtMoney(w.vendorInvoiceTotal)} → ${w.qboBillId} (stub, queued)`); swoStamp(w, `Vendor invoice ${fmtMoney(w.vendorInvoiceTotal)} pushed to QuickBooks · ${w.qboBillId} (stub)`); return resolve(swoRefs(w)); }

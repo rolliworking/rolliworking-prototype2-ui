@@ -12,7 +12,7 @@ import { fmtDate, fmtTime, humanize } from '@/lib/format';
 
 const TYPE_TONE: Record<AuditEventType, string> = {
   sign_in: 'bg-moss-50 text-moss-700',
-  view_as_started: 'bg-amber-100 text-amber-900',
+  session_continued_as_self: 'bg-amber-50 text-amber-800', view_as_started: 'bg-amber-100 text-amber-900',
   view_as_ended: 'bg-amber-50 text-amber-800',
   purchasing: 'bg-teal-50 text-teal-800',
   companion: 'bg-violet-50 text-violet-700',

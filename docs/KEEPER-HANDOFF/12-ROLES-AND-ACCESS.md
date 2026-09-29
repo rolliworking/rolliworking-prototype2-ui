@@ -3,7 +3,7 @@
 Code is truth. Every name below is a real identifier in `/app/frontend/src`. Where the seed or behaviour disagrees with MH's corrections it is flagged **⚠ DRIFT** and left.
 
 ## 1. The two axes: `accessTier` × `roles`
-`User` (`src/api/types.ts`): `{ id, roles: Role[], firstName, shortName, displayName, dutyLabel, accessTier: 'manager' | 'concierge', division: 'rolliworks' | 'rollishop' | 'both', password, pin }`.
+`User` (`src/api/types.ts`): `{ id, roles: Role[], firstName, shortName, displayName, dutyLabel, accessTier: 'manager' | 'supervisor' | 'concierge', division: 'rolliworks' | 'rollishop' | 'both', password, pin }`.
 - `Role` values used in the seed: `manager`, `inspector`, `concierge`, `watchmaker`, `polisher`, `band_tech`.
 - `accessTier` is the permission tier every API check uses (`'manager'` gates everything money/assignment/setup; `'concierge'` is the bench/front-desk tier — **the name is historical: watchmakers and band techs are `concierge` tier too**).
 
@@ -48,23 +48,26 @@ Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, use
 - **Single-session enforcement (one device per person): not built** ⚠ DRIFT — the same account can be signed in on two devices; nothing invalidates the other.
 - RGTime (`/rg`) keeps its own remembered phone session; RolliConnect keeps `rcSession`; kiosks have no session.
 
-## 7. View-as (D-385) — owner only
+## 7. View-as (D-385, amended 2026-09-29) — owner only
+- **No credential of the viewed user is ever involved.** View-as is impersonation by MH's own signed-in session: picking a tile on `/choose-view` (or the top-bar picker) switches the view immediately — no password, no PIN, no Touch ID, no station token; the viewed user's real session is never touched. Kiosk tiles open the kiosk screen under MH's session, no station token entry.
+- **Mandatory entry screen**: after ANY MH sign-in (password / Touch ID / PIN), on every device, `/choose-view` loads before anything else — keyed on the account being owner, not on `?device=` or the touch heuristic. Layout: "Continue as MH" on top, then "View as…" tiles grouped Watchmakers · Supervisors · Band/Polish · Front desk · Kiosks (name, initials, role, landing route). Exit from any View-as returns here. Logged: `view_as_started` (target) or `session_continued_as_self`.
+- "Inspector" is a TASK role (`#inspector` tasks / job owner role), not a person's role: it resolves to manager tier or above (`holdsRole`). MH's role is Owner / Super Admin.
 - Storage: `sessionStorage['rollisuite.prototype.viewAsUserId']` (this tab only). Never touches `currentUserId`, never creates/ends the viewed user's session.
 - Identity split (`client.ts`): `realUserSync()` = device sign-in · `viewAsSync()` = viewed user **only when real user is `OWNER_USER_ID`** · `currentUserSync()` = `viewAsSync() ?? realUserSync()` → every guard, scope, landing, hidden field and permission check evaluates the VIEWED user (MH viewing MM is bounced from desktop routes exactly like MM).
 - Attribution (D-361): `actor()` → `{ by: 'MH (as MM)', onBehalfOf: 'MM', user: viewed }` — every `createdBy/completedBy/by` string carries both names and never equals `'MM'`, so completions, components, hitlist rows and goals are never credited to the viewed user. `appendAudit` stamps `userShortName = 'MH'`, `userDisplayName = 'MH — … (as MM)'`, `onBehalfOf = 'MM'` on every event while active (Audit log shows an `as MM` chip, `audit-obo-<id>`).
 - API: `getViewAs(): Promise<{ real: User; viewing: User | null } | null>`, `startViewAs(userId): Promise<User>` (throws for non-owner), `stopViewAs(): Promise<void>`. Audit types `view_as_started` / `view_as_ended` (who, whom, station, when; switching person emits ended+started).
-- UI: `src/components/layout/ViewAs.tsx` — `ViewAsPicker` (TopBar + RW shell header, owner only), `ViewAsBanner` (fixed, every screen incl. kiosks: "Viewing as MM — actions are recorded as MH (as MM)", exit → `/` on desktop, `/choose-view` on a pad), `useViewAs()`. `src/pages/ChooseViewPage.tsx` = `/choose-view` (pad tiles: `roleKind ∈ {watchmaker, supervisor}` + Front-desk check-in kiosk `/kiosk` + Photo kiosk `/wm-kiosk` + My own view). `SignInPage.onDone` → owner && `isPadDevice(station)` → `/choose-view`.
+- UI: `src/components/layout/ViewAs.tsx` — `ViewAsPicker` (TopBar + RW shell header, owner only), `ViewAsBanner` (fixed, every screen incl. kiosks: "Viewing as MM — actions are recorded as MH (as MM)", exit → `/choose-view` on every device), `useViewAs()`. `src/pages/ChooseViewPage.tsx` = `/choose-view` (pad tiles: `roleKind ∈ {watchmaker, supervisor}` + Front-desk check-in kiosk `/kiosk` + Photo kiosk `/wm-kiosk` + My own view). `SignInPage.onDone` → owner && `isPadDevice(station)` → `/choose-view`.
 - Blocked while viewing: anything the viewed role cannot do (same checks) **plus** owner-only actions (`isOwnerSync()` is false in View-as). Managers (Walter, Vienna, JV) never see the picker.
 - Device type (`src/config/device.ts`): `station.deviceType` (D-384) → `?device=ipad|desktop` session override → touch + width ≤ 1366 heuristic. **Prototype only** — see `10-NOT-KEEPER.md`.
 
 ## 8. Seed identities (`src/api/fixtures/users.ts`, `stations.ts`)
 | short | name / duty | roles | tier | division | `roleKind` | lands on |
 |---|---|---|---|---|---|---|
-| MH | Michael — Inspector · Manager (**owner**) | manager, inspector | manager | both | manager | `/` (pad: `/choose-view`) |
-| Walter | Inspector · Manager | manager, inspector | manager | rollishop | manager | `/` |
+| MH | Michael — **Owner / Super Admin** (all entities, all routes, all money, View-as D-385, MH-only controls: Accounting/QBO connect, client 2FA reset, integrations setup, Access control) | manager (owner = `OWNER_USER_ID`) | manager | both | manager | **`/choose-view` on every sign-in** → own home `/` |
+| Walter | Manager (RolliShop) | manager | manager | rollishop | manager | `/` |
 | Vienna (VC) | **Operations Manager** | manager | manager | rolliworks | manager | `/` |
 | JV | **Workshop Supervisor (band/polish)** — Joseph; supervises Dre/Sam/Nico/MAM | manager, polisher, band_tech | manager | rolliworks | supervisor | `/rw/pad` |
-| MM | **Watchmaker Room Supervisor** · oversight of band/polish (read-only) — no bench, never assigned jobs | supervisor | concierge (no $) | rolliworks | supervisor | `/rw/pad` |
+| MM | **Watchmaker Room Supervisor** · oversight of band/polish (read-only) — no bench, never assigned jobs | supervisor | **supervisor** (no $; concierge-tier screens + supervisor actions — D-392) | rolliworks | supervisor | `/rw/pad` |
 | Leo | Watchmaker | watchmaker | concierge | rolliworks | watchmaker | `/rw/bench` |
 | Chyna (CM) | Concierge | concierge | concierge | rolliworks | concierge | `/` |
 | Dre | Polisher | polisher | concierge | rolliworks | band_tech | `/rw/band` |

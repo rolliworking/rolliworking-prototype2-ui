@@ -18,7 +18,7 @@ export const KpiRow = ({ stats }: { stats: DashboardStats }) => {
     { key: 'awaiting-approval', label: 'Awaiting approval', value: stats.awaitingApproval, hint: 'client response needed', to: '/estimates?status=sent' },
     { key: 'in-progress', label: 'In progress', value: stats.inProgress, hint: 'on the bench or in QC', to: '/jobs' },
     { key: 'awaiting-pickup', label: 'Awaiting pickup', value: stats.awaitingPickup, hint: 'ready for release', to: '/jobs?status=awaiting_pickup' },
-    { key: 'revenue-mtd', label: 'Revenue this month', value: fmtMoney(stats.revenueThisMonth), hint: 'completed jobs, MTD' },
+    { key: 'revenue-mtd', label: 'Sales this month', value: fmtMoney(stats.revenueThisMonth), hint: 'invoices sent, MTD (first-send date)', to: '/reports?key=pnl' },
   ];
 
   return (

@@ -51,7 +51,7 @@ export interface NavItem {
   blurb: string;
 }
 
-const ALL: AccessTier[] = ['manager', 'concierge'];
+const ALL: AccessTier[] = ['manager', 'supervisor', 'concierge'];
 const MGR: AccessTier[] = ['manager'];
 
 export const NAV_ITEMS: NavItem[] = [
@@ -76,7 +76,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, group: 'parts', built: true, blurb: 'Parts, stock levels and reorder alerts.' },
   { key: 'cycle-count', label: 'Cycle count', path: '/inventory/count', icon: Boxes, tiers: ALL, group: 'parts', built: true, blurb: 'Count mode (scan) — counts and locations only; variance dollars are manager-only.' },
   { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, group: 'parts', built: true, blurb: 'Purchase orders, vendors and receiving.' },
-  { key: 'swo', label: 'Shop Work Orders', path: '/swo', icon: Truck, tiers: MGR, group: 'parts', built: true, blurb: 'Outsourced plating / refinish at outside vendors — 5-stage board, labels both ways, Paid independent of receipt.' },
+  { key: 'concierge', label: 'Concierge', path: '/concierge', icon: Truck, tiers: MGR, built: true, blurb: 'Outsourced + in-house concierge work — one lane per vendor, lane shape by “do we ship to them?”, counts → cards → job. Replaces Shop Work Orders (same SWO model: custody, Paid, labels, QBO).' },
   { key: 'vendors', label: 'Vendors', path: '/purchasing/vendors', icon: Building2, tiers: MGR, group: 'parts', built: true, blurb: 'Vendor list, add / edit, detail roll-up: linked parts by last price, POs, purchase history.' },
   { key: 'parts-knowledge', label: 'Parts Knowledge', path: '/parts/knowledge', icon: BookOpen, tiers: MGR, group: 'parts', built: true, blurb: 'Part ↔ reference confirmations and aliases learned from approvals.' },
   { key: 'parts-catalog', label: 'Parts', path: '/parts', icon: Tag, tiers: MGR, group: 'parts', built: true, blurb: 'One part record · one stock count · one reorder rule · one caliber table · one search.' },

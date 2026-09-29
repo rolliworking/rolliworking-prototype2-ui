@@ -71,7 +71,8 @@ body {
 .rw-dark .text-ink { color: #f1f5f9; }
 .rw-dark .text-ink-700 { color: #e2e8f0; }
 .rw-dark .text-ink-500 { color: #94a3b8; }
-.rw-dark .text-ink-400, .rw-dark .text-ink-300 { color: #64748b; }
+.rw-dark .text-ink-400 { color: #8b98aa; }
+.rw-dark .text-ink-300 { color: #64748b; }
 .rw-dark .border-line { border-color: rgba(255, 255, 255, 0.1); }
 .rw-dark .divide-line\/70 > :not([hidden]) ~ :not([hidden]), .rw-dark .divide-line\/60 > :not([hidden]) ~ :not([hidden]), .rw-dark .divide-line > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255, 255, 255, 0.08); }
 .rw-dark .shadow-card { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); }

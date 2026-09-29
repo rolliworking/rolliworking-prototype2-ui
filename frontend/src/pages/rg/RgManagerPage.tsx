@@ -21,7 +21,7 @@ export default function RgManagerPage() {
 }
 
 function ManagerGate({ preselect, onVerified }: { preselect: User; onVerified: (u: User) => void }) {
-  const staff = api.rgAllStaff().filter((u) => u.accessTier === 'manager' || u.accessTier === 'concierge');
+  const staff = api.rgAllStaff().filter((u) => !!u.accessTier);
   const [userId, setUserId] = useState(staff.some((u) => u.id === preselect.id) ? preselect.id : ''); const [err, setErr] = useState<string | null>(null);
   const go = useCallback((secret: string) => api.rgVerifyManager(userId, secret.trim()).then(onVerified).catch((x) => setErr(x.message)), [userId, onVerified]);
   return <div data-testid="rg-manager-gate" className="space-y-3 rounded-lg border border-line bg-surface p-4">

@@ -40,7 +40,7 @@ export default function RgShell() {
     return () => { link.remove(); theme.remove(); document.title = 'RolliSuite — Prototype'; };
   }, []);
   const signOut = async () => { await api.rgSignOut(); setUser(null); };
-  const canManage = user && (user.accessTier === 'manager' || user.accessTier === 'concierge');
+  const canManage = user && user.accessTier !== undefined;
   return (
     <div data-testid="rg-shell" className="flex h-full flex-col bg-canvas">
       <header className="flex items-center justify-between bg-ink px-4 py-2.5 text-white">

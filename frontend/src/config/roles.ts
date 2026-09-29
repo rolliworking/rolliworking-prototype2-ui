@@ -5,7 +5,7 @@ export type RoleKind = 'watchmaker' | 'band_tech' | 'supervisor' | 'concierge' |
 const BAND_ROLES = ['polisher', 'band_tech'];
 export const roleKind = (u: Pick<User, 'roles' | 'accessTier'>): RoleKind => {
   const band = u.roles.some((r) => BAND_ROLES.includes(r)); const wm = u.roles.includes('watchmaker');
-  if (u.roles.includes('supervisor') || (u.accessTier === 'manager' && (band || wm))) return 'supervisor';
+  if (u.roles.includes('supervisor') || u.accessTier === 'supervisor' || (u.accessTier === 'manager' && (band || wm))) return 'supervisor';
   if (u.accessTier === 'manager') return 'manager';
   if (wm) return 'watchmaker';
   if (band) return 'band_tech';
@@ -20,7 +20,7 @@ export const desktopAllowed = (k: RoleKind) => k !== 'watchmaker' && k !== 'band
 export const rwAllowed = (k: RoleKind) => k !== 'concierge';
 export const padAllowed = (k: RoleKind) => k === 'supervisor' || k === 'manager';
 // Supervisor actions (assign, reassign, stage moves) — manager tier or the supervisor role (MM is concierge tier but supervises)
-export const canSupervise = (u: Pick<User, 'roles' | 'accessTier'>) => u.accessTier === 'manager' || u.roles.includes('supervisor');
+export const canSupervise = (u: Pick<User, 'roles' | 'accessTier'>) => u.accessTier === 'manager' || u.accessTier === 'supervisor' || u.roles.includes('supervisor');
 // Team colour families (MM's merged view): W = watchmakers, B·P = band / polish. Never colour alone — always paired with the chip text.
 export const teamFamily = (u: Pick<User, 'roles'>): 'W' | 'B·P' | null => (u.roles.includes('watchmaker') ? 'W' : u.roles.some((r) => BAND_ROLES.includes(r)) ? 'B·P' : null);
 export const FAMILY_TONE: Record<'W' | 'B·P', string> = { W: 'bg-sky-100 text-sky-900 ring-sky-300', 'B·P': 'bg-orange-100 text-orange-900 ring-orange-300' };

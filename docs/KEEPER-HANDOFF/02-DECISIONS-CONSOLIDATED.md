@@ -386,3 +386,36 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Item 8 (Concierge module: standalone sidebar button, one board, a lane per vendor, lane shape by "do we ship to them?", counts per stage → cards → job screen) — **spec still to come from MH**, not started.
 
 **Modules touched:** cross-cutting
+
+## Q5 AMENDMENT — Sales vs Completions — 2026-09-29 (MH; supersedes the 2026-09-28 "dated when paid" line)
+- **Sales are dated by the INVOICE SENT date** — the RS Outbox timestamp of the finalized invoice's **first** send (`SalesOrder.invoiceSends[0].at`). Re-sends and edits never re-date the sale; an edit that changes the total adjusts the sale **in the original month** (`saleDateOf(o)` + current total). Seeded orders without a recorded send fall back to `orderDate` (STAND-IN).
+- **Completions / performance** are dated by the click-map completion date (`completedAt` from the scan ledger), per person via D-361 credit. Unchanged.
+- **Payment date is neither**: it drives A/R aging, the ship/pickup gate and cash reporting (from QBO) — not Sales.
+- Zero-total / zero-balance jobs have no invoice sent → never in Sales; they still count in Completions.
+- Consequence: Sales in RS lines up with QBO's invoice date under invoice-first (VB4-03) — the two ledgers agree by construction.
+- Applied: dashboard KPI **"Sales this month · invoices sent, MTD (first-send date)"** + department MTD strip; Reports → `pnl` = "Department sales (by invoice-sent date)"; Reports → `completions` untouched. Live wire lacks `invoice_sent_at` (STAND-IN in `realClient.getDashboardStats`).
+
+**Modules touched:** cross-cutting
+
+## MH = Owner / Super Admin · View-as without credentials · mandatory entry screen · supervisor tier — 2026-09-29 (MH)
+- **D-392 MH is Owner / Super Admin, not "Inspector".** Seed roles `['manager']`, dutyLabel "Owner / Super Admin"; Walter = "Manager (RolliShop)". `inspector` stays only as a TASK role (`#inspector` tasks, job `owner: 'inspector'`) and resolves to **manager tier or above** (`holdsRole`); bench gates that said "watchmaker or inspector" now say "watchmaker or manager tier". UI header reads "MH · Owner".
+- **AccessTier gains `supervisor`** (MM): concierge-tier screens + supervisor actions (`canSupervise`), no money (`MoneyContext` stays manager-only). Nav `ALL` includes it; RGTime manager view admits it.
+- **D-385 amendment — no credentials, mandatory entry.** View-as never asks for the viewed user's password/PIN/Touch ID; MH's sign-in is the only credential. After ANY MH sign-in on ANY device `/choose-view` loads first (keyed on owner account, not device detection): "Continue as MH" (logged `session_continued_as_self`) + grouped tiles Watchmakers · Supervisors · Band/Polish · Front desk · Kiosks (initials, role, landing). Exit from any View-as returns to this screen on every device. Top-bar picker remains for switching later.
+- Front-desk initials (VC = Vienna, CM = Chyna) are shown on tiles; shortNames unchanged pending MH's call on a global rename.
+
+**Modules touched:** cross-cutting
+
+## iPad role tab bar — 2026-09-29 (MH)
+- **D-393** Every RW-shell route (`/rw/*`: bench, pad, band, hitlist, testing, queue, station, assign, messages…) gets a persistent thumb-height (64 px + safe-area) bottom tab bar scoped to the **viewed** role (`components/rw/RoleTabBar.tsx`, `roleTabs(user)`): Watchmaker = Bench · Hitlist · Photos (`/rw/evidence`) · Messages; Band tech = Band pad · Hitlist · Photos · Messages; Supervisor / manager = Pad (JV → `/rw/band`, MM → `/rw/pad`) · Team hitlist · Queue · Assign · Messages. Active tab highlighted; Messages carries the unread badge. MH under View-as sees the viewed role's tabs with the View-as banner sitting above the bar. `/choose-view` and kiosks (`/kiosk`, `/wm-kiosk`, `/rg/kiosk`) mount no bar. The Supervisor Pad's own internal tab strip moves up 64 px. New `/rw/messages` page = Inbox (Done / Claim) + composer + Sent. Bench PIN-in now refreshes the shell identity (`refreshStation` → `syncIdentity`) so the bar knows the tech; PIN re-lock / idle rules unchanged.
+
+**Modules touched:** cross-cutting
+
+## CONCIERGE — one board, one lane per vendor (replaces the SWO front) — 2026-09-29 (MH)
+- **D-394** `/concierge` (sidebar **Concierge**, standalone; `/swo` redirects). SWO data model, custody (`vendor:<id>`, excluded from asset-value on hand), Paid flag, labels and QBO push are unchanged underneath. Vendors reuse the Purchasing module (`kind: 'outsource'`) + new fields `ships` (the ONE lane-shaping question), `location`, `work`; `international` = `country !== 'US'` (drives customs). Seeds: **Claudio** (gold band work, California, ships, domestic) · **Jacques** (gold band work, Italy, ships, intl) · **James** (reluming, Netherlands, ships, intl) · **Chyna (CM)** (concierge, in-house, no ship). Old outsource seeds deactivated.
+- Lane stages — ships: In queue → In route → In progress → Returning → Received → Inspection → Fulfilled (`SHIP_LANE`); no-ship: In queue → In progress → Inspection → Fulfilled (`NOSHIP_LANE`). Concierge lane first. Cells = COUNT + "oldest: Nd" (amber ≥ 3 d, red ≥ 7 d = inbound-shipping thresholds; Fulfilled never ages).
+- Drill-down: tap a count → lane expands in place (URL `?lane=&stage=`) → cards (est# digits, client, item, days at stage, expected-back for shipping lanes, Paid chip on shipping lanes only) → job screen with **← Back to Concierge board** at the same expanded state.
+- Moves: Advance one stage (In route = outbound label from the detail sheet, customs for intl; Returning = pre-queued return label + vendor email; Received = arrival scan → custody back; Inspection = shop QC; Fulfilled = outsourced portion closed, job stamped). **Back one stage requires a reason** (`sendBackSwo`, audited). No-ship moves are hand-off custody scans (In progress → holder `vendor:v-cm`, Inspection → back to the scanner).
+- Paid + QBO: unchanged for shipping vendors; hidden on the concierge lane (her labor is a dept line).
+- "Send to vendor" from any job detail (`job-send-to-vendor`) drops the job at In queue on the chosen lane; a job may ride several lanes over its life, one at a time. Supervisor-pad outsource-hold entry point: NOT wired yet (queued).
+
+**Modules touched:** cross-cutting

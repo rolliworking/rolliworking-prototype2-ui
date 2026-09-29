@@ -43,7 +43,7 @@ export default function RwPadPage({ room = 'wm' }: { room?: PadRoom }) {
       </div>
       <div className="mt-3 flex flex-wrap items-end gap-4"><h1 data-testid="pad-title" className="text-4xl font-bold tracking-tight text-white sm:text-5xl">{tab === 'dashboard' ? api.ROOM_LABEL[room] : TITLE[tab]}</h1>{tab !== 'dashboard' && <span data-testid="pad-room" className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-300">{api.ROOM_LABEL[room]}{!isManager && ' · read-only'}</span>}{tab !== 'audit' && tab !== 'dashboard' && tab !== 'team' && tab !== 'comms' && <div className="min-w-[280px] flex-1 max-w-xl"><ScanInput big testId="pad-scan" placeholder={tab === 'parts' ? 'Scan watch → job · ref · caliber' : 'Scan watch label → its card'} onScan={globalScan} /></div>}</div>
     </header>
-    <main className="flex-1 overflow-y-auto px-5 pb-28 pt-4">
+    <main className="flex-1 overflow-y-auto px-5 pb-44 pt-4">
       {tab === 'dashboard' && <PadDashboard room={room} tick={cards.length + reqs.length} />}
       {tab === 'jobs' && <PadJobs cards={cards} hit={hit} say={say} reload={() => void load()} />}
       {tab === 'parts' && <PadParts ctx={ctx} onCtx={(c) => { setCtx(c); if (c) setAlert(api.clientRequestAlert(c.job.id)); }} say={say} requests={reqs} reload={() => void load()} isManager={!!isManager} />}
@@ -53,7 +53,7 @@ export default function RwPadPage({ room = 'wm' }: { room?: PadRoom }) {
       {tab === 'comms' && <PadComms say={say} />}
       {tab === 'audit' && <div data-testid="pad-audit"><AuditPanel big scope={room === 'band' ? 'band' : api.auditScopeFor(user)} onFinished={(s) => say(s.missing.length ? `${s.locationLabel}: ${s.missing.length} MISSING — pinned to the manager hit list` : `${s.locationLabel} audited clean`, s.missing.length ? 'err' : 'ok')} /></div>}
     </main>
-    <nav data-testid="pad-tabbar" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0f14]/95 px-4 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 backdrop-blur">
+    <nav data-testid="pad-tabbar" className="fixed inset-x-0 bottom-16 z-40 border-t border-white/10 bg-[#0b0f14]/95 px-4 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 backdrop-blur">
       <div className={`mx-auto grid max-w-4xl gap-2 ${isManager ? 'grid-cols-9' : 'grid-cols-3'}`}>
         {tabs.map(([k, l, Icon]) => <button key={k} data-testid={`pad-tab-${k}`} onClick={() => setTab(k)} className={`flex min-h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold ${tab === k ? 'text-amber-400' : 'text-slate-400'}`}><span className="relative"><Icon size={26} />{counts[k] > 0 && <span data-testid={`pad-tab-count-${k}`} className={`absolute -right-3 -top-1.5 rounded-full px-1.5 font-mono text-[10px] ${tab === k ? 'bg-amber-400 text-[#161b22]' : 'bg-white/15 text-slate-100'}`}>{counts[k]}</span>}</span>{l}</button>)}
         {isManager && <Link to="/rw/floor" data-testid="pad-tab-floor" className="flex min-h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold text-slate-400"><Map size={26} />Shop Floor</Link>}

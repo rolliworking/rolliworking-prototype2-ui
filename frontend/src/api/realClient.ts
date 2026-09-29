@@ -111,7 +111,7 @@ export const resolveIdentifier = async (query: string): Promise<SearchResults> =
 // No KPI / activity endpoints in the contract — derived from the three list endpoints (flagged in the report)
 export const getDashboardStats = async (): Promise<DashboardStats> => {
   const [est, jobs, sos] = await Promise.all([getEstimates(), getJobs(), getSalesOrders()]); const month = new Date().toISOString().slice(0, 7);
-  return { watchesInHouse: jobs.filter((j) => j.status !== 'closed').length, openEstimates: est.filter((e) => ['draft', 'sent'].includes(e.status)).length, awaitingApproval: est.filter((e) => e.status === 'sent').length, inProgress: jobs.filter((j) => ['in_service', 'testing'].includes(j.status)).length, awaitingPickup: sos.filter((o) => o.status === 'fulfilled').length, revenueThisMonth: sos.filter((o) => o.isPaid && o.orderDate.startsWith(month)).reduce((t, o) => t + o.total, 0), departments: [] };
+  return { watchesInHouse: jobs.filter((j) => j.status !== 'closed').length, openEstimates: est.filter((e) => ['draft', 'sent'].includes(e.status)).length, awaitingApproval: est.filter((e) => e.status === 'sent').length, inProgress: jobs.filter((j) => ['in_service', 'testing'].includes(j.status)).length, awaitingPickup: sos.filter((o) => o.status === 'fulfilled').length, revenueThisMonth: sos.filter((o) => o.status !== 'draft' && o.status !== 'cancelled' && o.total > 0 && o.orderDate.startsWith(month)).reduce((t, o) => t + o.total, 0) /* Q5 amended: Sales by first INVOICE SEND — wire has no invoice_sent_at, orderDate is the STAND-IN */, departments: [] };
 };
 export const getRecentActivity = async (limit = 10): Promise<ActivityEvent[]> => {
   const [est, jobs, sos] = await Promise.all([getEstimates(), getJobs(), getSalesOrders()]);

@@ -8,6 +8,7 @@ import { ChainForJob } from '@/components/estimates/ComponentChain';
 import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ConciergeBackBar, SendToVendorButton } from '@/components/jobs/SendToVendor';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
@@ -71,6 +72,7 @@ export default function JobDetailPage() {
 
   return (
     <div data-testid="job-detail-page" className="space-y-4">
+      <ConciergeBackBar />
       <div className="flex items-center justify-between">
         <Link to="/jobs" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Jobs</Link>
         <span className="text-[11px] text-ink-400">Created {fmtDate(j.createdAt)} by {j.createdBy}{j.intakeDate && ` · On hand since ${fmtDate(j.intakeDate)}`}{j.finishedAt && ` · Finished ${fmtDate(j.finishedAt)}`}</span>
@@ -140,6 +142,7 @@ export default function JobDetailPage() {
           <TimingCard jobId={j.id} watchId={j.watchId} status={j.status} />
           <Card title="Service evidence" subtitle="Four QC slots · filed by scanning the watch label · keyed to watch AND job" testId="job-evidence-card"><EvidencePanel job={j} run={run} /></Card>
           <Card title="Photos" testId="job-photos-card"><PhotosPanel job={j} run={run} /></Card>
+          <Card title="Outsource / concierge" subtitle="Send this job to a vendor lane — it appears at In queue on the Concierge board" testId="job-vendor-card"><SendToVendorButton job={j} onDone={(m) => run(async () => undefined, m)} /></Card>
           <Card title="Appraisals" subtitle="Client-facing appraisal report generated from this job’s data · draft → confirm value → finalize & sign → PDF" testId="job-appraisals-card"><AppraisalsPanel job={j} /></Card>
           <Card title="Authentication photos" subtitle="Guided 11-step capture for the authentication app’s training data · per-step camera + per-step Fake / Unsure flag · every shot attaches to the job" testId="job-auth-card"><AuthCapturePanel jobId={j.id} /></Card>
           <Card title="Bench tests" subtitle="Before / after timing + Proofmaster pressure + Witschi Chronoscope · tolerance sheet with caliber match · one photo in, structured readings out (mock extraction)" testId="job-bench-tests-card"><BenchTestsPanel jobId={j.id} /></Card>

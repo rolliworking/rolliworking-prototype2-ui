@@ -1,5 +1,5 @@
 import { Eye, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import { homeRouteFor } from '@/api/hitlist';
 import { useAuth } from '@/auth/AuthContext';
@@ -11,8 +11,9 @@ export const useViewAs = () => {
   const isOwner = realUser?.id === api.OWNER_USER_ID;
   const pad = isPadDevice(station);
   const start = async (userId: string) => { const u = await startViewAs(userId); nav(homeRouteFor(u), { replace: true }); };
-  const exit = async () => { await stopViewAs(); nav(pad ? '/choose-view' : '/', { replace: true }); };
-  const own = async () => { await stopViewAs(); nav('/', { replace: true }); };
+  // D-385 amendment: exit from any View-as returns to the entry screen on every device; "Continue as MH" is logged
+  const exit = async () => { await stopViewAs(); nav('/choose-view', { replace: true }); };
+  const own = async () => { await api.continueAsSelf(); await stopViewAs(); nav('/', { replace: true }); };
   return { isOwner, viewingAs, pad, start, exit, own, realUser };
 };
 
@@ -33,14 +34,15 @@ export const ViewAsPicker = ({ dark }: { dark?: boolean }) => {
 
 // Persistent on every screen while active; one tap exits (desktop → MH's own view, pad → the Choose-a-view picker)
 export const ViewAsBanner = () => {
-  const { viewingAs, exit, realUser, pad } = useViewAs();
+  const { viewingAs, exit, realUser } = useViewAs(); const { pathname } = useLocation();
   if (!viewingAs || !realUser) return null;
+  // sits above the iPad role tab bar on /rw routes
   return (
-    <div data-testid="view-as-banner" role="status" className="pointer-events-none fixed inset-x-0 bottom-3 z-[90] flex justify-center px-3">
+    <div data-testid="view-as-banner" role="status" className={`pointer-events-none fixed inset-x-0 z-[90] flex justify-center px-3 ${pathname.startsWith('/rw') ? 'bottom-[76px]' : 'bottom-3'}`}>
       <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-amber-500 bg-amber-400 px-4 py-2 text-xs font-semibold text-black shadow-lg">
         <Eye size={14} />
         <span data-testid="view-as-banner-text">Viewing as {viewingAs.shortName} — actions are recorded as {realUser.shortName} (as {viewingAs.shortName})</span>
-        <button type="button" data-testid="view-as-exit" onClick={() => void exit()} className="inline-flex items-center gap-1 rounded-full bg-black px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-black/80"><LogOut size={11} /> {pad ? 'Back to Choose a view' : 'Exit to my view'}</button>
+        <button type="button" data-testid="view-as-exit" onClick={() => void exit()} className="inline-flex items-center gap-1 rounded-full bg-black px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-black/80"><LogOut size={11} /> Exit · back to Choose a view</button>
       </div>
     </div>
   );

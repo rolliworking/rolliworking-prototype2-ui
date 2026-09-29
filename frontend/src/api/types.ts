@@ -1,4 +1,5 @@
-export type AccessTier = 'manager' | 'concierge';
+// supervisor = room supervisor (MM): concierge-tier screens + supervisor actions, no money (D-392)
+export type AccessTier = 'manager' | 'supervisor' | 'concierge';
 
 export type Role = 'concierge' | 'manager' | 'inspector' | 'supervisor' | 'watchmaker' | 'polisher' | 'band_tech';
 
@@ -63,6 +64,7 @@ export type AuditEventType =
   | 'settings'
   | 'shipping'
   | 'view_as_started'
+  | 'session_continued_as_self'
   | 'view_as_ended';
 
 export interface AuditEvent {
@@ -1000,9 +1002,9 @@ export interface StaffInboxThread { client: Client; messages: Message[]; unread:
 
 // ---- E9 RS modules: purchasing, inventory, templates, users admin, evidence ----------------------
 
-export interface Vendor { id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line'; kind?: VendorKind; country?: string }
+export interface Vendor { ships?: boolean; location?: string; work?: string; id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line'; kind?: VendorKind; country?: string }
 export type VendorKind = 'parts' | 'outsource';
-export interface VendorInput { id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; kind?: VendorKind; country?: string }
+export interface VendorInput { ships?: boolean; location?: string; work?: string; id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; kind?: VendorKind; country?: string }
 export interface VendorSummary { vendor: Vendor; partsLinked: number; lastOrderAt?: string; avgTurnaroundDays?: number; openPos: number }
 export interface VendorPartRow { partId: string; partNumber: string; name: string; lastPrice?: number; lastAt?: string; buys: number; avgCost: number | null; cheapestElsewhere?: { vendorName: string; price: number } }
 

@@ -647,3 +647,13 @@ _Frontend-only verification of the new Watchmaker-room Photo Kiosk feature (K1â€
 _Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
 - Optional: verify intended read/unread default for seed ib-10 (currently shows Unread on /hitlist/michael).
 - Optional: double-check wmk-camera-select â†’ wmk-camera-mode text flip to 'manual' on human interaction.
+
+## Iteration 62
+
+_Frontend-only paced Playwright testing of REBUILD-SPEC 5-7 (paging zones / one-shot messages, photos, access control). Ran in two paced browser sessions (mock mode). T1, T2, T4, T5, T6 all PASS. T3 (intercom), T7 (access enforcement), T8 (Pad comms MM), T9 (claim as Dre) could not be fully verified due to two blockers: (a) messages popover overlay stealing focus from intercom-btn, and (b) heavy 429 rate-limiting from the Vite dev server preventing multi-tab / re-signin flows. All happy-path features previously self-tested by main agent (T1/T3/T4/T5/T6/T8) are consistent with the code and the MH-side portions I verified live._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Manual retest of T3/T7/T8/T9 (main agent can self-test since happy paths already validated; report shows only environmental blockers, no code defects surfaced).
+- Optionally add `aria-disabled="true"` to owner-row access cells.
+- Confirm PhotosPanel post-work chip testid matches exactly `photo-type-post-work` (current source may render `photo-type-post_work` -- please verify).

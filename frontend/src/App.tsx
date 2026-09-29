@@ -90,11 +90,12 @@ import FloorMapPage from '@/pages/workshop/FloorMapPage';
 import PartsKnowledgePage from '@/pages/workshop/PartsKnowledgePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
+import ConciergePage from '@/pages/rs/ConciergePage';
+import RwMessagesPage from '@/pages/rw/RwMessagesPage';
 import AccessControlPage from '@/pages/rs/AccessControlPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
 import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
 import SchedulePage from '@/pages/SchedulePage';
-import SwoPage from '@/pages/rs/SwoPage';
 import InventoryPage from '@/pages/rs/InventoryPage';
 import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
@@ -177,6 +178,7 @@ export default function App() {
             <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
+            <Route path="messages" element={<RwMessagesPage />} />
             <Route path="testing" element={<RwTestingQueuePage />} />
             <Route path="testing/test/:jobId" element={<RwTestingTestPage />} />
             <Route path="today" element={<HitlistIndex />} />
@@ -268,7 +270,8 @@ export default function App() {
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/parts" element={<PartsPage />} />
               <Route path="/appointments" element={<SchedulePage />} />
-              <Route path="/swo" element={<SwoPage />} />
+              <Route path="/concierge" element={<ConciergePage />} />
+              <Route path="/swo" element={<Navigate to="/concierge" replace />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/purchasing/vendors" element={<VendorsPage />} />
               <Route path="/purchasing/vendors/:id" element={<VendorDetailPage />} />

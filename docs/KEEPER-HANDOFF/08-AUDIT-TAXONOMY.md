@@ -32,7 +32,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `station_reset` | `resetDeviceRegistration` | All only |
 | `intake` | `commitArrivals`, `shipStamp`, `stamp` | Intake |
 | `estimate` | `closeRequest`, `convertLegacy`, `estStamp`, `overrideSoScanGate`, `setKioskRequired`, `writeClientRef` | Estimates |
-| `job` | `advanceSwo`, `bulkCommit`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `saveShopWorkOrder`, `scanTech`, `startAudit`, `undoOutbox` | Jobs (with task, pin, parts) |
+| `job` | `advanceSwo`, `bulkCommit`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox` | Jobs (with task, pin, parts) |
 | `task` | `taskStamp` | All only |
 | `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
 | `sales` | `convertLegacy`, `soStamp` | Sales |
@@ -53,6 +53,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `settings` | `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setRcDocAccess` | All only |
 | `shipping` | `portalCreateLabel` | All only |
 | `view_as_started` | `startViewAs` | All only |
+| `session_continued_as_self` | `continueAsSelf` | All only |
 | `view_as_ended` | `startViewAs`, `stopViewAs` | All only |
 
 ## Stamp helpers (one type each, called from many functions)
