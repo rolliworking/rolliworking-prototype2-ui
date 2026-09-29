@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-09-27  
+**Last updated**: 2026-09-30  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -552,3 +552,14 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 ### Concierge v2 (2026-09-29; MH full paste; paced Playwright self-tests pass — counts = cards on every stage, N·M late split adds up)
 - D-395 in DECISIONS. `api/concierge.ts` (health, chips, alerts, invoices + duplicate guard, redo, outstanding, escalation, vendor parts requests), `components/concierge/VendorInvoices.tsx`, `components/jobs/ComponentWaitChips.tsx`, `pages/rs/ConciergePage.tsx` v2. Chips verified on MM pad, JV pad, Leo bench, job detail, jobs board, hitlist, click map.
 - Still queued: G5 Hitlist layout, G6 Access control template/disable + Limits, G7 Theme tokens, G8 iPad PWA; supervisor-pad outsource-hold → Concierge.
+
+### Concierge v3 — TRACK | ACTION + slide-out + 320 seed (2026-09-29; D-396; visually verified 2026-09-30)
+- `ConciergePage` view toggle remembered per user; `components/concierge/ActionMap.tsx` (lookup / scan several → tap destination → one custody commit), `SlidePanel.tsx` (right third / full sheet, Esc), `SwoCard.tsx`; manual QBO push removed. `seedSwoVolume` = 10 synthetic SWOs per stage per lane (`Swo.synth`, parent `j-01`); synthetic rows are excluded from component-wait chips and the one-lane-at-a-time guard.
+
+### G5–G8 + pad Send-to-vendor (2026-09-30; testing agent iteration_63 → 2 findings fixed + self-verified via `/app/memory/tools/dbg_vendor.py`, `smoke_hitlist.py`, `smoke_g6g8.py`)
+- **G5 Hitlist (D-397, D-382)**: `TodayPage` header "Hitlist · MH · Owner" (`roleTitle`); `hitlist-top-row` Appointments | Pinned (stack < lg); `InboxChip` + `InboxDrawer` slide-out (`components/today/InboxDrawer.tsx`); `DerivedGroups.tsx` Overdue → Urgent → Due today → Upcoming → No date with "N waiting on a component"; `ComponentWaitChips compact` = worst 3 + `+N more`; `estDigits` raw digits; seeds t-mh-01…10 + pin-mh-01…06 (MH = 25 rows).
+- **G6 Access control (D-398…401)**: `User.reportsTo / limits / disabled / createdFrom`; org tree helpers (`managerOf`, `directReports`, `chainOf`, `subtreeOf`, `inSubtree`, `getOrgTree`); tree walks in `hitlist.ts` (`getTeam`, `supervisorOf`, `isSupervisor`, `teamLabel`), `/choose-view` groups, Concierge escalation L2 = point person's manager. `AccessLimitsDrawer.tsx` (reports-to, locked stations `RW_STATION_OPTIONS`, `PART_CATEGORIES`, pricing, `CONTAINERS` read-only, enable/disable with reason) + `NewUserFromTemplate.tsx`; page filter `access-status-*`, row `access-limits-<id>`; enforcement `stationLockedForMe` (bulkCommit + DestinationMap `data-limited`), `pricing: none` hides money in RW; `assertEnabled` blocks all sign-ins; `getDivisionStaff` hides disabled users. Seed JV limits + reportsTo tree.
+- **G7 (D-402)**: `--accent #5CE1FF` (Tailwind `accent`), `--warn`; selection/active/focus highlights re-pointed from amber to accent across RW shell, pads, maps, choose-view, action map. Yellow = warn only.
+- **G8 (D-403…408)**: `/rw-manifest.webmanifest` + `rw-icon.svg` injected by `RwShell`, `viewport-fit=cover`, safe-area insets, 44 pt CSS rule, `inputMode`; `api/offline.ts` scan queue + replay (station scanner, reconcile; banners `rw-offline-banner`/`rw-replay-banner`); `api/webauthn.ts` Touch ID enrol/assert + `signInWithTouchId` (audit method `touch_id`; PROTOTYPE — no server verification); `/rw/device` Device check (standalone, rear camera, Touch ID, Web Push note, offline queue, Guided Access note); long-press brand → `OwnerPinGate` → `/choose-view` (+ bench gear owner path via `isOwnerPin`); `ContainerReconcile.tsx` on the band pad (BIN-JV, night prompt 17:00, missing → pins).
+- **Pad Send to vendor**: `pad-send-vendor-<job>` (disabled when `jobOnVendorLane`) → same `SwoForm` (point person default Chyna, save needs work + components) → In queue on the lane; verified Claudio 10 → 11.
+- Not tree-derived (by design): paging zones (rooms, not people). Not built: Walter's tree position beyond MH (RolliShop has no manager layer).
