@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { AlertTriangle, Clock, Kanban, PauseCircle, Plus, UserCog } from 'lucide-react';
 import { useState } from 'react';
+import { ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
 import { Link, NavLink } from 'react-router-dom';
 import * as api from '@/api/client';
 import { ComponentChips } from '@/components/jobs/ComponentBits';
@@ -102,6 +103,7 @@ export const JobCard = ({ job: j }: { job: JobWithRefs }) => (
       <div className="flex items-center gap-1">{api.threadNeedsReplyFor({ kind: 'job', id: j.id }) && <span data-testid={`reply-indicator-${j.id}`} title="Client reply waiting" className="rounded bg-rose-50 px-1 text-[10px] font-semibold text-rose-700">reply</span>}{j.kind !== 'service' && <KindPill kind={j.kind} />}{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} /></div>
     </div>
     <div className="truncate text-xs leading-tight"><span className="font-medium text-ink">{fullName(j.client)}</span> <span className="text-ink-500">· {j.watch.model}</span> <span className="font-mono text-[10px] text-ink-400">{j.watch.reference}</span></div>
+    <ComponentWaitChips jobId={j.id} compact />
     <div className="mt-1 flex items-center justify-between gap-2">
       <div className="flex items-center gap-1.5">
         <AssigneeChips assignees={j.assignees} />

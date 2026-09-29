@@ -77,12 +77,14 @@ export async function getSent(shortName: string): Promise<SentRow[]> {
 export const stationTargets = () => b.stations().filter((s) => s.id !== b.stationId() && !/kiosk/i.test(s.name));
 
 // "Flag to" — a message/photo sent to a person or role lands in their Inbox AND as a Pinned row on their Hitlist
-export interface FlagInput { to: Assignee; text?: string; photo?: PackagePhoto; jobId?: string; from?: string; kind?: 'flag' | 'message' }
+export interface FlagInput { id?: string; to: Assignee; text?: string; photo?: PackagePhoto; jobId?: string; from?: string; kind?: 'flag' | 'message' }
+// raw rows for system syncs (Concierge alerts) — idempotent ids like ib-swo-<swo>-<kind>
+export const inboxRowsFor = () => inbox;
 export async function flagToHitlist(input: FlagInput): Promise<{ inbox: InboxItem; pinned: PinnedItem }> {
   const a0 = b.actor(); const a = { ...a0, by: input.from ?? a0.by }; // kiosk: attribution = the job's watchmaker, not the station login
   if (!input.text?.trim() && !input.photo) throw new Error('Add a note or a photo');
   const j = input.jobId ? b.jobs().find((x) => x.id === input.jobId) : undefined;
-  const item: InboxItem = { id: b.newId('ib'), to: input.to, from: a.by, text: input.text?.trim() || undefined, photo: input.photo, jobId: j?.id, createdAt: new Date().toISOString(), station: a.station, readBy: [] };
+  const item: InboxItem = { id: input.id ?? b.newId('ib'), to: input.to, from: a.by, text: input.text?.trim() || undefined, photo: input.photo, jobId: j?.id, createdAt: new Date().toISOString(), station: a.station, readBy: [] };
   const noun = input.kind === 'message' ? 'Message' : input.photo ? 'Photo' : 'Note'; const who = b.label(input.to).split(' →')[0];
   const pin: PinnedItem = { id: b.newId('pin'), title: `${noun} from ${a.by}${j ? ` · ${j.number}` : ''}${item.text ? ` — ${item.text.slice(0, 80)}` : ''}`, assignedTo: input.to, createdBy: a.by, division: b.division(), jobId: j?.id, inboxId: item.id, photo: input.photo, createdAt: item.createdAt, station: a.station };
   item.pinnedId = pin.id; inbox.unshift(item); b.pinned().unshift(pin);

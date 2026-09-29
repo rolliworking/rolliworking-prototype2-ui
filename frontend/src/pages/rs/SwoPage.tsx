@@ -2,6 +2,9 @@ import { Globe, Plus, Truck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
+import * as cz from '@/api/concierge';
+import { VendorInvoicesPanel } from '@/components/concierge/VendorInvoices';
+import { useAuth } from '@/auth/AuthContext';
 import type { ComponentKey, SwoInput, SwoStage, SwoWithRefs, Vendor } from '@/api/client';
 import { field, Flash, Head } from '@/components/rs/RsBits';
 import { Button } from '@/components/ui/Button';
@@ -46,14 +49,13 @@ export function SwoDetail({ w, onClose, run, onEdit }: { w: SwoWithRefs; onClose
       <div className="rounded-sm border border-line px-2 py-1.5"><div className="text-[10px] uppercase text-ink-400">Work</div>{w.work}{w.notes && <div className="mt-0.5 text-ink-500">{w.notes}</div>}</div>
       <div className="grid grid-cols-3 gap-2">
         <label>Predicted completion (vendor)<input type="date" data-testid="swo-predicted" value={pred} onChange={(e) => setPred(e.target.value)} className={`${field} mt-1 block w-full`} /></label>
-        <div>Vendor invoice<div className={`${field} mt-1 flex items-center justify-between bg-canvas`}><span>{w.vendorInvoiceNumber ?? '—'}</span><b>{fmtMoneyCents(w.vendorInvoiceTotal)}</b></div></div>
-        {!noShip && <div>QuickBooks (bill)<div className="mt-1 flex items-center gap-2"><Button size="sm" data-testid="swo-qbo-push" onClick={() => run(() => api.pushSwoToQbo(w.id), 'Vendor invoice pushed to QuickBooks (stub)')}>{w.qboStatus === 'queued' ? 'Re-push' : 'Push to QBO'}</Button><span className="text-[11px] text-ink-500">{w.qboStatus === 'queued' ? `queued · ${w.qboBillId}` : 'not pushed'}</span></div></div>}
+        {!noShip && <div className="col-span-2"><VendorInvoicesPanel w={w} run={run} /></div>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {w.stage === 'queue' && <Button variant="primary" data-testid="swo-create-outbound" onClick={() => run(() => api.createSwoOutboundLabel(w.id, w.international ? { contents: customs.contents || undefined, value: customs.value ? Number(customs.value) : undefined, hsCode: customs.hsCode, origin: customs.origin, incoterm: customs.incoterm } : undefined), 'Outbound label created · vendor emailed · custody → vendor')}><Truck size={12} /> Create outbound label{w.international ? ' (international)' : ''}</Button>}
-        {next && next !== 'sent' && <Button variant={next === 'received' ? 'primary' : 'secondary'} data-testid={`swo-advance-${next}`} onClick={() => run(() => api.advanceSwo(w.id, next), next === 'received' ? 'Received back — custody returned to you' : `Moved to ${api.swoStageLabel(next)}`)}>→ {api.swoStageLabel(next)}</Button>}
+        {next && !/sent$/.test(next) && <Button variant={next === 'received' ? 'primary' : 'secondary'} data-testid={`swo-advance-${next}`} onClick={() => run(() => api.advanceSwo(w.id, next), next === 'received' ? 'Received back — custody returned to you' : `Moved to ${api.swoStageLabel(next)}`)}>→ {api.swoStageLabel(next)}</Button>}
         {!noShip && w.stage !== 'queue' && w.stage !== 'received' && w.stage !== 'inspection' && w.stage !== 'fulfilled' && !w.returnLabel && <Button data-testid="swo-queue-return" onClick={() => run(() => api.queueSwoReturnLabel(w.id, pred || undefined), 'Return label queued + emailed to vendor')}>Queue return label + email vendor</Button>}
-        {!noShip && <Button data-testid="swo-toggle-paid" onClick={() => run(() => api.setSwoPaid(w.id, !w.paid), w.paid ? 'Un-marked paid' : 'Marked paid (independent of receipt)')}>{w.paid ? 'Un-mark paid' : 'Mark paid'}</Button>}
+        
         <Button size="sm" variant="ghost" data-testid="swo-edit" onClick={onEdit}>Edit</Button>
         {pred !== (w.predictedCompletion ?? '') && <Button size="sm" data-testid="swo-save-predicted" onClick={() => run(() => api.saveShopWorkOrder({ id: w.id, vendorId: w.vendorId, jobId: w.jobId, components: w.components, work: w.work, vendorInvoiceTotal: w.vendorInvoiceTotal, vendorInvoiceNumber: w.vendorInvoiceNumber, predictedCompletion: pred, notes: w.notes }), 'Predicted completion saved')}>Save date</Button>}
       </div>
@@ -65,21 +67,26 @@ export function SwoDetail({ w, onClose, run, onEdit }: { w: SwoWithRefs; onClose
 }
 
 export function SwoForm({ init, onClose, onSaved }: { init: Partial<SwoInput>; onClose: () => void; onSaved: (m: string, id: string) => void }) {
-  const [f, setF] = useState<SwoInput>({ vendorId: '', jobId: '', components: [], work: '', vendorInvoiceTotal: 0, ...init });
+  const { user } = useAuth(); const [f, setF] = useState<SwoInput>({ vendorId: '', jobId: '', components: [], work: '', vendorInvoiceTotal: 0, pointPerson: user?.shortName, ...init });
   const [vendors, setVendors] = useState<Vendor[]>([]); const [q, setQ] = useState(''); const [hits, setHits] = useState<Awaited<ReturnType<typeof api.getSwoJobCandidates>>>([]); const [err, setErr] = useState<string | null>(null);
   useEffect(() => { void api.getOutsourceVendors().then((v) => { setVendors(v); if (!f.vendorId && v[0]) setF((x) => ({ ...x, vendorId: v[0].id })); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (init.id) return; void api.getSwoJobCandidates(q).then(setHits); }, [q, init.id]);
   const v = vendors.find((x) => x.id === f.vendorId);
+  // expected date prefills from vendor turnaround + shipping each way; re-prefills when the vendor changes on a NEW order
+  useEffect(() => { if (v && !init.id) setF((x) => ({ ...x, predictedCompletion: api.defaultExpectedAt(v) })); }, [v?.id, init.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const staff = cz.conciergeStaff();
   return <Modal testId="swo-modal" title={init.id ? 'Edit shop work order' : 'New shop work order'} width="w-[620px]" onClose={onClose}>
     <div className="space-y-3 text-xs text-ink-500">
       {!init.id && <div>Job<input data-testid="swo-job-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Job number or client" className={`${field} mt-1 block w-full`} /><ul className="mt-1 max-h-32 divide-y divide-line/70 overflow-y-auto rounded-sm border border-line">{hits.map((h) => <li key={h.id}><button data-testid={`swo-job-${h.id}`} onClick={() => setF({ ...f, jobId: h.id, components: f.components.length ? f.components : [h.components.includes('case') ? 'case' : h.components[0]] })} className={`flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-canvas ${f.jobId === h.id ? 'bg-ink text-white hover:bg-ink' : ''}`}><span className="font-mono font-semibold">{h.number}</span><span>{h.client}</span><span className="ml-auto">{h.watch}</span></button></li>)}</ul></div>}
       <div className="grid grid-cols-2 gap-2"><label>Vendor (outsource work)<select data-testid="swo-vendor" value={f.vendorId} onChange={(e) => setF({ ...f, vendorId: e.target.value })} className={`${field} mt-1 block w-full`}>{vendors.map((x) => <option key={x.id} value={x.id}>{x.name}{api.isInternationalVendor(x) ? ` (${x.country} · international)` : ''}</option>)}</select>{v && <span className="mt-0.5 block text-[11px]">{v.terms} · lead {v.leadTimeDays ?? '?'} d{api.isInternationalVendor(v) ? ' · customs required' : ''}</span>}</label>
         <div>Components going out<div className="mt-1 flex gap-1">{COMPONENTS.map((c) => <button key={c.key} data-testid={`swo-comp-${c.key}`} onClick={() => setF({ ...f, components: f.components.includes(c.key) ? f.components.filter((k) => k !== c.key) : [...f.components, c.key] })} className={`rounded-sm border px-2 py-1 ${f.components.includes(c.key) ? 'border-ink bg-ink text-white' : 'border-line bg-surface hover:bg-canvas'}`}>{c.label}</button>)}</div></div></div>
       <label className="block">Work to be done<textarea data-testid="swo-work" rows={2} value={f.work} onChange={(e) => setF({ ...f, work: e.target.value })} className={`${field} mt-1 block w-full`} /></label>
-      <div className="grid grid-cols-3 gap-2"><label>Vendor invoice total $<input type="number" min={0} data-testid="swo-invoice-total" value={f.vendorInvoiceTotal} onChange={(e) => setF({ ...f, vendorInvoiceTotal: Number(e.target.value) })} className={`${field} mt-1 block w-full`} /></label><label>Vendor invoice #<input data-testid="swo-invoice-number" value={f.vendorInvoiceNumber ?? ''} onChange={(e) => setF({ ...f, vendorInvoiceNumber: e.target.value })} className={`${field} mt-1 block w-full`} /></label><label>Predicted completion<input type="date" data-testid="swo-form-predicted" value={f.predictedCompletion ?? ''} onChange={(e) => setF({ ...f, predictedCompletion: e.target.value })} className={`${field} mt-1 block w-full`} /></label></div>
+      <div className="grid grid-cols-2 gap-2 rounded-sm border border-brand-100 bg-brand-50/40 p-2"><label>Expected completion date <span className="text-rose-600">*</span><input type="date" required data-testid="swo-form-predicted" value={f.predictedCompletion ?? ''} onChange={(e) => setF({ ...f, predictedCompletion: e.target.value })} className={`${field} mt-1 block w-full`} />{v && <span className="mt-0.5 block text-[10px]">prefilled: {v.leadTimeDays ?? 10} d turnaround{v.ships === false ? '' : ` + ${api.shipDaysFor(v)} d shipping each way`}</span>}</label>
+        <label>Point person <span className="text-rose-600">*</span><select data-testid="swo-form-point" value={f.pointPerson ?? ''} onChange={(e) => setF({ ...f, pointPerson: e.target.value })} className={`${field} mt-1 block w-full`}><option value="">— who chases this vendor job —</option>{staff.map((u) => <option key={u.id} value={u.shortName}>{u.shortName} · {u.dutyLabel}</option>)}</select></label></div>
+      <div className="grid grid-cols-2 gap-2"><label>Vendor quote / expected total $<input type="number" min={0} data-testid="swo-invoice-total" value={f.vendorInvoiceTotal} onChange={(e) => setF({ ...f, vendorInvoiceTotal: Number(e.target.value) })} className={`${field} mt-1 block w-full`} /></label><span className="mt-5 text-[11px]">Vendor invoices + Paid are entered on the card after creation (invoice # + our payment reference required, duplicate guard).</span></div>
       <label className="block">Notes<input data-testid="swo-notes" value={f.notes ?? ''} onChange={(e) => setF({ ...f, notes: e.target.value })} className={`${field} mt-1 block w-full`} /></label>
       {err && <div data-testid="swo-form-error" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">{err}</div>}
-      <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" data-testid="swo-save" disabled={!f.jobId || !f.vendorId} onClick={async () => { try { const w = await api.saveShopWorkOrder(f); onSaved(`${w.number} ${init.id ? 'updated' : 'queued'} · ${w.vendor.name}`, w.id); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } }}>{init.id ? 'Save' : 'Queue work order'}</Button></div>
+      <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" data-testid="swo-save" disabled={!f.jobId || !f.vendorId || !f.predictedCompletion || !f.pointPerson} onClick={async () => { try { const w = await api.saveShopWorkOrder(f); onSaved(`${w.number} ${init.id ? 'updated' : 'queued'} · ${w.vendor.name}`, w.id); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } }}>{init.id ? 'Save' : 'Queue work order'}</Button></div>
     </div>
   </Modal>;
 }

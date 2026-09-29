@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Task, TodayRow, TodaySource } from '@/api/client';
 import { OwnerChip } from '@/components/ui/Pills';
+import { ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
 import { dueLabel, fmtDate } from '@/lib/format';
 
 const SOURCE: Record<TodaySource, { label: string; icon: typeof Wrench; tone: string }> = {
@@ -38,6 +39,7 @@ export const TodayRowItem = ({ row: r, onDone, onPin, dense }: { row: TodayRow; 
         <div className="flex items-center gap-1.5 truncate text-[13px] text-ink">
           {href ? <Link to={href} data-testid={`today-open-${r.id}`} className="truncate hover:underline">{r.title}</Link> : <span className="truncate">{r.title}</span>}
           {r.urgent && <AlertTriangle size={11} className="shrink-0 text-rose-600" />}
+          {r.jobId && <ComponentWaitChips jobId={r.jobId} compact />}
         </div>
         {!dense && <div className="truncate text-[11px] text-ink-400">{r.detail} · <span className="text-ink-500">{r.via}</span></div>}
       </div>

@@ -1,5 +1,6 @@
 import { AlertTriangle, Clock3, MessageSquare, Truck } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { AtRiskTag, ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
 import type { BenchBoard, BenchJobRow, BenchSplitRow, JobWithRefs, SplitState } from '@/api/client';
 import { ClientRequestList } from '@/components/jobs/ClientRequests';
 import { KindPill } from '@/components/jobs/JobBits';
@@ -14,7 +15,7 @@ export const BenchSection = ({ title, count, testId, children, tone }: { title: 
 );
 
 const Head = ({ j, onMessage, section }: { j: JobWithRefs; onMessage: (j: JobWithRefs) => void; section: string }) => (
-  <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xl font-semibold text-slate-100">{j.number}</span><span className="text-slate-300">{j.watch.brand} {j.watch.model}</span><span className="font-mono text-xs text-slate-500">{j.watch.reference}</span><KindPill kind={j.kind} />{j.priority === 'urgent' || j.priority === 'high' ? <span className="rounded-full bg-orange-500/20 px-2 text-xs text-orange-200">{j.priority}</span> : null}
+  <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xl font-semibold text-slate-100">{j.number}</span><span className="text-slate-300">{j.watch.brand} {j.watch.model}</span><ComponentWaitChips jobId={j.id} dark compact /><AtRiskTag jobId={j.id} dark /><span className="font-mono text-xs text-slate-500">{j.watch.reference}</span><KindPill kind={j.kind} />{j.priority === 'urgent' || j.priority === 'high' ? <span className="rounded-full bg-orange-500/20 px-2 text-xs text-orange-200">{j.priority}</span> : null}
     <button data-testid={`bench-msg-${section}-${j.id}`} onClick={() => onMessage(j)} className="ml-auto inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm text-slate-200 hover:bg-white/10"><MessageSquare size={14} /> Message</button></div>
 );
 

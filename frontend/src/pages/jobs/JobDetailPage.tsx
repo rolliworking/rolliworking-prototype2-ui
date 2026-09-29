@@ -9,6 +9,7 @@ import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ConciergeBackBar, SendToVendorButton } from '@/components/jobs/SendToVendor';
+import { AtRiskTag, ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
@@ -81,7 +82,7 @@ export default function JobDetailPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="job-number">{j.number}</h1>
+            <h1 className="font-mono text-xl font-semibold tracking-tight text-ink" data-testid="job-number">{j.number}</h1><ComponentWaitChips jobId={j.id} compact /><AtRiskTag jobId={j.id} />
             <StatusWithHold job={j} />
             <KindPill kind={j.kind} testId="job-kind-pill" client={j.client} />
             <PriorityPill priority={j.priority} testId="job-priority" />

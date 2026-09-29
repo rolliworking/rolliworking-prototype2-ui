@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
 import { ChevronDown, ChevronRight, PauseCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -65,7 +66,7 @@ export const JobGroupedList = ({ jobs }: { jobs: JobWithRefs[] }) => {
             </tr>,
             ...(collapsed[lane] ? [] : rows.map((j) => (
               <tr key={j.id} data-testid={`job-row-${j.id}`} tabIndex={0} onClick={() => navigate(`/jobs/${j.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/jobs/${j.id}`)} className="cursor-pointer transition-colors hover:bg-canvas/70 focus:bg-canvas focus:outline-none">
-                <Td className="font-mono text-xs font-medium text-ink">{j.number}</Td>
+                <Td className="font-mono text-xs font-medium text-ink">{j.number}<ComponentWaitChips jobId={j.id} /></Td>
                 <Td><KindPill kind={j.kind} /></Td>
                 <Td className="font-medium text-ink">{fullName(j.client)}</Td>
                 <Td><span className="text-ink">{j.watch.brand} {j.watch.model}</span> <span className="ml-1 font-mono text-xs text-ink-400">{j.watch.reference}</span></Td>

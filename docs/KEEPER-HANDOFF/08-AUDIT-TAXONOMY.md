@@ -32,7 +32,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `station_reset` | `resetDeviceRegistration` | All only |
 | `intake` | `commitArrivals`, `shipStamp`, `stamp` | Intake |
 | `estimate` | `closeRequest`, `convertLegacy`, `estStamp`, `overrideSoScanGate`, `setKioskRequired`, `writeClientRef` | Estimates |
-| `job` | `advanceSwo`, `bulkCommit`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox` | Jobs (with task, pin, parts) |
+| `job` | `advanceSwo`, `bulkCommit`, `conciergeBridge`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox` | Jobs (with task, pin, parts) |
 | `task` | `taskStamp` | All only |
 | `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
 | `sales` | `convertLegacy`, `soStamp` | Sales |
