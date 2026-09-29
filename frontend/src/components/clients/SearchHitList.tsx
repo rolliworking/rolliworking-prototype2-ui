@@ -35,14 +35,16 @@ export const SearchHitList = ({ results, active, onHover, onPick, dense }: Props
                     type="button"
                     data-testid={`search-hit-${h.kind}-${h.id}`}
                     data-active={i === active || undefined}
+                    data-in-house={h.inHouse ? 'true' : undefined}
                     onMouseEnter={() => onHover(i)}
                     onClick={() => onPick(h)}
-                    className={clsx('flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors', i === active ? 'bg-brand-50' : 'hover:bg-canvas')}
+                    className={clsx('flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors', h.inHouse && 'border-l-[3px] border-amber-500 bg-amber-50/70', i === active ? 'bg-brand-50' : !h.inHouse && 'hover:bg-canvas')}
                   >
                     <Icon size={13} className="shrink-0 text-ink-400" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
                         <span className={clsx('truncate text-[13px] font-medium text-ink', h.kind !== 'client' && h.kind !== 'watch' && 'font-mono text-xs')}>{h.label}</span>
+                        {h.inHouse && <span data-testid={`search-hit-inhouse-${h.id}`} className="inline-flex shrink-0 items-center gap-1 text-[11px]"><span className="rounded-sm bg-amber-500 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white">in-house</span>{h.inHouse.estimateNumbers.map((n) => <span key={n} data-testid={`search-hit-est-${h.id}-${n}`} className="font-mono font-semibold text-amber-900">· {n}</span>)}</span>}
                         {h.kind !== 'client' && <span className="truncate text-xs text-ink-500">{h.clientName}</span>}
                       </div>
                       <div className="truncate text-[11px] text-ink-500">{h.detail}</div>

@@ -836,6 +836,8 @@ export interface SearchHit {
   clientId?: string;
   clientName: string;
   path: string;
+  // Customer currently has a job in our possession — highlighted + sorted first, est# shown to tell same-named customers apart
+  inHouse?: { estimateNumbers: string[] };
 }
 
 export interface SearchGroup { kind: IdentifierKind; label: string; hits: SearchHit[] }

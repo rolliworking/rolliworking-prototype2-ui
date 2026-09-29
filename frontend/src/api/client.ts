@@ -2485,8 +2485,13 @@ async function resolveIdentifierMock(query: string): Promise<SearchResults> {
   fx.clients.forEach((c) => {
     const name = fullNameOf(c).toLowerCase();
     const matched = name.includes(q) ? fullNameOf(c) : c.email.toLowerCase().includes(q) ? c.email : c.company?.toLowerCase().includes(q) ? c.company : digits.length >= 3 && c.phone.replace(/\D/g, '').includes(digits) ? c.phone : null;
-    if (matched) hits.push({ kind: 'client', id: c.id, hitKey: 'top', label: fullNameOf(c), detail: [c.company, c.email, c.phone].filter(Boolean).join(' · '), matched, clientId: c.id, clientName: fullNameOf(c), path: `/clients/${c.id}` });
+    if (!matched) return;
+    const inHouseJobs = store.jobs.filter((j) => j.clientId === c.id && j.simpleStatus === 'on_hand');
+    const estimateNumbers = uniq(inHouseJobs.map((j) => (j.estimateId ? store.estimates.find((e) => e.id === j.estimateId)?.number : undefined) ?? j.number));
+    hits.push({ kind: 'client', id: c.id, hitKey: 'top', label: fullNameOf(c), detail: [c.company, c.email, c.phone].filter(Boolean).join(' · '), matched, clientId: c.id, clientName: fullNameOf(c), path: `/clients/${c.id}`, inHouse: inHouseJobs.length ? { estimateNumbers } : undefined });
   });
+  // In-house customers float to the top of the client group; everything else keeps its order
+  hits.sort((a, b) => Number(!!b.inHouse) - Number(!!a.inHouse));
 
   if (q.length >= 3) {
     store.watches.forEach((w) => {

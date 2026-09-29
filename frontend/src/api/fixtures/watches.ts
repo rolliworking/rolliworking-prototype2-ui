@@ -36,4 +36,5 @@ export const watches: Watch[] = [
   // Band-only piece — no watch head, so no ref# / serial# to encode on a label
   { id: 'w-52', clientId: 'c-32', brand: 'Rolex', model: 'Oyster bracelet (band only)', reference: '', serial: '', dial: '—', bracelet: 'Oyster 78360', status: 'in_service', receivedAt: daysAgo(3) },
   { id: 'w-53', clientId: 'c-33', brand: 'Rolex', model: 'GMT-Master II', reference: '126710BLRO', serial: 'M4R7K2P9', dial: 'Black', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(4) },
+  { id: 'w-54', clientId: 'c-35', brand: 'Rolex', model: 'Explorer II', reference: '226570', serial: 'Q8L2M4N7', dial: 'Polar', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(2) },
 ];

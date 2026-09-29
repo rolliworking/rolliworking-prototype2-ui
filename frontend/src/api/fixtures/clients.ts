@@ -34,6 +34,9 @@ const rows: Row[] = [
   // Two different customers, same name — the real-world mixup case; contact info is what tells them apart
   ['c-32', 'William', 'Sanchez', 'wsanchez.nyc@example.com', '(212) 555-0132', 'New York', 'NY'],
   ['c-33', 'William', 'Sanchez', 'will.sanchez.tx@example.com', '(713) 555-0133', 'Houston', 'TX'],
+  // Second same-name pair — only ONE has a watch in-house right now (search highlight scenario)
+  ['c-34', 'Daniel', 'Okafor', 'd.okafor@example.com', '(312) 555-0134', 'Chicago', 'IL'],
+  ['c-35', 'Daniel', 'Okafor', 'daniel.okafor.mia@example.com', '(305) 555-0135', 'Miami', 'FL'],
 ];
 
 const tradeIds = new Set(['c-11', 'c-25', 'c-31']);
