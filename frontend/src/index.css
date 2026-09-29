@@ -4,6 +4,10 @@
 
 :root {
   font-feature-settings: 'tnum' 1, 'cv05' 1;
+  /* G7 theme tokens: selection / active / focus highlights use --accent; yellow is reserved for --warn (aging amber) */
+  --accent: #5ce1ff;
+  --accent-rgb: 92 225 255;
+  --warn: #f5b400;
 }
 
 html,
@@ -125,4 +129,21 @@ body {
   .print-header { padding: 0 6px 10px; border-bottom: 2px solid #000; margin-bottom: 8px; }
   .print-header h1 { font-size: 16pt; font-weight: 700; margin: 0 0 2px; }
   .print-header p { font-size: 9.5pt; margin: 0; color: #333 !important; }
+}
+
+/* G8 iPad-first: every tappable control inside the RolliWorking shell is at least 44 pt; safe-area on the shell edges */
+[data-testid='rw-shell'] button:not(.no-44),
+[data-testid='rw-shell'] select,
+[data-testid='rw-shell'] input:not([type='checkbox']):not([type='radio']):not([type='file']),
+[data-testid='rw-shell'] a[role='button'] {
+  min-height: 44px;
+}
+[data-testid='rw-shell'] input[type='checkbox'],
+[data-testid='rw-shell'] input[type='radio'] {
+  min-width: 20px;
+  min-height: 20px;
+}
+[data-testid='rw-shell'] {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }

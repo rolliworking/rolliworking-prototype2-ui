@@ -31,6 +31,7 @@ import RwPadPage from '@/pages/rw/RwPadPage';
 import RwBenchPage from '@/pages/rw/RwBenchPage';
 import RwPickingPage from '@/pages/rw/RwPickingPage';
 import RwHistoryPage from '@/pages/rw/RwHistoryPage';
+import RwDevicePage from '@/pages/rw/RwDevicePage';
 import RwReportsPage from '@/pages/rw/RwReportsPage';
 import AllJobsPage from '@/pages/jobs/AllJobsPage';
 import { IntakeAwaitingApprovalPage, IntakeInspectionFormStep, IntakeInspectionListPage, IntakePhotosPage } from '@/pages/intake/IntakeStepPages';
@@ -174,6 +175,7 @@ export default function App() {
             <Route path="pad" element={<RwRoleGuard pad><RwPadPage room="wm" /></RwRoleGuard>} />
             <Route path="band" element={<RwRoleGuard pad band><RwPadPage room="band" /></RwRoleGuard>} />
             <Route path="history" element={<RwHistoryPage />} />
+            <Route path="device" element={<RwDevicePage />} />
             <Route path="reports" element={<RwReportsPage />} />
             <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />

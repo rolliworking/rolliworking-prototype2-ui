@@ -25,6 +25,7 @@ export const users: User[] = [
     division: 'rollishop',
     password: 'walter123',
     pin: '1234',
+    reportsTo: 'u-michael',
   },
   {
     id: 'u-vienna',
@@ -37,6 +38,7 @@ export const users: User[] = [
     division: 'rolliworks',
     password: 'vienna123',
     pin: '1234',
+    reportsTo: 'u-michael',
   },
   {
     id: 'u-mm',
@@ -49,6 +51,7 @@ export const users: User[] = [
     division: 'rolliworks',
     password: 'mm123',
     pin: '1234',
+    reportsTo: 'u-vienna',
   },
   {
     id: 'u-jv',
@@ -61,6 +64,8 @@ export const users: User[] = [
     division: 'rolliworks',
     password: 'jv123',
     pin: '1234',
+    reportsTo: 'u-vienna',
+    limits: { lockedStations: ['wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'movement_service', 'recase_test', 'testing'], partsCategories: ['Spring bar', 'Unique Resale'], pricing: 'cost_only' },
   },
   {
     id: 'u-leo',
@@ -73,6 +78,7 @@ export const users: User[] = [
     division: 'rolliworks',
     password: 'leo123',
     pin: '1234',
+    reportsTo: 'u-mm',
   },
   {
     id: 'u-chyna',
@@ -85,10 +91,11 @@ export const users: User[] = [
     division: 'rolliworks',
     password: 'chyna123',
     pin: '1234',
+    reportsTo: 'u-vienna',
   },
   // JV's team — band techs + polishers (iPad-only benches)
-  { id: 'u-dre', roles: ['polisher'], firstName: 'dre', shortName: 'Dre', displayName: 'Dre — Polisher', dutyLabel: 'Polisher', accessTier: 'concierge', division: 'rolliworks', password: 'dre123', pin: '1234' },
-  { id: 'u-sam', roles: ['band_tech'], firstName: 'sam', shortName: 'Sam', displayName: 'Sam — Band tech', dutyLabel: 'Band tech', accessTier: 'concierge', division: 'rolliworks', password: 'sam123', pin: '1234' },
-  { id: 'u-mam', roles: ['band_tech'], firstName: 'matthew', shortName: 'MAM', displayName: 'MAM — Band tech (part-time) · Matthew Monteverde', dutyLabel: 'Band tech (part-time)', accessTier: 'concierge', division: 'rolliworks', password: 'matthew123', pin: '1234' },
-  { id: 'u-nico', roles: ['polisher', 'band_tech'], firstName: 'nico', shortName: 'Nico', displayName: 'Nico — Polisher · Band tech', dutyLabel: 'Polisher · Band tech', accessTier: 'concierge', division: 'rolliworks', password: 'nico123', pin: '1234' },
+  { id: 'u-dre', reportsTo: 'u-jv', roles: ['polisher'], firstName: 'dre', shortName: 'Dre', displayName: 'Dre — Polisher', dutyLabel: 'Polisher', accessTier: 'concierge', division: 'rolliworks', password: 'dre123', pin: '1234' },
+  { id: 'u-sam', reportsTo: 'u-jv', roles: ['band_tech'], firstName: 'sam', shortName: 'Sam', displayName: 'Sam — Band tech', dutyLabel: 'Band tech', accessTier: 'concierge', division: 'rolliworks', password: 'sam123', pin: '1234' },
+  { id: 'u-mam', reportsTo: 'u-jv', roles: ['band_tech'], firstName: 'matthew', shortName: 'MAM', displayName: 'MAM — Band tech (part-time) · Matthew Monteverde', dutyLabel: 'Band tech (part-time)', accessTier: 'concierge', division: 'rolliworks', password: 'matthew123', pin: '1234' },
+  { id: 'u-nico', reportsTo: 'u-jv', roles: ['polisher', 'band_tech'], firstName: 'nico', shortName: 'Nico', displayName: 'Nico — Polisher · Band tech', dutyLabel: 'Polisher · Band tech', accessTier: 'concierge', division: 'rolliworks', password: 'nico123', pin: '1234' },
 ];

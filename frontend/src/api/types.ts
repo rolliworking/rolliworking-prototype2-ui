@@ -16,7 +16,14 @@ export interface User {
   division: Division | 'both';
   password: string;
   pin: string;
+  reportsTo?: string;
+  limits?: UserLimits;
+  disabled?: { at: string; by: string; reason: string };
+  createdFrom?: string;
 }
+
+// Limits drawer (Access control): scope inside a tier — tier itself stays separate from the org tree
+export interface UserLimits { lockedStations: string[]; partsCategories: string[]; pricing: 'full' | 'cost_only' | 'none' }
 
 export interface Station {
   id: string;
@@ -27,7 +34,7 @@ export interface Station {
 }
 
 export type CameraStatus = 'captured' | 'no_camera' | 'denied';
-export type SignInMethod = 'password_photo' | 'pin_switch';
+export type SignInMethod = 'password_photo' | 'pin_switch' | 'touch_id';
 
 export interface VerificationPhoto {
   dataUrl: string | null;

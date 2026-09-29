@@ -1,73 +1,16 @@
-import { Globe, Plus, Truck } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import * as cz from '@/api/concierge';
-import { VendorInvoicesPanel } from '@/components/concierge/VendorInvoices';
-import { useAuth } from '@/auth/AuthContext';
-import type { ComponentKey, SwoInput, SwoStage, SwoWithRefs, Vendor } from '@/api/client';
-import { field, Flash, Head } from '@/components/rs/RsBits';
+import type { ComponentKey, SwoInput, Vendor } from '@/api/client';
+import { field } from '@/components/rs/RsBits';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
-import { fmtDate, fmtMoneyCents } from '@/lib/format';
 
 const COMPONENTS: { key: ComponentKey; label: string }[] = [{ key: 'head', label: 'Head / dial' }, { key: 'case', label: 'Case / bezel' }, { key: 'band', label: 'Bracelet' }];
-const Paid = ({ w }: { w: SwoWithRefs }) => <span data-testid={`swo-paid-${w.id}`} className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase ${w.paid ? 'bg-moss-50 text-moss-700 ring-1 ring-moss-200' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'}`}>{w.paid ? 'Paid' : 'Unpaid'}</span>;
-const Intl = ({ w }: { w: { international: boolean } }) => w.international ? <span className="inline-flex items-center gap-0.5 rounded-sm bg-sky-50 px-1 py-0.5 text-[10px] font-semibold text-sky-800 ring-1 ring-sky-200"><Globe size={9} /> INTL</span> : null;
 
-// Shop Work Orders — outsourced work at outside vendors. Condensed 5-stage board (linear), Paid independent of stage, labels both ways from here.
-export default function SwoPage() {
-  const [rows, setRows] = useState<SwoWithRefs[]>([]); const [open, setOpen] = useState<string | null>(null); const [form, setForm] = useState<Partial<SwoInput> | null>(null); const [msg, setMsg] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => api.getShopWorkOrders().then(setRows), []);
-  useEffect(() => { void load(); }, [load]);
-  const run = async (fn: () => Promise<unknown>, m: string) => { try { setError(null); await fn(); await load(); setMsg(m); setTimeout(() => setMsg(null), 3000); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } };
-  const sel = rows.find((r) => r.id === open) ?? null; const out = rows.filter((r) => r.stage !== 'received' && r.stage !== 'queue');
-  return <div data-testid="swo-page" className="space-y-4">
-    <Head title="Shop Work Orders" sub={<>Outsourced plating / refinish at outside vendors · {out.length} item{out.length === 1 ? '' : 's'} out · {rows.filter((r) => !r.paid).length} unpaid · <Link to="/purchasing/vendors" className="underline" data-testid="swo-vendors-link">Vendors</Link> (kind: Outsource work) · <Link to="/custody" className="underline">Custody</Link></>} action={<Button variant="primary" data-testid="swo-new" onClick={() => setForm({})}><Plus size={13} /> New shop work order</Button>} />
-    <Flash error={error} msg={msg} />
-    <div data-testid="swo-board" className="grid grid-cols-5 gap-2">{api.SWO_STAGES.map((st, i) => { const list = rows.filter((r) => r.stage === st.key); return <div key={st.key} data-testid={`swo-col-${st.key}`} className="rounded-md border border-line bg-surface">
-      <div className="flex items-center gap-2 border-b border-line/70 px-3 py-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-ink text-[10px] font-bold text-white">{i + 1}</span><div><div className="text-xs font-semibold">{st.label}</div><div className="text-[10px] text-ink-400">{st.blurb}</div></div><span data-testid={`swo-col-count-${st.key}`} className="ml-auto text-xs font-semibold text-ink-500">{list.length}</span></div>
-      <ul className="space-y-1.5 p-2">{list.map((w) => <li key={w.id}><button data-testid={`swo-card-${w.id}`} onClick={() => setOpen(w.id)} className={`w-full rounded-sm border px-2 py-1.5 text-left text-xs hover:bg-canvas ${open === w.id ? 'border-ink' : 'border-line'} ${w.overdue ? 'ring-1 ring-rose-300' : ''}`}><div className="flex items-center gap-1.5"><span className="font-mono font-semibold">{w.number}</span><Intl w={w} /><span className="ml-auto"><Paid w={w} /></span></div><div className="truncate text-ink-600">{w.jobNumber} · {w.watchLabel}</div><div className="truncate text-[11px] text-ink-500">{w.vendor.name}</div>{w.predictedCompletion && <div className={`text-[10px] ${w.overdue ? 'font-semibold text-rose-700' : 'text-ink-400'}`}>due back {fmtDate(w.predictedCompletion)}{w.overdue ? ' · OVERDUE' : ''}</div>}</button></li>)}{!list.length && <li className="py-3 text-center text-[11px] text-ink-300">—</li>}</ul>
-    </div>; })}</div>
-    <div className="grid grid-cols-[1fr_1fr] gap-3">
-      <Card title="Paid vs. not — independent of receipt" subtitle="vendor invoice totals · QBO bill status" bodyClassName="p-0" testId="swo-paid-card"><table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase text-ink-400"><th className="px-3 py-1.5">SWO</th><th>Vendor</th><th>Stage</th><th className="text-right">Invoice</th><th>Paid</th><th>QBO</th></tr></thead><tbody>{rows.map((w) => <tr key={w.id} data-testid={`swo-pay-row-${w.id}`} className="border-t border-line/70"><td className="px-3 py-1.5 font-mono font-semibold"><button onClick={() => setOpen(w.id)} className="hover:underline">{w.number}</button></td><td>{w.vendor.name}</td><td className="text-ink-500">{api.SWO_STAGES.find((s) => s.key === w.stage)?.label}</td><td className="tabular text-right">{fmtMoneyCents(w.vendorInvoiceTotal)}</td><td><Paid w={w} /></td><td className="text-[11px]">{w.qboStatus === 'queued' ? <span className="text-amber-800">queued · {w.qboBillId}</span> : <span className="text-ink-300">not pushed</span>}</td></tr>)}</tbody></table></Card>
-      <Card title="Custody — off-premises" subtitle="items with a vendor are a real custody state (Custody screen: “At vendor: …”) and are excluded from the Hitlist asset-value total" bodyClassName="p-0" testId="swo-custody-card"><ul className="divide-y divide-line/70 text-xs">{out.map((w) => <li key={w.id} data-testid={`swo-custody-${w.id}`} className="flex items-center gap-2 px-3 py-1.5"><Truck size={12} className="text-ink-400" /><span className="font-mono font-semibold">{w.jobNumber}</span><span>{w.components.join(' + ')}</span><span className="text-ink-500">{w.custodyHolder}</span><span className="ml-auto text-ink-400">{w.daysOut} d out</span></li>)}{!out.length && <li className="px-3 py-3 text-ink-400">Nothing out with vendors.</li>}</ul></Card>
-    </div>
-    {sel && <SwoDetail w={sel} onClose={() => setOpen(null)} run={run} onEdit={() => setForm({ id: sel.id, vendorId: sel.vendorId, jobId: sel.jobId, components: sel.components, work: sel.work, vendorInvoiceTotal: sel.vendorInvoiceTotal, vendorInvoiceNumber: sel.vendorInvoiceNumber, predictedCompletion: sel.predictedCompletion, notes: sel.notes })} />}
-    {form && <SwoForm init={form} onClose={() => setForm(null)} onSaved={(m, id) => { setForm(null); setOpen(id); void run(async () => undefined, m); }} />}
-  </div>;
-}
-
-export function SwoDetail({ w, onClose, run, onEdit }: { w: SwoWithRefs; onClose: () => void; run: (fn: () => Promise<unknown>, m: string) => Promise<void>; onEdit: () => void }) {
-  const lane = api.laneStagesFor(w.vendor); const li = lane.indexOf(w.stage); const next = lane[li + 1] as SwoStage | undefined; const noShip = w.vendor.ships === false;
-  const [customs, setCustoms] = useState({ contents: '', value: '', hsCode: '9111.20', origin: 'CH', incoterm: 'DAP' as 'DAP' | 'DDP' }); const [pred, setPred] = useState(w.predictedCompletion ?? '');
-  const Lbl = ({ l }: { l: NonNullable<SwoWithRefs['outbound']> }) => <div data-testid={`swo-label-${l.direction}`} className="rounded-sm border border-line bg-canvas/60 px-2 py-1.5 text-xs"><div className="flex items-center gap-2"><span className="font-semibold">{l.direction === 'outbound' ? 'Outbound · shop → vendor' : 'Return · vendor → shop (prepaid)'}</span>{l.international && <Intl w={l} />}<span className="ml-auto text-ink-400">{fmtMoneyCents(l.cost)}</span></div><div className="font-mono">{l.carrier} {l.service} · {l.tracking}</div>{l.customs && <div className="mt-0.5 text-[11px] text-ink-500">Customs: {l.customs.contents} · ${l.customs.value} · HS {l.customs.hsCode} · origin {l.customs.origin} · {l.customs.incoterm}</div>}<div className="text-[11px] text-ink-400">created {fmtDate(l.createdAt)} by {l.createdBy}{l.emailedAt ? ` · emailed to vendor ${fmtDate(l.emailedAt)}` : ''}</div></div>;
-  return <Modal testId="swo-detail" title={`${w.number} · ${w.vendor.name}`} width="w-[760px]" onClose={onClose}>
-    <div className="space-y-3 text-xs">
-      <div className="flex flex-wrap items-center gap-2"><span className="rounded-sm bg-ink px-2 py-0.5 text-[10px] font-semibold uppercase text-white" data-testid="swo-stage">{api.swoStageLabel(w.stage)}</span><Paid w={w} /><Intl w={w} /><Link to={`/jobs/${w.jobId}`} className="font-mono font-semibold hover:underline">{w.jobNumber}</Link><span>{w.clientName} · {w.watchLabel}</span><span className="text-ink-500">{w.components.map((c) => COMPONENTS.find((x) => x.key === c)?.label ?? c).join(' + ')}</span><span className="ml-auto text-ink-500" data-testid="swo-custody-holder">Custody: <b>{w.custodyHolder}</b></span></div>
-      <div className="rounded-sm border border-line px-2 py-1.5"><div className="text-[10px] uppercase text-ink-400">Work</div>{w.work}{w.notes && <div className="mt-0.5 text-ink-500">{w.notes}</div>}</div>
-      <div className="grid grid-cols-3 gap-2">
-        <label>Predicted completion (vendor)<input type="date" data-testid="swo-predicted" value={pred} onChange={(e) => setPred(e.target.value)} className={`${field} mt-1 block w-full`} /></label>
-        {!noShip && <div className="col-span-2"><VendorInvoicesPanel w={w} run={run} /></div>}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {w.stage === 'queue' && <Button variant="primary" data-testid="swo-create-outbound" onClick={() => run(() => api.createSwoOutboundLabel(w.id, w.international ? { contents: customs.contents || undefined, value: customs.value ? Number(customs.value) : undefined, hsCode: customs.hsCode, origin: customs.origin, incoterm: customs.incoterm } : undefined), 'Outbound label created · vendor emailed · custody → vendor')}><Truck size={12} /> Create outbound label{w.international ? ' (international)' : ''}</Button>}
-        {next && !/sent$/.test(next) && <Button variant={next === 'received' ? 'primary' : 'secondary'} data-testid={`swo-advance-${next}`} onClick={() => run(() => api.advanceSwo(w.id, next), next === 'received' ? 'Received back — custody returned to you' : `Moved to ${api.swoStageLabel(next)}`)}>→ {api.swoStageLabel(next)}</Button>}
-        {!noShip && w.stage !== 'queue' && w.stage !== 'received' && w.stage !== 'inspection' && w.stage !== 'fulfilled' && !w.returnLabel && <Button data-testid="swo-queue-return" onClick={() => run(() => api.queueSwoReturnLabel(w.id, pred || undefined), 'Return label queued + emailed to vendor')}>Queue return label + email vendor</Button>}
-        
-        <Button size="sm" variant="ghost" data-testid="swo-edit" onClick={onEdit}>Edit</Button>
-        {pred !== (w.predictedCompletion ?? '') && <Button size="sm" data-testid="swo-save-predicted" onClick={() => run(() => api.saveShopWorkOrder({ id: w.id, vendorId: w.vendorId, jobId: w.jobId, components: w.components, work: w.work, vendorInvoiceTotal: w.vendorInvoiceTotal, vendorInvoiceNumber: w.vendorInvoiceNumber, predictedCompletion: pred, notes: w.notes }), 'Predicted completion saved')}>Save date</Button>}
-      </div>
-      {w.stage === 'queue' && w.international && <div data-testid="swo-customs-form" className="grid grid-cols-[1fr_90px_90px_70px_80px] gap-1 rounded-sm border border-sky-200 bg-sky-50/50 p-2"><label className="col-span-5 text-[10px] font-semibold uppercase text-sky-800">Customs — international vendor ({w.vendor.country})</label><input data-testid="swo-customs-contents" placeholder="Contents (defaults to component + repair & return)" value={customs.contents} onChange={(e) => setCustoms({ ...customs, contents: e.target.value })} className={field} /><input data-testid="swo-customs-value" placeholder="Value $" type="number" value={customs.value} onChange={(e) => setCustoms({ ...customs, value: e.target.value })} className={field} /><input data-testid="swo-customs-hs" value={customs.hsCode} onChange={(e) => setCustoms({ ...customs, hsCode: e.target.value })} className={field} /><input value={customs.origin} onChange={(e) => setCustoms({ ...customs, origin: e.target.value })} className={field} /><select value={customs.incoterm} onChange={(e) => setCustoms({ ...customs, incoterm: e.target.value as 'DAP' | 'DDP' })} className={field}><option>DAP</option><option>DDP</option></select></div>}
-      <div className="grid grid-cols-2 gap-2">{w.outbound ? <Lbl l={w.outbound} /> : <div className="rounded-sm border border-dashed border-line px-2 py-3 text-center text-ink-400">No outbound label yet</div>}{w.returnLabel ? <Lbl l={w.returnLabel} /> : <div className="rounded-sm border border-dashed border-line px-2 py-3 text-center text-ink-400">No return label queued</div>}</div>
-      <div><div className="text-[10px] uppercase text-ink-400">Timeline</div><ul data-testid="swo-timeline" className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">{w.timeline.map((t, i) => <li key={i} className="flex gap-2"><span className="w-28 shrink-0 text-ink-400">{fmtDate(t.at)}</span><span className="w-14 shrink-0 font-medium">{t.by}</span><span>{t.text}</span></li>)}</ul></div>
-    </div>
-  </Modal>;
-}
-
+// "Send to vendor" form — the only thing left from the old Shop Work Orders screen (the board + detail live in Concierge)
 export function SwoForm({ init, onClose, onSaved }: { init: Partial<SwoInput>; onClose: () => void; onSaved: (m: string, id: string) => void }) {
-  const { user } = useAuth(); const [f, setF] = useState<SwoInput>({ vendorId: '', jobId: '', components: [], work: '', vendorInvoiceTotal: 0, pointPerson: user?.shortName, ...init });
+  const [f, setF] = useState<SwoInput>({ vendorId: '', jobId: '', components: [], work: '', vendorInvoiceTotal: 0, pointPerson: init.pointPerson ?? 'Chyna', ...init });
   const [vendors, setVendors] = useState<Vendor[]>([]); const [q, setQ] = useState(''); const [hits, setHits] = useState<Awaited<ReturnType<typeof api.getSwoJobCandidates>>>([]); const [err, setErr] = useState<string | null>(null);
   useEffect(() => { void api.getOutsourceVendors().then((v) => { setVendors(v); if (!f.vendorId && v[0]) setF((x) => ({ ...x, vendorId: v[0].id })); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (init.id) return; void api.getSwoJobCandidates(q).then(setHits); }, [q, init.id]);

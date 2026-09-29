@@ -1,0 +1,11 @@
+{
+  "name": "RolliWorking — workshop pads",
+  "short_name": "RolliWorking",
+  "start_url": "/rw",
+  "scope": "/rw",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#161b22",
+  "theme_color": "#0f131a",
+  "icons": [{ "src": "/rw-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

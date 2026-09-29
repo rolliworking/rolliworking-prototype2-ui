@@ -13,7 +13,7 @@ export const BenchLock = ({ onUnlock, lastUser }: { onUnlock: (u: User) => void;
     <div className="w-full max-w-md">
       <h2 className="text-2xl font-bold text-slate-100">Who’s at this bench?</h2>
       <p className="mt-1 text-sm text-slate-400">Tap your card, then your PIN. The board comes straight back.</p>
-      <div className="mt-4 grid grid-cols-2 gap-2">{staff.map((u) => <button key={u.id} data-testid={`bench-card-${u.id}`} onClick={() => { setSel(u); setPin(''); setErr(null); }} className={`min-h-[64px] rounded-2xl border p-3 text-left transition-colors ${sel?.id === u.id ? 'border-amber-400 bg-amber-400/15' : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'}`}><div className="text-lg font-semibold text-slate-100">{u.shortName}</div><div className="text-xs text-slate-400">{u.dutyLabel}</div></button>)}</div>
+      <div className="mt-4 grid grid-cols-2 gap-2">{staff.map((u) => <button key={u.id} data-testid={`bench-card-${u.id}`} onClick={() => { setSel(u); setPin(''); setErr(null); }} className={`min-h-[64px] rounded-2xl border p-3 text-left transition-colors ${sel?.id === u.id ? 'border-accent bg-accent/15' : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'}`}><div className="text-lg font-semibold text-slate-100">{u.shortName}</div><div className="text-xs text-slate-400">{u.dutyLabel}</div></button>)}</div>
     </div>
     <div className="w-full max-w-xs">
       <div className="mb-3 flex items-center justify-center gap-3" data-testid="bench-pin-dots">{[0, 1, 2, 3].map((i) => <span key={i} className={`h-4 w-4 rounded-full border-2 ${pin.length > i ? 'border-amber-400 bg-amber-400' : 'border-white/30'}`} />)}</div>

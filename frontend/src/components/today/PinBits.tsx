@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { OwnerChip } from '@/components/ui/Pills';
-import { fmtTime } from '@/lib/format';
+import { estDigits, fmtTime } from '@/lib/format';
 import { useEffect, useState } from 'react';
 
 const field = 'h-8 rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:outline-none';
@@ -19,10 +19,10 @@ export const PinnedList = ({ items, onDismiss, dense }: { items: PinnedItem[]; o
         {p.photo && <img src={p.photo.dataUrl} alt="" data-testid={`pinned-photo-${p.id}`} className="h-9 w-12 shrink-0 rounded-sm object-cover ring-1 ring-line" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] text-ink">
-            {p.jobId ? <Link to={`/jobs/${p.jobId}${p.messageId ? `#msg-${p.messageId}` : ''}`} className="hover:underline">{p.messageId && <MessageSquare size={11} className="mr-1 inline text-amber-700" />}{p.title}</Link>
-            : p.clientId ? <Link to={`/clients/${p.clientId}`} className="hover:underline">{p.title}</Link>
-            : p.estimateId ? <Link to={`/estimates/${p.estimateId}`} className="hover:underline">{p.title}</Link>
-            : p.title}
+            {p.jobId ? <Link to={`/jobs/${p.jobId}${p.messageId ? `#msg-${p.messageId}` : ''}`} className="hover:underline">{p.messageId && <MessageSquare size={11} className="mr-1 inline text-amber-700" />}{estDigits(p.title)}</Link>
+            : p.clientId ? <Link to={`/clients/${p.clientId}`} className="hover:underline">{estDigits(p.title)}</Link>
+            : p.estimateId ? <Link to={`/estimates/${p.estimateId}`} className="hover:underline">{estDigits(p.title)}</Link>
+            : estDigits(p.title)}
           </div>
           {!dense && <div className="text-[11px] text-ink-400">pinned by {p.createdBy} · {fmtTime(p.createdAt)} · {p.assignedTo.type === 'role' ? `role · ${p.assignedTo.role}` : 'for me'}{p.taskId && ' · from a task'}</div>}
         </div>

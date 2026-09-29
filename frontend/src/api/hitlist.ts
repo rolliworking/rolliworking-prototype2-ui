@@ -1,4 +1,4 @@
-import { hitlistBridge as b } from './client';
+import { directReports, hitlistBridge as b } from './client';
 import { daysAgo } from './fixtures/time';
 import { roleKind, ROLE_HOME } from '@/config/roles';
 import type { Assignee, PackagePhoto, PinnedItem, Role, TodayRow, User } from './types';
@@ -13,14 +13,16 @@ export const TEAM_MAP: Record<string, { roles: Role[]; label: string; readOnlyRo
   MM: { roles: ['watchmaker', 'band_tech', 'polisher'], label: 'Watchmaker room · band / polish oversight', readOnlyRoles: ['band_tech', 'polisher'] },
   JV: { roles: ['band_tech', 'polisher'], label: 'Workshop · band / polish' },
 };
-export const supervisorOf = (tech: User): User[] => (isTech(tech) ? b.users().filter((s) => s.id !== tech.id && TEAM_MAP[s.shortName]?.roles.some((r) => tech.roles.includes(r))) : []);
+// Org tree (User.reportsTo) is the source: a tech's supervisor is the manager they report to, plus anyone with read-only oversight of their roles (MM over band / polish)
+export const supervisorOf = (tech: User): User[] => (isTech(tech) ? b.users().filter((s) => s.id !== tech.id && (tech.reportsTo === s.id || TEAM_MAP[s.shortName]?.readOnlyRoles?.some((r) => tech.roles.includes(r)))) : []);
 export const teamRowReadOnly = (viewer: User, tech: User) => !!TEAM_MAP[viewer.shortName]?.readOnlyRoles?.some((r) => tech.roles.includes(r)) && !tech.roles.some((r) => !TEAM_MAP[viewer.shortName]!.readOnlyRoles!.includes(r) && TEAM_MAP[viewer.shortName]!.roles.includes(r));
 // Who may open /hitlist/<slug>: the person, their supervisor(s), any manager tier, MH (also via View-as)
 export const canViewHitlist = (viewer: User, target: User) => viewer.id === target.id || viewer.accessTier === 'manager' || supervisorOf(target).some((s) => s.id === viewer.id);
-export const isSupervisor = (u: User | null | undefined) => !!u && !!TEAM_MAP[u.shortName];
+export const isSupervisor = (u: User | null | undefined) => !!u && (!!TEAM_MAP[u.shortName] || directReports(u.id).some(isTech));
 // Techs only — other supervisors / managers never roll up into a team even when they carry a room role (JV is not on MM's team)
 const isTech = (u: User) => u.accessTier !== 'manager' && !u.roles.includes('supervisor');
-export const getTeam = (sup: User): User[] => { const t = TEAM_MAP[sup.shortName]; return t ? b.users().filter((u) => u.id !== sup.id && isTech(u) && (u.division === 'both' || u.division === sup.division || sup.division === 'both') && u.roles.some((r) => t.roles.includes(r))) : []; };
+export const getTeam = (sup: User): User[] => { const t = TEAM_MAP[sup.shortName]; return b.users().filter((u) => u.id !== sup.id && isTech(u) && !u.disabled && (u.reportsTo === sup.id || !!t?.readOnlyRoles?.some((r) => u.roles.includes(r)))); };
+export const teamLabel = (sup: User) => TEAM_MAP[sup.shortName]?.label ?? `Reports to ${sup.shortName}`;
 export const teamPath = (u: User) => `${hitlistPath(u)}/team`;
 
 // ---- Inbox --------------------------------------------------------------------------------------------------------

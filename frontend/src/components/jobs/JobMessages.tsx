@@ -32,7 +32,7 @@ export const MessageComposer = ({ onSend, placeholder, testId, autoFocus, onCanc
 };
 
 const Msg = ({ m, reply, hit }: { m: JobMessage; reply?: boolean; hit?: boolean }) => (
-  <div id={`msg-${m.id}`} data-testid={`msg-${m.id}`} className={`rounded-sm px-2 py-1.5 ${hit ? 'bg-amber-100/70 ring-1 ring-amber-400' : ''} ${reply ? 'ml-5 border-l-2 border-line pl-3' : ''}`}>
+  <div id={`msg-${m.id}`} data-testid={`msg-${m.id}`} className={`rounded-sm px-2 py-1.5 ${hit ? 'bg-accent-100/70 ring-1 ring-accent' : ''} ${reply ? 'ml-5 border-l-2 border-line pl-3' : ''}`}>
     <div className="flex items-center gap-1.5 text-[11px] text-ink-400">{reply && <CornerDownRight size={10} />}<span className="font-semibold text-ink-700">{m.by}</span> · {fmtDate(m.at)} {fmtTime(m.at)} · {m.station}{m.notify.length > 0 && <span data-testid={`msg-routed-${m.id}`} className="ml-1 rounded-full bg-canvas px-1.5 text-[10px]">→ {m.notify.map((n) => `@${n}`).join(' ')}</span>}</div>
     <div className="mt-0.5 text-[13px] text-ink"><MentionText text={m.text} /></div>
     {m.photo && <img data-testid={`msg-photo-${m.id}`} src={m.photo.dataUrl} alt="attached" className="mt-1.5 max-h-40 rounded-sm border border-line object-cover" />}

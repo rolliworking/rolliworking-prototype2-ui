@@ -29,6 +29,7 @@ export default {
           accent: '#8a6d3b',
           accentSoft: '#f1e8d8',
         },
+        accent: { DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)', 100: '#dff8ff', 700: '#0e8fb0' },
         moss: {
           DEFAULT: '#1f7a4d',
           700: '#176240',

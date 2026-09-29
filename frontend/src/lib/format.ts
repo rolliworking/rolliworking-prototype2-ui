@@ -27,6 +27,10 @@ export const relativeTime = (iso: string) => {
   return days === 1 ? 'yesterday' : `${days}d ago`;
 };
 
+// D-382: estimate / job numbers display as raw digits ("02015"), input still accepts "E02015"
+export const estDigits = (s: string) => s.replace(/\bE(\d{5})\b/g, '$1');
+export const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
+
 export const dueLabel = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();

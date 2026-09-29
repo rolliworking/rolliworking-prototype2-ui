@@ -23,7 +23,7 @@ const Reassign = ({ team, current, onPick, testId }: { team: TeamHitlist; curren
   const cur = current.type === 'user' ? `user:${current.shortName}` : current.type === 'role' ? `role:${current.role}` : `station:${current.stationId}`;
   return <select data-testid={testId} value={cur} onChange={(e) => { const [t, x] = e.target.value.split(':'); onPick(t === 'role' ? { type: 'role', role: x as Role } : { type: 'user', shortName: x }); }} className="h-7 rounded-sm border border-line bg-surface px-1.5 text-[11px]" title="Reassign">
     <optgroup label="Team">{team.team.map((u) => <option key={u.id} value={`user:${u.shortName}`}>{u.shortName}</option>)}<option value={`user:${team.supervisor.shortName}`}>{team.supervisor.shortName} (me)</option></optgroup>
-    <optgroup label="Roles">{hl.TEAM_MAP[team.supervisor.shortName].roles.map((r) => <option key={r} value={`role:${r}`}>#{r}</option>)}</optgroup>
+    <optgroup label="Roles">{Array.from(new Set(team.team.flatMap((u) => u.roles))).map((r) => <option key={r} value={`role:${r}`}>#{r}</option>)}</optgroup>
   </select>;
 };
 
@@ -45,7 +45,7 @@ export default function TeamHitlistPage() {
   const rows = (data?.rows ?? []).filter((r) => filter === 'all' || r.tech.shortName === filter);
   return <div data-testid="team-hitlist-page" data-for={sup.shortName} className="space-y-4">
     <div className="flex items-start justify-between gap-4">
-      <PageHeader title={`Team Hitlist · ${sup.shortName} · ${hl.TEAM_MAP[sup.shortName].label}`} subtitle={data ? `${data.team.length} on the team · ${data.pinned.length} pinned · ${data.rows.length} derived · one merged queue, reassign inline, tap a name to drill in` : 'Loading…'} testId="team-header" />
+      <PageHeader title={`Team Hitlist · ${sup.shortName} · ${hl.teamLabel(sup)}`} subtitle={data ? `${data.team.length} on the team · ${data.pinned.length} pinned · ${data.rows.length} derived · one merged queue, reassign inline, tap a name to drill in` : 'Loading…'} testId="team-header" />
       <Link to={`${base}/${hl.slugOf(sup)}`} data-testid="team-own-link" className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 hover:border-ink-400 hover:bg-canvas"><UsersRound size={13} /> My own Hitlist</Link>
     </div>
     <div className="flex flex-wrap items-center gap-1.5" data-testid="team-filters">

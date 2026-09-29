@@ -307,7 +307,7 @@ export async function resetDeviceRegistration(): Promise<void> {
 
 /** All users whose division includes `div` (own-division + 'both'). */
 export const getDivisionStaff = (div: Division): User[] =>
-  fx.users.filter((u) => u.division === div || u.division === 'both');
+  fx.users.filter((u) => !u.disabled && (u.division === div || u.division === 'both'));
 
 /** Roles that have at least one holder in `div`. */
 export const getDivisionRoles = (div: Division): Role[] =>
@@ -370,7 +370,7 @@ export async function stopViewAs(): Promise<void> {
 }
 
 const signedInTodaySync = (userId: string) =>
-  readAudit().some((e) => e.type === 'sign_in' && e.method === 'password_photo' && e.userShortName === byId(fx.users, userId).shortName && isToday(e.timestamp));
+  readAudit().some((e) => e.type === 'sign_in' && (e.method === 'password_photo' || e.method === 'touch_id') && e.userShortName === byId(fx.users, userId).shortName && isToday(e.timestamp));
 
 export async function getUsers(): Promise<User[]> {
   return resolve(fx.users);
@@ -391,6 +391,7 @@ export async function getUsersSignedInToday(): Promise<User[]> {
 async function signInWithPasswordMock(userId: string, password: string, photo: VerificationPhoto): Promise<User> {
   const user = byId(fx.users, userId);
   const stationName = stationNameOrUnknown();
+  assertEnabled(user, stationName, 'password_photo');
   if (user.password !== password) {
     appendAudit({ type: 'sign_in_failed', stationName, userShortName: user.shortName, userDisplayName: user.displayName, method: 'password_photo', detail: 'Incorrect password' });
     throw new Error('Incorrect password');
@@ -413,12 +414,21 @@ export async function switchUserWithPin(userId: string, pin: string): Promise<Us
   const user = byId(fx.users, userId);
   const stationName = stationNameOrUnknown();
   if (!signedInTodaySync(userId)) throw new Error('First sign-in of the day needs password and photo');
+  assertEnabled(user, stationNameOrUnknown(), 'pin_switch');
   if (user.pin !== pin) {
     appendAudit({ type: 'sign_in_failed', stationName, userShortName: user.shortName, userDisplayName: user.displayName, method: 'pin_switch', detail: 'Incorrect PIN' });
     throw new Error('Incorrect PIN');
   }
   localStorage.setItem(KEYS.currentUser, user.id);
   appendAudit({ type: 'sign_in', stationName, userShortName: user.shortName, userDisplayName: user.displayName, method: 'pin_switch', detail: 'Fast switch · PIN verified' });
+  return resolve(user);
+}
+
+// Touch ID (WebAuthn platform authenticator) — the browser asserted the device credential; the prototype trusts that assertion (Keeper verifies server-side). Counts as the day's first sign-in.
+export async function signInWithTouchId(userId: string): Promise<User> {
+  const user = byId(fx.users, userId); const stationName = stationNameOrUnknown(); assertEnabled(user, stationName, 'touch_id');
+  localStorage.setItem(KEYS.currentUser, user.id);
+  appendAudit({ type: 'sign_in', stationName, userShortName: user.shortName, userDisplayName: user.displayName, method: 'touch_id', detail: 'Touch ID · platform credential asserted (prototype — no server verification)' });
   return resolve(user);
 }
 
@@ -3297,7 +3307,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
 }
 
 // ---- E9 RS modules ---------------------------------------------------------------------------------
-import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, Vendor, VendorInput, ZeroBalanceReason, VendorPartRow, VendorSummary } from './types';
+import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, UserLimits, Vendor, VendorInput, ZeroBalanceReason, VendorPartRow, VendorSummary } from './types';
 
 const rs = {
   vendors: fx.vendors.map((v): Vendor => ({ ...v })),
@@ -4319,7 +4329,9 @@ export async function resolveBulkLabel(label: string, to: RwStationKey): Promise
   const key = bulkPartFor(to, band); const row = getJobRow(j.id); if (key !== 'case' && !ensureParts(row).some((c) => c.key === key)) throw new Error(`${j.number} has no ${PART_LABEL[key].toLowerCase()} part`);
   return resolve({ id: newId('bulk'), at: new Date().toISOString(), label: label.trim(), jobId: j.id, jobNumber: j.number, watchLabel: `${j.watch.brand} ${j.watch.model}`, key, clientName: `${j.client.firstName} ${j.client.lastName}` });
 }
+export const stationLockedForMe = (to: string) => { const me = currentUserSync(); return !!me && limitsOf(me).lockedStations.includes(to); };
 export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: string): Promise<BulkResult[]> {
+  if (stationLockedForMe(to)) throw new Error(`${stationOf(to).label} is a locked station for ${currentUserSync()?.shortName} (Access control → Limits)`);
   const out: BulkResult[] = []; const seen = new Set<string>();
   for (const r of rows) { if (seen.has(r.jobId + r.key)) continue; seen.add(r.jobId + r.key);
     try { const gate = GATE_TARGET[to]; if (gate) { const g = gateScanJob(getJobRow(r.jobId), gate.direction, gate.track, handTo); out.push({ row: r, ok: true, detail: `gate ${gate.direction.toUpperCase()} · ${g.scan.parts.map((k) => PART_LABEL[k]).join(' + ')}${g.scan.bundled ? ' (bundled)' : ''} → ${stationOf(g.scan.to).label} · ${g.scan.assignedTo}` }); }
@@ -4774,6 +4786,7 @@ fx.jobMessages.forEach((m) => routeMessage(byId(store.jobs, m.jobId), m));
 const BENCH_KEY = 'rollisuite.bench.settings';
 export const STUCK_WORKING_DAYS = 4;
 export const getBenchSettings = (): BenchSettings => ({ benchName: 'Bench 3', idleMinutes: 10, simulateOffline: localStorage.getItem(KIOSK_OFFLINE) === '1', ...readJson<Partial<BenchSettings>>(BENCH_KEY, {}) });
+export const isOwnerPin = (pin: string) => fx.users.some((u) => u.id === OWNER_USER_ID && u.pin === pin);
 export const verifySupervisorPin = (pin: string) => fx.users.some((u) => u.accessTier === 'manager' && u.pin === pin);
 export const saveBenchSettings = (s: BenchSettings, supervisorPin: string): BenchSettings => {
   if (!verifySupervisorPin(supervisorPin)) throw new Error('Supervisor PIN not recognised');
@@ -5823,7 +5836,7 @@ export interface VendorInvoice { id: string; number: string; vendorRef?: string;
 export interface RedoCycle { n: number; reason: string; photo?: string; startedAt: string; by: string }
 export interface VendorReply { at: string; by: string; text: string; newExpectedAt?: string }
 // `paid` is DERIVED (any invoice with a Paid record) — kept on the row for the old readers; `predictedCompletion` = EXPECTED completion date (required at creation)
-export interface Swo { id: string; number: string; vendorId: string; jobId: string; components: ComponentKey[]; work: string; stage: SwoStage; stageAt?: string; pointPerson?: string; invoices: VendorInvoice[]; redoCycles: RedoCycle[]; vendorReplies: VendorReply[]; statusRequests: { at: string; by: string; level: string }[]; paid: boolean; paidAt?: string; paidBy?: string; vendorInvoiceTotal: number; vendorInvoiceNumber?: string; qboStatus: 'not_queued' | 'queued'; qboBillId?: string; predictedCompletion?: string; sentAt?: string; atVendorAt?: string; inboundAt?: string; receivedAt?: string; outbound?: SwoLabel; returnLabel?: SwoLabel; notes?: string; createdAt: string; createdBy: string; timeline: { at: string; by: string; text: string }[] }
+export interface Swo { id: string; number: string; vendorId: string; jobId: string; synth?: { jobNumber: string; clientName: string; watchLabel: string; reference: string }; components: ComponentKey[]; work: string; stage: SwoStage; stageAt?: string; pointPerson?: string; invoices: VendorInvoice[]; redoCycles: RedoCycle[]; vendorReplies: VendorReply[]; statusRequests: { at: string; by: string; level: string }[]; paid: boolean; paidAt?: string; paidBy?: string; vendorInvoiceTotal: number; vendorInvoiceNumber?: string; qboStatus: 'not_queued' | 'queued'; qboBillId?: string; predictedCompletion?: string; sentAt?: string; atVendorAt?: string; inboundAt?: string; receivedAt?: string; outbound?: SwoLabel; returnLabel?: SwoLabel; notes?: string; createdAt: string; createdBy: string; timeline: { at: string; by: string; text: string }[] }
 export interface SwoWithRefs extends Swo { vendor: Vendor; job: JobWithRefs; jobNumber: string; clientName: string; watchLabel: string; international: boolean; custodyHolder: string; daysOut?: number; overdue: boolean }
 export interface SwoInput { id?: string; vendorId: string; jobId: string; components: ComponentKey[]; work: string; vendorInvoiceTotal: number; vendorInvoiceNumber?: string; predictedCompletion?: string; pointPerson?: string; notes?: string }
 // Expected-date default: vendor turnaround + shipping days each way (domestic 2 / intl 5) for shipping vendors
@@ -5836,7 +5849,9 @@ const swoCustoms = (w: Swo, v: Vendor): SwoCustoms => { const j = getJobRow(w.jo
 const swoTracking = (carrier: SwoLabel['carrier']) => (carrier === 'DHL Express' ? `${Math.floor(1000000000 + Math.random() * 8999999999)}` : carrier === 'UPS' ? `1Z8W${Math.random().toString(36).slice(2, 8).toUpperCase()}${Math.floor(1000000000 + Math.random() * 8999999999)}` : `${Math.floor(700000000000 + Math.random() * 99999999999)}`);
 // Custody: while out with a vendor the components are a REAL custody state, just off-premises — holder `vendor:<id>`
 const setSwoCustody = (w: Swo, holder: string | null, note: string) => { const j = getJobRow(w.jobId); const comps = ensureParts(j); const a = actor(); comps.filter((c) => w.components.includes(c.key)).forEach((c) => { const to = holder ?? a.by; c.history = c.history ?? []; c.history.push({ at: new Date().toISOString(), by: a.by, from: c.station, to: c.station, status: c.partStatus ?? 'in_progress', via: 'system', note }); c.custodyTech = to; }); };
-const swoRefs = (w: Swo): SwoWithRefs => { const v = byId(rs.vendors, w.vendorId); const j = getJobRow(w.jobId); const c = byId(fx.clients, j.clientId); const watch = j.watchId ? fx.watches.find((x) => x.id === j.watchId) : undefined; const out = w.stage === 'sent' || w.stage === 'at_vendor' || w.stage === 'inbound'; const holder = out ? `At vendor: ${v.name}` : w.stage === 'received' ? (ensureParts(j).find((p) => w.components.includes(p.key))?.custodyTech ?? 'Shop') : 'Shop (queued)'; const start = w.sentAt ?? w.createdAt; return { ...w, vendor: v, job: jobRefs(j), jobNumber: j.number, clientName: fullNameOf(c), watchLabel: watch ? `${watch.brand} ${watch.model}` : '—', international: isInternationalVendor(v), custodyHolder: holder, daysOut: out ? Math.round((Date.now() - new Date(start).getTime()) / 86_400_000) : undefined, overdue: out && !!w.predictedCompletion && w.predictedCompletion < new Date().toISOString().slice(0, 10) }; };
+// Synthetic seed SWOs (volume seed, 10 per stage per lane) carry denormalized refs and no parent job row — real jobs keep the component-wait chips
+const swoRefsSynth = (w: Swo): SwoWithRefs => { const v = byId(rs.vendors, w.vendorId); const out = ['sent', 'at_vendor', 'inbound'].includes(baseStage(w.stage)); const start = w.sentAt ?? w.createdAt; return { ...w, vendor: v, job: null as unknown as JobWithRefs, jobNumber: w.synth!.jobNumber, clientName: w.synth!.clientName, watchLabel: w.synth!.watchLabel, custodyHolder: out ? `At vendor: ${v.name}` : w.stage === 'fulfilled' ? 'Back in job flow' : 'Shop', daysOut: Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 86_400_000)), overdue: swoIsLate(w), international: isInternationalVendor(v) }; };
+const swoRefs = (w: Swo): SwoWithRefs => { if (w.synth) return swoRefsSynth(w); const v = byId(rs.vendors, w.vendorId); const j = getJobRow(w.jobId); const c = byId(fx.clients, j.clientId); const watch = j.watchId ? fx.watches.find((x) => x.id === j.watchId) : undefined; const out = w.stage === 'sent' || w.stage === 'at_vendor' || w.stage === 'inbound'; const holder = out ? `At vendor: ${v.name}` : w.stage === 'received' ? (ensureParts(j).find((p) => w.components.includes(p.key))?.custodyTech ?? 'Shop') : 'Shop (queued)'; const start = w.sentAt ?? w.createdAt; return { ...w, vendor: v, job: jobRefs(j), jobNumber: j.number, clientName: fullNameOf(c), watchLabel: watch ? `${watch.brand} ${watch.model}` : '—', international: isInternationalVendor(v), custodyHolder: holder, daysOut: out ? Math.round((Date.now() - new Date(start).getTime()) / 86_400_000) : undefined, overdue: out && !!w.predictedCompletion && w.predictedCompletion < new Date().toISOString().slice(0, 10) }; };
 const mkSwo = (id: string, n: number, vendorId: string, jobId: string, components: ComponentKey[], work: string, stage: SwoStage, o: Partial<Swo> & { daysAgo: number }): Swo => {
   const at = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString(); const v = byId(rs.vendors, vendorId); const intl = isInternationalVendor(v);
   const w: Swo = { id, number: `SWO-26-00${n}`, vendorId, jobId, components, work, stage, paid: false, vendorInvoiceTotal: 0, qboStatus: 'not_queued', pointPerson: 'Vienna', invoices: [], redoCycles: [], vendorReplies: [], statusRequests: [], createdAt: at(o.daysAgo), createdBy: 'Walter', timeline: [{ at: at(o.daysAgo), by: 'Walter', text: 'Queued for outsource' }], ...o };
@@ -5847,6 +5862,34 @@ const mkSwo = (id: string, n: number, vendorId: string, jobId: string, component
   if (idx >= 3) { w.inboundAt ??= at(Math.max(0, o.daysAgo - 9)); w.timeline.unshift({ at: w.inboundAt, by: 'System', text: `Vendor shipped back · ${w.returnLabel?.tracking ?? 'tracking pending'}` }); }
   if (idx >= 4) { w.receivedAt ??= at(Math.max(0, o.daysAgo - 11)); w.timeline.unshift({ at: w.receivedAt, by: 'Chyna', text: 'Received back at shop — custody returned' }); }
   return w;
+};
+// VOLUME SEED — ten jobs in EVERY stage of EVERY lane (4×10 + 4×7×10 = 320), realistic names / models / dates, v2 mix preserved (late + on-track in every In progress, redos on Jacques + Chronosky, Chronosky prepaid-not-back, unpaid invoices)
+const SEED_FIRST = ['Naomi', 'Daniel', 'Grace', 'Victoria', 'Camille', 'Julian', 'Priya', 'Marcus', 'Elena', 'Theo', 'Sofia', 'Hiro', 'Amara', 'Lucas', 'Isabelle', 'Rafael', 'Mei', 'Oliver', 'Zara', 'Henrik', 'Layla', 'Sebastian', 'Nadia', 'Felix', 'Ingrid', 'Omar', 'Chloe', 'Mateo', 'Yuki', 'Aiden'];
+const SEED_LAST = ['Castellanos', 'Moreau', 'Nakamura', 'Rosenthal', 'Beaumont', 'Okafor', 'Lindqvist', 'Haddad', 'Fitzgerald', 'Varga', 'Delacroix', 'Tanaka', 'Whitfield', 'Marchetti', 'Sørensen', 'Abernathy', 'Kowalski', 'Nguyen', 'Duarte', 'Hoffmann', 'Reyes', 'Ashworth', 'Petrova', 'Brennan', 'Sato', 'Villanueva', 'Grant', 'Ibrahim', 'Laurent', 'Chen'];
+const SEED_WATCH: [string, string][] = [['Submariner Date', '126610LN'], ['Datejust 41', '126334'], ['GMT-Master II', '126710BLRO'], ['Daytona', '116500LN'], ['Day-Date 40', '228238'], ['Explorer II', '226570'], ['Sea-Dweller', '126600'], ['Yacht-Master 40', '126622'], ['Oyster Perpetual 41', '124300'], ['Lady-Datejust', '279174'], ['Sky-Dweller', '326934'], ['Air-King', '126900'], ['Milgauss', '116400GV'], ['Cellini Time', '50509'], ['Datejust 36', '126234']];
+const SEED_WORK: Record<string, string[]> = { 'v-cm': ['Client prep — polish cloth, box & papers check', 'Pickup call + confirm appointment', 'Insurance letter for client', 'Photograph for client update', 'Sizing check with client at counter', 'Strap change + buckle swap', 'Box & papers reunification', 'Warranty card fill-in + stamp', 'Final wipe-down + presentation tray', 'Client walkthrough'], 'v-claudio': ['Gold bracelet — re-tighten links', 'Yellow-gold Jubilee — stretch repair', 'Gold Oyster — end-link rebuild', 'Clasp re-plate + spring replace', 'Gold Oysterlock — pin & tube set'], 'v-jacques': ['Rose-gold President — link rebuild', 'Two-tone Jubilee — center links', 'Gold clasp re-manufacture', 'President — hidden clasp restore', 'Solid end links — 18k'], 'v-james': ['Dial + hands relume', 'Hands relume only', 'Full dial relume — tritium tone', 'Bezel pearl relume', 'Dial relume + hand set'], 'v-chronosky': ['Full service — cal. 3135', 'Full service — cal. 3235', 'Full service — cal. 3186 GMT', 'Full service — cal. 4130 chrono', 'Full service — cal. 2235'] };
+const REDO_REASONS = ['Two center links brushed instead of polished', 'Amplitude below spec after 24 h', 'Chronograph reset off zero', 'Lume tone mismatch under UV', 'Clasp spring too soft'];
+type SeedMk = (vendorId: string, jobId: string, comps: ComponentKey[], work: string, stage: SwoStage, o: Partial<Swo> & { daysAgo: number }) => Swo;
+type SeedInv = (id: string, number: string, amount: number, daysAgoInv: number, paid?: { daysAgo: number; method: PayMethod; ourRef: string; by: string; bill: string }, charge?: 'work' | 'redo') => VendorInvoice;
+const seedSwoVolume = (mk: SeedMk, inv: SeedInv, ago: (n: number) => string, d: (n: number) => string) => {
+  let k = 0; const pick = <T,>(arr: T[]) => arr[k++ % arr.length]; let jobSeq = 2100; let invSeq = 7000; const PP = ['Vienna', 'JV', 'MM', 'Walter'];
+  const vendors = rs.vendors.filter((v) => v.kind === 'outsource' && v.active);
+  for (const v of vendors) for (const st of laneStagesFor(v)) {
+    const have = swos.filter((w) => w.vendorId === v.id && baseStage(w.stage) === st).length;
+    for (let i = have; i < 10; i++) {
+      const [model, ref] = pick(SEED_WATCH); const client = `${pick(SEED_FIRST)} ${pick(SEED_LAST)}`; const jobNumber = String(++jobSeq).padStart(5, '0'); const comp: ComponentKey = v.id === 'v-claudio' || v.id === 'v-jacques' ? 'band' : 'head';
+      const late = st === 'at_vendor' || st === 'inbound' || st === 'sent' ? i % 2 === 1 : false; const idx = SHIP_LANE.indexOf(st); const daysAgo = 2 + idx * 4 + (i % 5) * 3;
+      const stageAgo = st === 'fulfilled' ? 3 + i : Math.min(daysAgo, 1 + (i % 9)); const expected = late ? d(-(1 + (i % 12))) : st === 'fulfilled' || st === 'received' || st === 'inspection' ? d(-(2 + i)) : d(2 + (i % 20));
+      const redo = (v.id === 'v-jacques' || v.id === 'v-chronosky') && st === 'at_vendor' && i >= 7; const stage: SwoStage = redo ? 'redo_at_vendor' : st;
+      const o: Partial<Swo> & { daysAgo: number } = { daysAgo, stageAt: ago(stageAgo), pointPerson: v.id === 'v-cm' ? 'Chyna' : PP[i % PP.length], predictedCompletion: expected, synth: { jobNumber, clientName: client, watchLabel: `Rolex ${model}`, reference: ref } };
+      if (redo) o.redoCycles = [{ n: 1, reason: pick(REDO_REASONS), startedAt: ago(stageAgo + 2), by: 'MM' }];
+      if (v.ships !== false) { const amount = v.id === 'v-chronosky' ? 1250 + (i % 4) * 200 : 260 + (i % 6) * 120; const num = `${v.name.slice(0, 2).toUpperCase()}-${++invSeq}`;
+        const paidNow = v.id === 'v-chronosky' ? st !== 'queue' : st === 'fulfilled' || (st === 'received' && i % 2 === 0) || (st === 'inspection' && i % 3 === 0);
+        if (st !== 'queue' && st !== 'sent' || v.id === 'v-chronosky' && st !== 'queue') o.invoices = [inv(`vi-${v.id}-${st}-${i}`, num, amount, daysAgo - 1, paidNow ? { daysAgo: Math.max(0, daysAgo - 2), method: v.id === 'v-chronosky' ? 'ACH' : (['card', 'wire', 'check'] as PayMethod[])[i % 3], ourRef: `${v.id === 'v-chronosky' ? 'ACH' : 'REF'}-${5600 + invSeq % 1000}`, by: 'MH', bill: `QBO-BILL-STUB-${4000 + invSeq}` } : undefined)];
+        if (paidNow) { o.qboStatus = 'queued'; o.qboBillId = `QBO-BILL-STUB-${4000 + invSeq}`; } }
+      swos.push(mk(v.id, 'j-01', [comp], pick(SEED_WORK[v.id] ?? SEED_WORK['v-cm']), stage, o));
+    }
+  }
 };
 const seedSwo = () => {
   if (swoSeeded) return; swoSeeded = true;
@@ -5886,7 +5929,8 @@ const seedSwo = () => {
   );
   // Parent client dates: Chronosky redo jobs are 60–120 days past the client date (BREACH); j-32 shipped too late for its parent date (AT RISK); j-21/j-22 comfortably ahead (ON TRACK)
   target('j-23', ago(95)); target('j-24', ago(62)); target('j-25', ago(118)); target('j-32', d(12)); target('j-21', d(40)); target('j-22', d(45)); target('j-20', d(30)); target('j-19', d(35)); target('j-05', d(20)); target('j-03', d(45));
-  swos.forEach((w) => { if (['sent', 'at_vendor', 'inbound', 'redo_sent', 'redo_at_vendor', 'redo_inbound'].includes(w.stage)) setSwoCustody(w, `vendor:${w.vendorId}`, `Out to vendor · ${w.number}`); });
+  swos.forEach((w) => { if (!w.synth && ['sent', 'at_vendor', 'inbound', 'redo_sent', 'redo_at_vendor', 'redo_inbound'].includes(w.stage)) setSwoCustody(w, `vendor:${w.vendorId}`, `Out to vendor · ${w.number}`); });
+  seedSwoVolume(mk, inv, ago, d);
   swos.forEach((w) => { w.stageAt ??= w.receivedAt ?? w.inboundAt ?? w.atVendorAt ?? w.sentAt ?? w.createdAt; w.paid = w.invoices.some((i) => !!i.paid); if (w.paid) { const pi = w.invoices.find((i) => i.paid)!; w.paidAt = pi.paid!.at; w.paidBy = pi.paid!.by; } });
   // Vendor parts requests — same chain as the bench: one Chronosky awaiting client approval, one concierge approved + on order with the pick ticket addressed to the vendor
   const j21 = getJobRow('j-21'); const j10 = getJobRow('j-10');
@@ -6016,7 +6060,7 @@ const recordRefHistory = (watchId: string | undefined, value: number) => { const
 // ---- Access control panel (D-391) — OWNER ONLY. Per-user × per-screen toggle; role default comes from the nav tier table (config/navigation.ts), an override is a visible diff from it. Every change logged (who / whom / screen / from → to / when). Evaluated on the user's next route load (TierGate + sidebar), never mid-page. ----
 const ACCESS_KEYS = { overrides: 'rollisuite.access.overrides', log: 'rollisuite.access.log' };
 export type AccessValue = 'role' | 'allow' | 'deny';
-export interface AccessChange { id: string; at: string; by: string; station: string; userId: string; userShort: string; screenKey: string; screenLabel: string; from: AccessValue; to: AccessValue }
+export interface AccessChange { id: string; at: string; by: string; station: string; userId: string; userShort: string; screenKey: string; screenLabel: string; from: string; to: string }
 const accessOverrides = (): Record<string, Record<string, boolean>> => readJson(ACCESS_KEYS.overrides, {});
 export const accessOverrideSync = (userId: string, screenKey: string): boolean | undefined => accessOverrides()[userId]?.[screenKey];
 export const accessOverridesFor = (userId: string): Record<string, boolean> => ({ ...(accessOverrides()[userId] ?? {}) });
@@ -6031,3 +6075,54 @@ export async function setAccessOverride(userId: string, screenKey: string, scree
   return resolve({ ...mine });
 }
 export async function getAccessLog(): Promise<AccessChange[]> { if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); return resolve(readJson<AccessChange[]>(ACCESS_KEYS.log, [])); }
+
+// ---- G6 Access control additions (MH 2026-09-30): enable / disable with reason, Limits drawer (lockedStations · partsCategories · pricing), org tree (reportsTo), containers owned, new user from template ----
+// Tier stays separate from the tree: a tier change is not a tree change. Data scope / view-as grouping / escalation walk the tree instead of hand-coded lists.
+export type PricingLimit = UserLimits['pricing'];
+export const PRICING_LIMITS: { key: PricingLimit; label: string }[] = [{ key: 'full', label: 'Full pricing (cost + sell)' }, { key: 'cost_only', label: 'Cost only — no sell prices' }, { key: 'none', label: 'No pricing' }];
+export const DEFAULT_LIMITS: UserLimits = { lockedStations: [], partsCategories: [], pricing: 'full' };
+export const limitsOf = (u: User): UserLimits => u.limits ?? DEFAULT_LIMITS;
+const assertEnabled = (u: User, stationName: string, method: AuditEvent['method']) => { if (u.disabled) { appendAudit({ type: 'sign_in_failed', stationName, userShortName: u.shortName, userDisplayName: u.displayName, method, detail: `Account disabled · ${u.disabled.reason}` }); throw new Error(`Account disabled — ${u.disabled.reason}. Ask MH to re-enable it.`); } };
+export const isDisabledSync = (u: User) => !!u.disabled;
+// Org tree
+export const managerOf = (userId: string): User | undefined => { const u = fx.users.find((x) => x.id === userId); return u?.reportsTo ? fx.users.find((x) => x.id === u.reportsTo) : undefined; };
+export const managerShortOf = (shortName: string): string | undefined => { const u = fx.users.find((x) => x.shortName === shortName); return u ? managerOf(u.id)?.shortName : undefined; };
+export const directReports = (userId: string): User[] => fx.users.filter((u) => u.reportsTo === userId && !u.disabled);
+export const chainOf = (userId: string): User[] => { const out: User[] = []; let cur = managerOf(userId); const seen = new Set<string>(); while (cur && !seen.has(cur.id)) { out.push(cur); seen.add(cur.id); cur = managerOf(cur.id); } return out; };
+export const subtreeOf = (rootId: string): User[] => { const out: User[] = []; const walk = (id: string) => directReports(id).forEach((r) => { out.push(r); walk(r.id); }); walk(rootId); return out; };
+export const inSubtree = (rootId: string, userId: string) => rootId === userId || chainOf(userId).some((m) => m.id === rootId);
+export interface OrgNode { user: User; reports: OrgNode[] }
+export const getOrgTree = (): OrgNode[] => { const build = (u: User): OrgNode => ({ user: u, reports: fx.users.filter((r) => r.reportsTo === u.id).map(build) }); return fx.users.filter((u) => !u.reportsTo || !fx.users.some((m) => m.id === u.reportsTo)).map(build); };
+// Containers (bins / safes) — created in Custody, shown read-only in the Limits drawer
+export interface Container { key: string; label: string; kind: 'safe' | 'bin'; owner: string }
+export const CONTAINERS: Container[] = [
+  { key: 'pre_queue', label: 'Pre-queue safe (WM)', kind: 'safe', owner: 'MM' }, { key: 'safe_head', label: 'Head safe · awaiting band', kind: 'safe', owner: 'MM' },
+  { key: 'mgr_safe_polish', label: 'Manager safe · polish in / out', kind: 'safe', owner: 'Vienna' },
+  { key: 'band_pre', label: 'Pre-queue safe (band)', kind: 'safe', owner: 'JV' }, { key: 'band_mgr_safe', label: 'Band manager safe · in / out', kind: 'safe', owner: 'JV' }, { key: 'jv_bin', label: 'JV bin', kind: 'bin', owner: 'JV' },
+  { key: 'owner_safe', label: 'Owner safe', kind: 'safe', owner: 'MH' },
+];
+export const containersOwnedBy = (shortName: string) => CONTAINERS.filter((c) => c.owner === shortName);
+const accessLog = (userId: string, screenKey: string, screenLabel: string, from: string, to: string) => { const u = byId(fx.users, userId); const a = actor(); const ch: AccessChange = { id: newId('acc'), at: new Date().toISOString(), by: a.by, station: a.station, userId, userShort: u.shortName, screenKey, screenLabel, from, to }; writeJson(ACCESS_KEYS.log, [ch, ...readJson<AccessChange[]>(ACCESS_KEYS.log, [])].slice(0, 500)); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Access · ${u.shortName} · ${screenLabel} · ${from} → ${to}` }); };
+export async function setUserEnabled(userId: string, enabled: boolean, reason: string): Promise<User> {
+  if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); const u = byId(fx.users, userId); if (u.id === OWNER_USER_ID) throw new Error('The owner cannot be disabled'); if (!reason.trim()) throw new Error('A reason is required');
+  const from = u.disabled ? 'disabled' : 'active'; if (enabled) delete u.disabled; else u.disabled = { at: new Date().toISOString(), by: actor().by, reason: reason.trim() };
+  accessLog(userId, 'account', 'Account', from, `${enabled ? 'active' : 'disabled'} · ${reason.trim()}`); return resolve({ ...u });
+}
+export async function setUserLimits(userId: string, patch: { limits?: UserLimits; reportsTo?: string | null }): Promise<User> {
+  if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); const u = byId(fx.users, userId);
+  if (patch.reportsTo !== undefined) { const to = patch.reportsTo || undefined; if (to === u.id) throw new Error('Nobody reports to themselves'); if (to && inSubtree(u.id, to)) throw new Error('That would make a loop in the org tree'); const from = managerOf(u.id)?.shortName ?? '—'; u.reportsTo = to; accessLog(userId, 'reportsTo', 'Reports to', from, to ? byId(fx.users, to).shortName : '—'); }
+  if (patch.limits) { const prev = limitsOf(u); u.limits = { lockedStations: [...patch.limits.lockedStations], partsCategories: [...patch.limits.partsCategories], pricing: patch.limits.pricing }; accessLog(userId, 'limits', 'Limits', `${prev.lockedStations.length} locked · ${prev.partsCategories.length} cat · ${prev.pricing}`, `${u.limits.lockedStations.length} locked · ${u.limits.partsCategories.length} cat · ${u.limits.pricing}`); }
+  return resolve({ ...u });
+}
+export interface NewUserFromTemplate { templateId: string; firstName: string; shortName: string; dutyLabel: string; division: Division | 'both'; reportsTo?: string; password?: string; pin?: string }
+export async function createUserFromTemplate(input: NewUserFromTemplate): Promise<User> {
+  if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); const t = byId(fx.users, input.templateId); const first = input.firstName.trim().toLowerCase(); const short = input.shortName.trim();
+  if (!first || !short) throw new Error('First name and short name are required'); if (fx.users.some((u) => u.shortName.toLowerCase() === short.toLowerCase() || u.firstName === first)) throw new Error('Name or short name already in use');
+  const pin = input.pin?.trim() || '1234'; if (!/^\d{4}$/.test(pin)) throw new Error('PIN must be 4 digits');
+  const u: User = { id: `u-${first}`, firstName: first, shortName: short, displayName: `${short} — ${input.dutyLabel.trim() || t.dutyLabel}`, dutyLabel: input.dutyLabel.trim() || t.dutyLabel, accessTier: t.accessTier, roles: [...t.roles], division: input.division, password: input.password?.trim() || `${first}123`, pin, reportsTo: input.reportsTo ?? t.reportsTo, limits: t.limits ? { ...t.limits, lockedStations: [...t.limits.lockedStations], partsCategories: [...t.limits.partsCategories] } : undefined, createdFrom: t.id };
+  fx.users.push(u); accessLog(u.id, 'account', 'Account', '—', `created from template ${t.shortName} · ${u.accessTier} · reports to ${managerOf(u.id)?.shortName ?? '—'}`); return resolve({ ...u });
+}
+export const RW_STATION_OPTIONS: { key: string; label: string }[] = [
+  { key: 'wm_bench_1', label: 'WM Bench 1' }, { key: 'wm_bench_2', label: 'WM Bench 2' }, { key: 'wm_bench_3', label: 'WM Bench 3' }, { key: 'uncase', label: 'Uncase' }, { key: 'movement_service', label: 'Movement service' }, { key: 'parts_approval', label: 'Parts approval' }, { key: 'recase_test', label: 'Recase + test' },
+  { key: 'polish_room', label: 'Polish room' }, { key: 'refinish', label: 'Refinish' }, { key: 'band_assign', label: 'Band tech bench' }, { key: 'band_qc', label: 'Band QC' }, { key: 'final_assembly', label: 'Final assembly' }, { key: 'testing', label: 'Testing' }, { key: 'shipping', label: 'Shipping' },
+];

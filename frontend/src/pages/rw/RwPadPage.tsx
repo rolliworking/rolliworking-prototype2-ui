@@ -2,6 +2,7 @@ import { ClipboardCheck, ClipboardList, LayoutDashboard, Megaphone, Package, Sca
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
+import { ContainerReconcile } from '@/components/rw/ContainerReconcile';
 import type { ClientRequestAlert, PadCard, PadPartsContext, PadRoom, PartsRequestWithRefs, RoomSummary } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { canSupervise } from '@/config/roles';
@@ -45,6 +46,7 @@ export default function RwPadPage({ room = 'wm' }: { room?: PadRoom }) {
     </header>
     <main className="flex-1 overflow-y-auto px-5 pb-44 pt-4">
       {tab === 'dashboard' && <PadDashboard room={room} tick={cards.length + reqs.length} />}
+      {tab === 'jobs' && room === 'band' && <ContainerReconcile say={say} />}
       {tab === 'jobs' && <PadJobs cards={cards} hit={hit} say={say} reload={() => void load()} />}
       {tab === 'parts' && <PadParts ctx={ctx} onCtx={(c) => { setCtx(c); if (c) setAlert(api.clientRequestAlert(c.job.id)); }} say={say} requests={reqs} reload={() => void load()} isManager={!!isManager} />}
       {tab === 'review' && !isManager && <div data-testid="pad-concierge-open-question" className="mb-3 rounded-2xl border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"><b>Open question for MH (Q91):</b> what should a Concierge card see on the Supervisor Pad — anything at all? This read-only Parts Request History is a placeholder, not a ruling.</div>}
@@ -55,7 +57,7 @@ export default function RwPadPage({ room = 'wm' }: { room?: PadRoom }) {
     </main>
     <nav data-testid="pad-tabbar" className="fixed inset-x-0 bottom-16 z-40 border-t border-white/10 bg-[#0b0f14]/95 px-4 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 backdrop-blur">
       <div className={`mx-auto grid max-w-4xl gap-2 ${isManager ? 'grid-cols-9' : 'grid-cols-3'}`}>
-        {tabs.map(([k, l, Icon]) => <button key={k} data-testid={`pad-tab-${k}`} onClick={() => setTab(k)} className={`flex min-h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold ${tab === k ? 'text-amber-400' : 'text-slate-400'}`}><span className="relative"><Icon size={26} />{counts[k] > 0 && <span data-testid={`pad-tab-count-${k}`} className={`absolute -right-3 -top-1.5 rounded-full px-1.5 font-mono text-[10px] ${tab === k ? 'bg-amber-400 text-[#161b22]' : 'bg-white/15 text-slate-100'}`}>{counts[k]}</span>}</span>{l}</button>)}
+        {tabs.map(([k, l, Icon]) => <button key={k} data-testid={`pad-tab-${k}`} onClick={() => setTab(k)} className={`flex min-h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold ${tab === k ? 'text-accent' : 'text-slate-400'}`}><span className="relative"><Icon size={26} />{counts[k] > 0 && <span data-testid={`pad-tab-count-${k}`} className={`absolute -right-3 -top-1.5 rounded-full px-1.5 font-mono text-[10px] ${tab === k ? 'bg-accent text-[#161b22]' : 'bg-white/15 text-slate-100'}`}>{counts[k]}</span>}</span>{l}</button>)}
         {isManager && <Link to="/rw/floor" data-testid="pad-tab-floor" className="flex min-h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold text-slate-400"><Map size={26} />Shop Floor</Link>}
         <Link to="/rw/picking" data-testid="pad-tab-picking" className="flex min-h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold text-slate-400"><span className="relative"><ClipboardList size={26} />{(sum?.picksRemaining ?? 0) > 0 && <span className="absolute -right-3 -top-1.5 rounded-full bg-white/15 px-1.5 font-mono text-[10px] text-slate-100">{sum?.picksRemaining}</span>}</span>Picking</Link>
       </div>

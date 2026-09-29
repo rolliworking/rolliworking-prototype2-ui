@@ -10,6 +10,7 @@ interface AuthValue {
   loading: boolean;
   signInWithPassword: (userId: string, password: string, photo: VerificationPhoto) => Promise<User>;
   switchWithPin: (userId: string, pin: string) => Promise<User>;
+  signInWithTouchId: (userId: string) => Promise<User>;
   signOut: () => Promise<void>;
   refreshStation: () => Promise<void>;
   startViewAs: (userId: string) => Promise<User>;
@@ -48,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return u;
   }, [syncIdentity]);
 
+  const signInWithTouchId = useCallback(async (userId: string) => { const u = await api.signInWithTouchId(userId); await syncIdentity(); return u; }, [syncIdentity]);
+
   const signOut = useCallback(async () => {
     await api.signOut();
     setUser(null); setRealUser(null); setViewingAs(null);
@@ -63,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const stopViewAs = useCallback(async () => { await api.stopViewAs(); await syncIdentity(); }, [syncIdentity]);
 
   return (
-    <AuthContext.Provider value={{ user, realUser, viewingAs, station, loading, signInWithPassword, switchWithPin, signOut, refreshStation, startViewAs, stopViewAs }}>
+    <AuthContext.Provider value={{ user, realUser, viewingAs, station, loading, signInWithPassword, switchWithPin, signInWithTouchId, signOut, refreshStation, startViewAs, stopViewAs }}>
       {children}
     </AuthContext.Provider>
   );

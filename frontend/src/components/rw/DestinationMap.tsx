@@ -1,3 +1,4 @@
+import * as api from '@/api/client';
 import { UserPlus } from 'lucide-react';
 import type { FloorDot } from '@/api/client';
 import { PART_NAME, PartDot } from '@/components/rw/RwBits';
@@ -24,18 +25,18 @@ const pt = (r: Box, side: 'l' | 'r' | 'b') => ({ x: side === 'l' ? r.left : side
 const Node = ({ n, selected, onSelect, marks = [] }: { n: MapNode; selected: boolean; onSelect: (n: MapNode) => void; marks?: FloorDot[] }) => (n.lock ? (
   // Manager safe = just the safe image, no labels. Still a clickable destination.
   <button type="button" data-node={n.id} data-testid={`dest-node-${n.id}`} data-lock="true" aria-pressed={selected} aria-label="Manager safe" title="Manager safe" onClick={() => onSelect(n)} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW[n.row] }}
-    className={`relative z-10 flex min-h-[72px] flex-col items-center justify-center rounded-md p-1 transition-transform hover:scale-105 ${selected ? 'rounded-md bg-amber-400/15 ring-2 ring-amber-400' : ''}`}>
+    className={`relative z-10 flex min-h-[72px] flex-col items-center justify-center rounded-md p-1 transition-transform hover:scale-105 ${selected ? 'rounded-md bg-amber-400/15 ring-2 ring-accent' : ''}`}>
     <img src="/safe.png" alt="Manager safe" data-testid="safe-icon" className="h-16 w-16 object-contain drop-shadow-[0_0_6px_rgba(245,158,11,0.45)]" />
     {marks.length > 0 && <span data-testid={`dest-mark-${n.id}`} className="mt-1 flex flex-wrap justify-center gap-1">{marks.map((d) => <span key={d.key} data-testid={`dest-mark-${d.jobId}-${d.key}`} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-400/60 bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-100"><PartDot k={d.key} size={8} /> {PART_NAME[d.key]}{d.tech ? <span className="text-amber-200/70">· {d.tech}</span> : null}</span>)}{Array.from(new Set(marks.map((d) => d.jobId))).map((jid) => <ComponentWaitChips key={jid} jobId={jid} dark compact />)}</span>}
-    {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
+    {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-accent px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
   </button>
 ) : (
-  <button type="button" data-node={n.id} data-testid={`dest-node-${n.id}`} data-lock={!!n.lock} aria-pressed={selected} onClick={() => onSelect(n)} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW[n.row] }}
-    className={`relative z-10 flex min-h-[72px] flex-col items-start rounded-md border p-2 text-left transition-colors ${selected ? 'border-amber-400 bg-amber-400/15 ring-2 ring-amber-400' : n.lock ? 'border-white/25 bg-black/50 hover:border-amber-300/60' : 'border-white/15 bg-[#0b0e13] hover:border-amber-300/60'}`}>
+  <button type="button" data-node={n.id} data-testid={`dest-node-${n.id}`} data-lock={!!n.lock} data-limited={n.keys.some(api.stationLockedForMe)} disabled={n.keys.some(api.stationLockedForMe)} title={n.keys.some(api.stationLockedForMe) ? 'Locked station for you (Access control → Limits)' : undefined} aria-pressed={selected} onClick={() => onSelect(n)} style={n.free ? undefined : { gridColumn: n.col, gridRow: ROW[n.row] }}
+    className={`relative z-10 flex min-h-[72px] flex-col items-start rounded-md border p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${selected ? 'border-accent bg-accent/15 ring-2 ring-accent' : n.lock ? 'border-white/25 bg-black/50 hover:border-accent/60' : 'border-white/15 bg-[#0b0e13] hover:border-accent/60'}`}>
     <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-200">{n.assign ? <UserPlus size={11} className="text-slate-400" /> : null}{n.label}</span>
     {n.sub && <span className="mt-0.5 text-[9px] leading-tight text-slate-500">{n.sub}</span>}
     {marks.length > 0 && <span data-testid={`dest-mark-${n.id}`} className="mt-1 flex flex-wrap gap-1">{marks.map((d) => <span key={d.key} data-testid={`dest-mark-${d.jobId}-${d.key}`} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-400/60 bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-100"><PartDot k={d.key} size={8} /> {PART_NAME[d.key]}{d.tech ? <span className="text-amber-200/70">· {d.tech}</span> : null}</span>)}{Array.from(new Set(marks.map((d) => d.jobId))).map((jid) => <ComponentWaitChips key={jid} jobId={jid} dark compact />)}</span>}
-    {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
+    {selected && <span data-testid="dest-selected-tag" className="mt-1 rounded-sm bg-accent px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#161b22]">destination</span>}
   </button>
 ));
 

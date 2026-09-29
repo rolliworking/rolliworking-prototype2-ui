@@ -4,11 +4,11 @@ import { useFmtMoney } from '@/components/MoneyContext';
 
 // Tablet-native primitives for the Supervisor Pad — iOS feel: 44px+ targets, sheets, large titles. Nothing from the desktop shell.
 export const Big = ({ children, onClick, tone = 'ghost', testId, disabled, title, type = 'button', full }: { children: ReactNode; onClick?: () => void; tone?: 'primary' | 'ghost' | 'danger' | 'warn' | 'quiet'; testId: string; disabled?: boolean; title?: string; type?: 'button' | 'submit'; full?: boolean }) => (
-  <button type={type} data-testid={testId} onClick={onClick} disabled={disabled} title={title} className={`inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl px-5 text-base font-semibold transition-transform active:scale-[0.97] disabled:opacity-40 ${full ? 'w-full' : ''} ${tone === 'primary' ? 'bg-amber-400 text-[#161b22]' : tone === 'danger' ? 'bg-rose-600 text-white' : tone === 'warn' ? 'bg-orange-500 text-white' : tone === 'quiet' ? 'bg-white/5 text-slate-200' : 'border border-white/20 text-slate-100'}`}>{children}</button>
+  <button type={type} data-testid={testId} onClick={onClick} disabled={disabled} title={title} className={`inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl px-5 text-base font-semibold transition-transform active:scale-[0.97] disabled:opacity-40 ${full ? 'w-full' : ''} ${tone === 'primary' ? 'bg-accent text-[#161b22]' : tone === 'danger' ? 'bg-rose-600 text-white' : tone === 'warn' ? 'bg-orange-500 text-white' : tone === 'quiet' ? 'bg-white/5 text-slate-200' : 'border border-white/20 text-slate-100'}`}>{children}</button>
 );
 
 export const Chip = ({ children, tone = 'neutral', testId, onClick }: { children: ReactNode; tone?: 'neutral' | 'amber' | 'green' | 'blue' | 'rose' | 'violet'; testId?: string; onClick?: () => void }) => {
-  const cls = { neutral: 'bg-white/10 text-slate-100', amber: 'bg-amber-400 text-[#161b22]', green: 'bg-emerald-700 text-emerald-50', blue: 'bg-sky-700 text-sky-50', rose: 'bg-rose-700 text-rose-50', violet: 'bg-violet-700 text-violet-50' }[tone];
+  const cls = { neutral: 'bg-white/10 text-slate-100', amber: 'bg-accent text-[#161b22]', green: 'bg-emerald-700 text-emerald-50', blue: 'bg-sky-700 text-sky-50', rose: 'bg-rose-700 text-rose-50', violet: 'bg-violet-700 text-violet-50' }[tone];
   const El = onClick ? 'button' : 'span';
   return <El data-testid={testId} onClick={onClick} className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-full px-3 text-sm font-semibold ${cls} ${onClick ? 'min-h-[44px] active:scale-95' : ''}`}>{children}</El>;
 };
