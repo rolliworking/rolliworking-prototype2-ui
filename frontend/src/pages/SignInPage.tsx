@@ -24,7 +24,7 @@ export default function SignInPage() {
 
   if (loading) return null;
   if (!station) return <Navigate to="/station-setup" replace />;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={homeRouteFor(user)} replace />;
 
   return (
     <div className="flex h-full flex-col">

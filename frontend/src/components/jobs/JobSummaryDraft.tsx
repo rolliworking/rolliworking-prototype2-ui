@@ -4,9 +4,9 @@ import * as api from '@/api/client';
 import { draftJobSummary, type SummaryFields } from '@/api/ai';
 
 // "Generate summary" → editable draft → Copy. AI fills the fixed template's fields; a person reviews and pastes into their own reply. Nothing is sent from here.
-export const JobSummaryDraft = ({ jobId, dark = false, compact = false }: { jobId: string; dark?: boolean; compact?: boolean }) => {
+export const JobSummaryDraft = ({ jobId, job, dark = false, compact = false }: { jobId: string; job?: api.JobWithRefs; dark?: boolean; compact?: boolean }) => {
   const [text, setText] = useState(''); const [fields, setFields] = useState<SummaryFields | null>(null); const [source, setSource] = useState<'claude' | 'local' | null>(null); const [busy, setBusy] = useState(false); const [copied, setCopied] = useState(false); const [err, setErr] = useState<string | null>(null);
-  const gen = async () => { setBusy(true); setErr(null); setCopied(false); try { const ctx = await api.jobSummaryContext(jobId); const r = await draftJobSummary(ctx); setText(r.text); setFields(r.fields); setSource(r.source); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not draft'); } finally { setBusy(false); } };
+  const gen = async () => { setBusy(true); setErr(null); setCopied(false); try { const ctx = await api.jobSummaryContext(jobId, job); const r = await draftJobSummary(ctx); setText(r.text); setFields(r.fields); setSource(r.source); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not draft'); } finally { setBusy(false); } };
   const copy = async () => { try { await navigator.clipboard.writeText(text); } catch { /* clipboard blocked — text stays selectable */ } setCopied(true); window.setTimeout(() => setCopied(false), 2000); };
   const btn = dark ? 'border-white/15 text-slate-100 hover:bg-white/10' : 'border-line bg-surface text-ink hover:bg-canvas'; const sub = dark ? 'text-slate-400' : 'text-ink-500';
   return <div data-testid="job-summary-draft" className={compact ? 'space-y-1.5' : 'space-y-2'}>

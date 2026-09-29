@@ -2716,10 +2716,32 @@ export async function rcLookup(email: string): Promise<{ clientOnFile: boolean; 
   return resolve({ clientOnFile: !!c, hasAccount: !!a, totpEnabled: !!a?.totpEnabled, firstName: c?.firstName });
 }
 // Step 1 of signup — the email must already be on file (accounts are for existing clients; new clients come in through Requests)
-export async function rcSignup(email: string, password: string): Promise<{ account: RcAccount; otpauth: string }> {
+// Signup proves the client owns the email (D-357): email → one-time verification link (Outbox, mock, never really sent) → only that link opens password + authenticator
+interface RcInvite { token: string; clientId: string; email: string; createdAt: string; usedAt?: string; source: 'signup' | 'reset' }
+const RC_INVITES = 'rollisuite.rc.invites';
+const rcInvites = (): RcInvite[] => { try { return JSON.parse(localStorage.getItem(RC_INVITES) ?? '[]'); } catch { return []; } };
+const saveInvites = (v: RcInvite[]) => localStorage.setItem(RC_INVITES, JSON.stringify(v));
+const issueRcInvite = (c: Client, source: RcInvite['source']): RcInvite => {
+  const inv: RcInvite = { token: `rcv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, clientId: c.id, email: c.email, createdAt: new Date().toISOString(), source };
+  saveInvites([...rcInvites().filter((x) => x.clientId !== c.id || x.usedAt), inv]);
+  const link = `${window.location.origin}/rc/signup?verify=${inv.token}`;
+  queueOutbox({ id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `RolliConnect · ${c.id}`, status: 'pending', subject: source === 'reset' ? 'Your RolliConnect account was reset — set it up again' : 'Verify your email to finish creating your RolliConnect account', body: `Hello ${c.firstName},\n\n${source === 'reset' ? 'A member of our team reset your RolliConnect account. ' : ''}To ${source === 'reset' ? 'set it up again' : 'finish creating your account'}, open this one-time link and choose a password and authenticator:\n\n${link}\n\nIf you didn’t request this, ignore this email — nothing changes without the link.\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: 'RolliConnect', station: 'Portal' });
+  portalStamp(c.id, source === 'reset' ? 'RolliConnect reset — fresh verification link emailed' : 'RolliConnect signup requested — verification link emailed');
+  return inv;
+};
+export async function rcRequestSignup(email: string): Promise<{ sent: true; maskedEmail: string }> {
   const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
   if (!c) throw new Error('We don’t have that email on file. Use the address we contact you at, or message the workshop.');
   if (rcAccountByEmail(email)) throw new Error('An account already exists for this email — sign in instead.');
+  issueRcInvite(c, 'signup'); const [u, d] = c.email.split('@'); return resolve({ sent: true, maskedEmail: `${u.slice(0, 2)}…@${d}` });
+}
+export async function rcVerifyInvite(token: string): Promise<{ email: string; firstName: string }> { const inv = rcInvites().find((x) => x.token === token); if (!inv || inv.usedAt) throw new Error('This link has expired or was already used. Request a new one from the signup page.'); const c = byId(fx.clients, inv.clientId); return resolve({ email: c.email, firstName: c.firstName }); }
+export async function rcSignup(email: string, password: string, token: string): Promise<{ account: RcAccount; otpauth: string }> {
+  const inv = rcInvites().find((x) => x.token === token); if (!inv || inv.usedAt || inv.email.toLowerCase() !== email.trim().toLowerCase()) throw new Error('Open the verification link from your email to continue — the password step only works from that link.');
+  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
+  if (!c) throw new Error('We don’t have that email on file. Use the address we contact you at, or message the workshop.');
+  if (rcAccountByEmail(email)) throw new Error('An account already exists for this email — sign in instead.');
+  saveInvites(rcInvites().map((x) => (x.token === token ? { ...x, usedAt: new Date().toISOString() } : x)));
   if (password.length < 8) throw new Error('Password needs at least 8 characters');
   const a: RcAccount = { clientId: c.id, email: c.email, password, totpSecret: b32(16), totpEnabled: false, backupCodes: [], usedBackupCodes: [], createdAt: new Date().toISOString() };
   saveAccounts([...rcAccounts(), a]); portalStamp(c.id, 'RolliConnect account created — awaiting authenticator setup');
@@ -2751,7 +2773,7 @@ export async function rcVerifyTotp(email: string, code: string): Promise<Client>
 export async function rcGetAccount(clientId: string): Promise<RcAccount | null> { const a = rcAccounts().find((x) => x.clientId === clientId); return resolve(a ? rcPublic(a) : null); }
 export async function rcRegenerateBackupCodes(clientId: string): Promise<string[]> { const all = rcAccounts(); const a = all.find((x) => x.clientId === clientId); if (!a) throw new Error('No account'); a.backupCodes = Array.from({ length: 8 }, backupCode); a.usedBackupCodes = []; saveAccounts(all); portalStamp(clientId, 'Backup codes regenerated · old codes void'); return resolve([...a.backupCodes]); }
 export async function rcListAccounts(): Promise<(RcAccount & { clientName: string })[]> { return resolve(rcAccounts().map((a) => ({ ...rcPublic(a), clientName: fullNameOf(byId(fx.clients, a.clientId)) }))); }
-export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset for ${fullNameOf(byId(fx.clients, clientId))} — client must sign up again` }); return resolve(undefined); }
+export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); issueRcInvite(byId(fx.clients, clientId), 'reset'); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset for ${fullNameOf(byId(fx.clients, clientId))} — fresh verification link emailed (Outbox)` }); return resolve(undefined); }
 
 // Per-document gating by type — token documents (report, inspection form) can stay public links; identity-bound pages always need the account
 export type RcDocType = 'estimate' | 'invoice' | 'watch' | 'messages' | 'report' | 'inspection_form';
@@ -4233,8 +4255,18 @@ export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: str
 // -- Client-update summary context: everything the AI is allowed to see, already translated where the mapping is deterministic. AI fills template fields; a human edits and pastes. Never sent.
 const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished' };
 export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[] }
-export async function jobSummaryContext(jobId: string): Promise<JobSummaryContext> {
-  const j = getJobRow(jobId); const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const now = Date.now(); const days = (iso?: string) => (iso ? Math.max(0, Math.round((now - new Date(iso).getTime()) / 86_400_000)) : 0);
+export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext> {
+  const mock = store.jobs.find((x) => x.id === jobId);
+  if (!mock) {
+    // Hybrid: the job came from the real API — build the context from what the page already shows, no mock lookups
+    if (!live) throw new Error('Live job context missing');
+    const now = Date.now(); const daysOpen = live.createdAt ? Math.max(0, Math.round((now - new Date(live.createdAt).getTime()) / 86_400_000)) : 0;
+    const hold = live.holds.find((h) => !h.releasedAt); const open: string[] = [];
+    if (live.status === 'awaiting_customer_approval') open.push('awaiting client approval of the estimate'); if (live.status === 'in_review' || live.status === 'intake') open.push('estimate still being prepared'); if (hold) open.push(`${hold.type} hold — ${hold.reason || 'parked'}`);
+    const plain = live.status.replace(/_/g, ' ');
+    return resolve({ jobNumber: live.number, clientFirstName: live.client?.firstName ?? 'there', watch: live.watch ? `${live.watch.brand} ${live.watch.model}` : 'your watch', status: live.status, intakeStage: undefined, dueAt: live.dueAt, daysOpen, components: [{ part: 'Watch', plainLocation: plain, partStatus: 'in_progress' as PartStatus, daysAtStep: daysOpen, slowFlag: daysOpen > 21 }], openItems: open, notes: (live.notes ?? []).slice(0, 3).map((n) => (typeof n === 'string' ? n : n.text)) });
+  }
+  const j = mock; const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const now = Date.now(); const days = (iso?: string) => (iso ? Math.max(0, Math.round((now - new Date(iso).getTime()) / 86_400_000)) : 0);
   const components = ensureParts(j).map((p) => { const pl = derivePlacement(j, p); const last = p.history?.[p.history.length - 1]; const d = days(last?.at ?? j.createdAt); return { part: PART_LABEL[p.key], plainLocation: p.completedAt ? 'finished' : PLAIN_LOCATION[pl.station] ?? 'in progress', partStatus: pl.status, daysAtStep: d, slowFlag: d > 5 && pl.status !== 'fulfilled' }; });
   const open: string[] = []; if (j.status === 'awaiting_customer_approval') open.push('awaiting client approval of the estimate'); if (j.status === 'in_review' || j.status === 'intake') open.push('estimate still being prepared'); if (j.holds.some((h) => !h.releasedAt)) open.push(`on hold: ${j.holds.filter((h) => !h.releasedAt).map((h) => h.type.replace(/_/g, ' ')).join(', ')}`);
   const pr = (store.partsRequests ?? []).filter((r) => r.jobId === j.id); if (pr.some((r) => r.status === 'on_order')) open.push('a part is on order'); else if (pr.some((r) => r.status === 'approved' || r.status === 'pending' || r.status === 'pending_review')) open.push('a part request is being reviewed'); if (j.status === 'ready_to_ship') open.push('finished, ready for pickup / return shipping');
@@ -4345,7 +4377,7 @@ export async function stationScan(station: RwStationKey, label: string): Promise
 const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship'];
 const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', awaiting_manager_review: 'Manager review', ready_to_ship: 'Finished' };
 export type PadRoom = 'wm' | 'band';
-export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MM', 'MH', 'Walter'], band: ['Joseph', 'Leo'] };
+export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MM', 'JV', 'MH', 'Walter'], band: ['Joseph', 'Leo'] };
 export const ROOM_LABEL: Record<PadRoom, string> = { wm: 'Watchmaker Room', band: 'Band / Polish Room' };
 const inRoom = (j: Job, room: PadRoom) => room === 'wm' || j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
 export async function getPadBoard(room: PadRoom = 'wm'): Promise<PadCard[]> {
@@ -4638,7 +4670,7 @@ export const staffForMention = (): User[] => getDivisionStaff(getSessionDivision
 const legacyNoteAsMessage = (j: Job, n: JobNote): JobMessage => ({ id: n.id, jobId: j.id, text: n.text, mentions: [], notify: [], readBy: [], at: n.at, by: n.by, station: n.station });
 const messagesOf = (j: Job): JobMessage[] => [...store.jobMessages.filter((m) => m.jobId === j.id), ...j.notes.map((n) => legacyNoteAsMessage(j, n))];
 const threadOf = (j: Job, rootId: string): JobThread => { const all = messagesOf(j); const root = all.find((m) => m.id === rootId)!; const replies = all.filter((m) => m.parentId === rootId).sort((a, b) => a.at.localeCompare(b.at)); return { root, replies, participants: [...new Set([root.by, ...root.mentions, ...replies.flatMap((r) => [r.by, ...r.mentions])])] }; };
-export async function getJobThreads(jobId: string): Promise<JobThread[]> { const j = getJobRow(jobId); const roots = messagesOf(j).filter((m) => !m.parentId).sort((a, b) => b.at.localeCompare(a.at)); return resolve(roots.map((r) => threadOf(j, r.id))); }
+export async function getJobThreads(jobId: string): Promise<JobThread[]> { const j = store.jobs.find((x) => x.id === jobId); if (!j) return resolve([]); const roots = messagesOf(j).filter((m) => !m.parentId).sort((a, b) => b.at.localeCompare(a.at)); return resolve(roots.map((r) => threadOf(j, r.id))); }
 const routeMessage = (j: Job, m: JobMessage) => {
   m.notify.forEach((n) => { const u = fx.users.find((x) => x.shortName === n); if (!u || !isManagerTier(u)) return;
     store.pinned.unshift({ id: newId('pin'), title: `@${m.by} on ${j.number}: “${m.text.slice(0, 70)}${m.text.length > 70 ? '…' : ''}”`, assignedTo: { type: 'user', shortName: u.shortName }, createdBy: m.by, division: j.division, jobId: j.id, messageId: m.id, createdAt: m.at, station: m.station }); });
@@ -5569,7 +5601,14 @@ export const hitlistBridge = {
   jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
 };
 // ---- Appraisal bridge (./appraisals.ts) ----
-export const appraisalBridge = { job: (id: string) => store.jobs.find((j) => j.id === id), jobs: () => store.jobs, watch: (id?: string) => store.watches.find((w) => w.id === id), client: (id: string) => fx.clients.find((c) => c.id === id), photos: (jobId: string) => getJobPhotoViews(jobId), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), inspectionFor: (jobId: string) => insp.forms.find((f) => f.jobId === jobId), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (!j) return; jobStamp(j, detail); const a = actor(); j.notes.unshift({ id: newId('n'), text: detail, at: new Date().toISOString(), by: a.by, station: a.station }); } };
+// D-085: insured (declared) values from OUTBOUND shipments of the same reference — never service invoice amounts
+const insuredComps = (reference: string): { value: number; date: string; ref: string }[] => {
+  const refOf = (watchId?: string) => store.watches.find((w) => w.id === watchId)?.reference;
+  const fromSo = store.salesOrders.filter((o) => o.shipment && o.jobId && refOf(store.jobs.find((j) => j.id === o.jobId)?.watchId) === reference).map((o) => ({ value: o.shipment!.declaredValue, date: o.shipment!.at, ref: o.number }));
+  const fromShip = shp.rows.filter((sh) => sh.direction === 'outbound' && sh.declaredValue > 0 && refOf(store.estimates.find((e) => e.id === sh.estimateId)?.watchId) === reference).map((sh) => ({ value: sh.declaredValue, date: sh.requestedAt, ref: store.estimates.find((e) => e.id === sh.estimateId)?.number ?? sh.id }));
+  return [...fromSo, ...fromShip].sort((a, b) => b.date.localeCompare(a.date));
+};
+export const appraisalBridge = { insuredComps, jobDivision: (id: string): Division => store.jobs.find((j) => j.id === id)?.division ?? 'rolliworks', job: (id: string) => store.jobs.find((j) => j.id === id), jobs: () => store.jobs, watch: (id?: string) => store.watches.find((w) => w.id === id), client: (id: string) => fx.clients.find((c) => c.id === id), photos: (jobId: string) => getJobPhotoViews(jobId), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), inspectionFor: (jobId: string) => insp.forms.find((f) => f.jobId === jobId), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (!j) return; jobStamp(j, detail); const a = actor(); j.notes.unshift({ id: newId('n'), text: detail, at: new Date().toISOString(), by: a.by, station: a.station }); } };
 // ---- Bench-test capture bridge (before/after timing + pressure slips, tolerance sheet — ./benchTests.ts) ----
 // Bench events land on the job as a note (visible on the job page) as well as in the audit log
 export const benchBridge = { job: (id: string) => store.jobs.find((j) => j.id === id), watch: (id?: string) => store.watches.find((w) => w.id === id), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (!j) return; jobStamp(j, detail); const a = actor(); j.notes.unshift({ id: newId('n'), text: detail, at: new Date().toISOString(), by: a.by, station: a.station }); } };

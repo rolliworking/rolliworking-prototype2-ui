@@ -1,5 +1,6 @@
 import { hitlistBridge as b } from './client';
 import { daysAgo } from './fixtures/time';
+import { roleKind, ROLE_HOME } from '@/config/roles';
 import type { Assignee, PackagePhoto, PinnedItem, Role, TodayRow, User } from './types';
 
 // ---- Per-person Hitlist — slug URLs, inbox (messages + photos sent to you), "flag to" from photo capture, supervisor team rollup, home-screen preference ----
@@ -10,7 +11,7 @@ export const hitlistPath = (u: User) => `/hitlist/${slugOf(u)}`;
 // Supervisors and the roles they roll up
 export const TEAM_MAP: Record<string, { roles: Role[]; label: string }> = {
   Joseph: { roles: ['band_tech', 'polisher'], label: 'Band / Polish room' },
-  MM: { roles: ['watchmaker'], label: 'Watchmaker room' },
+  JV: { roles: ['watchmaker'], label: 'Watchmaker room' },
 };
 export const isSupervisor = (u: User | null | undefined) => !!u && !!TEAM_MAP[u.shortName];
 export const getTeam = (sup: User): User[] => { const t = TEAM_MAP[sup.shortName]; return t ? b.users().filter((u) => u.id !== sup.id && (u.division === 'both' || u.division === sup.division || sup.division === 'both') && u.roles.some((r) => t.roles.includes(r))) : []; };
@@ -91,4 +92,4 @@ export type HomeScreen = 'default' | 'hitlist' | 'team';
 const homeKey = (userId: string) => `rollisuite.home.${b.stationId()}.${userId}`;
 export const getHomeScreen = (userId: string): HomeScreen => (localStorage.getItem(homeKey(userId)) as HomeScreen | null) ?? 'default';
 export const setHomeScreen = (userId: string, v: HomeScreen) => { if (v === 'default') localStorage.removeItem(homeKey(userId)); else localStorage.setItem(homeKey(userId), v); };
-export const homeRouteFor = (u: User): string => { const h = getHomeScreen(u.id); return h === 'team' && isSupervisor(u) ? teamPath(u) : h !== 'default' ? hitlistPath(u) : '/'; };
+export const homeRouteFor = (u: User): string => { const rk = roleKind(u); if (rk === 'watchmaker' || rk === 'supervisor') return ROLE_HOME[rk]; const h = getHomeScreen(u.id); return h === 'team' && isSupervisor(u) ? teamPath(u) : h !== 'default' ? hitlistPath(u) : '/'; };

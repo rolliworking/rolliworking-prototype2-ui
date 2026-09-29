@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
-import { ToastHost } from '@/components/ui/Toast';
+import { ToastHost, toast } from '@/components/ui/Toast';
+import { desktopAllowed, padAllowed, roleKind, rwAllowed, ROLE_HOME, ROLE_LABEL, type RoleKind } from '@/config/roles';
 import AppShell from '@/components/layout/AppShell';
 import IntakeLayout from '@/components/intake/IntakeLayout';
 import { canAccess, findNavItem } from '@/config/navigation';
@@ -103,7 +105,21 @@ function RequireAuth() {
   if (loading) return null;
   if (!station) return <Navigate to="/station-setup" replace />;
   if (!user) return <Navigate to="/sign-in" replace />;
+  // Role guard: a watchmaker typing any desktop route is sent to the RW bench before any data loads
+  const k = roleKind(user); if (!desktopAllowed(k)) return <RoleRedirect to={ROLE_HOME[k]} label="the desktop app" role={k} />;
   return <AppShell />;
+}
+function RoleRedirect({ to, label, role }: { to: string; label: string; role: RoleKind }) {
+  useEffect(() => { toast.warn(`Not available for your role (${ROLE_LABEL[role]}) — ${label} is not part of your view`); }, [label, role]);
+  return <Navigate to={to} replace />;
+}
+// RW shell guard: concierge never enters the RW app; the Supervisor Pad is supervisors / managers only
+function RwRoleGuard({ pad, children }: { pad?: boolean; children: JSX.Element }) {
+  const { user } = useAuth(); if (!user) return children;
+  const k = roleKind(user);
+  if (!rwAllowed(k)) return <RoleRedirect to={ROLE_HOME[k]} label="the RolliWorking bench app" role={k} />;
+  if (pad && !padAllowed(k)) return <RoleRedirect to={ROLE_HOME[k]} label="the Supervisor Pad" role={k} />;
+  return children;
 }
 
 function TierGate() {
@@ -135,7 +151,7 @@ export default function App() {
           <Route path="/sign-in" element={<SignInPage />} />
           {/* RolliConnect — client portal. Separate shell, separate session, no staff routes reachable. */}
           {/* E11 — RolliWorking standalone: workshop route-space, own shell, RS routes not reachable (access boundary) */}
-          <Route path="/rw" element={<RwShell />}>
+          <Route path="/rw" element={<RwRoleGuard><RwShell /></RwRoleGuard>}>
             <Route index element={<BenchPage />} />
             <Route path="jobs" element={<RwJobsPage />} />
             <Route path="jobs/:id" element={<RwJobPage />} />
@@ -148,7 +164,7 @@ export default function App() {
             <Route path="bulk" element={<RwManagerOnly label="Bulk Assign"><RwBulkAssignPage /></RwManagerOnly>} />
             <Route path="wm" element={<RwWmPage />} />
             <Route path="station" element={<RwStationScanPage />} />
-            <Route path="pad" element={<RwPadPage room="wm" />} />
+            <Route path="pad" element={<RwRoleGuard pad><RwPadPage room="wm" /></RwRoleGuard>} />
             <Route path="band" element={<RwPadPage room="band" />} />
             <Route path="history" element={<RwHistoryPage />} />
             <Route path="reports" element={<RwReportsPage />} />

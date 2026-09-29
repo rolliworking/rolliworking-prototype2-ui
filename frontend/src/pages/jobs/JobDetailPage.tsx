@@ -153,7 +153,7 @@ export default function JobDetailPage() {
           <Card title="Owner" subtitle="Accountable shepherd — role-based" testId="job-owner-card"><OwnerPanel job={j} run={run} /></Card>
           <Card title="Assignees" subtitle="Working techs" testId="job-assignment-card"><AssignmentPanel job={j} run={run} /></Card>
           <Card title="Holds" testId="job-holds-card"><HoldPanel job={j} onPlace={() => setModal({ kind: 'hold' })} onRelease={() => setModal({ kind: 'release' })} /></Card>
-          <Card title="Client update · summary draft" subtitle="For phone / email replies — AI fills a fixed template from this job's live data; you review and paste" testId="job-summary-card"><JobSummaryDraft jobId={j.id} /></Card>
+          <Card title="Client update · summary draft" subtitle="For phone / email replies — AI fills a fixed template from this job's live data; you review and paste" testId="job-summary-card"><JobSummaryDraft jobId={j.id} job={j} /></Card>
           <Card title="Details" testId="job-details-card"><DetailsPanel job={j} run={run} /></Card>
           {j.packageId && <PackageCustodyCard packageId={j.packageId} />}
         </div>

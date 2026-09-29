@@ -497,3 +497,15 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 ### Global search — in-house customer highlight + est# (2026-09-29; self-tested via Playwright, both scenarios + toast)
 - `SearchHit.inHouse?: { estimateNumbers }` set in `resolveIdentifier` client hits when the customer has any job with `simpleStatus === 'on_hand'` (est# = linked estimate number, else the job's E0xxxx number); client hits sorted in-house first. `SearchHitList`: amber left-border row (`data-in-house=true`), 'IN-HOUSE' badge + `search-hit-est-<clientId>-<num>` chips. Display/sort only — click still explicit; duplicate-name toast unchanged.
 - Seeds: William Sanchez ×2 BOTH in-house (E02060 / E02061); Daniel Okafor ×2 (c-34 Chicago none, c-35 Miami in-house E02062 — floats above c-34).
+
+
+### Review 4fc901d — Batch 1 (2026-09-29; self-tested via Playwright on mock + LIVE API)
+1. `realClient.ts` hold mapper: priorStatus/station/releaseNote mapped (+ `WireHold` fields). Live SEED48-48 renders "Parts hold" with no crash.
+2. Live jobs: `getJobThreads` returns [] for non-mock jobs; `jobSummaryContext(jobId, live?)` builds from the live `JobWithRefs` (JobSummaryDraft passes `job`). Live b5ec23e5… shows no "Fixture row not found"; Generate summary drafts.
+3. RolliConnect signup = email → one-time verification link (Outbox mock, `rollisuite.rc.invites`, `/rc/signup?verify=<token>`) → password → TOTP. `rcRequestSignup`, `rcVerifyInvite`, `rcSignup(email, password, token)` (token single-use); `rcResetAccount` issues a fresh invite. Login page had no Provisional badge (already clean). Page steps: `data-step` email | check-email | verifying | password | totp.
+4. Appraisals: `SIGNERS` per entity (rolliworks→MH `sig-mh`, rollishop→Walter `sig-walter`), `signersFor(entity, actingShortName)` authorized only when acting user IS the signer; `finalizeAppraisal(id, signerId)` records signedBy/signedByShortName/signatureId/signatureUrl; UI `apr-signer-select` (+ Provisional badge), `apr-finalize` disabled "Not authorized to sign for Rolliworks" for MM. Placeholder value = avg insured value of outbound shipments per reference (`appraisalBridge.insuredComps`: SO shipments + outbound `shp.rows`), comparables show ref + date; seeds sh-10/sh-11 (ref 124300).
+- PENDING (user answered, not built): Q5 Sales vs Completions, Q6 per-component credit, Q7 concierge permissions-as-data, item 8 a–k, batches 3–4.
+
+### Role-based landing + route guarding (2026-09-29; self-tested all four roles)
+- `src/config/roles.ts`: roleKind = watchmaker (room role, concierge tier) | supervisor (room role, manager tier) | concierge | manager. Homes: `/rw/bench`, `/rw/pad`, `/`, `/`. `homeRouteFor` (hitlist.ts) + SignInPage use it. Guards in App.tsx: `RequireAuth` (desktop) redirects watchmakers → `/rw/bench`; `RwRoleGuard` on `/rw` redirects concierge → `/`; `pad` variant redirects non-supervisors → their home. Toast "Not available for your role (…)". Seeds: MM demoted to watchmaker; JV added as WM-room supervisor (TEAM_MAP MM→JV; ROOM_TECHS + JV).
+- Known: RW hitlist asset $ totals visible to watchmakers at `/rw/hitlist/<name>` (flagged, not changed).
