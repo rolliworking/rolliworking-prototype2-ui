@@ -72,6 +72,7 @@ import type {
   Package,
   PackageScan,
   PackagePhoto,
+  PhotoType,
   PackageSource,
   PackageStatus,
   PackageWithRefs,
@@ -335,6 +336,7 @@ export async function getAuditLog(): Promise<AuditEvent[]> {
 
 // Real sign-in (localStorage, the device session) vs. the VIEWED identity (D-385 owner View-as, sessionStorage — this tab only, never touches the viewed user's own session)
 export const OWNER_USER_ID = 'u-michael';
+const canSuperviseUser = (u: User) => u.accessTier === 'manager' || u.roles.includes('supervisor');
 const VIEW_AS_KEY = 'rollisuite.prototype.viewAsUserId';
 const realUserSync = (): User | null => {
   const id = localStorage.getItem(KEYS.currentUser);
@@ -464,12 +466,19 @@ export async function getWatchesForClient(clientId: string): Promise<Watch[]> {
 
 // ---- Estimates --------------------------------------------------------------
 
+// Division wall (2026-09-29): scope by the signed-in identity's division, not the station. Estimates / SOs / packages inherit the division of their linked job (default rolliworks).
+const userDivisionOk = (div: Division) => { const u = currentUserSync(); return !u || u.division === 'both' || u.division === div; };
+const estimateDivision = (e: Estimate): Division => store.jobs.find((j) => j.estimateId === e.id)?.division ?? 'rolliworks';
+const soDivision = (o: SalesOrder): Division => (o.jobId ? store.jobs.find((j) => j.id === o.jobId)?.division : undefined) ?? 'rolliworks';
+const packageDivision = (p: Package): Division => (p.estimateId ? estimateDivision(byId(store.estimates, p.estimateId)) : 'rolliworks');
+export const inMyDivision = { estimate: (e: Estimate) => userDivisionOk(estimateDivision(e)), salesOrder: (o: SalesOrder) => userDivisionOk(soDivision(o)), package: (p: Package) => userDivisionOk(packageDivision(p)), job: (j: Job) => userDivisionOk(j.division) };
 async function getEstimatesMock(): Promise<EstimateWithRefs[]> {
-  return resolve([...store.estimates].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(withRefs));
+  return resolve([...store.estimates].filter(inMyDivision.estimate).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(withRefs));
 }
 
 async function getEstimateMock(id: string): Promise<EstimateWithRefs | null> {
   const e = store.estimates.find((x) => x.id === id);
+  if (e && !inMyDivision.estimate(e)) throw new Error('Not in your division — this estimate belongs to the other entity');
   return resolve(e ? withRefs(e) : null);
 }
 
@@ -575,7 +584,7 @@ export const detectCarrier = (tracking: string): Carrier => {
 };
 
 async function getPackagesMock(status?: PackageStatus): Promise<PackageWithRefs[]> {
-  const rows = store.packages.filter((p) => !status || p.status === status);
+  const rows = store.packages.filter((p) => (!status || p.status === status) && inMyDivision.package(p));
   return resolve(rows.map(pkgWithRefs).sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt)));
 }
 
@@ -934,13 +943,13 @@ export async function setItemReceived(packageId: string, itemId: string, receive
 }
 export const isInspectionPhoto = (p: PackagePhoto) => !!p.slot?.startsWith('inspection-');
 export async function addPackageInspectionPhoto(packageId: string, p: { source: 'ipevo' | 'microscope'; dataUrl: string }): Promise<{ pkg: PackageWithRefs; photo: PackagePhoto; attachedToJob?: string }> {
-  const pkg = getPkg(packageId); const a = actor();
+  const pkg = getPkg(packageId);
   const n = pkg.photos.filter(isInspectionPhoto).length + 1;
   const photo: PackagePhoto = { id: newId('iph'), source: 'camera', dataUrl: p.dataUrl, slot: `inspection-${p.source}-${n}`, fileName: `${p.source === 'ipevo' ? 'IPEVO overview' : 'Microscope detail'} ${n}` };
   pkg.photos.push(photo);
   const est = pkg.estimateId ? store.estimates.find((e) => e.id === pkg.estimateId) : undefined;
   const j = est?.jobId ? store.jobs.find((x) => x.id === est.jobId) : undefined;
-  if (j) j.photos.unshift({ ...photo, at: new Date().toISOString(), by: a.by, station: a.station });
+  if (j) addJobPhotoSync(j, { ...photo, photoType: 'inspection', stamp: false });
   stamp(`Inspection photo ${n} · ${p.source === 'ipevo' ? 'IPEVO' : 'microscope'}${j ? ` · attached to ${j.number}` : ''}`, pkg.subNumber);
   return resolve({ pkg: pkgWithRefs(pkg), photo, attachedToJob: j?.number });
 }
@@ -1441,7 +1450,7 @@ export async function completeComponent(jobId: string, key: ComponentKey): Promi
   return resolve(jobRefs(j));
 }
 export async function amendComponentAttribution(jobId: string, key: ComponentKey, shortName: string): Promise<JobWithRefs> {
-  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Only a supervisor / manager can amend attribution');
+  const a = actor(); if (!a.user || !canSuperviseUser(a.user)) throw new Error('Only a supervisor / manager can amend attribution');
   if (!fx.users.some((u) => u.shortName === shortName)) throw new Error('Pick someone from the staff list');
   const j = getJobRow(jobId); const c = ensureComponents(j).find((x) => x.key === key); if (!c?.completedAt) throw new Error('Only completed components can be re-attributed');
   if (c.completedBy === shortName) return resolve(jobRefs(j));
@@ -1556,11 +1565,27 @@ export async function addJobNote(id: string, text: string): Promise<JobWithRefs>
   return resolve(jobRefs(j));
 }
 
-export async function addJobPhotos(id: string, photos: PackagePhoto[]): Promise<JobWithRefs> {
-  const j = getJobRow(id);
+// ---- ONE photo pipeline (D-390). Every entry point ends here: locked (private) by default, typed, stamped. Unlock = client sees it in RolliConnect. ----
+export const PHOTO_TYPES: { key: PhotoType; label: string; blurb: string }[] = [
+  { key: 'intake', label: 'Intake', blurb: 'Arrival / receive-watch condition shots' },
+  { key: 'bench', label: 'Bench', blurb: 'Pad camera, WM kiosk, work-in-progress' },
+  { key: 'post_work', label: 'Post-work', blurb: 'After-work / completed evidence' },
+  { key: 'inspection', label: 'Inspection', blurb: 'Dual-camera inspection + guided authentication capture' },
+];
+export interface AddJobPhotoInput { dataUrl: string; photoType: PhotoType; slot?: string; fileName?: string; source?: PackagePhoto['source']; note?: string; id?: string; by?: string; station?: string; at?: string; replaceSlot?: boolean; stamp?: string | false }
+export const addJobPhotoSync = (j: Job, p: AddJobPhotoInput): PackagePhoto & Stamp => {
   const a = actor();
-  photos.forEach((p) => j.photos.unshift({ ...p, at: new Date().toISOString(), by: a.by, station: a.station }));
-  jobStamp(j, `${photos.length} photo${photos.length === 1 ? '' : 's'} attached`);
+  if (p.replaceSlot && p.slot) j.photos = j.photos.filter((x) => x.slot !== p.slot);
+  const photo: PackagePhoto & Stamp = { id: p.id ?? newId('ph'), source: p.source ?? 'camera', dataUrl: p.dataUrl, slot: p.slot, fileName: p.fileName, photoType: p.photoType, note: p.note, clientVisible: false, at: p.at ?? new Date().toISOString(), by: p.by ?? a.by, station: p.station ?? a.station };
+  j.photos.unshift(photo);
+  if (p.stamp !== false) jobStamp(j, p.stamp ?? `Photo added · ${PHOTO_TYPES.find((t) => t.key === p.photoType)!.label}${p.slot ? ` · ${p.slot}` : ''} · locked (private)`);
+  return photo;
+};
+export async function addJobPhoto(jobId: string, p: AddJobPhotoInput): Promise<PackagePhoto & Stamp> { return resolve(addJobPhotoSync(getJobRow(jobId), p)); }
+export async function addJobPhotos(id: string, photos: PackagePhoto[], photoType: PhotoType = 'bench'): Promise<JobWithRefs> {
+  const j = getJobRow(id);
+  photos.forEach((p) => addJobPhotoSync(j, { ...p, photoType: p.photoType ?? photoType, stamp: false }));
+  jobStamp(j, `${photos.length} photo${photos.length === 1 ? '' : 's'} attached · ${PHOTO_TYPES.find((t) => t.key === photoType)!.label} · locked (private)`);
   return resolve(jobRefs(j));
 }
 
@@ -1764,8 +1789,9 @@ export async function addShopTime(jobId: string, minutes: number, note: string):
 // ---- Tasks (explicit) + /today (derived, no manual curation) ------------------
 
 const userRoles = (u: User | null): Role[] => u?.roles ?? [];
-const assigneeMatches = (a: Assignee, u: User) => (a.type === 'user' ? a.shortName === u.shortName : u.roles.includes(a.role));
-export const assigneeLabel = (a: Assignee) => (a.type === 'user' ? a.shortName : `${a.role} role → ${roleHolders(a.role).map((u) => u.shortName).join(', ') || 'no holder'}`);
+// Station target = whoever is signed in at that station right now (a message to "Front Desk 1" is for the desk, not a person)
+const assigneeMatches = (a: Assignee, u: User) => (a.type === 'user' ? a.shortName === u.shortName : a.type === 'station' ? readStation()?.id === a.stationId : u.roles.includes(a.role));
+export const assigneeLabel = (a: Assignee) => (a.type === 'user' ? a.shortName : a.type === 'station' ? (fx.stations.find((s) => s.id === a.stationId)?.name ?? a.stationId) : `${a.role} role → ${roleHolders(a.role).map((u) => u.shortName).join(', ') || 'no holder'}`);
 
 const taskStamp = (t: Task, detail: string) => {
   const a = actor();
@@ -1946,10 +1972,11 @@ export function tailStage(job: Job): TailStage | null {
 }
 
 async function getSalesOrdersMock(): Promise<SalesOrderWithRefs[]> {
-  return resolve([...store.salesOrders].sort((a, b) => b.orderDate.localeCompare(a.orderDate)).map(soRefs));
+  return resolve([...store.salesOrders].filter(inMyDivision.salesOrder).sort((a, b) => b.orderDate.localeCompare(a.orderDate)).map(soRefs));
 }
 async function getSalesOrderMock(id: string): Promise<SalesOrderWithRefs | null> {
   const o = store.salesOrders.find((x) => x.id === id);
+  if (o && !inMyDivision.salesOrder(o)) throw new Error('Not in your division — this order belongs to the other entity');
   return resolve(o ? soRefs(o) : null);
 }
 export async function getSalesOrderForJob(jobId: string): Promise<SalesOrderWithRefs | null> {
@@ -2333,7 +2360,7 @@ export async function getSupervisorBoard(): Promise<SupervisorBoard> {
 export async function supervisorAssign(jobId: string, shortNames: string[]): Promise<JobWithRefs> {
   const j = getJobRow(jobId);
   const a = actor();
-  if (a.user?.accessTier !== 'manager') throw new Error('Assignment is a supervisor action (manager tier)');
+  if (!a.user || !canSuperviseUser(a.user)) throw new Error('Assignment is a supervisor action');
   const prev = j.assignees.join(', ') || 'nobody';
   j.assignees = shortNames.filter((s) => fx.users.some((u) => u.shortName === s));
   jobStamp(j, `Supervisor ${a.by} assigned → ${j.assignees.join(', ') || 'nobody'} (was ${prev})`);
@@ -4416,7 +4443,7 @@ export async function stationScan(station: RwStationKey, label: string): Promise
 const STAGE_ORDER: JobStatus[] = ['approved', 'in_service', 'testing', 'awaiting_manager_review', 'ready_to_ship'];
 const STAGE_LABEL: Record<string, string> = { approved: 'Queued', in_service: 'On the bench', testing: 'Final assembly / QC', awaiting_manager_review: 'Manager review', ready_to_ship: 'Finished' };
 export type PadRoom = 'wm' | 'band';
-export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MM', 'MH', 'Walter'], band: ['JV', 'Leo'] };
+export const ROOM_TECHS: Record<PadRoom, string[]> = { wm: ['Leo', 'MH', 'Walter'], band: ['JV', 'Leo', 'Dre', 'Sam', 'Nico', 'MAM'] };
 export const ROOM_LABEL: Record<PadRoom, string> = { wm: 'Watchmaker Room', band: 'Band / Polish Room' };
 const inRoom = (j: Job, room: PadRoom) => room === 'wm' || j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
 export async function getPadBoard(room: PadRoom = 'wm'): Promise<PadCard[]> {
@@ -4482,13 +4509,12 @@ export async function pickAction(taskId: string, action: 'picked' | 'short' | 'f
   else { if (!location?.trim()) throw new Error('Type the actual location'); if (part) part.location = location.trim(); t.location = location.trim(); t.status = 'open'; t.note = 'found elsewhere'; appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, detail: `${part?.name ?? 'part'} relocated → ${location.trim()}` }); }
   return resolve(pickView(t));
 }
-export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => ({ ...p, unlocked: isPhotoUnlocked(p.id) })), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, at: p.at, by: p.by, unlocked: isPhotoUnlocked(p.id) }))]); }
+export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => ({ ...p, unlocked: isPhotoUnlocked(p.id) })), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, photoType: p.photoType, at: p.at, by: p.by, unlocked: isPhotoUnlocked(p.id) }))]); }
 // Pad camera — photo binds to the open job (job ↔ watch identity), stamped who / when / slot. Client sees only client-visible slots.
 export const PHOTO_SLOTS: { key: string; label: string; clientVisible: boolean }[] = [{ key: 'workbench', label: 'Workbench', clientVisible: false }, { key: 'movement', label: 'Movement', clientVisible: true }, { key: 'dial', label: 'Dial', clientVisible: true }, { key: 'caseback', label: 'Caseback', clientVisible: true }, { key: 'bracelet', label: 'Bracelet', clientVisible: true }, { key: 'parts', label: 'Parts', clientVisible: false }, { key: 'other', label: 'Other', clientVisible: false }];
 export async function capturePadPhoto(jobId: string, dataUrl: string, slotKey: string): Promise<JobWithRefs> {
   const j = getJobRow(jobId); const slot = PHOTO_SLOTS.find((s) => s.key === slotKey); if (!slot) throw new Error('Pick a slot'); const a = actor();
-  j.photos.unshift({ id: newId('ph'), source: 'camera', dataUrl, fileName: `${slot.label}.jpg`, slot: slot.label, clientVisible: slot.clientVisible, at: new Date().toISOString(), by: a.by, station: a.station });
-  jobStamp(j, `Photo captured on the pad · ${slot.label}${slot.clientVisible ? ' · client-visible' : ''}`); return resolve(jobRefs(j));
+  addJobPhotoSync(j, { dataUrl, fileName: `${slot.label}.jpg`, slot: slot.label, photoType: 'bench', stamp: `Photo captured on the pad · ${slot.label} · locked (private) · ${a.by}` }); return resolve(jobRefs(j));
 }
 // Pad parts history — every request on room jobs, newest first, with a derived stage label
 export async function getRoomPartsHistory(): Promise<(PartsRequestWithRefs & { stageLabel: string })[]> {
@@ -4849,7 +4875,7 @@ const AUDIT_SCOPES: Record<Exclude<AuditScope, 'full'>, { keys: AuditLocationKey
   wm: { keys: ['into_safe_head', 'safe_await_band', 'safe_await_head', 'wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'stuck_parts_bin', 'testing', 'finished', 'pre_queue', 'uncase', 'mgr_safe_polish_in', 'polish_room', 'mgr_safe_polish_out', 'movement_service', 'parts_approval', 'recase_test'], relabel: { finished: 'MM Inspection · finished, awaiting inspection', pre_queue: 'Pre-queue · in safe, awaiting bench pickup' } },
   band: { keys: ['band_pre_queue', 'band_assign', 'band_mgr_safe_in', 'refinish', 'band_mgr_safe_out', 'band_qc', 'polish_room', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly'], relabel: { final_assembly: 'Band handoff · final assembly' } },
 };
-export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' || /Watchmaker Room Supervisor/i.test(u.dutyLabel) ? 'wm' : u.id === 'u-jv' || /Band|Workshop Supervisor/i.test(u.dutyLabel) ? 'band' : 'full');
+export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' ? 'wm' : u.id === 'u-jv' ? 'band' : 'full');
 export async function getAuditLocations(scope: AuditScope = 'full'): Promise<AuditLocationStatus[]> {
   const sc = scope === 'full' ? null : AUDIT_SCOPES[scope];
   return resolve((sc ? sc.keys.map((k) => ({ ...auditLoc(k), label: sc.relabel[k] ?? auditLoc(k).label })) : fx.AUDIT_LOCATIONS).map((location) => { const last = auditStore.sessions.filter((a) => a.location === location.key).sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0]; const daysSince = last ? Math.floor((Date.now() - new Date(last.finishedAt).getTime()) / 86_400_000) : undefined; return { location, expected: expectedAt(location.key).length, lastAudited: last?.finishedAt, lastResult: last ? (last.missing.length ? 'missing' : 'clean') : undefined, stale: daysSince === undefined || daysSince > auditStore.staleDays, daysSince }; }));
@@ -5051,12 +5077,12 @@ export const PART_CATEGORIES = ['Vintage Parts', 'Crystals', 'Crowns', 'Inserts'
 const LEGACY_CATEGORY: Record<string, string> = { crystal: 'Crystals', crown: 'Crowns', insert: 'Inserts', movement: 'Mov-Parts', gasket: 'crystal gaskets', bezel: 'Bezels', spring_bar: 'Spring bar', mainspring: 'Main Springs', vintage: 'Vintage Parts', resale: 'Unique Resale', tube: 'Crowns', bracelet: 'Unique Resale', hands: 'Mov-Parts', dial: 'Vintage Parts' };
 export const canonicalCategory = (c: string): string => (PART_CATEGORIES.includes(c) ? c : LEGACY_CATEGORY[c] ?? (c.includes('spring') && !c.includes('bar') ? 'Main Springs' : c.includes('crystal') ? 'Crystals' : 'Mov-Parts'));
 // Location = a manager's safe → a bin/drawer inside it (same safe concept as Assign/Move + Custody). No free text.
-export const PART_SAFES: PartSafe[] = [{ id: 'safe-mm', name: "MM's safe", owner: 'MM', bins: ['A1', 'A2', 'A3', 'B1', 'B2'] }, { id: 'safe-vienna', name: "Vienna's safe", owner: 'Vienna', bins: ['P1', 'P2', 'P3'] }, { id: 'safe-joseph', name: "JV's safe", owner: 'JV', bins: ['S1', 'S2'] }];
+export const PART_SAFES: PartSafe[] = [{ id: 'safe-mm', name: "MM's safe", owner: 'MM', bins: ['A1', 'A2', 'A3', 'B1', 'B2'] }, { id: 'safe-vienna', name: "Vienna's safe", owner: 'Vienna', bins: ['P1', 'P2', 'P3'] }, { id: 'safe-jv', name: "JV's safe", owner: 'JV', bins: ['S1', 'S2'] }];
 const calibers: Caliber[] = [
   { id: 'cal-3135', brand: 'Rolex', number: '3135', spec: 'Automatic · 31 jewels · 28,800 vph · 48 h · date' }, { id: 'cal-3235', brand: 'Rolex', number: '3235', spec: 'Automatic · Chronergy escapement · 70 h · date' }, { id: 'cal-3285', brand: 'Rolex', number: '3285', spec: 'Automatic · GMT · 70 h' },
   { id: 'cal-4130', brand: 'Rolex', number: '4130', spec: 'Automatic chronograph · column wheel · 72 h' }, { id: 'cal-2235', brand: 'Rolex', number: '2235', spec: 'Automatic · ladies · 31 jewels · date' }, { id: 'cal-mt5602', brand: 'Tudor', number: 'MT5602', spec: 'Automatic · silicon hairspring · 70 h' }, { id: 'cal-mt5612', brand: 'Tudor', number: 'MT5612', spec: 'Automatic · date · 70 h' }, { id: 'cal-1570', brand: 'Rolex', number: '1570', spec: 'Vintage automatic · 26 jewels · 19,800 vph (placeholder spec — reconcile)' },
 ];
-const partLocationSeed: Record<string, [string, string]> = { 'pt-01': ['safe-mm', 'A1'], 'pt-02': ['safe-mm', 'A1'], 'pt-03': ['safe-mm', 'A2'], 'pt-04': ['safe-mm', 'A2'], 'pt-05': ['safe-vienna', 'P1'], 'pt-06': ['safe-vienna', 'P1'], 'pt-07': ['safe-vienna', 'P2'], 'pt-08': ['safe-vienna', 'P2'], 'pt-09': ['safe-mm', 'B1'], 'pt-10': ['safe-mm', 'B1'], 'pt-11': ['safe-joseph', 'S1'], 'pt-12': ['safe-joseph', 'S1'] };
+const partLocationSeed: Record<string, [string, string]> = { 'pt-01': ['safe-mm', 'A1'], 'pt-02': ['safe-mm', 'A1'], 'pt-03': ['safe-mm', 'A2'], 'pt-04': ['safe-mm', 'A2'], 'pt-05': ['safe-vienna', 'P1'], 'pt-06': ['safe-vienna', 'P1'], 'pt-07': ['safe-vienna', 'P2'], 'pt-08': ['safe-vienna', 'P2'], 'pt-09': ['safe-mm', 'B1'], 'pt-10': ['safe-mm', 'B1'], 'pt-11': ['safe-jv', 'S1'], 'pt-12': ['safe-jv', 'S1'] };
 let partsModuleReady = false;
 const ensurePartsModule = () => { if (partsModuleReady) return; partsModuleReady = true; store.parts.forEach((p, i) => { p.category = canonicalCategory(p.category); p.cost ??= Math.round(p.price * 0.55); p.vendorIds ??= [rs.vendors[i % rs.vendors.length]?.id].filter(Boolean) as string[]; const loc = partLocationSeed[p.id] ?? [PART_SAFES[i % 3].id, PART_SAFES[i % 3].bins[i % PART_SAFES[i % 3].bins.length]]; p.safeId ??= loc[0]; p.bin ??= loc[1]; p.location = `${byIdSafe(p.safeId).name} → ${p.bin}`; });
   // seed a few parts right at their trigger so reorder has something real
@@ -5421,11 +5447,11 @@ export async function startKioskSession(jobId: string): Promise<KioskSession> { 
 export async function recordKioskShot(sessionId: string, shot: Omit<KioskShot, 'at'>): Promise<KioskSession> {
   const s = kioskSessions.find((x) => x.id === sessionId); if (!s) throw new Error('Kiosk session not found'); const j = getJobRow(s.jobId); const at = new Date().toISOString();
   s.shots = [...s.shots.filter((x) => x.step !== shot.step), { ...shot, at }];
-  j.photos = j.photos.filter((p) => p.slot !== `wmroom-${shot.step}`); j.photos.unshift({ id: newId('ph'), source: 'camera', dataUrl: shot.dataUrl, slot: `wmroom-${shot.step}`, fileName: `WM room · ${KIOSK_STEPS.find((k) => k.key === shot.step)?.label}`, at, by: s.watchmaker, station: 'Watchmaker Room Kiosk' });
+  addJobPhotoSync(j, { dataUrl: shot.dataUrl, slot: `wmroom-${shot.step}`, fileName: `WM room · ${KIOSK_STEPS.find((k) => k.key === shot.step)?.label}`, photoType: 'bench', at, by: s.watchmaker, station: 'Watchmaker Room Kiosk', replaceSlot: true, stamp: false });
   if (s.shots.length >= KIOSK_STEPS.length && !s.completedAt) { s.completedAt = at; jobStamp(j, `WM room kiosk · required 4-photo set FINISHED · attributed to ${s.watchmaker} · clears the bench task`); }
   return resolve({ ...s, shots: [...s.shots] });
 }
-export async function addKioskPhoto(jobId: string, dataUrl: string, device: string, note: string): Promise<PackagePhoto> { const j = getJobRow(jobId); const p: PackagePhoto = { id: newId('ph'), source: 'camera', dataUrl, slot: 'wmroom-adhoc', fileName: note.slice(0, 60) || 'WM room photo' }; j.photos.unshift({ ...p, at: new Date().toISOString(), by: j.assignees[0] ?? 'Watchmaker', station: `Watchmaker Room Kiosk · ${device}` }); jobStamp(j, `WM room kiosk · ad-hoc photo added${note ? ` — ${note.slice(0, 80)}` : ''}`); return resolve(p); }
+export async function addKioskPhoto(jobId: string, dataUrl: string, device: string, note: string): Promise<PackagePhoto> { const j = getJobRow(jobId); const p = addJobPhotoSync(j, { dataUrl, slot: 'wmroom-adhoc', fileName: note.slice(0, 60) || 'WM room photo', note, photoType: 'bench', by: j.assignees[0] ?? 'Watchmaker', station: `Watchmaker Room Kiosk · ${device}`, stamp: false }); jobStamp(j, `WM room kiosk · ad-hoc photo added${note ? ` — ${note.slice(0, 80)}` : ''}`); return resolve(p); }
 // Seed: E02014 (j-04, MM) walked through the full 4-step set yesterday — its bench task is already clear
 (() => { const j = store.jobs.find((x) => x.id === 'j-04'); if (!j) return; const at = daysAgoIso(1); const s: KioskSession = { id: 'wmk-seed-1', jobId: j.id, watchmaker: j.assignees[0] ?? 'MM', startedAt: at, completedAt: at, shots: KIOSK_STEPS.map((k, i) => ({ step: k.key, dataUrl: `https://picsum.photos/seed/wmk-${k.key}/640/480`, device: k.cam === 'ipevo' ? 'IPEVO V4K' : 'HY-3307 Microscope', cam: k.cam, at: new Date(new Date(at).getTime() + i * 60000).toISOString() })) }; kioskSessions.push(s); s.shots.forEach((sh) => j.photos.push({ id: `ph-${sh.step}`, source: 'camera', dataUrl: sh.dataUrl, slot: `wmroom-${sh.step}`, fileName: `WM room · ${KIOSK_STEPS.find((k) => k.key === sh.step)?.label}`, at: sh.at, by: s.watchmaker, station: 'Watchmaker Room Kiosk' })); })();
 
@@ -5635,7 +5661,7 @@ export const actorInfo = () => actor();
 // ---- Hitlist bridge (per-person hit lists, inbox, supervisor rollup live in ./hitlist.ts) ----
 export const hitlistBridge = {
   users: () => fx.users, pinned: () => store.pinned, tasks: () => store.tasks, jobs: () => store.jobs, watches: () => store.watches, clients: () => fx.clients,
-  stationId: () => readStation()?.id ?? 'unknown', division: getSessionDivision, matches: assigneeMatches, today: (userId: string) => getTodayMock(userId), newId, label: assigneeLabel, actor: () => actor(),
+  stationId: () => readStation()?.id ?? 'unknown', stations: () => readStations(), division: getSessionDivision, matches: assigneeMatches, today: (userId: string) => getTodayMock(userId), newId, label: assigneeLabel, actor: () => actor(),
   audit: (detail: string) => appendAudit({ type: 'pin', stationName: actor().station, userShortName: actor().user?.shortName, userDisplayName: actor().user?.displayName, detail }),
   jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
 };
@@ -5717,6 +5743,42 @@ export async function sendSoReminder(id: string, kind: 'pickup' | 'payment', cha
   else queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: c.phone || '(no phone on file)', toName: fullNameOf(c), relatedRef: o.number, status: 'pending', subject: `SMS → ${c.phone || 'no phone'} — ${o.number}`, body: text, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
   soStamp(o, `${kind === 'pickup' ? 'Pickup' : 'Payment'} reminder ${channel.toUpperCase()} queued`); return resolve(soRefs(o));
 }
+// ---- QBO stub · VB4-09 (mock, but modelled on Intuit semantics) ----------------------------------------------------
+// SyncToken: every successful write increments it; a write carrying a stale token is rejected (Intuit error 5010) — the caller must re-read (getInvoiceLink) and retry.
+// The payment webhook never flips the gate by itself: it lands on the "remote" ledger, then a balance re-read reconciles the local SO, and the gate (isPaid) is DERIVED from that.
+const qboRemote = new Map<string, { balance: number; syncToken: number }>();
+const qboRemoteOf = (o: SalesOrder) => { const r = qboRemote.get(o.id) ?? { balance: o.balanceDue, syncToken: o.qboSyncToken ?? 0 }; qboRemote.set(o.id, r); return r; };
+export interface InvoiceLink { salesOrderId: string; number: string; url: string; total: number; balanceDue: number; isPaid: boolean; syncToken: number; gateOpen: boolean }
+const invoiceLink = (o: SalesOrder): InvoiceLink => ({ salesOrderId: o.id, number: o.number, url: payLinkPath(o), total: o.total, balanceDue: o.balanceDue, isPaid: o.isPaid, syncToken: o.qboSyncToken ?? 0, gateOpen: o.isPaid });
+export async function getInvoiceLink(id: string): Promise<InvoiceLink> { const o = getSO(id); return resolve(invoiceLink(o)); }
+export interface UpdateInvoicePatch { lines?: SOLineInput[]; shippingAmount?: number; memo?: string }
+// Sparse update: only the fields present change (Intuit "sparse: true"). Requires the current SyncToken.
+export async function updateInvoice(id: string, patch: UpdateInvoicePatch, syncToken: number): Promise<InvoiceLink> {
+  const o = getSO(id); const current = o.qboSyncToken ?? 0;
+  if (syncToken !== current) { soStamp(o, `QBO update rejected · stale SyncToken ${syncToken} (server ${current}) · re-read required`); throw new Error(`Stale SyncToken — you sent ${syncToken}, the invoice is at ${current}. Re-read the invoice and retry.`); }
+  const wasPaid = o.isPaid;
+  await updateSalesOrder(id, patch);
+  o.qboSyncToken = current + 1; o.qboLastSyncedAt = new Date().toISOString(); qboRemote.set(o.id, { balance: o.balanceDue, syncToken: o.qboSyncToken });
+  soStamp(o, `QBO sparse update · SyncToken ${current} → ${o.qboSyncToken}${wasPaid && !o.isPaid ? ' · balance reopened — payment gate closed, order leaves the ship cart' : ''} · same payment link, new total ${fmtMoney(o.total)}`);
+  return resolve(invoiceLink(o));
+}
+// Mock of the Intuit payment webhook: lands on the remote ledger only; the gate flips after the balance re-read below.
+export async function simulatePaymentWebhook(id: string, amount?: number): Promise<{ remoteBalance: number; link: InvoiceLink }> {
+  const o = getSO(id); const r = qboRemoteOf(o); const paid = Math.min(amount ?? r.balance, r.balance); r.balance = Math.round((r.balance - paid) * 100) / 100;
+  soStamp(o, `QBO webhook received · payment ${fmtMoney(paid)} · remote balance ${fmtMoney(r.balance)} · gate unchanged until balance re-read`);
+  const link = await qboReadBalance(id);
+  return resolve({ remoteBalance: r.balance, link });
+}
+// Balance re-read: reconcile local balance to the remote ledger; isPaid (the gate) is derived, never set by the webhook directly.
+export async function qboReadBalance(id: string): Promise<InvoiceLink> {
+  const o = getSO(id); const r = qboRemoteOf(o); const diff = Math.round((o.balanceDue - r.balance) * 100) / 100;
+  if (diff > 0) { await recordPayment(id, diff, 'card', 'QBO balance re-read · payment webhook reconciled'); soStamp(o, `QBO balance re-read · applied ${fmtMoney(diff)} · gate ${o.isPaid ? 'OPEN' : 'closed'}`); }
+  o.qboLastSyncedAt = new Date().toISOString();
+  return resolve(invoiceLink(o));
+}
+// Ship cart = ship-channel orders whose payment gate is open (isPaid); an edit that reopens the balance removes the order here
+export async function getShipCart(): Promise<SalesOrderWithRefs[]> { return resolve(store.salesOrders.filter((o) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && o.channel === 'ship' && o.isPaid).map(soRefs)); }
+
 export async function qboSyncInvoice(id: string, direction: 'pull' | 'push'): Promise<SalesOrderWithRefs> {
   const o = getSO(id); managerOnly();
   if (o.zeroBalance) throw new Error(`${o.number} is zero-balanced (${ZERO_REASON_LABEL[o.zeroBalance.reason]}) — excluded from QuickBooks revenue, nothing to sync`);
@@ -5863,3 +5925,22 @@ const REF_HISTORY: Record<string, { total: number; count: number }> = { '116500L
 export const suggestInsuredByRef = (watchId?: string): RefValueSuggestion | null => { const w = watchId ? fx.watches.find((x) => x.id === watchId) : undefined; if (!w) return null; const h = REF_HISTORY[w.reference]; if (!h?.count) return null; return { reference: w.reference, value: Math.round(h.total / h.count / 100) * 100, count: h.count }; };
 // every label bound feeds the history for the next suggestion
 const recordRefHistory = (watchId: string | undefined, value: number) => { const w = watchId ? fx.watches.find((x) => x.id === watchId) : undefined; if (!w || !(value > 0)) return; const h = (REF_HISTORY[w.reference] ??= { total: 0, count: 0 }); h.total += value; h.count += 1; };
+
+// ---- Access control panel (D-391) — OWNER ONLY. Per-user × per-screen toggle; role default comes from the nav tier table (config/navigation.ts), an override is a visible diff from it. Every change logged (who / whom / screen / from → to / when). Evaluated on the user's next route load (TierGate + sidebar), never mid-page. ----
+const ACCESS_KEYS = { overrides: 'rollisuite.access.overrides', log: 'rollisuite.access.log' };
+export type AccessValue = 'role' | 'allow' | 'deny';
+export interface AccessChange { id: string; at: string; by: string; station: string; userId: string; userShort: string; screenKey: string; screenLabel: string; from: AccessValue; to: AccessValue }
+const accessOverrides = (): Record<string, Record<string, boolean>> => readJson(ACCESS_KEYS.overrides, {});
+export const accessOverrideSync = (userId: string, screenKey: string): boolean | undefined => accessOverrides()[userId]?.[screenKey];
+export const accessOverridesFor = (userId: string): Record<string, boolean> => ({ ...(accessOverrides()[userId] ?? {}) });
+export async function getAccessUsers(): Promise<User[]> { if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); return resolve(fx.users.map((u) => ({ ...u }))); }
+export async function setAccessOverride(userId: string, screenKey: string, screenLabel: string, value: AccessValue): Promise<Record<string, boolean>> {
+  if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); const u = byId(fx.users, userId); if (u.id === OWNER_USER_ID) throw new Error('The owner’s own access cannot be toggled');
+  const all = accessOverrides(); const mine = all[userId] ?? {}; const from: AccessValue = mine[screenKey] === undefined ? 'role' : mine[screenKey] ? 'allow' : 'deny'; if (from === value) return resolve({ ...mine });
+  if (value === 'role') delete mine[screenKey]; else mine[screenKey] = value === 'allow'; if (Object.keys(mine).length) all[userId] = mine; else delete all[userId]; writeJson(ACCESS_KEYS.overrides, all);
+  const a = actor(); const ch: AccessChange = { id: newId('acc'), at: new Date().toISOString(), by: a.by, station: a.station, userId, userShort: u.shortName, screenKey, screenLabel, from, to: value };
+  writeJson(ACCESS_KEYS.log, [ch, ...readJson<AccessChange[]>(ACCESS_KEYS.log, [])].slice(0, 500));
+  appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Access · ${u.shortName} · ${screenLabel} · ${from} → ${value}` });
+  return resolve({ ...mine });
+}
+export async function getAccessLog(): Promise<AccessChange[]> { if (!isOwnerSync()) throw new Error('Access control is owner-only (MH)'); return resolve(readJson<AccessChange[]>(ACCESS_KEYS.log, [])); }

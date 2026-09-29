@@ -25,8 +25,8 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera } from 'lucide-react';
-import { OWNER_USER_ID, type AccessTier, type User } from '@/api/client';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound } from 'lucide-react';
+import { OWNER_USER_ID, accessOverrideSync, type AccessTier, type User } from '@/api/client';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
 // Expandable sidebar groups. `path` = the header itself is a page (Intake → /intake); no path = pure folder (RW).
@@ -74,6 +74,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'custody', label: 'Custody', path: '/custody', icon: Hand, tiers: MGR, built: true, blurb: 'Who physically holds which watch head / case / bracelet right now, grouped by person.' },
   { key: 'sales', label: 'Sales', path: '/sales', icon: ShoppingCart, tiers: ALL, group: 'clients', built: true, blurb: 'Sales orders (invoices), payments, Pickup & Ship Stations.' },
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: Boxes, tiers: MGR, group: 'parts', built: true, blurb: 'Parts, stock levels and reorder alerts.' },
+  { key: 'cycle-count', label: 'Cycle count', path: '/inventory/count', icon: Boxes, tiers: ALL, group: 'parts', built: true, blurb: 'Count mode (scan) — counts and locations only; variance dollars are manager-only.' },
   { key: 'purchasing', label: 'Purchasing', path: '/purchasing', icon: PackageSearch, tiers: MGR, group: 'parts', built: true, blurb: 'Purchase orders, vendors and receiving.' },
   { key: 'swo', label: 'Shop Work Orders', path: '/swo', icon: Truck, tiers: MGR, group: 'parts', built: true, blurb: 'Outsourced plating / refinish at outside vendors — 5-stage board, labels both ways, Paid independent of receipt.' },
   { key: 'vendors', label: 'Vendors', path: '/purchasing/vendors', icon: Building2, tiers: MGR, group: 'parts', built: true, blurb: 'Vendor list, add / edit, detail roll-up: linked parts by last price, POs, purchase history.' },
@@ -85,6 +86,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
   { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },
+  { key: 'access', label: 'Access control', path: '/setup/access', icon: KeyRound, tiers: ['manager'], ownerOnly: true, built: true, blurb: 'Owner-only: per-user × per-screen toggles with role defaults, override diff and a change log.' },
   { key: 'integrations', label: 'Integrations', path: '/integrations', icon: Plug, tiers: MGR, built: true, blurb: 'QuickBooks, email, SMS and shipping carriers.' },
   { key: 'help', label: 'Help', path: '/help', icon: HelpCircle, tiers: ALL, built: true, blurb: 'Guides, keyboard shortcuts and support.' },
 ];
@@ -105,8 +107,11 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { key: 'pickup', label: 'Pickup', path: '/sales/pickup', icon: PackageCheck, blurb: 'Release a finished watch to its owner.' },
 ];
 
-export const canAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => i.tiers.includes(user.accessTier) && (!i.ownerOnly || user.id === OWNER_USER_ID);
+// Role default from the tier table; a per-user override (Access control panel, owner-only) wins. Owner-only screens never open by override.
+export const roleDefaultAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => i.tiers.includes(user.accessTier) && (!i.ownerOnly || user.id === OWNER_USER_ID);
+export const canAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => { if (i.ownerOnly) return user.id === OWNER_USER_ID; const o = accessOverrideSync(user.id, i.key); return o === undefined ? roleDefaultAccess(i, user) : o; };
 export const navForTier = (tier: AccessTier) => NAV_ITEMS.filter((i) => i.tiers.includes(tier));
+export const SCREENS = NAV_ITEMS.filter((i) => !i.ownerOnly);
 export const navForUser = (user: Pick<User, 'id' | 'accessTier'>) => NAV_ITEMS.filter((i) => canAccess(i, user));
 
 export const findNavItem = (pathname: string) =>

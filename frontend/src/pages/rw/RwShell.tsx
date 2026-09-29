@@ -5,10 +5,11 @@ import * as api from '@/api/client';
 import type { AccessTier, User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { MoneyContext } from '@/components/MoneyContext';
-import { roleKind } from '@/config/roles';
+import { padAllowed, roleKind } from '@/config/roles';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
-import { IntercomButton } from '@/components/layout/IntercomPanel';
+import { IntercomButton, PageBanner } from '@/components/layout/IntercomPanel';
+import { MessagesButton } from '@/components/layout/MessagesPopover';
 import { CornerLookup } from '@/components/layout/CornerLookup';
 import { ViewAsPicker } from '@/components/layout/ViewAs';
 
@@ -16,13 +17,13 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
   { key: 'hitlist', label: 'Hitlist', path: '/rw/hitlist', tiers: ['manager', 'concierge'] },
   { key: 'bench', label: 'Bench', path: '/rw', tiers: ['manager', 'concierge'], end: true },
   { key: 'floor', label: 'Shop Floor', path: '/rw/floor', tiers: ['manager', 'concierge'] },
-  { key: 'assign', label: 'Assign / Move', path: '/rw/assign', tiers: ['manager', 'concierge'] },
-  { key: 'queue', label: 'Work Queue', path: '/rw/queue', tiers: ['manager', 'concierge'] },
+  { key: 'assign', label: 'Assign / Move', path: '/rw/assign', tiers: ['manager'] },
+  { key: 'queue', label: 'Work Queue', path: '/rw/queue', tiers: ['manager'] },
   { key: 'bulk', label: 'Bulk Assign', path: '/rw/bulk', tiers: ['manager'] },
   { key: 'jobs', label: 'Jobs', path: '/rw/jobs', tiers: ['manager', 'concierge'] },
   { key: 'parts', label: 'Parts', path: '/rw/parts', tiers: ['manager', 'concierge'] },
   { key: 'wm', label: 'WM Room', path: '/rw/wm', tiers: ['manager', 'concierge'] },
-  { key: 'station', label: 'Station Scan', path: '/rw/station', tiers: ['manager', 'concierge'] },
+  { key: 'station', label: 'Station Scan', path: '/rw/station', tiers: ['manager'] },
   { key: 'testing', label: 'Testing', path: '/rw/testing', tiers: ['manager', 'concierge'] },
   { key: 'qc', label: 'QC', path: '/rw/qc', tiers: ['manager'] },
   { key: 'supervisor', label: 'Supervisor', path: '/rw/supervisor', tiers: ['manager'] },
@@ -36,6 +37,8 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
 ];
 
 const JOB_LINK = /^\/jobs\/([^/?#]+)$/;
+// Supervisor tab bar (MM: Pad · Team hitlist · Queue · Assign · Messages) — visible to any pad-tier role even below manager tier
+const SUPERVISOR_NAV = ['pad', 'band', 'hitlist', 'queue', 'assign', 'jobs'];
 
 export default function RwShell() {
   const { user, station, signOut } = useAuth(); const nav = useNavigate(); const { pathname } = useLocation();
@@ -53,13 +56,14 @@ export default function RwShell() {
     setBlocked(p);
   };
   return (
-    <MoneyContext.Provider value={!!user && roleKind(user) !== 'watchmaker'}>
+    <MoneyContext.Provider value={user?.accessTier === 'manager'}>
       <div data-testid="rw-shell" onClickCapture={guard} className="flex h-full flex-col bg-[#161b22] text-slate-100">
         {!fullscreen && <header className="flex items-center gap-4 border-b border-white/10 bg-[#0f131a] px-4 py-2">
           <NavLink to="/rw" data-testid="rw-brand" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white"><Hammer size={16} className="text-amber-400" /> RolliWorking <span className="text-[10px] font-normal text-white/50">workshop · {station?.name ?? 'unregistered'} · {station ? api.RG_DIVISION_LABEL[station.division] : ''}</span></NavLink>
-          {user && <nav data-testid="rw-nav" className="flex items-center gap-1 text-xs">{RW_NAV.filter((n) => n.tiers.includes(user.accessTier)).map((n) => <NavLink key={n.key} to={n.path} end={n.end} data-testid={`rw-nav-${n.key}`} className={({ isActive }) => `rounded-sm px-2.5 py-1.5 font-medium ${isActive ? 'bg-amber-400 text-[#161b22]' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>{n.label}</NavLink>)}</nav>}
-          <div className="ml-auto flex items-center gap-3 text-xs"><ViewAsPicker dark /><IntercomButton dark /><Provisional note="RolliWorking standalone is an ACCESS BOUNDARY in Keeper: bench tiers authenticate into RW only and cannot reach RS. The prototype shares one origin and one station session." />{user && <><span data-testid="rw-user" className="text-white/80">{user.shortName} · {user.dutyLabel}</span><button data-testid="rw-sign-out" onClick={() => void signOut()} className="text-white/60 hover:text-white">Sign out</button></>}</div>
+          {user && <nav data-testid="rw-nav" className="flex items-center gap-1 text-xs">{RW_NAV.filter((n) => (roleKind(user) === 'supervisor' && user.accessTier !== 'manager' ? SUPERVISOR_NAV.includes(n.key) : n.tiers.includes(user.accessTier) || (padAllowed(roleKind(user)) && SUPERVISOR_NAV.includes(n.key)))).map((n) => <NavLink key={n.key} to={n.path} end={n.end} data-testid={`rw-nav-${n.key}`} className={({ isActive }) => `rounded-sm px-2.5 py-1.5 font-medium ${isActive ? 'bg-amber-400 text-[#161b22]' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>{n.label}</NavLink>)}</nav>}
+          <div className="ml-auto flex items-center gap-3 text-xs"><ViewAsPicker dark /><MessagesButton dark /><IntercomButton dark /><Provisional note="RolliWorking standalone is an ACCESS BOUNDARY in Keeper: bench tiers authenticate into RW only and cannot reach RS. The prototype shares one origin and one station session." />{user && <><span data-testid="rw-user" className="text-white/80">{user.shortName} · {user.dutyLabel}</span><button data-testid="rw-sign-out" onClick={() => void signOut()} className="text-white/60 hover:text-white">Sign out</button></>}</div>
         </header>}
+        {fullscreen && <PageBanner />}
         {blocked && <div data-testid="rw-blocked" className="flex items-center gap-2 border-b border-rose-900/50 bg-rose-950/60 px-4 py-1.5 text-xs text-rose-200"><ShieldOff size={12} /> <span className="font-mono">{blocked}</span> is a RolliSuite screen — not reachable from RolliWorking (access boundary). Use a front-desk station.<button onClick={() => setBlocked(null)} className="ml-auto text-rose-300 hover:text-white">dismiss</button></div>}
         <main className={`rw-dark min-h-0 flex-1 overflow-y-auto ${fullscreen ? '' : 'p-4'}`}>
           {user || bench ? <Outlet /> : <RwSignIn />}

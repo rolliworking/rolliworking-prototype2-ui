@@ -525,3 +525,11 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 ### KEEPER-HANDOFF docs refresh (2026-09-29; documentation-only)
 - New `11-INTEGRATIONS.md`, `12-ROLES-AND-ACCESS.md`, `13-INTEGRATION-GAPS.md`; rewrote `01-ROUTE-MAP.md` (landing/guard/scope + ⚠ UNGUARDED); appended `03` (Q92–Q100), `04`, `06`, `10`, `00-INDEX`; `docs/DECISIONS.md` 2026-09-29 block → `02`; `_gen.py` now emits `source` + `auth expected` columns and `[post-refresh]` tags (`_baseline_refresh.txt`, 461 exports at 2ae5e1a) and audit families 40–50. Mirrored to `frontend/docs`. User must **Save to GitHub**.
 - Pending spec items: 5 (Sales vs Completions), 6 (direct tech credit), 7 (concierge scope: `/rw/assign` guard, cycle count for concierge), 8–25.
+
+### Fix batch UNGUARDED/DRIFT + MM supervisor correction (2026-09-29; self-tested via paced Playwright + in-page module calls)
+- `roles.ts`: `RoleKind` adds `band_tech` (→ `/rw/band`); supervisor = role `supervisor` or manager+room role; `canSupervise`, `teamFamily`, `FAMILY_TONE`. MM seed → roles [supervisor], concierge tier (no $), lands `/rw/pad`; seed jobs/rw components MM→Leo; `Role` adds 'supervisor'.
+- Guards: `/rw/assign|queue|station` pad-guarded; `/rw/band` pad guard admitting band_tech; `canViewHitlist` on `/hitlist/:slug`; RW nav for non-manager supervisors = `SUPERVISOR_NAV`; MoneyContext = accessTier manager.
+- `hitlist.ts`: TEAM_MAP MM (W + B·P read-only via `readOnlyRoles`), `isTech`, `supervisorOf`, `teamRowReadOnly`, `canViewHitlist`; TeamHitlistPage legend + family chips + read-only rows.
+- Division wall `inMyDivision.*` on estimates/SOs/packages (mock path; detail throws). Reception idle sign-out `useReceptionIdleSignOut` (5 min). Nav `cycle-count` ALL tiers.
+- QBO stub: `getInvoiceLink`, `updateInvoice(id, patch, syncToken)`, `simulatePaymentWebhook`, `qboReadBalance`, `getShipCart`; `SalesOrder.qboSyncToken/qboLastSyncedAt`. Verified edit-after-send path.
+- Docs updated: 01, 03 (Q92/94/98/99 resolved, Q101–102), 11 (§2 QBO, §9 labels), 12, `_gen.py` (token auth), DECISIONS.md block → 02, regenerated 05/08/09. Remaining drift listed in 12 §8. User must Save to GitHub.

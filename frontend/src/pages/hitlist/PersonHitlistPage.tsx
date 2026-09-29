@@ -7,6 +7,7 @@ import TodayPage, { useHitlistBase } from '@/pages/TodayPage';
 export default function PersonHitlistPage() {
   const { slug = '' } = useParams(); const { base } = useHitlistBase(); const { user } = useAuth();
   const u = hl.userBySlug(slug);
+  if (u && user && !hl.canViewHitlist(user, u)) return <Navigate to={`${base}/${hl.slugOf(user)}`} replace />;
   if (!u) return <div data-testid="hitlist-unknown" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">No staff member at “{slug}”. <a href={`${base}/${hl.slugOf(user!)}`} className="underline">Open your own Hitlist</a></div>;
   return <TodayPage key={u.id} forUser={u} />;
 }

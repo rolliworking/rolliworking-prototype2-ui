@@ -8,17 +8,28 @@ export const slugOf = (u: User) => u.firstName.toLowerCase();
 export const userBySlug = (slug: string): User | undefined => b.users().find((u) => slugOf(u) === slug.toLowerCase() || u.shortName.toLowerCase() === slug.toLowerCase());
 export const hitlistPath = (u: User) => `/hitlist/${slugOf(u)}`;
 
-// Supervisors and the roles they roll up — the watchmaker room has no supervisor yet (slot intentionally empty)
-export const TEAM_MAP: Record<string, { roles: Role[]; label: string }> = {
+// Supervisors and the roles they roll up. MM = watchmaker-room supervisor with band/polish OVERSIGHT (read-only on band rows); JV = band/polish supervisor.
+export const TEAM_MAP: Record<string, { roles: Role[]; label: string; readOnlyRoles?: Role[] }> = {
+  MM: { roles: ['watchmaker', 'band_tech', 'polisher'], label: 'Watchmaker room · band / polish oversight', readOnlyRoles: ['band_tech', 'polisher'] },
   JV: { roles: ['band_tech', 'polisher'], label: 'Workshop · band / polish' },
 };
+export const supervisorOf = (tech: User): User[] => (isTech(tech) ? b.users().filter((s) => s.id !== tech.id && TEAM_MAP[s.shortName]?.roles.some((r) => tech.roles.includes(r))) : []);
+export const teamRowReadOnly = (viewer: User, tech: User) => !!TEAM_MAP[viewer.shortName]?.readOnlyRoles?.some((r) => tech.roles.includes(r)) && !tech.roles.some((r) => !TEAM_MAP[viewer.shortName]!.readOnlyRoles!.includes(r) && TEAM_MAP[viewer.shortName]!.roles.includes(r));
+// Who may open /hitlist/<slug>: the person, their supervisor(s), any manager tier, MH (also via View-as)
+export const canViewHitlist = (viewer: User, target: User) => viewer.id === target.id || viewer.accessTier === 'manager' || supervisorOf(target).some((s) => s.id === viewer.id);
 export const isSupervisor = (u: User | null | undefined) => !!u && !!TEAM_MAP[u.shortName];
-export const getTeam = (sup: User): User[] => { const t = TEAM_MAP[sup.shortName]; return t ? b.users().filter((u) => u.id !== sup.id && (u.division === 'both' || u.division === sup.division || sup.division === 'both') && u.roles.some((r) => t.roles.includes(r))) : []; };
+// Techs only — other supervisors / managers never roll up into a team even when they carry a room role (JV is not on MM's team)
+const isTech = (u: User) => u.accessTier !== 'manager' && !u.roles.includes('supervisor');
+export const getTeam = (sup: User): User[] => { const t = TEAM_MAP[sup.shortName]; return t ? b.users().filter((u) => u.id !== sup.id && isTech(u) && (u.division === 'both' || u.division === sup.division || sup.division === 'both') && u.roles.some((r) => t.roles.includes(r))) : []; };
 export const teamPath = (u: User) => `${hitlistPath(u)}/team`;
 
 // ---- Inbox --------------------------------------------------------------------------------------------------------
-export interface InboxItem { id: string; to: Assignee; from: string; text?: string; photo?: PackagePhoto; jobId?: string; pinnedId?: string; replyToId?: string; createdAt: string; station: string; readBy: string[] }
-export interface InboxRow extends InboxItem { unread: boolean; jobNumber?: string; jobLabel?: string }
+// One-shot directed messages (D-389): person / role / station. No threads — a reply is a new message back. Sender sees delivered → seen → done.
+export type MessageStatus = 'delivered' | 'seen' | 'done';
+export interface InboxItem { id: string; to: Assignee; from: string; text?: string; photo?: PackagePhoto; jobId?: string; pinnedId?: string; replyToId?: string; createdAt: string; station: string; readBy: string[]; seenAt?: string; claimedBy?: string; claimedAt?: string; doneBy?: string; doneAt?: string }
+export interface InboxRow extends InboxItem { unread: boolean; status: MessageStatus; claimable: boolean; jobNumber?: string; jobLabel?: string }
+export interface SentRow extends InboxItem { status: MessageStatus; toLabel: string; jobNumber?: string }
+export const messageStatus = (m: InboxItem): MessageStatus => (m.doneAt ? 'done' : m.seenAt || m.readBy.length ? 'seen' : 'delivered');
 const img = (seed: string): PackagePhoto => ({ id: `ibph-${seed}`, source: 'camera', dataUrl: `https://picsum.photos/seed/${seed}/640/480`, slot: 'workbench' });
 const inbox: InboxItem[] = [
   { id: 'ib-01', to: { type: 'user', shortName: 'JV' }, from: 'MM', text: 'Clasp weld on the Sub bracelet looks thin on the 6 o’clock side — your call before Sam re-pins it.', photo: img('rs-clasp-weld'), jobId: 'j-05', createdAt: daysAgo(0, 8.7), station: 'Watchmaker Room', readBy: [] },
@@ -26,8 +37,9 @@ const inbox: InboxItem[] = [
   { id: 'ib-03', to: { type: 'role', role: 'polisher' }, from: 'Walter', text: 'Reference finish for the Oyster bracelet — match this grain.', photo: img('rs-oyster-grain'), jobId: 'j-05', createdAt: daysAgo(0, 10.2), station: 'Inspection Bench', readBy: [] },
   { id: 'ib-04', to: { type: 'user', shortName: 'Sam' }, from: 'JV', text: 'Two stretched links between 4 and 6 — swap from the parts bin, don’t re-pin.', photo: img('rs-stretched-links'), jobId: 'j-05', createdAt: daysAgo(0, 11), station: 'Band Room', readBy: [] },
   { id: 'ib-05', to: { type: 'user', shortName: 'MM' }, from: 'Leo', text: 'Hairspring on the Lady-Datejust after QC fail — see the kink at the stud.', photo: img('rs-hairspring'), jobId: 'j-16', createdAt: daysAgo(0, 13.4), station: 'Bench 1', readBy: [] },
-  { id: 'ib-06', to: { type: 'user', shortName: 'Leo' }, from: 'MM', text: 'Take the GMT next — parts landed this morning.', jobId: 'j-04', createdAt: daysAgo(0, 8.2), station: 'Watchmaker Room', readBy: ['Leo'] },
-  { id: 'ib-07', to: { type: 'user', shortName: 'Vienna' }, from: 'MH', text: 'Receipt printer paper — order two cases, not one.', createdAt: daysAgo(1, 16), station: 'Front Desk 1', readBy: ['Vienna'] },
+  { id: 'ib-06', to: { type: 'user', shortName: 'Leo' }, from: 'MM', text: 'Take the GMT next — parts landed this morning.', jobId: 'j-04', createdAt: daysAgo(0, 8.2), station: 'Watchmaker Room', readBy: ['Leo'], seenAt: daysAgo(0, 8.1) },
+  { id: 'ib-07', to: { type: 'user', shortName: 'Vienna' }, from: 'MH', text: 'Receipt printer paper — order two cases, not one.', createdAt: daysAgo(1, 16), station: 'Front Desk 1', readBy: ['Vienna'], seenAt: daysAgo(1, 15.8), doneBy: 'Vienna', doneAt: daysAgo(1, 15.5) },
+  { id: 'ib-12', to: { type: 'station', stationId: 'st-01' }, from: 'JV', text: 'Calloway is picking up E02040 at 3 — the bracelet is in the finished tray, not the safe.', jobId: 'j-16', createdAt: daysAgo(0, 9.6), station: 'Band Room', readBy: [] },
   { id: 'ib-08', to: { type: 'user', shortName: 'MH' }, from: 'JV', text: 'Polish room QC tray — all six bracelets passed brush check.', photo: img('rs-qc-tray'), createdAt: daysAgo(0, 15.5), station: 'Polish Room', readBy: [] },
   { id: 'ib-09', to: { type: 'user', shortName: 'Dre' }, from: 'JV', text: 'Clasp + end links on E02013 — satin, then hand to Sam.', photo: img('rs-clasp-satin'), jobId: 'j-03', createdAt: daysAgo(0, 8.1), station: 'Polish Room', readBy: [] },
   // WM-room kiosk ad-hoc photo: Leo documents pre-existing damage on E02026 and tags @MH; MH's reply pings Leo's bench iPad, not the kiosk
@@ -35,26 +47,51 @@ const inbox: InboxItem[] = [
   { id: 'ib-11', to: { type: 'user', shortName: 'Leo' }, from: 'MH', text: 'Re: Pre-existing scratch — noted and logged on the job, you’re covered. Carry on.', jobId: 'j-16', replyToId: 'ib-10', createdAt: daysAgo(0, 7.1), station: 'Front Desk 1', readBy: [] },
 ];
 const jobRef = (jobId?: string) => { const j = jobId ? b.jobs().find((x) => x.id === jobId) : undefined; if (!j) return {}; const w = b.watches().find((x) => x.id === j.watchId); const c = b.clients().find((x) => x.id === j.clientId); return { jobNumber: j.number, jobLabel: `${c ? `${c.firstName} ${c.lastName}` : ''}${w ? ` · ${w.brand} ${w.model}` : ''}` }; };
+// Role-tagged items are a CLAIMABLE QUEUE, not fan-out: every holder sees it until one claims it, then it is theirs alone
+const visibleTo = (m: InboxItem, me: User) => b.matches(m.to, me) && (m.to.type !== 'role' || !m.claimedBy || m.claimedBy === me.shortName);
+const row = (m: InboxItem, me: User): InboxRow => ({ ...m, unread: !m.readBy.includes(me.shortName), status: messageStatus(m), claimable: m.to.type === 'role' && !m.claimedBy && !m.doneAt, ...jobRef(m.jobId) });
 export async function getInbox(userId: string): Promise<InboxRow[]> {
   const me = b.users().find((u) => u.id === userId); if (!me) return [];
-  return inbox.filter((m) => b.matches(m.to, me)).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).map((m) => ({ ...m, unread: !m.readBy.includes(me.shortName), ...jobRef(m.jobId) }));
+  return inbox.filter((m) => visibleTo(m, me)).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).map((m) => row(m, me));
 }
-export async function markInboxRead(id: string, shortName: string, read = true): Promise<void> { const m = inbox.find((x) => x.id === id); if (!m) return; m.readBy = read ? Array.from(new Set([...m.readBy, shortName])) : m.readBy.filter((s) => s !== shortName); }
-export const unreadCount = (userId: string) => { const me = b.users().find((u) => u.id === userId); return me ? inbox.filter((m) => b.matches(m.to, me) && !m.readBy.includes(me.shortName)).length : 0; };
+export async function markInboxRead(id: string, shortName: string, read = true): Promise<void> { const m = inbox.find((x) => x.id === id); if (!m) return; m.readBy = read ? Array.from(new Set([...m.readBy, shortName])) : m.readBy.filter((s) => s !== shortName); if (read && !m.seenAt) m.seenAt = new Date().toISOString(); }
+export const unreadCount = (userId: string) => { const me = b.users().find((u) => u.id === userId); return me ? inbox.filter((m) => visibleTo(m, me) && !m.readBy.includes(me.shortName) && !m.doneAt).length : 0; };
+// Claim a role-tagged message — it leaves everyone else's list; the pinned row follows
+export async function claimMessage(id: string, shortName: string): Promise<InboxItem> {
+  const m = inbox.find((x) => x.id === id); if (!m) throw new Error('Message not found'); if (m.to.type !== 'role') throw new Error('Only role-tagged messages are claimable'); if (m.claimedBy && m.claimedBy !== shortName) throw new Error(`Already claimed by ${m.claimedBy}`);
+  m.claimedBy = shortName; m.claimedAt = new Date().toISOString(); m.readBy = Array.from(new Set([...m.readBy, shortName])); m.seenAt ??= m.claimedAt;
+  const pin = b.pinned().find((x) => x.id === m.pinnedId); if (pin) pin.assignedTo = { type: 'user', shortName };
+  b.audit(`Claimed #${m.to.role} message from ${m.from}${m.jobId ? ` · ${jobRef(m.jobId).jobNumber}` : ''}`); return m;
+}
+// Done = the recipient handled it; the sender sees "done", the pinned row clears
+export async function markMessageDone(id: string, shortName: string, done = true): Promise<InboxItem> {
+  const m = inbox.find((x) => x.id === id); if (!m) throw new Error('Message not found');
+  if (done) { m.doneBy = shortName; m.doneAt = new Date().toISOString(); m.readBy = Array.from(new Set([...m.readBy, shortName])); m.seenAt ??= m.doneAt; } else { delete m.doneBy; delete m.doneAt; }
+  const pin = b.pinned().find((x) => x.id === m.pinnedId); if (pin) { if (done) { pin.dismissedAt = m.doneAt; pin.dismissedBy = shortName; } else { delete pin.dismissedAt; delete pin.dismissedBy; } }
+  if (m.jobId && done) b.jobStamp(m.jobId, `${shortName} marked ${m.from}'s message done`); return m;
+}
+// Sender's view — everything I sent, newest first, with delivered / seen / done
+export async function getSent(shortName: string): Promise<SentRow[]> {
+  return inbox.filter((m) => m.from === shortName).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).map((m) => ({ ...m, status: messageStatus(m), toLabel: m.to.type === 'role' ? `#${m.to.role}${m.claimedBy ? ` → ${m.claimedBy}` : ''}` : b.label(m.to).split(' →')[0], jobNumber: jobRef(m.jobId).jobNumber }));
+}
+export const stationTargets = () => b.stations().filter((s) => s.id !== b.stationId() && !/kiosk/i.test(s.name));
 
 // "Flag to" — a message/photo sent to a person or role lands in their Inbox AND as a Pinned row on their Hitlist
-export interface FlagInput { to: Assignee; text?: string; photo?: PackagePhoto; jobId?: string; from?: string }
+export interface FlagInput { to: Assignee; text?: string; photo?: PackagePhoto; jobId?: string; from?: string; kind?: 'flag' | 'message' }
 export async function flagToHitlist(input: FlagInput): Promise<{ inbox: InboxItem; pinned: PinnedItem }> {
   const a0 = b.actor(); const a = { ...a0, by: input.from ?? a0.by }; // kiosk: attribution = the job's watchmaker, not the station login
   if (!input.text?.trim() && !input.photo) throw new Error('Add a note or a photo');
   const j = input.jobId ? b.jobs().find((x) => x.id === input.jobId) : undefined;
   const item: InboxItem = { id: b.newId('ib'), to: input.to, from: a.by, text: input.text?.trim() || undefined, photo: input.photo, jobId: j?.id, createdAt: new Date().toISOString(), station: a.station, readBy: [] };
-  const pin: PinnedItem = { id: b.newId('pin'), title: `${input.photo ? 'Photo' : 'Note'} from ${a.by}${j ? ` · ${j.number}` : ''}${item.text ? ` — ${item.text.slice(0, 80)}` : ''}`, assignedTo: input.to, createdBy: a.by, division: b.division(), jobId: j?.id, inboxId: item.id, photo: input.photo, createdAt: item.createdAt, station: a.station };
+  const noun = input.kind === 'message' ? 'Message' : input.photo ? 'Photo' : 'Note'; const who = b.label(input.to).split(' →')[0];
+  const pin: PinnedItem = { id: b.newId('pin'), title: `${noun} from ${a.by}${j ? ` · ${j.number}` : ''}${item.text ? ` — ${item.text.slice(0, 80)}` : ''}`, assignedTo: input.to, createdBy: a.by, division: b.division(), jobId: j?.id, inboxId: item.id, photo: input.photo, createdAt: item.createdAt, station: a.station };
   item.pinnedId = pin.id; inbox.unshift(item); b.pinned().unshift(pin);
-  b.audit(`Flagged ${input.photo ? 'photo' : 'note'} to ${b.label(input.to).split(' →')[0]}${j ? ` · ${j.number}` : ''}`);
-  if (j) b.jobStamp(j.id, `${input.photo ? 'Photo' : 'Note'} flagged to ${b.label(input.to).split(' →')[0]}'s hit list`);
+  b.audit(`${input.kind === 'message' ? 'Sent message' : `Flagged ${input.photo ? 'photo' : 'note'}`} to ${who}${input.to.type === 'role' ? ' (claimable)' : ''}${j ? ` · ${j.number}` : ''}`);
+  if (j) b.jobStamp(j.id, `${noun} ${input.kind === 'message' ? 'sent' : 'flagged'} to ${who}${input.kind === 'message' ? ' (nudge — the job note is the record)' : "'s hit list"}`);
   return { inbox: item, pinned: pin };
 }
+// Send = one-shot directed message (person / #role / station). Lands as an inbox row + hitlist pin. No thread.
+export const sendMessage = (input: Omit<FlagInput, 'kind'>) => flagToHitlist({ ...input, kind: 'message' });
 // Reply to an inbox message — lands in the ORIGINAL SENDER's inbox + hitlist (their bench iPad), never back at the shared kiosk it was sent from
 export async function replyToInbox(inboxId: string, text: string, fromOverride?: string): Promise<InboxItem> {
   const orig = inbox.find((x) => x.id === inboxId); if (!orig) throw new Error('Message not found'); if (!text.trim()) throw new Error('Type a reply');

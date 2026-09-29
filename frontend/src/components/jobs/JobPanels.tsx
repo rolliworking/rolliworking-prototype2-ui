@@ -2,7 +2,7 @@ import { Camera, Clock, ListChecks, Lock, PauseCircle, PlayCircle, Send, Unlock,
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { JobPriority, JobWithRefs, Role, ShopTimeEntry, Task, User } from '@/api/client';
+import type { JobPriority, JobWithRefs, PhotoType, Role, ShopTimeEntry, Task, User } from '@/api/client';
 import { PhotoCapture } from '@/components/intake/ReceiveBits';
 import { AssigneeChips, KindPill, OwnerBadge, Provisional } from '@/components/jobs/JobBits';
 import { Button } from '@/components/ui/Button';
@@ -123,21 +123,29 @@ export const NotesPanel = ({ job: j, run }: { job: JobWithRefs; run: Refresh }) 
   );
 };
 
+// Staff photo viewer — ONE pipeline (`addJobPhoto`), four entry points. photo_type chips filter; per-photo lock (locked by default; unlock = client sees it in the portal; re-lock any time).
+const typeOf = (p: { photoType?: PhotoType; slot?: string }): PhotoType => p.photoType ?? (/^inspection-|^auth-/.test(p.slot ?? '') ? 'inspection' : /after|complete/i.test(p.slot ?? '') ? 'post_work' : /arrival|intake/i.test(p.slot ?? '') ? 'intake' : 'bench');
 export const PhotosPanel = ({ job: j, run }: { job: JobWithRefs; run: Refresh }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); const [type, setType] = useState<PhotoType | 'all'>('all'); const [attachType, setAttachType] = useState<PhotoType>('bench');
+  const shown = j.photos.filter((p) => type === 'all' || typeOf(p) === type); const unlocked = j.photos.filter((p) => api.isPhotoUnlocked(p.id)).length;
   return (
     <div data-testid="photos-panel">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-ink-500">{j.photos.length} photo{j.photos.length === 1 ? '' : 's'} on this job</span>
+        <span className="text-xs text-ink-500">{j.photos.length} photo{j.photos.length === 1 ? '' : 's'} on this job · <span data-testid="photos-unlocked-count">{unlocked}</span> client-visible</span>
         <Button size="sm" data-testid="photos-toggle" onClick={() => setOpen((o) => !o)}><Camera size={12} /> {open ? 'Done' : 'Attach photo…'}</Button>
       </div>
-      {open && <div className="mt-2"><PhotoCapture onAdd={(p) => run(() => api.addJobPhotos(j.id, p), `${p.length} photo${p.length === 1 ? '' : 's'} attached`)} /></div>}
-      {j.photos.length > 0 && (
+      <div className="mt-2 flex flex-wrap gap-1" data-testid="photo-type-chips">
+        <button type="button" data-testid="photo-type-all" data-selected={type === 'all'} onClick={() => setType('all')} className={`rounded-full border px-2 py-0.5 text-[11px] ${type === 'all' ? 'border-ink bg-ink text-white' : 'border-line text-ink-600 hover:bg-canvas'}`}>All {j.photos.length}</button>
+        {api.PHOTO_TYPES.map((t) => { const n = j.photos.filter((p) => typeOf(p) === t.key).length; return <button key={t.key} type="button" data-testid={`photo-type-${t.key}`} data-selected={type === t.key} title={t.blurb} onClick={() => setType(t.key)} className={`rounded-full border px-2 py-0.5 text-[11px] ${type === t.key ? 'border-ink bg-ink text-white' : 'border-line text-ink-600 hover:bg-canvas'}`}>{t.label} {n}</button>; })}
+      </div>
+      {open && <div className="mt-2 space-y-2"><div className="flex items-center gap-2 text-xs text-ink-500">Type<select data-testid="photos-attach-type" value={attachType} onChange={(e) => setAttachType(e.target.value as PhotoType)} className="h-7 rounded-sm border border-line bg-canvas px-1.5 text-xs">{api.PHOTO_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select><span className="text-[10px] text-ink-400">locked (private) on attach</span></div><PhotoCapture onAdd={(p) => run(() => api.addJobPhotos(j.id, p, attachType), `${p.length} photo${p.length === 1 ? '' : 's'} attached · ${api.PHOTO_TYPES.find((t) => t.key === attachType)!.label} · locked`)} /></div>}
+      {shown.length === 0 && j.photos.length > 0 && <p data-testid="photo-grid-empty" className="mt-2 text-xs text-ink-400">No {api.PHOTO_TYPES.find((t) => t.key === type)?.label.toLowerCase()} photos on this job.</p>}
+      {shown.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5" data-testid="photo-grid">
-          {j.photos.map((p) => { const open = api.isPhotoUnlocked(p.id); return <figure key={p.id} className="relative w-[88px]" data-testid={`job-photo-${p.id}`} data-unlocked={open}><img src={p.dataUrl} alt={p.fileName ?? 'Job photo'} className={`h-16 w-full rounded-sm object-cover ring-1 ${open ? 'ring-moss' : 'ring-line'}`} /><button type="button" data-testid={`photo-lock-${p.id}`} title={open ? 'Visible to the client in RolliConnect — click to make private' : 'Private to the workshop — click to unlock for the client'} onClick={() => run(() => api.setPhotoUnlocked(j.id, p.id, !open), open ? 'Photo locked — private to the workshop' : 'Photo unlocked — visible to the client')} className={`absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-white ${open ? 'bg-moss' : 'bg-ink/80'}`}>{open ? <Unlock size={10} /> : <Lock size={10} />}</button><figcaption className="truncate text-[10px] text-ink-400">{open ? 'client-visible' : 'private'} · {p.by} · {fmtDate(p.at)}</figcaption></figure>; })}
+          {shown.map((p) => { const open = api.isPhotoUnlocked(p.id); return <figure key={p.id} className="relative w-[88px]" data-testid={`job-photo-${p.id}`} data-unlocked={open}><img src={p.dataUrl} alt={p.fileName ?? 'Job photo'} className={`h-16 w-full rounded-sm object-cover ring-1 ${open ? 'ring-moss' : 'ring-line'}`} /><button type="button" data-testid={`photo-lock-${p.id}`} title={open ? 'Visible to the client in RolliConnect — click to make private' : 'Private to the workshop — click to unlock for the client'} onClick={() => run(() => api.setPhotoUnlocked(j.id, p.id, !open), open ? 'Photo locked — private to the workshop' : 'Photo unlocked — visible to the client')} className={`absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-white ${open ? 'bg-moss' : 'bg-ink/80'}`}>{open ? <Unlock size={10} /> : <Lock size={10} />}</button><figcaption className="truncate text-[10px] text-ink-400" title={`${p.slot ?? p.fileName ?? ''} · ${p.station}`}><span data-testid={`photo-type-chip-${p.id}`} className="rounded-sm bg-canvas px-1 font-semibold uppercase tracking-wide text-[9px] text-ink-600">{api.PHOTO_TYPES.find((t) => t.key === typeOf(p))!.label}</span> {open ? 'client-visible' : 'private'} · {p.by} · {fmtDate(p.at)}</figcaption></figure>; })}
         </div>
       )}
-      <p className="mt-2 text-[10px] text-ink-400">Every staff photo is private by default · unlock to publish it to the client’s RolliConnect (behind their login)</p>
+      <p className="mt-2 text-[10px] text-ink-400">Every staff photo is locked (private) by default — pad camera, WM kiosk, inspection cameras, auth capture and this panel all land here · unlock = visible to the client in RolliConnect (behind their login) · re-lock any time</p>
     </div>
   );
 };

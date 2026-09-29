@@ -32,7 +32,8 @@ def callers(name):
     return ', '.join(sorted(out)) or '— (internal / other client.ts functions only)'
 # Best reading of what the real endpoint must require (auth expected). Order matters: first match wins.
 AUTH_RULES = [
-    (r'^(rc|portal|issueRc|verifyRc|getRc|rcSign|rcTotp|rcVerify|payViaLink|getPayPage|getPortal|portalDeepLink|portalRevoke|soRecordsLink)', 'client-portal'),
+    (r'^(payViaLink|getPayPage|getPayLink)', 'token'),
+    (r'^(rc|portal|issueRc|verifyRc|getRc|rcSign|rcTotp|rcVerify|getPortal|portalDeepLink|portalRevoke|soRecordsLink)', 'client-portal'),
     (r'^(kiosk|rgKiosk|rgClock|rgPunch|rgTag|benchPinIn|getBenchBoard|getBenchSettings|saveBenchSettings|wmKiosk|getWmKiosk|submitWmKiosk|captureWmKiosk)', 'station'),
     (r'^(simulateTrackingEvent|simulateClient|onInboundCall|receiveInboundCall|qboSyncInvoice|simulate)', 'webhook'),
     (r'^(getStations?|registerStation|renameStation|resetDevice|getCurrentUser|hasSignedInToday|getUsersSignedInToday|signInWithPassword|switchUserWithPin|isReceptionMode|receptionSource|getViewAs)$', 'none'),
@@ -57,7 +58,7 @@ def side_effects(name):
     return ', '.join(fx) or 'none (read)'
 lines = ['# 05 — API CONTRACT (target surface for the real backend)', '',
          'Every exported function of `src/api/client.ts`, generated from the code (`_gen.py`). Screens only ever call these. In KEEPER each `async` entry becomes an HTTP endpoint (or RPC); each `sync` helper becomes either a server-computed field or a shared pure function.',
-         '', 'Columns: **kind** (async = crosses the wire; sync = pure/derived; const = lookup table) · **signature** as written · **source** = `real` when `API_SOURCE[name] === \'real\'` in `src/api/config.ts` (served by `realClient.ts`, mock fallback on failure) else `mock` · **auth expected** = best reading of what the real endpoint must require: `staff` (device session + role check) · `station` (station token — kiosks/pads) · `client-portal` (RolliConnect session or deep-link token) · `webhook` (provider → server, signed) · `none` · **side effects** detected in the body · **callers**.', '', 'Tags: **[post-E16]** = not in the E16 baseline; **[post-refresh]** = added after the 2026-09-26 refresh (see `_baseline_refresh.txt`).',
+         '', 'Columns: **kind** (async = crosses the wire; sync = pure/derived; const = lookup table) · **signature** as written · **source** = `real` when `API_SOURCE[name] === \'real\'` in `src/api/config.ts` (served by `realClient.ts`, mock fallback on failure) else `mock` · **auth expected** = best reading of what the real endpoint must require: `staff` (device session + role check) · `station` (station token — kiosks/pads) · `client-portal` (RolliConnect session or deep-link token) · `token` (the `/pay/:token` mock page — open in the prototype by ruling) · `webhook` (provider → server, signed) · `none` · **side effects** detected in the body · **callers**.', '', 'Tags: **[post-E16]** = not in the E16 baseline; **[post-refresh]** = added after the 2026-09-26 refresh (see `_baseline_refresh.txt`).',
          '', 'Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md` for what "audit" means per call.', '']
 last = None
 for cur, name, kind, sig in entries:

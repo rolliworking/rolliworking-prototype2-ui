@@ -90,6 +90,7 @@ import FloorMapPage from '@/pages/workshop/FloorMapPage';
 import PartsKnowledgePage from '@/pages/workshop/PartsKnowledgePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
+import AccessControlPage from '@/pages/rs/AccessControlPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
 import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
 import SchedulePage from '@/pages/SchedulePage';
@@ -116,11 +117,12 @@ function RoleRedirect({ to, label, role }: { to: string; label: string; role: Ro
   return <Navigate to={to} replace />;
 }
 // RW shell guard: concierge never enters the RW app; the Supervisor Pad is supervisors / managers only
-function RwRoleGuard({ pad, children }: { pad?: boolean; children: JSX.Element }) {
+function RwRoleGuard({ pad, band, children }: { pad?: boolean; band?: boolean; children: JSX.Element }) {
   const { user } = useAuth(); if (!user) return children;
   const k = roleKind(user);
   if (!rwAllowed(k)) return <RoleRedirect to={ROLE_HOME[k]} label="the RolliWorking bench app" role={k} />;
-  if (pad && !padAllowed(k)) return <RoleRedirect to={ROLE_HOME[k]} label="the Supervisor Pad" role={k} />;
+  // Band Pad is the band/polish techs' own home; every other pad-tier route needs a supervisor / manager
+  if (pad && !padAllowed(k) && !(band && k === 'band_tech')) return <RoleRedirect to={ROLE_HOME[k]} label="the Supervisor Pad" role={k} />;
   return children;
 }
 
@@ -163,13 +165,13 @@ export default function App() {
             <Route path="qc" element={<RwManagerOnly label="QC"><RwQcPage /></RwManagerOnly>} />
             <Route path="supervisor" element={<RwManagerOnly label="Supervisor board"><SupervisorPage /></RwManagerOnly>} />
             <Route path="floor" element={<RwFloorPage />} />
-            <Route path="assign" element={<div className="mx-6 my-5"><AssignMovePage /></div>} />
-            <Route path="queue" element={<RwWorkQueuePage />} />
+            <Route path="assign" element={<RwRoleGuard pad><div className="mx-6 my-5"><AssignMovePage /></div></RwRoleGuard>} />
+            <Route path="queue" element={<RwRoleGuard pad><RwWorkQueuePage /></RwRoleGuard>} />
             <Route path="bulk" element={<RwManagerOnly label="Bulk Assign"><RwBulkAssignPage /></RwManagerOnly>} />
             <Route path="wm" element={<RwWmPage />} />
-            <Route path="station" element={<RwStationScanPage />} />
+            <Route path="station" element={<RwRoleGuard pad><RwStationScanPage /></RwRoleGuard>} />
             <Route path="pad" element={<RwRoleGuard pad><RwPadPage room="wm" /></RwRoleGuard>} />
-            <Route path="band" element={<RwPadPage room="band" />} />
+            <Route path="band" element={<RwRoleGuard pad band><RwPadPage room="band" /></RwRoleGuard>} />
             <Route path="history" element={<RwHistoryPage />} />
             <Route path="reports" element={<RwReportsPage />} />
             <Route path="bench" element={<RwBenchPage />} />
@@ -254,6 +256,7 @@ export default function App() {
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/setup" element={<SetupPage />} />
+              <Route path="/setup/access" element={<AccessControlPage />} />
               <Route path="/wm-kiosk" element={<WmKioskPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />

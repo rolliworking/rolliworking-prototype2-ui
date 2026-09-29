@@ -1,6 +1,7 @@
 import { CornerLookup } from '@/components/layout/CornerLookup';
 import { Component, useEffect, useState, type ReactNode } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/auth/AuthContext';
 import * as api from '@/api/client';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -44,6 +45,7 @@ export class RouteErrorBoundary extends Component<{ children: ReactNode }, { err
 }
 
 export default function AppShell() {
+  useReceptionIdleSignOut();
   return (
     <QuickAddProvider>
     <CompanionProvider>
@@ -66,4 +68,16 @@ export default function AppShell() {
     </CompanionProvider>
     </QuickAddProvider>
   );
+}
+
+// Reception mode (station flag on Front Desk 1 & 2): 5 minutes without input → sign out and return to the sign-in screen. Applies to every role at that station.
+const RECEPTION_IDLE_MS = 5 * 60_000;
+function useReceptionIdleSignOut() {
+  const { station, user, signOut } = useAuth(); const nav = useNavigate();
+  useEffect(() => {
+    if (!user || !api.isReceptionMode()) return;
+    let t = 0; const arm = () => { window.clearTimeout(t); t = window.setTimeout(() => { void signOut().then(() => nav('/sign-in?idle=1', { replace: true })); }, RECEPTION_IDLE_MS); };
+    const evs = ['pointerdown', 'keydown', 'mousemove', 'touchstart', 'scroll']; evs.forEach((e) => window.addEventListener(e, arm, { passive: true })); arm();
+    return () => { window.clearTimeout(t); evs.forEach((e) => window.removeEventListener(e, arm)); };
+  }, [station?.id, user?.id, signOut, nav]);
 }

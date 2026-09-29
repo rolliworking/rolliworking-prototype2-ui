@@ -1,6 +1,6 @@
 export type AccessTier = 'manager' | 'concierge';
 
-export type Role = 'concierge' | 'manager' | 'inspector' | 'watchmaker' | 'polisher' | 'band_tech';
+export type Role = 'concierge' | 'manager' | 'inspector' | 'supervisor' | 'watchmaker' | 'polisher' | 'band_tech';
 
 export type Division = 'rolliworks' | 'rollishop';
 
@@ -351,7 +351,7 @@ export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]
 
 // ---- Tasks (explicit 20%) + derived /today rows -----------------------------
 
-export type Assignee = { type: 'user'; shortName: string } | { type: 'role'; role: Role };
+export type Assignee = { type: 'user'; shortName: string } | { type: 'role'; role: Role } | { type: 'station'; stationId: string };
 
 export interface Task {
   id: string;
@@ -464,6 +464,8 @@ export type PackageScanKind = 'arrival' | 'shelved' | 'open';
 export type PackageMatch = 'label_request' | 'manual' | 'none';
 export interface PackageScan { id: string; kind: PackageScanKind; at: string; by: string; station: string; trackingNumber?: string; clientId?: string; shipmentId?: string; shelfBin?: string; matched: PackageMatch; note?: string }
 
+// One photo pipeline (D-390): every entry point (pad camera, WM kiosk, inspection cameras, auth capture, desktop attach) writes through `addJobPhoto`
+export type PhotoType = 'intake' | 'bench' | 'post_work' | 'inspection';
 export interface PackagePhoto {
   id: string;
   source: 'webcam' | 'upload' | 'camera';
@@ -471,6 +473,8 @@ export interface PackagePhoto {
   fileName?: string;
   slot?: string;
   clientVisible?: boolean;
+  photoType?: PhotoType;
+  note?: string;
 }
 
 export interface Package {
@@ -657,6 +661,8 @@ export interface SalesOrder {
   memo?: string;
   qboInvoiceId?: string;
   qboStatus: 'not_queued' | 'queued' | 'excluded';
+  qboSyncToken?: number;
+  qboLastSyncedAt?: string;
   zeroBalance?: ZeroBalance;
   payments: Payment[];
   balanceDue: number;
@@ -1160,7 +1166,7 @@ export interface PartSuggestion { part: Part; score: number; reason: 'recent' | 
 export type SendBackReason = 'rework' | 'waiting_on_part' | 'failed_qc' | 'other';
 export interface PadCard { job: JobWithRefs; stage: JobStatus; stageLabel: string; canAdvance: boolean; canSendBack: boolean; parts: FloorDot[]; photos: number; pendingParts: number }
 export interface RoomSummary { jobsInRoom: number; waitingOnParts: number; waitingOnApproval: number; picksRemaining: number; shortsToday: number }
-export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection' | 'completed'; at: string; by: string; unlocked: boolean }
+export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection' | 'completed'; photoType?: PhotoType; at: string; by: string; unlocked: boolean }
 
 // ---- Job messages — threaded, internal-only board ON the job; @mentions route by tier (hit list vs bench Messages) ----
 export interface JobMessage extends Stamp { id: string; jobId: string; parentId?: string; text: string; mentions: string[]; notify: string[]; photo?: PackagePhoto; readBy: string[] }
@@ -1258,5 +1264,6 @@ export interface B2bMatch { code: string; tier: B2bTier; estimate?: EstimateWith
 export type IntercomKind = 'station' | 'room' | 'pad';
 export interface IntercomStation { id: string; label: string; kind: IntercomKind; division: Division; online: boolean; busy: boolean }
 export interface IntercomCall { id: string; from: string; to: string; startedAt: string; state: 'ringing' | 'live' | 'ended'; endedAt?: string }
-export interface StorePage { id: string; by: string; from: string; text: string; at: string; division: Division | 'all' }
+export type PageZone = 'all' | 'wm' | 'front';
+export interface StorePage { id: string; by: string; from: string; text: string; at: string; division: Division | 'all'; zone: PageZone }
 export interface IntercomState { me: string; stations: IntercomStation[]; call?: IntercomCall; pages: StorePage[]; history: IntercomCall[] }

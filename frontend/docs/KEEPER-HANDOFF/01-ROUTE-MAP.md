@@ -16,14 +16,14 @@ Legend — **landing for**: which role kinds land here right after sign-in (`rol
 | `/home` | `HomeRedirect` → `homeRouteFor(user)` | — | RequireAuth | — |
 | `/today`, `/hitlist`, `/hit-list` | own Hitlist (redirects to `/hitlist/<slug>`) | manager, concierge (home-screen pref) | RequireAuth | own |
 | `/hitlist/owner` | MH Accountability (asset $ on hand, bypass feed, zero-balance log) | owner | TierGate `ownerOnly` + `isOwnerSync()` in `getHitlist` | all |
-| `/hitlist/:slug` | any person's Hitlist | — | RequireAuth; person switcher only for manager/concierge | own (of slug) |
+| `/hitlist/:slug` | a person's Hitlist | — | RequireAuth + `canViewHitlist` (self · their supervisor · manager tier · MH via View-as; others → own list) | own (of slug) |
 | `/hitlist/:slug/team` | supervisor team rollup (JV → Dre/Sam/Nico/MAM) | — | RequireAuth; `isSupervisor(slug)` else notice | team |
 | `/requests` | service requests queue | manager, concierge | TierGate(ALL) | division |
 | `/inbox` | comms hub | manager, concierge | TierGate(ALL) | division |
 | `/shipping/inbound` | inbound shipping stages / labels / tracking | manager, concierge | TierGate(ALL) | all |
 | `/shipping/bill-audit` | carrier bill audit (dollars) | manager | TierGate(MGR) | all |
-| `/intake` (+ `receive`, `receive/:id`, `work-order`, `inspection`, `inspection/:id`, `history`, `photos`, `inspect`, `inspect/new`, `inspect/:id`, `awaiting-approval`, `outbox`, `labels`, `trade`) | arrival → receive → work order → receive watch → inspection → outbox / label queue / trade scan-in | manager, concierge | TierGate(ALL) | all ⚠ (no division wall) |
-| `/estimates`, `/estimates/new`, `/estimates/:id` | estimates | manager, concierge | TierGate(ALL) | all ⚠ |
+| `/intake` (+ `receive`, `receive/:id`, `work-order`, `inspection`, `inspection/:id`, `history`, `photos`, `inspect`, `inspect/new`, `inspect/:id`, `awaiting-approval`, `outbox`, `labels`, `trade`) | arrival → receive → work order → receive watch → inspection → outbox / label queue / trade scan-in | manager, concierge | TierGate(ALL) | user division (packages via linked job; mock path) |
+| `/estimates`, `/estimates/new`, `/estimates/:id` | estimates | manager, concierge | TierGate(ALL) | user division (mock path; live API rows unwalled ⚠) |
 | `/jobs`, `/jobs/all`, `/jobs/new`, `/jobs/shop-time`, `/jobs/:id`, `/jobs/:jobId/appraisal/:id` | jobs board / list / detail / appraisal (signer selector) | manager | TierGate(MGR) | all |
 | `/inspection/new`, `/inspection/:id`, `/inspection-photos` | redirects into `/intake/inspect*` | — | RequireAuth | — |
 | `/clients`, `/clients/:id` | universal search, Client 360 (in-house badge hidden in reception mode) | manager, concierge | TierGate(ALL) | all |
@@ -34,7 +34,8 @@ Legend — **landing for**: which role kinds land here right after sign-in (`rol
 | `/assign` | Assign / Move | manager | TierGate(MGR) | all |
 | `/custody` | unified custody view | manager | TierGate(MGR) | all |
 | `/parts`, `/parts/knowledge` | parts catalog, learned knowledge | manager | TierGate(MGR) | all |
-| `/inventory`, `/inventory/count` | inventory, cycle count (variance $ = `accessTier === 'manager'` in `getVarianceReport`) | manager | TierGate(MGR) | all |
+| `/inventory` | inventory | manager | TierGate(MGR) | all |
+| `/inventory/count` | cycle count — counts + locations for every tier; variance report ($) manager-only | manager, concierge | TierGate(ALL) | all |
 | `/purchasing`, `/purchasing/vendors`, `/purchasing/vendors/:id` | purchasing | manager | TierGate(MGR) | all |
 | `/swo` | shipping work orders | manager | TierGate(MGR) | all |
 | `/labels` | label queue + printers | manager, concierge | TierGate(ALL) | all |
@@ -43,17 +44,17 @@ Legend — **landing for**: which role kinds land here right after sign-in (`rol
 | `/integrations`, `/integrations/quickbooks` | integration tiles, QBO setup | manager | TierGate(MGR) | all |
 | `/setup`, `/setup/audit-log` | users, catalog, templates, printers, audit log (shows `as <viewed>` chip) | manager | TierGate(MGR) | all |
 | `/help` | help | manager, concierge | TierGate(ALL) | — |
-| `/sales`, `/sales/new`, `/sales/:id`, `/sales/pickup`, `/sales/ship` | sales orders, pickup station, ship station (scan gate + manager override) | manager, concierge | TierGate(ALL) | all ⚠ |
-| `/wm-kiosk` | **Watchmaker-room photo kiosk** (common area, guided 4-step + ad-hoc) | — | RequireAuth only ⚠ UNGUARDED for role — any signed-in tier | all |
+| `/sales`, `/sales/new`, `/sales/:id`, `/sales/pickup`, `/sales/ship` | sales orders, pickup station, ship station (scan gate + manager override) | manager, concierge | TierGate(ALL) | user division (mock path) |
+| `/wm-kiosk` | **Watchmaker-room photo kiosk** (common area, guided 4-step + ad-hoc) | — | RequireAuth — left open to any signed-in tier in the prototype; **auth expected: station** | all |
 | `/actions/:action`, section placeholders, `*` | placeholders / not found | — | RequireAuth | — |
 
 ## B. RolliWorking bench app `/rw` — `RwRoleGuard` → `RwShell` (MoneyContext = `roleKind !== 'watchmaker'`)
 | route | purpose | landing for | guard | data scope |
 |---|---|---|---|---|
 | `/rw` (index) | Bench (desktop-style) | — | RwRoleGuard | own |
-| `/rw/bench` | **Bench Pad** (kiosked, PIN board, idle re-lock) | watchmaker (Leo, MM, Dre, Sam, Nico, MAM) | RwRoleGuard | own |
-| `/rw/pad` | **Supervisor Pad** (WM room) | supervisor (JV) | RwRoleGuard `pad` (`padAllowed` = supervisor/manager) | room |
-| `/rw/band` | Band Pad (`RwPadPage room="band"`) | — | RwRoleGuard only ⚠ UNGUARDED for pad tier (watchmakers reach it; $ hidden by MoneyContext) | room |
+| `/rw/bench` | **Bench Pad** (kiosked, PIN board, idle re-lock) | watchmaker (Leo) | RwRoleGuard | own |
+| `/rw/pad` | **Supervisor Pad** (WM room) | supervisor (MM, JV) | RwRoleGuard `pad` (`padAllowed` = supervisor/manager) | room |
+| `/rw/band` | Band Pad (`RwPadPage room="band"`) — home of band techs / polishers | band_tech (Dre, Sam, Nico, MAM) | RwRoleGuard `pad band` (supervisor / manager / band_tech) | room |
 | `/rw/hitlist`, `/rw/today`, `/rw/hitlist/:slug`, `/rw/hitlist/:slug/team` | Hitlist inside the RW shell (no $ for watchmakers) | — | RwRoleGuard | own / team |
 | `/rw/jobs`, `/rw/jobs/:id` | jobs, job detail (hide-money) | — | RwRoleGuard | all |
 | `/rw/parts` | parts | — | RwRoleGuard | all |
@@ -61,16 +62,17 @@ Legend — **landing for**: which role kinds land here right after sign-in (`rol
 | `/rw/supervisor` | supervisor board | — | RwManagerOnly | all |
 | `/rw/bulk` | Bulk Assign (scan) | — | RwManagerOnly | all |
 | `/rw/floor` | shop floor + manager gate scan (`accessTier === 'manager'` inside `gateScan`) | — | RwRoleGuard; gate action manager-only in API | all |
-| `/rw/assign`, `/rw/queue`, `/rw/wm`, `/rw/station`, `/rw/history`, `/rw/reports`, `/rw/picking`, `/rw/evidence` | assign/move, work queue, WM room, station scan, history lookup, reports, picking, evidence | — | RwRoleGuard only ⚠ (Assign/Move is NOT manager-only here — spec item 7 pending) | all |
+| `/rw/assign`, `/rw/queue`, `/rw/station` | assign/move, work queue, station scan | — | RwRoleGuard `pad` (supervisor / manager only) | all |
+| `/rw/wm`, `/rw/history`, `/rw/reports`, `/rw/picking`, `/rw/evidence` | WM room, history lookup, reports, picking, evidence | — | RwRoleGuard | all |
 | `/rw/testing`, `/rw/testing/test/:jobId` (`/rt*` redirect here) | timing bench (RolliTime) | — | RwRoleGuard | all |
 
 ## C. Public / station / token routes
 | route | purpose | landing for | guard | data scope |
 |---|---|---|---|---|
-| `/kiosk` | **Front-desk check-in kiosk** (walk-in) | — | none ⚠ UNGUARDED (intended public; needs station token in prod) | none |
-| `/rg/kiosk` | RGTime walk-in time-clock kiosk | — | none ⚠ UNGUARDED (station token intended) | none |
+| `/kiosk` | **Front-desk check-in kiosk** (walk-in) | — | none — left open in the prototype; **auth expected: station** | none |
+| `/rg/kiosk` | RGTime walk-in time-clock kiosk | — | none — left open; **auth expected: station** | none |
 | `/rg`, `/rg/clock`, `/rg/week`, `/rg/manager` | RGTime phone PWA (own remembered session, name+PIN) | — | own PIN session; `/rg/manager` = concierge+ card + PIN | own / all |
-| `/pay/:token` | mock payment page from invoice email | — | token ⚠ (token is a mock string, never expires) | one SO |
+| `/pay/:token` | mock payment page from invoice email | — | mock token, left open in the prototype; **auth expected: token** | one SO |
 | `/track`-style public page | **not built** (spec item "public track page" pending) | — | — | — |
 
 ## D. RolliConnect client portal `/rc`
@@ -80,12 +82,7 @@ Legend — **landing for**: which role kinds land here right after sign-in (`rol
 | `/rc/home`, `/rc/account`, `/rc/estimates/:id`, `/rc/invoices/:id`, `/rc/watches/:id`, `/rc/messages` | portal | portal session (`rcSession`) | one client |
 | `/rc/report/:token`, `/rc/inspection/:token` | tokened deep links (report approvals, inspection form) | token (`portalDeepLink`, revocable) | one client |
 
-## ⚠ UNGUARDED list (consumed by the lockdown build)
-1. `/kiosk` — public by design; production needs a station token (D-384) so a laptop can't pretend to be the kiosk.
-2. `/rg/kiosk` — same.
-3. `/pay/:token` — mock token, no expiry, no rate limit.
-4. `/wm-kiosk` — any signed-in tier (concierge included) can open the watchmaker-room photo kiosk; intended: kiosk station or RW roles.
-5. `/rw/band` — no `pad` guard (watchmakers can open the Band Pad; money is hidden but Assign/Advance actions are only API-gated).
-6. `/rw/assign`, `/rw/queue`, `/rw/bulk`(manager-only ✔), `/rw/station` — Assign is not manager-only for concierge/supervisor (spec item 7).
-7. `/hitlist/:slug` — any manager/concierge can read any person's list (ruled OK for admin assistants; concierge scope pending item 7).
-8. Division wall missing on `/intake/*`, `/estimates/*`, `/sales/*` (pre-existing ⚠).
+## ⚠ UNGUARDED list (consumed by the lockdown build) — after the 2026-09-29 fix batch
+Fixed: `/rw/assign` `/rw/queue` `/rw/station` (pad guard) · `/rw/band` (pad guard + band_tech) · `/hitlist/:slug` (`canViewHitlist`) · division wall on intake / estimates / sales (mock path).
+Left open in the prototype by ruling, tagged in `05-API-CONTRACT.md`: `/kiosk` (station), `/rg/kiosk` (station), `/wm-kiosk` (station), `/pay/:token` (token).
+Still ⚠: rows served by the live staging API bypass the division wall (no division on the wire).

@@ -1,4 +1,4 @@
-import { appraisalBridge as b } from './client';
+import { addJobPhotoSync, appraisalBridge as b } from './client';
 import { getAuthSessions, AUTH_STEPS } from './authCapture';
 import type { Division } from './types';
 
@@ -57,7 +57,7 @@ export async function updateAppraisal(id: string, patch: Partial<Pick<Appraisal,
 // After-work photo — its own slot on the job so it is always identifiable as "after", never mixed into the intake set
 export async function attachAfterPhoto(id: string, dataUrl: string): Promise<Appraisal> {
   const a = appraisals.find((x) => x.id === id); if (!a) throw new Error('Appraisal not found'); const j = b.job(a.jobId); const ac = b.actor();
-  if (j) j.photos.unshift({ id: b.newId('after'), source: 'camera', dataUrl, slot: 'after-work', fileName: 'After work', at: new Date().toISOString(), by: ac.by, station: ac.station });
+  if (j) addJobPhotoSync(j, { id: b.newId('after'), dataUrl, slot: 'after-work', fileName: 'After work', photoType: 'post_work', by: ac.by, station: ac.station, stamp: false });
   a.afterPhotoUrl = dataUrl; b.jobStamp(a.jobId, `After-work photo attached · ${a.number}`); return { ...a };
 }
 export async function finalizeAppraisal(id: string, signerId?: string): Promise<Appraisal> {

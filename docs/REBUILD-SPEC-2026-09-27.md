@@ -193,6 +193,12 @@ Dashboard, Today/hit list, Clients directory, Requests, Inbound shipments, Label
 - Job templates: `api/jobTemplates.ts` (`JobTemplate` with `depts` vs `inferredDepts`, `reviewed`, `archived`; `reviewJobTemplate` = VB10-04 one-time review) — UI under Bill Audit tab.
 - Money: every price store is DOLLARS (purchase history converted at source). Cycle count has no threshold/pin — `CycleCount.gainLoss` report only.
 
+## 12e. Spec items 5–7 shipped (2026-09-29) — see DECISIONS D-389 / D-390 / D-391
+- **5 Paging + one-shot messages**: `api/intercom.ts` zones (`PAGE_ZONES`, `zoneOfStation`, `pageTargetsMe`), `api/hitlist.ts` (`sendMessage`, `claimMessage`, `markMessageDone`, `getSent`, `messageStatus`, station targets), UI `components/layout/MessageComposer.tsx` (+ `useDictation`), `MessagesPopover.tsx` (top bar), `components/rw/pad/PadComms.tsx` (pad tab), `InboxPanel` Done / Claim / status chips. MOCK; Daily.co seam untouched; dictation = browser Web Speech API. STAND-IN: station targeting = the station id in the device session.
+- **6 One photo pipeline**: `addJobPhoto` / `addJobPhotoSync` + `PHOTO_TYPES`; four entry points route through it; `PhotosPanel` type chips + lock. Photos remain base64 / object URLs in memory (STAND-IN → object storage).
+- **7 Access control panel**: `/setup/access` owner-only; `canAccess` honours per-user overrides; log + audit. STAND-IN: overrides live in localStorage of the device — Keeper stores them server-side per user.
+- **8 Concierge module**: spec pending from MH.
+
 ## 13. Consolidated STAND-INS to replace in production
 1. Job status map `complete→ready_to_ship`, `awaiting_parts/hold→in_service`; default `simpleStatus`, `priority`, `department`, `division` derivation. 2. `valid_until` = created+30 d. 3. Lead numbering `RQ-YY-XXXX` from id. 4. Serial prefix decode table. 5. B2B account-code heuristics. 6. `lineDollars` cents/dollars heuristic. 7. Team "actual" scaled from component-count goals; roster lists. 8. Waiver-required proxy; 14-day update-email threshold; approval wait-time origin. 9. $98/hr bracelet rate; inspection type list. 10. Camera device assignment (IPEVO vs microscope). 11. Base64 photos in memory (→ object storage). 12. QBO and intercom entirely mocked. 13. Audit scope membership lists (WM/band) and `stuck_parts_bin` derivation. 14. Concierge pad placeholder view.
 

@@ -9,13 +9,14 @@ Code is truth. Every name below is a real identifier in `/app/frontend/src`. Whe
 
 ## 2. `roleKind()` — the ONE landing/guard function (`src/config/roles.ts`)
 ```ts
-export type RoleKind = 'watchmaker' | 'supervisor' | 'concierge' | 'manager';
-const ROOM_ROLES = ['watchmaker', 'polisher', 'band_tech'];
-roleKind(u) = manager tier ? (has room role ? 'supervisor' : 'manager') : (has room role ? 'watchmaker' : 'concierge')
-ROLE_HOME = { watchmaker: '/rw/bench', supervisor: '/rw/pad', concierge: '/', manager: '/' }
-desktopAllowed(k) = k !== 'watchmaker'   // RequireAuth
-rwAllowed(k)      = k !== 'concierge'    // RwRoleGuard
-padAllowed(k)     = k === 'supervisor' || k === 'manager'   // RwRoleGuard pad
+export type RoleKind = 'watchmaker' | 'band_tech' | 'supervisor' | 'concierge' | 'manager';   // band_tech = band techs AND polishers (Dre, Sam, Nico, MAM)
+roleKind(u) = roles has 'supervisor' || (manager tier && room role) ? 'supervisor' : manager tier ? 'manager' : has 'watchmaker' ? 'watchmaker' : has polisher/band_tech ? 'band_tech' : 'concierge'
+ROLE_HOME = { watchmaker: '/rw/bench', band_tech: '/rw/band', supervisor: '/rw/pad', concierge: '/', manager: '/' }
+desktopAllowed(k) = k !== 'watchmaker' && k !== 'band_tech'   // RequireAuth
+rwAllowed(k)      = k !== 'concierge'                          // RwRoleGuard
+padAllowed(k)     = k === 'supervisor' || k === 'manager'      // RwRoleGuard pad (Band Pad additionally admits band_tech — it is their home)
+canSupervise(u)   = manager tier || roles has 'supervisor'     // assign / reassign / stage moves (MM is concierge tier but supervises)
+teamFamily(u)     = 'W' | 'B·P' | null; FAMILY_TONE          // the two colour families in every mixed view, always paired with the chip text
 homeFor(u) = ROLE_HOME[roleKind(u)]; hitlist.homeRouteFor(u) honours the per-user home-screen preference for concierge/manager only
 ```
 Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, user)` from `src/config/navigation.ts` = `tiers.includes(accessTier) && (!ownerOnly || id === OWNER_USER_ID)`), `RwRoleGuard`, `RwManagerOnly`, `RoleRedirect` (toast + `<Navigate>`).
@@ -32,17 +33,17 @@ Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, use
 
 ## 4. Concierge restrictions (as built vs ruled)
 - Pad blocked: `rwAllowed('concierge') === false` → any `/rw/*` bounces to `/` with a toast. ✔
-- Assign manager-only: API-level `assignTech` throws for non-manager ✔; **route** `/assign` is `MGR` on desktop ✔, but `/rw/assign` has no manager guard — ⚠ DRIFT (spec item 7, pending).
-- Cycle counts without dollars: `/inventory/count` is `MGR` tier — concierge cannot count at all; ruled: concierge counts, no $. ⚠ DRIFT (item 7 pending). Variance $ is already manager-only inside `getVarianceReport`.
+- Assign: `/rw/assign`, `/rw/queue`, `/rw/station` wrapped in `RwRoleGuard pad` (supervisor / manager only); API `assignTech`/attribution amend use `canSuperviseUser` ✔ (item 7 done 2026-09-29).
+- Cycle counts without dollars: nav item `cycle-count` (`/inventory/count`, tiers ALL) — concierge counts; the variance report and its dollars stay manager-only (`getVarianceReport`) ✔.
 
 ## 5. Reception mode (station flag, D-2026-09-29)
 - Where: `Station.receptionMode?: boolean` (`types.ts`); seeded `true` on `st-01 Front Desk 1` and `st-02 Front Desk 2` (`fixtures/stations.ts`); localStorage station registry backfills the flag from the seed (`readStations` in `client.ts`).
 - Override: `?reception=1|0` on any URL → `sessionStorage['rollisuite.prototype.receptionOverride']` (this browser session). `isReceptionMode()` / `receptionSource()` exported from `client.ts`.
 - Hides: in `resolveIdentifierMock` the client hit's `inHouse` (IN-HOUSE badge + estimate numbers) is dropped, so `SearchHitList` renders a plain row and in-house clients no longer sort first. TopBar shows `header-reception-badge` (`data-source` = station | query).
-- **5-minute idle sign-out: not built** ⚠ DRIFT (only the Bench Pad has an idle re-lock, `BenchSettings.idleMinutes`, default 10).
+- **5-minute idle sign-out — built** (`useReceptionIdleSignOut` in `AppShell.tsx`, `RECEPTION_IDLE_MS = 300000`): when `isReceptionMode()` is true, 5 min without pointer/key/touch/scroll → `signOut()` → `/sign-in?idle=1`. Applies to every role at that station, managers included. Bench Pad keeps its own re-lock.
 - Applies to every role on that station (it is a station flag) — managers pass `?reception=0` to see badges.
 
-## 6. Sessions
+## 6. Sessions (division wall: `inMyDivision.*` in `client.ts` — estimates/SOs/packages inherit the linked job's division, default rolliworks; `both` users see all; other-entity detail throws "Not in your division")
 - Real sign-in = `localStorage['rollisuite.prototype.currentUserId']` (device-bound, one user per device at a time; PIN fast-switch replaces it). `signOut` clears it and the View-as key.
 - **Single-session enforcement (one device per person): not built** ⚠ DRIFT — the same account can be signed in on two devices; nothing invalidates the other.
 - RGTime (`/rg`) keeps its own remembered phone session; RolliConnect keeps `rcSession`; kiosks have no session.
@@ -63,20 +64,19 @@ Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, use
 | Walter | Inspector · Manager | manager, inspector | manager | rollishop | manager | `/` |
 | Vienna (VC) | **Operations Manager** | manager | manager | rolliworks | manager | `/` |
 | JV | **Workshop Supervisor (band/polish)** — Joseph; supervises Dre/Sam/Nico/MAM | manager, polisher, band_tech | manager | rolliworks | supervisor | `/rw/pad` |
-| MM | Watchmaker | watchmaker | concierge | rolliworks | watchmaker | `/rw/bench` |
+| MM | **Watchmaker Room Supervisor** · oversight of band/polish (read-only) — no bench, never assigned jobs | supervisor | concierge (no $) | rolliworks | supervisor | `/rw/pad` |
 | Leo | Watchmaker | watchmaker | concierge | rolliworks | watchmaker | `/rw/bench` |
 | Chyna (CM) | Concierge | concierge | concierge | rolliworks | concierge | `/` |
-| Dre | Polisher | polisher | concierge | rolliworks | watchmaker | `/rw/bench` |
-| Sam | Band tech | band_tech | concierge | rolliworks | watchmaker | `/rw/bench` |
-| Nico | Polisher · Band tech | polisher, band_tech | concierge | rolliworks | watchmaker | `/rw/bench` |
-| MAM | Matthew Monteverde — Band tech (part-time), reports to JV | band_tech | concierge | rolliworks | watchmaker | `/rw/bench` |
-Team rollups (`hitlist.ts TEAM_MAP`): only `JV → band_tech + polisher`. **The watchmaker room has no supervisor** (slot empty; `/hitlist/mm/team` → "doesn't supervise a team").
+| Dre | Polisher | polisher | concierge | rolliworks | band_tech | `/rw/band` |
+| Sam | Band tech | band_tech | concierge | rolliworks | band_tech | `/rw/band` |
+| Nico | Polisher · Band tech | polisher, band_tech | concierge | rolliworks | band_tech | `/rw/band` |
+| MAM | Matthew Monteverde — Band tech (part-time), reports to JV | band_tech | concierge | rolliworks | band_tech | `/rw/band` |
+Team rollups (`hitlist.ts TEAM_MAP`): `MM → watchmaker + band_tech + polisher` (band/polish rows **read-only** for MM: `readOnlyRoles`, `teamRowReadOnly(viewer, tech)`), `JV → band_tech + polisher`. Other supervisors/managers never roll up as techs (`isTech`). MM's team view is merged and colour-differentiated (legend `team-legend`, `W` / `B·P` chip on every tech tag). MM's tab bar: Hitlist · Assign/Move · Work Queue · Jobs · Pad · Band Pad (`SUPERVISOR_NAV`). Hitlist visibility `canViewHitlist(viewer, target)`: self, supervisor of target, manager tier, MH (also via View-as); others are redirected to their own list.
 Stations: `st-01 Front Desk 1` (reception ✔, default pre-registered), `st-02 Front Desk 2` (reception ✔), `st-03 Inspection Bench`, `st-04 Watchmaker Room`, `st-05 Shipping`, `st-rs RS Counter` (rollishop), **`st-wm1…st-wm8` "WM 1–8" = bench iPads (`deviceType: 'pad'`) — devices, NOT people**, `st-jv-pad`, `st-kiosk-fd` Front-desk check-in kiosk, `st-kiosk-wm` WM room photo kiosk (`deviceType: 'kiosk'`).
 
-### ⚠ DRIFT against MH's corrections
-- `roleKind` still labels band techs/polishers `'watchmaker'` (used for landing + money hiding). Behaviour matches (bench pad, no $) but the name is wrong for docs; KEEPER should call it `bench`.
-- `auditScopeFor()` still tests `/Watchmaker Room Supervisor/` for a WM-room scope that no seed user has — dead branch until a WM supervisor exists.
-- `RwPadPage` comment still says "one user (the watchmaker-room supervisor)"; today the pad's only supervisor is JV (band/polish). `/rw/pad` renders the WM room; JV's band room is `/rw/band`. Which pad JV should land on is an open question (03-OPEN-QUESTIONS).
-- Historic strings "Joseph's safe" were renamed "JV's safe"; safe id remains `safe-joseph`.
-- Concierge tier name (`accessTier: 'concierge'`) covers watchmakers/band techs — rename to `bench` in KEEPER.
-- Reception 5-minute idle sign-out and single-session: not built (see §5, §6).
+### ⚠ DRIFT remaining (2026-09-29 fix batch cleared: `band_tech` kind, dead WM branch in `auditScopeFor`, `RwPadPage` comment, `safe-jv`, reception idle sign-out, item 7 guards, MM = WM-room supervisor)
+- Concierge tier name (`accessTier: 'concierge'`) still covers watchmakers, band techs and MM — rename to `bench` in KEEPER; MM's "no $" rides on that tier.
+- Division wall applies to the MOCK path only; rows served by the live staging API carry no division and are shown to everyone (Q102).
+- Two colour families are applied on the team hitlist only; queue, pad and shop-floor map still lack the W / B·P chip (Q101).
+- JV lands on `/rw/pad` like MM (Q92 recommends `/rw/band`).
+- Single-session: not built (§6).

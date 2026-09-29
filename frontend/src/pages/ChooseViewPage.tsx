@@ -12,7 +12,7 @@ export default function ChooseViewPage() {
   if (loading) return null;
   if (!realUser) return <Navigate to="/sign-in" replace />;
   if (!isOwner) return <Navigate to="/" replace />;
-  const padPeople = api.getDivisionStaff('rolliworks').filter((u) => u.id !== realUser.id && ['watchmaker', 'supervisor'].includes(roleKind(u)));
+  const padPeople = api.getDivisionStaff('rolliworks').filter((u) => u.id !== realUser.id && ['watchmaker', 'band_tech', 'supervisor'].includes(roleKind(u)));
   const tile = 'flex min-h-[132px] flex-col items-start justify-between rounded-2xl border p-4 text-left transition-[transform,border-color] hover:-translate-y-0.5 hover:border-amber-400';
   return (
     <div data-testid="choose-view-page" className="min-h-full bg-[#161b22] px-6 py-8 text-slate-100">

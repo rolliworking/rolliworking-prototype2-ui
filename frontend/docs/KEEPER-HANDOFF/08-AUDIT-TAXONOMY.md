@@ -50,7 +50,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `rgtime` | `rgAudit` | RGTime |
 | `kiosk` | `kioskAudit`, `resolveKioskMatch`, `saveBenchSettings` | Kiosk |
 | `appointments` | `auditAppointments` | All only |
-| `settings` | `rcResetAccount`, `setFeatureFlag`, `setRcDocAccess` | All only |
+| `settings` | `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setRcDocAccess` | All only |
 | `shipping` | `portalCreateLabel` | All only |
 | `view_as_started` | `startViewAs` | All only |
 | `view_as_ended` | `startViewAs`, `stopViewAs` | All only |

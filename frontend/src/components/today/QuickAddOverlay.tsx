@@ -134,7 +134,7 @@ const Overlay = ({ onClose }: { onClose: () => void }) => {
       // Confirm assignee name for toast
       const targetName = parsed.assignedTo.type === 'user'
         ? parsed.assignedTo.shortName
-        : `${parsed.assignedTo.role} role`;
+        : parsed.assignedTo.type === 'role' ? `${parsed.assignedTo.role} role` : 'station';
       await api.pinToHitList({
         title: text,
         assignedTo: hasMention ? undefined : selfAssignee, // let parsePin win when mention present
