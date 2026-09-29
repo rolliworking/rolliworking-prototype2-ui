@@ -4,10 +4,13 @@ import * as api from '@/api/client';
 import * as cz from '@/api/concierge';
 import type { ConciergeLane, SwoStage, SwoWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
+import { fmtMoney } from '@/lib/format';
 import type { Run } from './SwoCard';
 
-// ACTION view = the Shop Floor Assign / Move contract applied to vendors. Lookup bar on top → job strip → map (one horizontal track per vendor) → bottom bar with the chosen destination.
-// Custody nodes (Outbound box · Hand-off · Received) need the label scan(s) at commit; status nodes are logged as the vendor's word; Back / Redo need a reason. NOTHING moves until COMMIT.
+// Two views over ONE map (one horizontal track per vendor, custody points as icons):
+//  TRACK  = progress view — counts tappable → slide-out with the cards, aging / late / redo chips on the nodes, vendor name → paid-not-back. No lookup, no destination clicks, no commit.
+//  ASSIGN = the Shop Floor Assign / Move contract — lookup bar (wedge scanner any-focus) → job strip → legal nodes lit → click a node = destination → bottom bar → scans at commit for custody nodes, reason for Back / Redo → COMMIT. Counts here are display-only.
+// Same board state underneath; a move committed in ASSIGN shows in TRACK immediately.
 type NodeKind = 'stage' | 'box' | 'arrival' | 'handoff';
 interface TNode { id: string; kind: NodeKind; stage?: SwoStage; label: string; sub?: string }
 const nodesFor = (ships: boolean): TNode[] => ships
@@ -34,13 +37,22 @@ const nodeOf = (w: SwoWithRefs) => nodeIdFor(w.stage);
 const HEALTH_TONE: Record<string, string> = { ok: 'bg-emerald-400/15 text-emerald-200', amber: 'bg-amber-400/20 text-amber-200', red: 'bg-rose-500/25 text-rose-200', dark: 'bg-rose-500/25 text-rose-200', muted: 'bg-white/10 text-slate-300' };
 
 // Wedge scanner: a barcode scanner types fast then sends Enter — capture it whatever has focus (our own inputs handle Enter themselves)
-const useWedge = (onCode: (code: string) => void) => {
+const useWedge = (onCode: (code: string) => void, enabled = true) => {
   const buf = useRef(''); const last = useRef(0);
-  useEffect(() => { const h = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return; const now = Date.now(); if (now - last.current > 120) buf.current = ''; last.current = now; if (e.key === 'Enter') { const code = buf.current; buf.current = ''; if (code.length >= 3) { e.preventDefault(); onCode(code); } return; } if (e.key.length === 1) buf.current += e.key; }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [onCode]);
+  useEffect(() => { if (!enabled) return; const h = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return; const now = Date.now(); if (now - last.current > 120) buf.current = ''; last.current = now; if (e.key === 'Enter') { const code = buf.current; buf.current = ''; if (code.length >= 3) { e.preventDefault(); onCode(code); } return; } if (e.key.length === 1) buf.current += e.key; }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [onCode, enabled]);
 };
 
-export interface ActionMapProps { lanes: ConciergeLane[]; run: Run; onLookup: (ids: string[], title: string) => void; onOpenStage: (vendorId: string, stage: SwoStage) => void; pad?: boolean; pickedId?: string | null; onPickedConsumed?: () => void; camera?: (onCode: (code: string) => void) => React.ReactNode }
-export const ActionMap = ({ lanes, run, onLookup, onOpenStage, pad, pickedId, onPickedConsumed, camera }: ActionMapProps) => {
+// ---- TRACK ----
+export const TrackMap = ({ lanes, pad, onOpenStage, onOutstanding, selected }: { lanes: ConciergeLane[]; pad?: boolean; onOpenStage: (vendorId: string, stage: SwoStage) => void; onOutstanding: (vendorId: string) => void; selected?: { vendorId: string; stage: SwoStage } | null }) => (
+  <div data-testid="concierge-track" data-pad={!!pad} className="space-y-2 rounded-md border border-white/10 bg-[#0b0e13] p-3">
+    {lanes.map((l) => <Track key={l.vendor.id} mode="track" lane={l} pad={!!pad} active={false} dimmed={false} current={[]} legal={[]} dest={null} redoLive={l.stages.some((c) => c.redo > 0)} selectedStage={selected?.vendorId === l.vendor.id ? selected.stage : undefined} onPick={() => undefined} onCount={(st) => onOpenStage(l.vendor.id, st)} onVendor={() => onOutstanding(l.vendor.id)} />)}
+  </div>
+);
+
+// ---- ASSIGN ----
+export interface ActionMapProps { lanes: ConciergeLane[]; run: Run; onLookup: (ids: string[], title: string) => void; pad?: boolean; pickedId?: string | null; onPickedConsumed?: () => void; camera?: (onCode: (code: string) => void) => React.ReactNode; active?: boolean }
+// Stays mounted (hidden) while TRACK is shown so the strip survives a flip between the views; the wedge listener only runs while visible
+export const ActionMap = ({ lanes, run, onLookup, pad, pickedId, onPickedConsumed, camera, active = true }: ActionMapProps) => {
   const { user } = useAuth(); const rows = useMemo(() => lanes.flatMap((l) => l.rows), [lanes]);
   const [q, setQ] = useState(''); const [sel, setSel] = useState<string[]>([]); const [dest, setDest] = useState<Legal | null>(null); const [scanned, setScanned] = useState<string[]>([]); const [scanQ, setScanQ] = useState(''); const [reason, setReason] = useState(''); const [err, setErr] = useState<string | null>(null); const [cam, setCam] = useState(false);
   const selected = sel.map((id) => rows.find((r) => r.id === id)!).filter(Boolean); const vendorIds = Array.from(new Set(selected.map((w) => w.vendorId)));
@@ -52,7 +64,7 @@ export const ActionMap = ({ lanes, run, onLookup, onOpenStage, pad, pickedId, on
   const clear = () => { setSel([]); setDest(null); setScanned([]); setReason(''); setErr(null); };
   const scan = useCallback((text: string) => { const w = find(text); setScanQ(''); if (!w || !sel.includes(w.id)) { setErr(`Label “${text.trim()}” is not in the strip`); return; } setErr(null); setScanned((s) => (s.includes(w.id) ? s : [...s, w.id])); }, [find, sel]);
   const needsScan = !!dest && (dest.kind === 'custody' || dest.kind === 'redo'); const needsReason = !!dest && (dest.kind === 'back' || dest.kind === 'redo');
-  useWedge(useCallback((code: string) => { if (dest && needsScan) scan(code); else add(code); }, [dest, needsScan, scan, add]));
+  useWedge(useCallback((code: string) => { if (dest && needsScan) scan(code); else add(code); }, [dest, needsScan, scan, add]), active);
   // a card tapped in the slide-out loads into the strip
   useEffect(() => { if (!pickedId) return; if (rows.some((r) => r.id === pickedId)) { setSel((s) => (s.includes(pickedId) ? s : [...s, pickedId])); setDest(null); setScanned([]); setErr(null); } onPickedConsumed?.(); }, [pickedId]); // eslint-disable-line react-hooks/exhaustive-deps
   const missing = sel.filter((id) => !scanned.includes(id)).length;
@@ -65,7 +77,7 @@ export const ActionMap = ({ lanes, run, onLookup, onOpenStage, pad, pickedId, on
     clear();
   };
   const vendorName = selected[0]?.vendor.name ?? '';
-  return <div data-testid="concierge-action" data-pad={!!pad} className="space-y-3">
+  return <div data-testid="concierge-assign" data-pad={!!pad} className="space-y-3">
     {/* 1 · LOOKUP BAR */}
     <div data-testid="action-lookup" className="rounded-md border border-white/10 bg-[#0b0e13] p-3 text-xs text-slate-200">
       <div className="flex flex-wrap items-center gap-2">
@@ -73,7 +85,7 @@ export const ActionMap = ({ lanes, run, onLookup, onOpenStage, pad, pickedId, on
         <input data-testid="action-lookup-input" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(q); }} placeholder="02015 · 126610LN · SWO-26-0049 · tracking #" className={`${pad ? 'h-12 text-base' : 'h-9'} min-w-[220px] flex-1 rounded-sm border border-white/15 bg-white/5 px-2 font-mono text-slate-100 placeholder:text-slate-600 focus:border-accent focus:outline-none`} />
         <button type="button" data-testid="action-lookup-go" onClick={() => add(q)} className={`${pad ? 'h-12 px-5 text-base' : 'h-9 px-3'} rounded-sm bg-accent font-semibold text-[#161b22]`}>Find</button>
         {camera && <button type="button" data-testid="action-camera" onClick={() => setCam((c) => !c)} aria-pressed={cam} className={`${pad ? 'h-12 px-4' : 'h-9 px-3'} inline-flex items-center gap-1 rounded-sm border border-white/20 text-slate-200 ${cam ? 'bg-accent/20 border-accent' : ''}`}><Camera size={16} /> Camera</button>}
-        <span data-testid="action-wedge-note" className="inline-flex items-center gap-1 text-[10px] text-slate-500"><ScanLine size={11} /> scanner works with any focus · scan more labels to pack a box</span>
+        <span data-testid="action-wedge-note" className="inline-flex items-center gap-1 text-[10px] text-slate-500"><ScanLine size={11} /> scanner works with any focus · scan more labels to pack a box · counts are display-only here (Track has the cards)</span>
       </div>
       {cam && camera && <div data-testid="action-camera-view" className="mt-2">{camera((code) => { if (dest && needsScan) scan(code); else add(code); })}</div>}
       {err && <p data-testid="action-error" className="mt-2 rounded-sm bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200">{err}</p>}
@@ -97,7 +109,7 @@ export const ActionMap = ({ lanes, run, onLookup, onOpenStage, pad, pickedId, on
     </div>
     {/* 3 · MAP */}
     <div data-testid="action-map" className="space-y-2 rounded-md border border-white/10 bg-[#0b0e13] p-3">
-      {lanes.map((l) => <Track key={l.vendor.id} lane={l} pad={!!pad} active={vendorIds.length === 1 && vendorIds[0] === l.vendor.id} dimmed={selected.length > 0 && !(vendorIds.length === 1 && vendorIds[0] === l.vendor.id)} current={vendorIds.length === 1 && vendorIds[0] === l.vendor.id ? Array.from(new Set(selected.map(nodeOf))) : []} legal={vendorIds[0] === l.vendor.id ? legal : []} dest={vendorIds[0] === l.vendor.id ? dest : null} redoLive={selected.some((w) => w.vendorId === l.vendor.id && (w.redoCycles.length > 0 || api.isRedoStage(w.stage)))} onPick={(lg) => { setDest(lg); setScanned([]); setReason(''); setErr(null); }} onCount={(st) => onOpenStage(l.vendor.id, st)} />)}
+      {lanes.map((l) => <Track key={l.vendor.id} mode="assign" lane={l} pad={!!pad} active={vendorIds.length === 1 && vendorIds[0] === l.vendor.id} dimmed={selected.length > 0 && !(vendorIds.length === 1 && vendorIds[0] === l.vendor.id)} current={vendorIds.length === 1 && vendorIds[0] === l.vendor.id ? Array.from(new Set(selected.map(nodeOf))) : []} legal={vendorIds[0] === l.vendor.id ? legal : []} dest={vendorIds[0] === l.vendor.id ? dest : null} redoLive={selected.some((w) => w.vendorId === l.vendor.id && (w.redoCycles.length > 0 || api.isRedoStage(w.stage)))} onPick={(lg) => { setDest(lg); setScanned([]); setReason(''); setErr(null); }} />)}
     </div>
     {/* 4 · BOTTOM BAR */}
     {dest && <div data-testid="action-bottom" data-kind={dest.kind} className={`sticky z-20 rounded-md border border-accent/50 bg-[#0f131a]/95 p-3 text-xs text-slate-200 shadow-2xl backdrop-blur ${pad ? 'bottom-[76px]' : 'bottom-2'}`}>
@@ -115,24 +127,36 @@ export const ActionMap = ({ lanes, run, onLookup, onOpenStage, pad, pickedId, on
   </div>;
 };
 
-const Track = ({ lane, pad, active, dimmed, current, legal, dest, redoLive, onPick, onCount }: { lane: ConciergeLane; pad: boolean; active: boolean; dimmed: boolean; current: string[]; legal: Legal[]; dest: Legal | null; redoLive: boolean; onPick: (l: Legal) => void; onCount: (stage: SwoStage) => void }) => {
+const Track = ({ mode, lane, pad, active, dimmed, current, legal, dest, redoLive, selectedStage, onPick, onCount, onVendor }: { mode: 'track' | 'assign'; lane: ConciergeLane; pad: boolean; active: boolean; dimmed: boolean; current: string[]; legal: Legal[]; dest: Legal | null; redoLive: boolean; selectedStage?: SwoStage; onPick: (l: Legal) => void; onCount?: (stage: SwoStage) => void; onVendor?: () => void }) => {
   const ships = lane.vendor.ships !== false; const nodes = nodesFor(ships); const host = useRef<HTMLDivElement>(null); const [arc, setArc] = useState<string | null>(null);
   const count = (n: TNode) => (n.stage ? lane.stages.find((s) => s.key === n.stage) : undefined);
-  useLayoutEffect(() => { const h = host.current; if (!h) return; const from = h.querySelector<HTMLElement>('[data-node="inspection"]'); const to = h.querySelector<HTMLElement>(`[data-node="${ships ? 'box' : 'handoff'}"]`); if (!from || !to) return; const hb = h.getBoundingClientRect(); const a = from.getBoundingClientRect(); const b = to.getBoundingClientRect(); const x1 = a.left + a.width / 2 - hb.left + h.scrollLeft; const x2 = b.left + b.width / 2 - hb.left + h.scrollLeft; const y = a.bottom - hb.top; setArc(`M ${x1} ${y} C ${x1} ${y + 46}, ${x2} ${y + 46}, ${x2} ${y}`); }, [ships, lane.stages.length, pad]);
+  // redo arc measured from the DOM; re-measured whenever the track is resized or becomes visible (the ASSIGN map stays mounted but hidden under TRACK)
+  useLayoutEffect(() => { const h = host.current; if (!h) return; const measure = () => { const from = h.querySelector<HTMLElement>('[data-node="inspection"]'); const to = h.querySelector<HTMLElement>(`[data-node="${ships ? 'box' : 'handoff'}"]`); if (!from || !to || !h.offsetWidth) { setArc(null); return; } const hb = h.getBoundingClientRect(); const a = from.getBoundingClientRect(); const b = to.getBoundingClientRect(); const x1 = a.left + a.width / 2 - hb.left + h.scrollLeft; const x2 = b.left + b.width / 2 - hb.left + h.scrollLeft; const y = a.bottom - hb.top; setArc(`M ${x1} ${y} C ${x1} ${y + 46}, ${x2} ${y + 46}, ${x2} ${y}`); }; measure(); const ro = new ResizeObserver(measure); ro.observe(h); return () => ro.disconnect(); }, [ships, lane.stages.length, pad]);
   const label = lane.vendor.name.replace(' (CM)', '').toUpperCase().replace('CHYNA', 'CM');
   return <div data-testid={`track-${lane.vendor.id}`} data-active={active} className={`relative grid items-center gap-2 rounded-md border px-2 pb-12 pt-2 transition-opacity ${pad ? 'grid-cols-[90px_1fr]' : 'grid-cols-[110px_1fr]'} ${active ? 'border-accent/50 bg-accent/[0.04]' : 'border-white/10'} ${dimmed ? 'opacity-40' : ''}`}>
-    <div className="text-[11px] font-bold uppercase tracking-widest text-slate-300">{label}<div className="text-[9px] font-normal normal-case tracking-normal text-slate-500">{lane.total} open{lane.vendor.paymentTerms === 'prepay' ? ' · prepay' : ''}</div></div>
+    {mode === 'track' ? <button type="button" data-testid={`tlane-name-${lane.vendor.id}`} onClick={onVendor} title="Outstanding: paid but not back" className="min-h-[44px] rounded-sm text-left text-[11px] font-bold uppercase tracking-widest text-slate-300 hover:text-white">{label}<div className="text-[9px] font-normal normal-case tracking-normal text-slate-500">{lane.total} open{lane.vendor.paymentTerms === 'prepay' ? ' · prepay' : ''}</div>
+      {lane.vendor.ships !== false && <div className="mt-0.5 flex flex-col gap-0.5 text-[9px] font-normal normal-case tracking-normal">{lane.unpaidCount > 0 && <span data-testid={`tlane-unpaid-${lane.vendor.id}`} className="text-slate-400">{lane.unpaidCount} unpaid · {fmtMoney(lane.unpaidTotal)}</span>}{lane.vendor.paymentTerms === 'prepay' && <span data-testid={`tlane-prepaid-${lane.vendor.id}`} className="font-semibold text-amber-300">{fmtMoney(lane.prepaidTotal)} paid · {lane.prepaidNotBack} not back</span>}</div>}
+    </button> : <div className="text-[11px] font-bold uppercase tracking-widest text-slate-300">{label}<div className="text-[9px] font-normal normal-case tracking-normal text-slate-500">{lane.total} open{lane.vendor.paymentTerms === 'prepay' ? ' · prepay' : ''}</div></div>}
     <div ref={host} className="relative flex items-center gap-0 overflow-x-auto overflow-y-visible pb-1" style={{ scrollbarWidth: 'thin' }}>
-      {nodes.map((n, i) => { const lg = legal.find((x) => x.node === n.id); const c = count(n); const isCur = current.includes(n.id); const isDest = dest?.node === n.id && dest.kind === lg?.kind; const custody = n.kind !== 'stage'; const dim = legal.length > 0 && !lg && !isCur;
+      {nodes.map((n, i) => { const lg = mode === 'assign' ? legal.find((x) => x.node === n.id) : undefined; const c = count(n); const isCur = current.includes(n.id); const isDest = dest?.node === n.id && dest.kind === lg?.kind; const custody = n.kind !== 'stage'; const dim = mode === 'assign' && legal.length > 0 && !lg && !isCur; const hi = mode === 'track' && !!n.stage && selectedStage === n.stage;
         return <div key={n.id} className="flex items-center">
           {i > 0 && <span className={`h-px shrink-0 ${pad ? 'w-4' : 'w-6'} ${active ? 'bg-accent/40' : 'bg-white/15'}`} />}
-          <div data-node={n.id} className={`relative flex flex-col items-stretch rounded-md border transition-[opacity,border-color,box-shadow] ${pad ? 'min-w-[104px]' : 'min-w-[92px]'} ${custody ? 'border-white/25 bg-black/50' : 'border-white/15 bg-[#11151b]'} ${isCur ? 'node-pulse ring-2 ring-accent' : ''} ${lg ? 'border-accent shadow-[0_0_12px_rgba(92,225,255,0.35)]' : ''} ${isDest ? 'bg-accent/20 ring-2 ring-accent' : ''} ${dim ? 'opacity-30' : ''}`}>
-            <button type="button" data-testid={`anode-${lane.vendor.id}-${n.id}`} data-legal={!!lg} data-current={isCur} aria-pressed={isDest} disabled={!lg} onClick={() => lg && onPick(lg)} title={lg?.label ?? n.sub ?? n.label} className={`flex flex-col items-center justify-center px-1.5 pt-1.5 text-center ${pad ? 'min-h-[52px]' : 'min-h-[44px]'} ${lg ? 'cursor-pointer hover:bg-accent/10' : 'cursor-default'}`}>
+          <div data-node={n.id} data-testid={mode === 'track' ? `tnode-${lane.vendor.id}-${n.id}` : undefined} data-tone={c?.tone} className={`relative flex flex-col items-stretch rounded-md border transition-[opacity,border-color,box-shadow] ${pad ? 'min-w-[104px]' : 'min-w-[92px]'} ${custody ? 'border-white/25 bg-black/50' : 'border-white/15 bg-[#11151b]'} ${isCur ? 'node-pulse ring-2 ring-accent' : ''} ${lg ? 'border-accent shadow-[0_0_12px_rgba(92,225,255,0.35)]' : ''} ${isDest || hi ? 'bg-accent/20 ring-2 ring-accent' : ''} ${dim ? 'opacity-30' : ''} ${mode === 'track' && c?.tone === 'red' ? 'border-rose-500/50' : mode === 'track' && c?.tone === 'amber' ? 'border-amber-400/50' : ''}`}>
+            {mode === 'assign' ? <button type="button" data-testid={`anode-${lane.vendor.id}-${n.id}`} data-legal={!!lg} data-current={isCur} aria-pressed={isDest} disabled={!lg} onClick={() => lg && onPick(lg)} title={lg?.label ?? n.sub ?? n.label} className={`flex flex-col items-center justify-center px-1.5 pt-1.5 text-center ${pad ? 'min-h-[52px]' : 'min-h-[44px]'} ${lg ? 'cursor-pointer hover:bg-accent/10' : 'cursor-default'}`}>
               {custody ? <span className="grid place-items-center">{n.kind === 'box' ? <Box size={20} className={lg ? 'text-accent' : 'text-slate-300'} /> : <Lock size={20} className={lg ? 'text-accent' : 'text-slate-300'} />}</span> : null}
               <span className="text-[10px] font-semibold leading-tight text-slate-200">{n.label}</span>
               {lg?.kind === 'back' && <span className="text-[8px] uppercase text-accent">back</span>}{lg?.kind === 'redo' && <span className="text-[8px] uppercase text-accent">redo</span>}
-            </button>
-            {c ? <button type="button" data-testid={`anode-count-${lane.vendor.id}-${n.id}`} data-count={c.count} data-late={c.late} onClick={() => c.count && onCount(n.stage!)} disabled={!c.count} title={c.count ? 'Tap for the cards' : 'empty'} className={`mx-1 mb-1 rounded-sm font-mono text-sm font-bold leading-tight ${pad ? 'min-h-[44px]' : 'min-h-[24px]'} ${c.late ? 'text-rose-300' : 'text-white'} ${c.count ? 'hover:bg-white/10' : 'opacity-50'}`}>{c.count}{c.late ? <span className="text-[9px]"> · {c.late} late</span> : null}{c.redo ? <span className="text-[9px] text-amber-300"> · {c.redo} redo</span> : null}</button> : <span className={`${pad ? 'h-[44px]' : 'h-[24px]'} mb-1 block`} />}
+            </button> : <div className={`flex flex-col items-center justify-center px-1.5 pt-1.5 text-center ${pad ? 'min-h-[52px]' : 'min-h-[44px]'}`} title={n.sub ?? n.label}>
+              {custody ? <span className="grid place-items-center">{n.kind === 'box' ? <Box size={20} className="text-slate-300" /> : <Lock size={20} className="text-slate-300" />}</span> : null}
+              <span className="text-[10px] font-semibold leading-tight text-slate-200">{n.label}</span>
+            </div>}
+            {c ? (mode === 'track'
+              ? <button type="button" data-testid={`tnode-count-${lane.vendor.id}-${n.id}`} data-count={c.count} data-late={c.late} data-redo={c.redo} aria-pressed={hi} onClick={() => c.count && onCount?.(n.stage!)} disabled={!c.count} title={c.count ? 'Tap for the cards' : 'empty'} className={`mx-1 mb-1 flex flex-col items-center rounded-sm font-mono text-sm font-bold leading-tight ${pad ? 'min-h-[44px]' : 'min-h-[32px]'} ${c.late ? 'text-rose-300' : 'text-white'} ${c.count ? 'hover:bg-white/10' : 'opacity-50'}`}>
+                  <span>{c.count}{c.late ? <span className="text-[9px]"> · {c.late} late</span> : null}{c.redo ? <span className="text-[9px] text-amber-300"> · {c.redo} redo</span> : null}</span>
+                  {c.count > 0 && n.stage !== 'fulfilled' && <span data-testid={`tnode-age-${lane.vendor.id}-${n.id}`} className={`text-[8px] font-normal ${c.tone === 'red' ? 'text-rose-300' : c.tone === 'amber' ? 'text-amber-300' : 'text-slate-400'}`}>oldest {c.oldestDays}d</span>}
+                </button>
+              : <span data-testid={`anode-count-${lane.vendor.id}-${n.id}`} data-count={c.count} data-late={c.late} className={`mx-1 mb-1 block text-center font-mono text-sm font-bold leading-tight ${pad ? 'min-h-[44px]' : 'min-h-[24px]'} ${c.late ? 'text-rose-300' : 'text-white'} ${c.count ? '' : 'opacity-50'}`}>{c.count}{c.late ? <span className="text-[9px]"> · {c.late} late</span> : null}{c.redo ? <span className="text-[9px] text-amber-300"> · {c.redo} redo</span> : null}</span>)
+              : <span className={`${pad ? 'h-[44px]' : 'h-[24px]'} mb-1 block`} />}
             {isDest && <span data-testid="anode-dest-tag" className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-sm bg-accent px-1 text-[8px] font-bold uppercase text-[#161b22]">destination</span>}
           </div>
         </div>; })}

@@ -36,7 +36,7 @@ export const SlidePanel = ({ state, lanes, run, onClose, onPick, pad }: { state:
 
 const Sub = ({ label, testId, tone, rows, run, onPick }: { label: string; testId: string; tone?: string; rows: SwoWithRefs[]; run: Run; onPick?: (w: SwoWithRefs) => void }) => <section data-testid={testId} data-count={rows.length}>
   <h3 className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${tone ?? 'text-ink-500'}`}>{label} · {rows.length}</h3>
-  <div className="space-y-2">{rows.map((w) => <div key={w.id}>{onPick && <button type="button" data-testid={`panel-pick-${w.id}`} onClick={() => onPick(w)} className="mb-0.5 inline-flex min-h-[32px] items-center gap-1 rounded-sm border border-line bg-surface px-2 text-[11px] font-semibold text-ink-700 hover:border-ink-400 hover:bg-canvas"><MousePointerClick size={12} /> Load {w.jobNumber.replace(/^E/, '')} into the lookup strip</button>}<SwoCard w={w} run={run} compact /></div>)}{!rows.length && <div className="text-[11px] text-ink-300">none</div>}</div>
+  <div className="space-y-2">{rows.map((w) => <div key={w.id}>{onPick && <button type="button" data-testid={`panel-pick-${w.id}`} onClick={() => onPick(w)} className="mb-0.5 inline-flex min-h-[32px] items-center gap-1 rounded-sm border border-line bg-surface px-2 text-[11px] font-semibold text-ink-700 hover:border-ink-400 hover:bg-canvas"><MousePointerClick size={12} /> Assign · load {w.jobNumber.replace(/^E/, '')} into the lookup strip</button>}<SwoCard w={w} run={run} compact /></div>)}{!rows.length && <div className="text-[11px] text-ink-300">none</div>}</div>
 </section>;
 
 const Outstanding = ({ vendorId, prepay, run, lanes }: { vendorId: string; prepay: boolean; run: Run; lanes: ConciergeLane[] }) => {

@@ -1,26 +1,26 @@
-import { LayoutList, MousePointerClick, Plus, Truck } from 'lucide-react';
+import { MousePointerClick, Plus, Route, Truck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import * as cz from '@/api/concierge';
 import type { ConciergeLane, SwoInput, SwoStage, VendorInput } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { ActionMap } from '@/components/concierge/ActionMap';
+import { ActionMap, TrackMap } from '@/components/concierge/ActionMap';
 import { SlidePanel, type PanelState } from '@/components/concierge/SlidePanel';
 import type { Run } from '@/components/concierge/SwoCard';
 import { field, Flash, Head } from '@/components/rs/RsBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { fmtMoney } from '@/lib/format';
 import { SwoForm } from './SwoPage';
 
-const TONE: Record<string, string> = { empty: 'text-ink-300', ok: 'text-ink', amber: 'bg-amber-50 text-amber-900 ring-1 ring-amber-300', red: 'bg-rose-50 text-rose-800 ring-1 ring-rose-300' };
-type View = 'track' | 'action';
+type View = 'track' | 'assign';
+export const VIEWS: { key: View; label: string; hint: string }[] = [{ key: 'track', label: 'Track', hint: 'progress — tap a count for the cards, tap a vendor for paid-not-back' }, { key: 'assign', label: 'Assign', hint: 'Assign / Move — look up, click a node, scan, COMMIT' }];
+export const readView = (userId?: string): View => { const v = localStorage.getItem(`rollisuite.concierge.view.${userId ?? 'anon'}`); return v === 'assign' || v === 'action' ? 'assign' : 'track'; };
 
-// CONCIERGE — TRACK (lane board, progress) | ACTION (click-map treatment). Tapping a count opens the slide-out panel; the board stays visible. Last view remembered per user.
+// CONCIERGE — one map, two views. TRACK = progress (tappable counts → slide-out cards, aging / late / redo on the nodes). ASSIGN = the Assign / Move contract (lookup → strip → node = destination → COMMIT). Same state; last view remembered per user.
 export default function ConciergePage() {
   const { user } = useAuth(); const viewKey = `rollisuite.concierge.view.${user?.id ?? 'anon'}`;
-  const [view, setViewState] = useState<View>(() => (localStorage.getItem(viewKey) as View) || 'track'); const setView = (v: View) => { setViewState(v); localStorage.setItem(viewKey, v); };
+  const [view, setViewState] = useState<View>(() => readView(user?.id)); const setView = (v: View) => { setViewState(v); localStorage.setItem(viewKey, v); };
   const [lanes, setLanes] = useState<ConciergeLane[]>([]); const [sp, setSp] = useSearchParams();
   const [panel, setPanel] = useState<PanelState>(() => { const l = sp.get('lane'); const st = sp.get('stage') as SwoStage | null; const swo = sp.get('swo'); return swo ? { kind: 'lookup', swoIds: [swo], title: 'Shop work order' } : l && st ? { kind: 'stage', vendorId: l, stage: st } : null; });
   const [picked, setPicked] = useState<string | null>(null); const [form, setForm] = useState<Partial<SwoInput> | null>(null); const [vendorForm, setVendorForm] = useState(false); const [msg, setMsg] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
@@ -31,30 +31,15 @@ export default function ConciergePage() {
   const closePanel = useCallback(() => { setPanel(null); setSp({}); }, [setSp]);
   const total = lanes.reduce((t, l) => t + l.rows.length, 0);
   return <div data-testid="concierge-page" className="space-y-4">
-    <Head title="Concierge" sub={`${lanes.length} vendor lanes · ${total} shop work orders · tap a count for the cards (panel slides in from the right) · tap a vendor name for paid-not-back`} action={<>
-      <div data-testid="concierge-view-toggle" className="mr-2 inline-flex rounded-sm border border-line text-xs">{(['track', 'action'] as View[]).map((v) => <button key={v} type="button" data-testid={`concierge-view-${v}`} data-selected={view === v} onClick={() => setView(v)} className={`inline-flex items-center gap-1 px-3 py-1 font-semibold uppercase tracking-wide ${view === v ? 'bg-ink text-white' : 'text-ink-500 hover:bg-canvas'}`}>{v === 'track' ? <LayoutList size={12} /> : <MousePointerClick size={12} />}{v}</button>)}</div>
+    <Head title="Concierge" sub={`${lanes.length} vendor lanes · ${total} shop work orders · ${VIEWS.find((v) => v.key === view)!.hint}`} action={<>
+      <div data-testid="concierge-view-toggle" className="mr-2 inline-flex rounded-sm border border-line text-xs">{VIEWS.map((v) => <button key={v.key} type="button" data-testid={`concierge-view-${v.key}`} data-selected={view === v.key} onClick={() => setView(v.key)} className={`inline-flex items-center gap-1 px-3 py-1 font-semibold uppercase tracking-wide ${view === v.key ? 'bg-ink text-white' : 'text-ink-500 hover:bg-canvas'}`}>{v.key === 'track' ? <Route size={12} /> : <MousePointerClick size={12} />}{v.label}</button>)}</div>
       <Button size="sm" data-testid="concierge-add-vendor" onClick={() => setVendorForm(true)}><Plus size={12} /> Vendor</Button><Button size="sm" variant="primary" data-testid="concierge-send" onClick={() => setForm({})}><Truck size={12} /> Send to vendor</Button></>} />
     <Flash msg={msg} error={error} />
     <div className={panel ? 'lg:pr-[33.333%]' : ''}>
-      {view === 'track' ? <div data-testid="concierge-board" className="space-y-2">
-        {lanes.map((l) => { const noShip = l.vendor.ships === false; const prepay = l.vendor.paymentTerms === 'prepay';
-          return <section key={l.vendor.id} data-testid={`lane-${l.vendor.id}`} data-ships={!noShip} className="rounded-md border border-line bg-surface">
-            <div className="grid items-stretch" style={{ gridTemplateColumns: `240px repeat(${l.stages.length}, minmax(0, 1fr))` }}>
-              <div className="flex flex-col justify-center border-r border-line px-3 py-2">
-                <button type="button" data-testid={`lane-name-${l.vendor.id}`} onClick={() => setPanel(panel?.kind === 'outstanding' && panel.vendorId === l.vendor.id ? null : { kind: 'outstanding', vendorId: l.vendor.id })} title="Outstanding: paid but not back" className="flex items-center gap-2 text-left text-[13px] font-semibold text-ink hover:underline">{l.vendor.name}<span data-testid={`lane-total-${l.vendor.id}`} className="rounded-full bg-canvas px-1.5 font-mono text-[10px] text-ink-600">{l.total}</span>{prepay && <span className="rounded-sm bg-amber-50 px-1 text-[9px] font-semibold uppercase text-amber-800">prepay</span>}</button>
-                <div className="truncate text-[10px] text-ink-400">{l.vendor.work} · {l.vendor.location}{noShip ? ' · in-house, no shipping' : api.isInternationalVendor(l.vendor) ? ' · international' : ' · domestic'}</div>
-                {!noShip && <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10px]">{l.unpaidCount > 0 && <span data-testid={`lane-unpaid-${l.vendor.id}`} className="text-ink-600">{l.unpaidCount} unpaid · {fmtMoney(l.unpaidTotal)}</span>}{prepay && <span data-testid={`lane-prepaid-${l.vendor.id}`} className="font-semibold text-amber-800">{fmtMoney(l.prepaidTotal)} paid · {l.prepaidNotBack} not back</span>}</div>}
-              </div>
-              {l.stages.map((c) => { const hi = panel?.kind === 'stage' && panel.vendorId === l.vendor.id && panel.stage === c.key; return <button key={c.key} type="button" data-testid={`cell-${l.vendor.id}-${c.key}`} data-count={c.count} data-late={c.late} data-redo={c.redo} data-tone={c.tone} data-selected={hi} onClick={() => c.count && openStage(l.vendor.id, c.key)} className={`flex flex-col items-center justify-center border-r border-line/60 px-1 py-2 last:border-r-0 ${hi ? 'bg-brand-50 ring-2 ring-inset ring-brand' : ''} ${c.count ? 'hover:bg-canvas' : 'cursor-default'}`}>
-                <span className="text-[10px] uppercase tracking-wide text-ink-400">{c.label}</span>
-                <span className={`mt-0.5 flex items-baseline gap-1 rounded-sm px-2 font-mono text-xl font-semibold leading-tight ${TONE[c.tone]}`}>{c.count}{c.late > 0 && <span className="text-xs text-rose-700">· {c.late} late</span>}{c.redo > 0 && <span className="text-xs text-amber-800">· {c.redo} redo</span>}</span>
-                <span className="h-3 text-[10px] text-ink-400">{c.count && c.key !== 'fulfilled' ? `oldest: ${c.oldestDays}d` : ''}</span>
-              </button>; })}
-            </div>
-          </section>; })}
-      </div> : <ActionMap lanes={lanes} run={run} onLookup={(ids, title) => setPanel({ kind: 'lookup', swoIds: ids, title })} onOpenStage={openStage} pickedId={picked} onPickedConsumed={() => setPicked(null)} />}
+      <div className={view === 'track' ? '' : 'hidden'}><TrackMap lanes={lanes} onOpenStage={openStage} onOutstanding={(vendorId) => setPanel(panel?.kind === 'outstanding' && panel.vendorId === vendorId ? null : { kind: 'outstanding', vendorId })} selected={panel?.kind === 'stage' ? { vendorId: panel.vendorId, stage: panel.stage } : null} /></div>
+      <div className={view === 'assign' ? '' : 'hidden'}><ActionMap lanes={lanes} run={run} active={view === 'assign'} onLookup={(ids, title) => setPanel({ kind: 'lookup', swoIds: ids, title })} pickedId={picked} onPickedConsumed={() => setPicked(null)} /></div>
     </div>
-    <SlidePanel state={panel} lanes={lanes} run={run} onClose={closePanel} onPick={view === 'action' ? (w) => { setPicked(w.id); closePanel(); } : undefined} />
+    <SlidePanel state={panel} lanes={lanes} run={run} onClose={closePanel} onPick={view === 'track' ? (w) => { setPicked(w.id); closePanel(); setView('assign'); } : undefined} />
     {form && <SwoForm init={form} onClose={() => setForm(null)} onSaved={(m) => { setForm(null); void run(async () => undefined, m); }} />}
     {vendorForm && <VendorQuickForm onClose={() => setVendorForm(false)} onSaved={(m) => { setVendorForm(false); void run(async () => undefined, m); }} />}
   </div>;
