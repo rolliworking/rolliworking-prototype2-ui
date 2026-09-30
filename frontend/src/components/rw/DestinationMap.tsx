@@ -61,8 +61,9 @@ const Node = <N extends DestNode>({ n, rowIndex, selected, current, legal, lit, 
   );
 };
 
-export interface DestinationMapProps<N extends DestNode> { config?: DestConfig<N>; selectedId?: string; onSelect: (n: N) => void; focus?: FloorDot[]; legal?: Set<string>; current?: Set<string>; dimRows?: Set<string>; testId?: string }
-export const DestinationMap = <N extends DestNode = MapNode>({ config, selectedId, onSelect, focus = [], legal, current, dimRows, testId = 'destination-map' }: DestinationMapProps<N>) => {
+export interface DestinationMapProps<N extends DestNode> { config?: DestConfig<N>; selectedId?: string; onSelect: (n: N) => void; focus?: FloorDot[]; legal?: Set<string>; current?: Set<string>; dimRows?: Set<string>; testId?: string; softLegal?: boolean }
+// softLegal: the legal set only LIGHTS nodes (destination-first flows keep every node armable); default disables the rest
+export const DestinationMap = <N extends DestNode = MapNode>({ config, selectedId, onSelect, focus = [], legal, current, dimRows, testId = 'destination-map', softLegal }: DestinationMapProps<N>) => {
   const cfg = (config ?? SHOP_FLOOR_CONFIG) as DestConfig<N>;
   const rowIndex: Record<string, number> = Object.fromEntries(cfg.rows.map((r, i) => [r.key, i + 1]));
   const marksFor = (n: DestNode) => focus.filter((d) => n.keys.includes(d.station));
@@ -82,7 +83,7 @@ export const DestinationMap = <N extends DestNode = MapNode>({ config, selectedI
     };
     draw(); const ro = new ResizeObserver(draw); ro.observe(el); return () => ro.disconnect();
   }, [focus.length, cfg]);
-  const isLegal = (n: DestNode) => !legal || legal.has(n.id); const isCur = (n: DestNode) => !!current?.has(n.id); const isDim = (n: DestNode) => (!!legal && !legal.has(n.id) && !isCur(n)) || !!dimRows?.has(n.row);
+  const isLegal = (n: DestNode) => !!softLegal || !legal || legal.has(n.id); const isCur = (n: DestNode) => !!current?.has(n.id); const isDim = (n: DestNode) => (!!legal && !legal.has(n.id) && !isCur(n)) || !!dimRows?.has(n.row);
   const node = (n: N) => <Node key={n.id} n={n} rowIndex={rowIndex} selected={selectedId === n.id} current={isCur(n)} legal={isLegal(n)} lit={!!legal && legal.has(n.id)} dim={isDim(n)} caption={cfg.safeCaptions} onSelect={onSelect} marks={marksFor(n)} />;
   return <div data-testid={testId} ref={host} className="relative rounded-md border border-white/10 bg-[#141920] p-3">
     <svg className="pointer-events-none absolute inset-0 z-0" width={size.w} height={size.h}>{paths.map((p, i) => <path key={i} d={p.d} fill="none" stroke={p.ramp ? '#f59e0b' : '#64748b'} strokeWidth={p.ramp ? 2 : 1.5} strokeDasharray={p.ramp ? undefined : '5 5'} opacity={0.8} />)}</svg>
