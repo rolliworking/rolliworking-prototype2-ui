@@ -54,6 +54,16 @@ export const parts: Part[] = [
   P('pt-46', '29-16610-CB', 'Case back, Submariner 16610', 'case', ['16610', '16613'], [], ['case back', 'caseback', 'back'], 480, 1),
   P('pt-47', '24-126710-CR', 'Winding crown, Triplock (GMT 126710)', 'crown', ['126710', '126711', '126719'], [], ['crown', 'gmt crown', 'triplock'], 260, 2),
   P('pt-48', '25-126710', 'Crystal, sapphire with cyclops (GMT 126710)', 'crystal', ['126710', '126711'], [], ['crystal', 'gmt crystal', 'cyclops'], 340, 2),
+  // Cousins UK generic supplies — shared pool (RW + RS); all below min → the ≥ $400 auto-PO seed
+  { ...P('pt-c1', 'CU-GSK-2865', 'Case back gasket assortment, 28.5–36.5mm', 'gasket', [], [], ['gasket set', 'o-ring'], 26, 0), vendorIds: ['v-cousins'], cost: 26 },
+  { ...P('pt-c2', 'CU-MS-2824', 'Mainspring, generic 2824/2892', 'movement', [], ['2824', '2892'], ['mainspring'], 34, 0), vendorIds: ['v-cousins'], cost: 34 },
+  { ...P('pt-c3', 'CU-CRY-30', 'Mineral crystal, flat 30.0mm ×1.0', 'crystal', [], [], ['flat crystal'], 12, 0), vendorIds: ['v-cousins'], cost: 12 },
+  { ...P('pt-c4', 'CU-SPR-BAR', 'Spring bars, 1.8mm assortment (100)', 'strap', [], [], ['spring bars'], 18, 0), vendorIds: ['v-cousins'], cost: 18 },
+  { ...P('pt-c5', 'CU-LUME-C3', 'Luminous compound C3, 1g', 'dial', [], [], ['lume', 'c3'], 48, 0), vendorIds: ['v-cousins'], cost: 48 },
+  { ...P('pt-c6', 'CU-OIL-9010', 'Moebius 9010, 2ml', 'consumable', [], [], ['9010', 'oil'], 42, 0), vendorIds: ['v-cousins'], cost: 42 },
+  { ...P('pt-c7', 'CU-OIL-HP1300', 'Moebius HP-1300, 2ml', 'consumable', [], [], ['hp1300', 'oil'], 44, 0), vendorIds: ['v-cousins'], cost: 44 },
+  { ...P('pt-c8', 'CU-RODICO', 'Rodico cleaning putty (3)', 'consumable', [], [], ['rodico'], 15, 0), vendorIds: ['v-cousins'], cost: 15 },
+  { ...P('pt-c9', 'CU-CRWN-GEN', 'Crown gasket set, generic (50)', 'gasket', [], [], ['crown gasket'], 29, 0), vendorIds: ['v-cousins'], cost: 29 },
 ];
 
 // Reference → caliber (prefix match; longest prefix wins)
@@ -92,6 +102,8 @@ export const partsRequests: PartsRequest[] = [
     ['pr-h04', 'PR-0033', 'j-06', 'received', 'pt-05', 1, 'MM', 17, 'pad'], ['pr-h05', 'PR-0034', 'j-06', 'approved', 'pt-02', 1, 'MM', 16, 'pad'], ['pr-h06', 'PR-0035', 'j-16', 'on_order', 'pt-22', 1, 'MM', 14, 'wm'],
     ['pr-h07', 'PR-0036', 'j-24', 'received', 'pt-31', 1, 'Leo', 12, 'wm'], ['pr-h08', 'PR-0037', 'j-30', 'awaiting_client', 'pt-26', 1, 'MM', 11, 'pad'], ['pr-h09', 'PR-0038', 'j-31', 'approved', 'pt-16', 2, 'Walter', 9, 'wm'],
     ['pr-h10', 'PR-0039', 'j-32', 'declined', 'pt-14', 1, 'Leo', 8, 'pad'], ['pr-h11', 'PR-0040', 'j-05', 'received', 'pt-13', 1, 'Walter', 7, 'wm'], ['pr-h12', 'PR-0049', 'j-01', 'pending_review', 'pt-40', 1, 'MM', 2, 'pad'],
+    // MH daily · approvals priced but not yet sent (pr-h12 + these three = 4 unsent)
+    ['pr-h13', 'PR-0051', 'j-30', 'pending_review', 'pt-26', 1, 'Leo', 3, 'wm'], ['pr-h14', 'PR-0052', 'j-04', 'pending_review', 'pt-47', 1, 'MM', 1, 'pad'], ['pr-h15', 'PR-0053', 'j-16', 'pending_review', 'pt-22', 1, 'Walter', 0, 'wm'],
   ] as [string, string, string, PartsRequest['status'], string, number, string, number, PartsRequest['source']][]).map(([id, number, jobId, status, partId, qty, by, d, source]): PartsRequest => {
     const p = parts.find((x) => x.id === partId)!; const hist = [{ at: daysAgo(d, 9), by, station: 'Watchmaker Room', action: `requested · ${p.name} ×${qty}` }];
     if (status !== 'pending_review') hist.push({ at: daysAgo(d, 11), by: 'MH', station: 'Front Desk 1', action: status === 'declined' ? 'declined at review' : 'priced + sent for client approval' });

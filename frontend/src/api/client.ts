@@ -1888,11 +1888,13 @@ export async function pinToHitList(input: PinInput): Promise<PinnedItem> {
   return resolve({ ...p });
 }
 
-export async function dismissPinned(id: string): Promise<PinnedItem> {
+export async function dismissPinned(id: string, reason?: string): Promise<PinnedItem> {
   const p = byId(store.pinned, id);
   const a = actor();
+  if (p.standing && !reason?.trim()) throw new Error('This item stands until done — give a reason to dismiss it');
   p.dismissedAt = new Date().toISOString();
-  p.dismissedBy = a.by;
+  p.dismissedBy = a.by; p.dismissReason = reason?.trim() || undefined;
+  if (p.key?.startsWith('auto-po:')) rsStamp('purchasing', `Auto-PO pin dismissed by ${a.by} — ${p.dismissReason}`);
   appendAudit({ type: 'pin', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Dismissed pin "${p.title.slice(0, 50)}"` });
   return resolve({ ...p });
 }
@@ -1944,7 +1946,8 @@ async function getTodayMock(userId?: string): Promise<TodayView> {
   threadsNeedingReplyForUser(me).forEach((c) => rows.push({ id: `thread-${c.id}`, source: 'thread', title: `Reply to ${c.client.firstName} ${c.client.lastName} · ${c.subject}`, detail: `${c.anchorLabel ?? 'General'} · waiting ${c.ageHours}h`, via: 'assigned thread', overdue: c.ageHours > 24, urgent: false, dueAt: c.lastInboundAt }));
   rows.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.urgent) - Number(a.urgent) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9'));
   const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.division === sessionDiv && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
-  const pinned = store.pinned.filter((p) => !p.dismissedAt && p.division === sessionDiv && assigneeMatches(p.assignedTo, me));
+  autoPoSweepSync(); approvalsToSendSweepSync();
+  const pinned = store.pinned.filter((p) => !p.dismissedAt && (p.global || p.division === sessionDiv) && assigneeMatches(p.assignedTo, me)).sort((a, b) => Number(b.priority === 'high') - Number(a.priority === 'high'));
   return resolve({ pinned, rows, waitingOn });
 }
 
@@ -3376,7 +3379,7 @@ export async function getVendorDetail(id: string): Promise<VendorDetail> {
   return resolve({ summary: s, parts, openPos: pos.filter(isOpen), pastPos: pos.filter((p) => !isOpen(p)), history: vendorHistory(id).map((h) => { const p = store.parts.find((x) => x.id === h.partId); return { ...h, partNumber: p?.partNumber ?? h.partId, partName: p?.name ?? '' }; }) });
 }
 export async function setVendorActive(id: string, active: boolean): Promise<Vendor> { const v = byId(rs.vendors, id); v.active = active; rsStamp('purchasing', `Vendor ${active ? 'reactivated' : 'retired'} · ${v.name}`); return resolve({ ...v }); }
-export async function getPurchaseOrders(): Promise<PurchaseOrderWithRefs[]> { return resolve([...rs.pos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(poRefs)); }
+export async function getPurchaseOrders(): Promise<PurchaseOrderWithRefs[]> { autoPoSweepSync(); return resolve([...rs.pos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(poRefs)); }
 export async function getPurchaseOrder(id: string): Promise<PurchaseOrderWithRefs | null> { const p = rs.pos.find((x) => x.id === id); return resolve(p ? poRefs(p) : null); }
 export interface POLineInput { partId: string; qty: number; unitCost: number }
 export async function createPurchaseOrder(input: { vendorId: string; locationId: string; lines: POLineInput[]; memo?: string }): Promise<PurchaseOrderWithRefs> {
@@ -3390,14 +3393,15 @@ export async function createPurchaseOrder(input: { vendorId: string; locationId:
 }
 export async function sendPurchaseOrder(id: string): Promise<PurchaseOrderWithRefs> {
   const p = byId(rs.pos, id); if (p.status !== 'draft') throw new Error('Only a draft PO can be sent');
+  if (p.auto && actor().user?.accessTier !== 'manager') throw new Error('Auto-PO send needs MH or a manager with PO rights');
   if (poRedLines(p).length && !p.redAcknowledgedBy) throw new Error(`${poRedLines(p).length} line(s) are more than 10% above your average — acknowledge them before sending`);
-  p.status = 'sent'; p.sentAt = new Date().toISOString(); const v = byId(rs.vendors, p.vendorId); const a = actor();
+  p.status = 'sent'; p.sentAt = new Date().toISOString(); const v = byId(rs.vendors, p.vendorId); const a = actor(); resolveSystemPin(`auto-po:${p.id}`, `sent by ${a.by}`);
   queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: v.email, toName: v.name, relatedRef: p.number, status: 'pending', subject: `Purchase order ${p.number}`, body: `${p.lines.map((l) => `• ${l.partNumber} ${l.description} × ${l.qty} @ ${fmtMoney(l.unitCost)}`).join('\n')}\n\nTotal ${fmtMoney(p.total)} · ${v.terms}${p.labelUrl ? `\n\nPrepaid return label attached (${p.labelService}${p.trackingNumber ? ` · ${p.trackingNumber}` : ''}).` : ''}\n\n— RolliSuite purchasing (STUB — not sent)`, createdAt: p.sentAt, createdBy: a.by, station: a.station });
   rsStamp('purchasing', `${p.number} sent to ${v.name} (stub · Outbox)`); return resolve(poRefs(p));
 }
 export async function cancelPurchaseOrder(id: string, reason: string): Promise<PurchaseOrderWithRefs> {
   const p = byId(rs.pos, id); if (!reason.trim()) throw new Error('A reason is required'); if (p.status === 'received' || p.status === 'cancelled') throw new Error('PO is already closed');
-  p.status = 'cancelled'; p.cancelledAt = new Date().toISOString(); p.cancelReason = reason.trim(); rsStamp('purchasing', `${p.number} cancelled · ${p.cancelReason}`); return resolve(poRefs(p));
+  p.status = 'cancelled'; p.cancelledAt = new Date().toISOString(); p.cancelReason = reason.trim(); rsStamp('purchasing', `${p.number} cancelled · ${p.cancelReason}`); resolveSystemPin(`auto-po:${p.id}`, `cancelled · ${p.cancelReason}`); autoPoSweepSync(); return resolve(poRefs(p));
 }
 // Receive against PO: each received line increments stock at the PO's location with an audited movement
 export async function receivePurchaseOrder(id: string, qtyByLine: Record<string, number>, putawayLocationId?: string): Promise<PurchaseOrderWithRefs> {
@@ -3408,7 +3412,7 @@ export async function receivePurchaseOrder(id: string, qtyByLine: Record<string,
     inv.needs = inv.needs.filter((n) => n.partId !== l.partId); } });
   if (!any) throw new Error('Enter a quantity to receive');
   const done = p.lines.every((l) => l.receivedQty >= l.qty); p.status = done ? 'received' : 'partially_received'; if (done) p.receivedAt = new Date().toISOString();
-  rsStamp('purchasing', `${p.number} ${done ? 'fully received' : 'partially received'}`); return resolve(poRefs(p));
+  rsStamp('purchasing', `${p.number} ${done ? 'fully received' : 'partially received'}`); autoPoSweepSync(); return resolve(poRefs(p));
 }
 
 // -- Inventory
@@ -3420,7 +3424,7 @@ export async function getLowStock(): Promise<StockRow[]> { return (await getStoc
 export async function getStockMovements(partId?: string): Promise<StockMovement[]> { return resolve(rs.movements.filter((m) => !partId || m.partId === partId).sort((a, b) => b.at.localeCompare(a.at))); }
 export async function adjustStock(partId: string, locationId: string, delta: number, reason: string): Promise<StockMovement> {
   if (!Number.isInteger(delta) || delta === 0) throw new Error('Enter a non-zero whole number'); if (!reason.trim()) throw new Error('A reason is required');
-  if (stockAt(partId, locationId).onHand + delta < 0) throw new Error('Stock cannot go negative'); return resolve(move('adjustment', partId, locationId, delta, reason.trim()));
+  if (stockAt(partId, locationId).onHand + delta < 0) throw new Error('Stock cannot go negative'); const mv = move('adjustment', partId, locationId, delta, reason.trim()); autoPoSweepSync(); return resolve(mv);
 }
 export async function getCycleCounts(): Promise<CycleCount[]> { return resolve([...rs.counts].sort((a, b) => b.at.localeCompare(a.at))); }
 export async function startCycleCount(locationId: string): Promise<CycleCount> {
@@ -3432,7 +3436,7 @@ export async function postCycleCount(id: string, counted: Record<string, number>
   const c = byId(rs.counts, id); if (c.status !== 'open') throw new Error('Count already posted'); const a = actor();
   c.lines.forEach((l) => { l.counted = counted[l.partId]; if (l.counted === undefined) throw new Error('Count every line'); });
   c.variances = 0; c.lines.forEach((l) => { const d = (l.counted ?? 0) - l.expected; if (d !== 0) { c.variances += 1; move('count', l.partId, c.locationId, d, `Cycle count ${c.number} variance ${d > 0 ? '+' : ''}${d}`, { ref: c.number, countId: c.id }); } });
-  c.status = 'posted'; c.postedAt = new Date().toISOString(); c.postedBy = a.by; rsStamp('inventory', `${c.number} posted · ${c.variances} variance${c.variances === 1 ? '' : 's'}`); return resolve({ ...c });
+  c.status = 'posted'; c.postedAt = new Date().toISOString(); c.postedBy = a.by; rsStamp('inventory', `${c.number} posted · ${c.variances} variance${c.variances === 1 ? '' : 's'}`); autoPoSweepSync(); return resolve({ ...c });
 }
 
 // -- Labels (batch reprint → existing Label Queue, unprinted)
@@ -4600,14 +4604,18 @@ export async function reviewItem(requestId: string, index: number, patch: { pric
   if (index === 0) { r.partId = it.partId; r.qty = it.qty; }
   return resolve({ request: prRefs(r), learned });
 }
-export async function sendForClientApproval(requestId: string): Promise<PartsRequestWithRefs> {
-  const a = managerOnly(); const r = byId(store.partsRequests, requestId); if (r.status !== 'pending_review') throw new Error('Not in review');
+export async function sendForClientApproval(requestId: string): Promise<PartsRequestWithRefs> { managerOnly(); return sendApprovalInternal(requestId); }
+// One-tap Send from the daily "Approvals to send" list — pricing was already reviewed, sending is clerical (MH or the desk)
+export async function sendReadyApproval(requestId: string): Promise<PartsRequestWithRefs> { const r = byId(store.partsRequests, requestId); if (!approvalReady(r)) throw new Error('Every line needs a price before it can go to the client'); return sendApprovalInternal(requestId); }
+const approvalReady = (r: PartsRequest) => r.status === 'pending_review' && (r.items ?? []).length > 0 && (r.items ?? []).every((i) => i.price !== undefined && i.price >= 0);
+async function sendApprovalInternal(requestId: string): Promise<PartsRequestWithRefs> {
+  const a = actor(); const r = byId(store.partsRequests, requestId); if (r.status !== 'pending_review') throw new Error('Not in review');
   const bad = (r.items ?? []).filter((i) => i.price === undefined || !(i.price >= 0)); if (bad.length) throw new Error(`Price required on every line — missing: ${bad.map((b) => b.description).join(', ')}`);
   const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0);
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
   queueOutbox(email); r.emailId = email.id; r.status = 'awaiting_client'; r.sentForApprovalAt = email.createdAt; r.sentBy = a.by;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'parts', a.by, `Parts approval sent · ${r.number} · ${(r.items ?? []).length} line(s) · $${total.toFixed(2)}`);
-  partsStamp(r, `sent for client approval · $${total.toFixed(2)} · email queued`); jobStamp(j, `${r.number} sent for client approval`);
+  partsStamp(r, `sent for client approval · $${total.toFixed(2)} · email queued`); jobStamp(j, `${r.number} sent for client approval`); approvalsToSendSweepSync();
   return resolve(prRefs(r));
 }
 export async function simulateClientPartsDecision(requestId: string, decision: 'approve' | 'decline'): Promise<PartsRequestWithRefs> {
@@ -5079,8 +5087,13 @@ const inv = {
     H('ph-13', 260, 'v-tudor', 'pt-05', 5, 31, 'PO-25-0115'), H('ph-14', 100, 'v-tudor', 'pt-05', 5, 33, 'PO-26-0005'), H('ph-15', 20, 'v-rsc', 'pt-05', 3, 39, 'PO-26-0021'),
     H('ph-16', 220, 'v-gold', 'pt-06', 20, 3.2, 'PO-25-0122'), H('ph-17', 80, 'v-gold', 'pt-06', 20, 3.4, 'PO-26-0008'),
     H('ph-18', 190, 'v-rsc', 'pt-07', 1, 640, 'PO-25-0130'), H('ph-19', 40, 'v-rsc', 'pt-08', 4, 58, 'PO-26-0016'), H('ph-20', 170, 'v-rsc', 'pt-08', 4, 55, 'PO-25-0135'),
+    // Cousins UK — two lines priced >10% above our average → the auto-PO draft carries 2 red lines
+    H('ph-c1', 150, 'v-rsc', 'pt-c2', 4, 28, 'PO-25-0138'), H('ph-c2', 35, 'v-cousins', 'pt-c2', 2, 34, 'PO-26-0022'), H('ph-c3', 120, 'v-rsc', 'pt-c5', 2, 38, 'PO-25-0140'), H('ph-c4', 30, 'v-cousins', 'pt-c5', 1, 48, 'PO-26-0022'),
+    H('ph-c5', 40, 'v-cousins', 'pt-c6', 2, 42, 'PO-26-0022'), H('ph-c6', 40, 'v-cousins', 'pt-c8', 3, 15, 'PO-26-0022'),
   ] as PurchaseHistoryRow[],
-  reorder: new Map<string, ReorderRule>([['pt-01', { partId: 'pt-01', min: 3, orderUpTo: 8 }], ['pt-02', { partId: 'pt-02', min: 2, orderUpTo: 6 }], ['pt-03', { partId: 'pt-03', min: 4, orderUpTo: 12 }], ['pt-04', { partId: 'pt-04', min: 2, orderUpTo: 6 }], ['pt-05', { partId: 'pt-05', min: 3, orderUpTo: 6 }], ['pt-06', { partId: 'pt-06', min: 5, orderUpTo: 20 }], ['pt-07', { partId: 'pt-07', min: 1, orderUpTo: 2 }], ['pt-08', { partId: 'pt-08', min: 2, orderUpTo: 6 }], ['pt-09', { partId: 'pt-09', min: 1, orderUpTo: 3 }], ['pt-10', { partId: 'pt-10', min: 1, orderUpTo: 3 }], ['pt-11', { partId: 'pt-11', min: 2, orderUpTo: 4 }], ['pt-12', { partId: 'pt-12', min: 2, orderUpTo: 4 }], ['pt-13', { partId: 'pt-13', min: 1, orderUpTo: 2 }], ['pt-16', { partId: 'pt-16', min: 4, orderUpTo: 10 }], ['pt-17', { partId: 'pt-17', min: 2, orderUpTo: 4 }]]),
+  reorder: new Map<string, ReorderRule>([['pt-c1', { partId: 'pt-c1', min: 1, orderUpTo: 2 }], ['pt-c2', { partId: 'pt-c2', min: 2, orderUpTo: 4 }], ['pt-c3', { partId: 'pt-c3', min: 2, orderUpTo: 6 }], ['pt-c4', { partId: 'pt-c4', min: 1, orderUpTo: 2 }], ['pt-c5', { partId: 'pt-c5', min: 1, orderUpTo: 2 }], ['pt-c6', { partId: 'pt-c6', min: 1, orderUpTo: 2 }], ['pt-c7', { partId: 'pt-c7', min: 1, orderUpTo: 2 }], ['pt-c8', { partId: 'pt-c8', min: 2, orderUpTo: 4 }], ['pt-c9', { partId: 'pt-c9', min: 1, orderUpTo: 2 }], ['pt-01', { partId: 'pt-01', min: 3, orderUpTo: 8 }], ['pt-02', { partId: 'pt-02', min: 2, orderUpTo: 6 }], ['pt-03', { partId: 'pt-03', min: 4, orderUpTo: 12 }], ['pt-04', { partId: 'pt-04', min: 2, orderUpTo: 6 }], ['pt-05', { partId: 'pt-05', min: 3, orderUpTo: 6 }], ['pt-06', { partId: 'pt-06', min: 5, orderUpTo: 20 }], ['pt-07', { partId: 'pt-07', min: 1, orderUpTo: 2 }], ['pt-08', { partId: 'pt-08', min: 2, orderUpTo: 6 }], ['pt-09', { partId: 'pt-09', min: 1, orderUpTo: 3 }], ['pt-10', { partId: 'pt-10', min: 1, orderUpTo: 3 }], ['pt-11', { partId: 'pt-11', min: 2, orderUpTo: 4 }], ['pt-12', { partId: 'pt-12', min: 2, orderUpTo: 4 }], ['pt-13', { partId: 'pt-13', min: 1, orderUpTo: 2 }], ['pt-16', { partId: 'pt-16', min: 4, orderUpTo: 10 }], ['pt-17', { partId: 'pt-17', min: 2, orderUpTo: 4 }]]),
+  // below-min rows date from when the part first dipped under min (seed: Tudor's lines have sat under the auto-PO threshold for 14 days)
+  lowSince: new Map<string, string>([['pt-01', dAgo(14)], ['pt-03', dAgo(14)], ['pt-05', dAgo(16)]]),
   needs: [{ id: 'no-01', partId: 'pt-16', reason: 'pick_short', qty: 2, at: dAgo(1), jobNumber: 'E02016' }, { id: 'no-02', partId: 'pt-03', reason: 'out_of_stock', qty: 2, at: dAgo(0.5), requestId: 'pr-20', jobNumber: 'E02011' }] as { id: string; partId: string; reason: 'out_of_stock' | 'pick_short'; qty: number; at: string; requestId?: string; jobNumber?: string }[],
 };
 const onHandOf = (partId: string) => rs.stock.filter((x) => x.partId === partId).reduce((t, x) => t + x.onHand, 0);
@@ -5130,13 +5143,16 @@ export async function savePart(input: PartInput): Promise<PartRow> {
   return resolve(partRow(p));
 }
 export const getReorderRule = (partId: string): ReorderRule => inv.reorder.get(partId) ?? { partId, min: 0, orderUpTo: 0 };
-export async function setReorderRule(partId: string, min: number, orderUpTo: number): Promise<ReorderRule> { if (min < 0 || orderUpTo < min) throw new Error('order-up-to must be ≥ min'); const r = { partId, min, orderUpTo }; inv.reorder.set(partId, r); rsStamp('inventory', `Reorder rule · ${byId(store.parts, partId).partNumber} · min ${min} / up to ${orderUpTo}`); return resolve(r); }
-export async function queueNeedsOrdering(partId: string, reason: 'out_of_stock' | 'pick_short', qty: number, ctx: { requestId?: string; jobNumber?: string } = {}): Promise<void> { if (!inv.needs.some((n) => n.partId === partId && n.requestId === ctx.requestId && n.reason === reason)) inv.needs.unshift({ id: newId('no'), partId, reason, qty, at: new Date().toISOString(), ...ctx }); return resolve(undefined); }
-export async function getNeedsOrdering(): Promise<NeedsOrderingRow[]> {
-  const rows: NeedsOrderingRow[] = inv.needs.map((n) => ({ ...n, part: byId(store.parts, n.partId), onHand: onHandOf(n.partId), onOrder: onOrderOf(n.partId), vendorHint: partPricingSync(n.partId).vendors[0]?.vendorName }));
-  inv.reorder.forEach((r) => { const oh = onHandOf(r.partId); if (r.min > 0 && oh + onOrderOf(r.partId) < r.min && !rows.some((x) => x.partId === r.partId)) rows.push({ id: `low-${r.partId}`, partId: r.partId, part: byId(store.parts, r.partId), reason: 'below_min', qty: r.orderUpTo - oh - onOrderOf(r.partId), onHand: oh, onOrder: onOrderOf(r.partId), at: new Date().toISOString(), vendorHint: partPricingSync(r.partId).vendors[0]?.vendorName }); });
-  return resolve(rows);
-}
+export async function setReorderRule(partId: string, min: number, orderUpTo: number): Promise<ReorderRule> { if (min < 0 || orderUpTo < min) throw new Error('order-up-to must be ≥ min'); const r = { partId, min, orderUpTo }; inv.reorder.set(partId, r); rsStamp('inventory', `Reorder rule · ${byId(store.parts, partId).partNumber} · min ${min} / up to ${orderUpTo}`); autoPoSweepSync(); return resolve(r); }
+export async function queueNeedsOrdering(partId: string, reason: 'out_of_stock' | 'pick_short', qty: number, ctx: { requestId?: string; jobNumber?: string } = {}): Promise<void> { if (!inv.needs.some((n) => n.partId === partId && n.requestId === ctx.requestId && n.reason === reason)) inv.needs.unshift({ id: newId('no'), partId, reason, qty, at: new Date().toISOString(), ...ctx }); autoPoSweepSync(); return resolve(undefined); }
+const needsOrderingSync = (): NeedsOrderingRow[] => {
+  const rows: NeedsOrderingRow[] = inv.needs.map((n) => ({ ...n, part: byId(store.parts, n.partId), onHand: onHandOf(n.partId), onOrder: onOrderOf(n.partId), vendorHint: preferredVendorOf(n.partId)?.name }));
+  inv.reorder.forEach((r) => { const oh = onHandOf(r.partId); if (r.min > 0 && oh + onOrderOf(r.partId) < r.min && !rows.some((x) => x.partId === r.partId)) rows.push({ id: `low-${r.partId}`, partId: r.partId, part: byId(store.parts, r.partId), reason: 'below_min', qty: r.orderUpTo - oh - onOrderOf(r.partId), onHand: oh, onOrder: onOrderOf(r.partId), at: inv.lowSince.get(r.partId) ?? new Date().toISOString(), vendorHint: preferredVendorOf(r.partId)?.name }); });
+  return rows;
+};
+export async function getNeedsOrdering(): Promise<NeedsOrderingRow[]> { return resolve(needsOrderingSync()); }
+// Preferred vendor for a needs row: the part's own vendor, else the vendor we last bought it from
+const preferredVendorOf = (partId: string): Vendor | undefined => { const p = byId(store.parts, partId); const id = p.vendorIds?.[0] ?? partPricingSync(partId).last?.vendorId ?? partPricingSync(partId).vendors[0]?.vendorId; return id ? rs.vendors.find((v) => v.id === id && v.active) : undefined; };
 // Auto-PO per vendor: every part below min (+ the needs-ordering queue) → qty = order-up-to − (on-hand + on-order), priced at the vendor's last price (else avg)
 export async function generatePurchaseOrder(vendorId: string, locationId = 'loc-a1'): Promise<PurchaseOrderWithRefs> {
   const needs = await getNeedsOrdering(); const v = byId(rs.vendors, vendorId);
@@ -5180,7 +5196,7 @@ export async function postCycleCountV2(id: string, counted: Record<string, numbe
   c.lines.filter((l) => !l.skipped).forEach((l) => { const d = (l.counted ?? 0) - l.expected; if (d !== 0) { c.variances += 1; dollars += d * (l.unitCost ?? 0); move('count', l.partId, c.locationId, d, `Cycle count ${c.number} variance ${d > 0 ? '+' : ''}${d}`, { ref: c.number, countId: c.id }); } });
   c.status = 'posted'; c.postedAt = new Date().toISOString(); c.postedBy = a.by;
   c.gainLoss = Math.round(dollars * 100) / 100; // plain gain/loss report for the session — no threshold, no gate, no hit-list pin
-  rsStamp('inventory', `${c.number} posted · ${loc.name} · ${c.variances} variance(s) · ${dollars < 0 ? '−' : '+'}${fmtMoney(Math.abs(dollars))}`); return resolve({ ...c });
+  rsStamp('inventory', `${c.number} posted · ${loc.name} · ${c.variances} variance(s) · ${dollars < 0 ? '−' : '+'}${fmtMoney(Math.abs(dollars))}`); autoPoSweepSync(); return resolve({ ...c });
 }
 export async function getVarianceReport(f: { from?: string; to?: string; locationId?: string; partId?: string; counter?: string } = {}): Promise<VarianceReport> {
   if (currentUserSync()?.accessTier !== 'manager') throw new Error('Variance dollars are manager-only');
@@ -6447,4 +6463,61 @@ export const staffPresenceSync = (u: User): PresenceView => {
   const sess = readAudit().filter((e) => (e.type === 'sign_in' || e.type === 'sign_out') && e.userShortName === u.shortName && isToday(e.timestamp)).sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
   if (sess?.type === 'sign_in' && /front desk/i.test(sess.stationName)) return { state: 'with_client', label: 'With client', detail: `at ${sess.stationName}` };
   return { state: 'at_bench', label: 'At bench', detail: last ? `clocked in ${clock(last.at)}` : 'no clock-in today' };
+};
+
+// ---- AUTO-PO THRESHOLD (MH 2026-09-30) — runs on every stock movement / count close / needs-ordering entry / hitlist read. Inventory is the shared pool (RW + RS) → global parts.
+// Per vendor: draft total ≥ $400 → CREATE the PO as a draft (not sent) and PIN it to MH as HIGH, standing until sent or dismissed with reason. Under $400 the lines wait in needs-ordering;
+// a vendor whose draft has sat under threshold ≥ 14 days pins as NORMAL. One open auto draft per vendor — new lines join it. Send still needs MH / a manager: red lines acknowledged, then Send.
+export const AUTO_PO_THRESHOLD = 400; export const AUTO_PO_WAIT_DAYS = 14;
+const MH_ASSIGNEE: Assignee = { type: 'user', shortName: 'MH' };
+const upsertSystemPin = (key: string, input: { title: string; subtitle?: string; assignedTo: Assignee; priority: 'high' | 'normal'; standing?: boolean; link?: string }) => {
+  const cur = store.pinned.find((p) => p.key === key && !p.dismissedAt); if (cur) { Object.assign(cur, input); return cur; }
+  const p: PinnedItem = { id: newId('pin'), key, ...input, createdBy: 'system', division: 'rolliworks', global: true, createdAt: new Date().toISOString(), station: 'RolliSuite' }; store.pinned.unshift(p); return p;
+};
+const resolveSystemPin = (key: string, reason: string) => store.pinned.filter((p) => p.key === key && !p.dismissedAt).forEach((p) => { p.dismissedAt = new Date().toISOString(); p.dismissedBy = 'system'; p.dismissReason = reason; });
+const autoLinesFor = (vendorId: string, rows: NeedsOrderingRow[]) => rows.map((n) => { const pr = partPricingSync(n.partId); const vend = pr.vendors.find((x) => x.vendorId === vendorId); const rule = getReorderRule(n.partId); const part = byId(store.parts, n.partId); const qty = Math.max(n.qty, rule.orderUpTo ? rule.orderUpTo - n.onHand - n.onOrder : 0, 1); return { partId: n.partId, qty, unitCost: vend?.lastPrice ?? pr.avgCost ?? part.cost ?? part.price, requestId: n.requestId, avg: pr.avgCost }; }).filter((l, i, arr) => arr.findIndex((x) => x.partId === l.partId) === i);
+export const autoPoTitle = (p: PurchaseOrder) => `${p.number} · ${byId(rs.vendors, p.vendorId).name} · ${fmtMoney(p.total)} · ${p.lines.length} line${p.lines.length === 1 ? '' : 's'} · ${poRedLines(p).length} red`;
+export const openAutoDraft = (vendorId: string) => rs.pos.find((p) => p.vendorId === vendorId && p.status === 'draft' && p.auto);
+export interface AutoPoVendorState { vendor: Vendor; lines: number; total: number; draft?: PurchaseOrder; since?: string; daysWaiting: number; pinned: 'high' | 'normal' | null }
+const autoPoWait = new Map<string, string>();
+export const autoPoSweepSync = (): AutoPoVendorState[] => {
+  const needs = needsOrderingSync(); const byVendor = new Map<string, NeedsOrderingRow[]>();
+  needs.forEach((n) => { const v = preferredVendorOf(n.partId); if (v) byVendor.set(v.id, [...(byVendor.get(v.id) ?? []), n]); });
+  const out: AutoPoVendorState[] = [];
+  rs.vendors.filter((v) => v.active && v.kind !== 'outsource').forEach((v) => {
+    const rows = byVendor.get(v.id) ?? []; const lines = autoLinesFor(v.id, rows); const open = openAutoDraft(v.id);
+    if (open) { // new lines join the open draft
+      let joined = 0; lines.forEach((l) => { if (!open.lines.some((x) => x.partId === l.partId)) { const pt = byId(store.parts, l.partId); open.lines.push({ id: newId('pol'), partId: pt.id, partNumber: pt.partNumber, description: pt.name, qty: l.qty, unitCost: l.unitCost, receivedQty: 0, requestId: l.requestId, avgAtOrder: l.avg }); joined += 1; } });
+      if (joined) { poTotal(open); rsStamp('purchasing', `${open.number} · ${joined} new line(s) joined the open auto draft`); }
+      upsertSystemPin(`auto-po:${open.id}`, { title: autoPoTitle(open), subtitle: `Auto-PO draft · ${v.terms} · acknowledge red lines, then Send`, assignedTo: MH_ASSIGNEE, priority: 'high', standing: true, link: `/purchasing?po=${open.id}` });
+      autoPoWait.delete(v.id); resolveSystemPin(`auto-po-wait:${v.id}`, 'draft created'); out.push({ vendor: v, lines: open.lines.length, total: open.total, draft: open, daysWaiting: 0, pinned: 'high' }); return;
+    }
+    if (!lines.length) { autoPoWait.delete(v.id); resolveSystemPin(`auto-po-wait:${v.id}`, 'nothing waiting'); return; }
+    const total = Math.round(lines.reduce((t, l) => t + l.qty * l.unitCost, 0) * 100) / 100;
+    if (total >= AUTO_PO_THRESHOLD) {
+      const p: PurchaseOrder = { id: newId('po'), number: `PO-26-${String(++rs.counters.po).padStart(4, '0')}`, vendorId: v.id, status: 'draft', division: 'rolliworks', locationId: 'loc-a1', memo: `Auto-PO · draft total crossed ${fmtMoney(AUTO_PO_THRESHOLD)} · ${rows.length} needs-ordering rows`, total: 0, createdAt: new Date().toISOString(), createdBy: 'Auto-PO', station: 'RolliSuite', auto: true,
+        lines: lines.map((l) => { const pt = byId(store.parts, l.partId); return { id: newId('pol'), partId: pt.id, partNumber: pt.partNumber, description: pt.name, qty: l.qty, unitCost: l.unitCost, receivedQty: 0, requestId: l.requestId, avgAtOrder: l.avg }; }) };
+      poTotal(p); rs.pos.unshift(p); rsStamp('purchasing', `${p.number} auto-created for ${v.name} · ${fmtMoney(p.total)} ≥ ${fmtMoney(AUTO_PO_THRESHOLD)} · pinned to MH (HIGH)`);
+      upsertSystemPin(`auto-po:${p.id}`, { title: autoPoTitle(p), subtitle: `Auto-PO draft · ${v.terms} · acknowledge red lines, then Send`, assignedTo: MH_ASSIGNEE, priority: 'high', standing: true, link: `/purchasing?po=${p.id}` });
+      autoPoWait.delete(v.id); resolveSystemPin(`auto-po-wait:${v.id}`, 'draft created'); out.push({ vendor: v, lines: p.lines.length, total: p.total, draft: p, daysWaiting: 0, pinned: 'high' }); return;
+    }
+    const since = autoPoWait.get(v.id) ?? rows.reduce((m, r) => (r.at < m ? r.at : m), rows[0].at); autoPoWait.set(v.id, since); const days = Math.floor((Date.now() - new Date(since).getTime()) / 864e5);
+    if (days >= AUTO_PO_WAIT_DAYS) upsertSystemPin(`auto-po-wait:${v.id}`, { title: `${v.name} · ${fmtMoney(total)} · ${days} days waiting`, subtitle: `Under the ${fmtMoney(AUTO_PO_THRESHOLD)} auto-PO threshold · ${lines.length} line${lines.length === 1 ? '' : 's'} in needs-ordering — generate by hand or keep waiting`, assignedTo: MH_ASSIGNEE, priority: 'normal', link: `/inventory?vendor=${v.id}` });
+    else resolveSystemPin(`auto-po-wait:${v.id}`, `under ${AUTO_PO_WAIT_DAYS} days`);
+    out.push({ vendor: v, lines: lines.length, total, since, daysWaiting: days, pinned: days >= AUTO_PO_WAIT_DAYS ? 'normal' : null });
+  });
+  return out;
+};
+export async function getAutoPoState(): Promise<AutoPoVendorState[]> { return resolve(autoPoSweepSync()); }
+
+// ---- MH DAILY · APPROVALS TO SEND — every parts approval priced and ready but not yet sent to the client. MH's item stands (refreshes live, clears at zero); VC gets a normal item.
+export interface ApprovalToSend { request: PartsRequestWithRefs; total: number; ageDays: number; ready: boolean }
+export const approvalsToSendSync = (): ApprovalToSend[] => store.partsRequests.filter((r) => r.status === 'pending_review').map((r) => ({ request: prRefs(r), total: (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0), ageDays: Math.floor((Date.now() - new Date(r.requestedAt).getTime()) / 864e5), ready: approvalReady(r) })).sort((a, b) => b.ageDays - a.ageDays);
+export async function getApprovalsToSend(): Promise<ApprovalToSend[]> { return resolve(approvalsToSendSync()); }
+export const approvalsToSendSweepSync = () => {
+  const ready = approvalsToSendSync().filter((x) => x.ready); const oldest = ready[0]?.ageDays ?? 0;
+  if (!ready.length) { resolveSystemPin('approvals-to-send:MH', 'all sent'); resolveSystemPin('approvals-to-send:VC', 'all sent'); return; }
+  const title = `Approvals to send · ${ready.length} · oldest ${oldest}d`; const subtitle = 'Parts approvals priced but not yet sent to the client — one-tap Send each';
+  upsertSystemPin('approvals-to-send:MH', { title, subtitle, assignedTo: MH_ASSIGNEE, priority: 'normal', standing: true, link: '/parts/approvals' });
+  upsertSystemPin('approvals-to-send:VC', { title, subtitle, assignedTo: { type: 'user', shortName: 'Vienna' }, priority: 'normal', link: '/parts/approvals' });
 };

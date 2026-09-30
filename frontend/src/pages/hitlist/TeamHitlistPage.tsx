@@ -38,7 +38,7 @@ export default function TeamHitlistPage() {
   if (!hl.isSupervisor(sup)) return <div data-testid="team-not-supervisor" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{sup.shortName} doesn’t supervise a team. <Link to={`${base}/${hl.slugOf(sup)}`} className="underline">Open their Hitlist</Link></div>;
   const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3000); };
   const move = async (input: { pinnedId?: string; taskId?: string }, to: Assignee) => { await hl.reassign({ ...input, to }); say(`Reassigned → ${api.assigneeLabel(to).split(' →')[0]}`); await load(); };
-  const dismiss = async (id: string) => { await api.dismissPinned(id); say('Pinned item done'); await load(); };
+  const dismiss = async (id: string, reason?: string) => { try { await api.dismissPinned(id, reason); say(reason ? 'Dismissed' : 'Pinned item done'); } catch (e) { say(e instanceof Error ? e.message : 'Failed'); } await load(); };
   const done = async (taskId: string) => { await api.setTaskDone(taskId, true); say('Task completed'); await load(); };
   const ro = (tech: { shortName: string }) => { const t = hl.userBySlug(tech.shortName); return !!user && !!t && hl.teamRowReadOnly(user, t); };
   const pinned = (data?.pinned ?? []).filter((p) => filter === 'all' || p.tech.shortName === filter);

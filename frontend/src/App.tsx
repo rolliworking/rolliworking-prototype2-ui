@@ -22,6 +22,7 @@ import RwFloorPage from '@/pages/rw/RwFloorPage';
 import AssignMovePage from '@/pages/rw/AssignMovePage';
 import CustodyPage from '@/pages/rw/CustodyPage';
 import PartsPage from '@/pages/rs/PartsPage';
+import ApprovalsToSendPage from '@/pages/rs/ApprovalsToSendPage';
 import HitlistPage from '@/pages/rs/HitlistPage';
 import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
 import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
@@ -281,6 +282,7 @@ export default function App() {
               <Route path="/custody" element={<CustodyPage />} />
               <Route path="/parts/knowledge" element={<PartsKnowledgePage />} />
               <Route path="/parts" element={<PartsPage />} />
+              <Route path="/parts/approvals" element={<ApprovalsToSendPage />} />
               <Route path="/appointments" element={<SchedulePage />} />
               <Route path="/concierge" element={<ConciergePage />} />
               <Route path="/swo" element={<SwoListPage />} />

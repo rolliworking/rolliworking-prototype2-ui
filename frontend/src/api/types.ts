@@ -399,6 +399,8 @@ export interface PinnedItem {
   station: string;
   dismissedAt?: string;
   dismissedBy?: string;
+  // System pins (auto-PO, daily items): key dedupes/upserts, priority ranks, standing = dismiss needs a reason, link = tap target, global = shared parts pool (ignores the division filter)
+  key?: string; priority?: 'high' | 'normal'; standing?: boolean; link?: string; subtitle?: string; global?: boolean; dismissReason?: string;
 }
 
 export type TodaySource = 'owner' | 'assignee' | 'hold' | 'discrepancy' | 'task' | 'thread';
@@ -1025,6 +1027,7 @@ export interface PurchaseOrder {
   lines: POLine[]; total: number; memo?: string; createdAt: string; createdBy: string; station: string;
   sentAt?: string; receivedAt?: string; cancelledAt?: string; cancelReason?: string;
   labelUrl?: string; trackingNumber?: string; labelService?: string; labelSource?: 'parcelpro' | 'upload'; redAcknowledgedBy?: string;
+  auto?: boolean; // created by the ≥ $400 auto-PO threshold — one open draft per vendor, new lines join it
 }
 export type PurchaseOrderWithRefs = PurchaseOrder & { vendor: Vendor; location: StockLocation };
 // ---- Inventory deep session: pricing intelligence, needs-ordering, reorder rules, PO labels, cycle-count queue + variance $ ----

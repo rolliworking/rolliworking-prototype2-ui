@@ -25,7 +25,7 @@ export const HitListPanel = () => {
       bodyClassName="py-1"
       action={<Link to="/today" data-testid="hit-list-open-link" className="inline-flex items-center gap-1 text-xs font-medium text-moss-700 hover:underline">Open Today <ArrowRight size={12} /></Link>}
     >
-      {view && view.pinned.length > 0 && <PinnedList items={view.pinned} dense onDismiss={async (id) => { await api.dismissPinned(id); await load(); }} />}
+      {view && view.pinned.length > 0 && <PinnedList items={view.pinned} dense onDismiss={async (id, reason) => { await api.dismissPinned(id, reason).catch(() => undefined); await load(); }} />}
       <ul className="divide-y divide-line/70">
         {rows.slice(0, 8).map((r) => <TodayRowItem key={r.id} row={r} dense onDone={async (id) => { await api.setTaskDone(id, true); await load(); }} />)}
         {view && rows.length === 0 && <li className="px-4 py-4 text-center text-xs text-ink-400">Nothing needs you right now.</li>}

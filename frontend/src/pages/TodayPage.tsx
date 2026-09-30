@@ -52,7 +52,7 @@ export default function TodayPage({ forUser }: { forUser?: User }) {
   const home = hl.getHomeScreen(me.id);
 
   const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3000); };
-  const dismiss = async (id: string) => { await api.dismissPinned(id); say('Pinned item done'); await load(); };
+  const dismiss = async (id: string, reason?: string) => { try { await api.dismissPinned(id, reason); say(reason ? 'Dismissed' : 'Pinned item done'); } catch (e) { say(e instanceof Error ? e.message : 'Failed'); } await load(); };
   const done = async (taskId: string) => { await api.setTaskDone(taskId, true); setFlash('Task completed — the sender sees it in their waiting-on list'); window.setTimeout(() => setFlash(null), 3000); await load(); };
   const closeInbox = useCallback(() => setInboxOpen(false), []);
 
