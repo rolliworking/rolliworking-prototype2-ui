@@ -1,11 +1,12 @@
-import { MousePointerClick, Plus, Route, Truck } from 'lucide-react';
+import { LayoutList, MousePointerClick, Plus, Truck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import * as cz from '@/api/concierge';
 import type { ConciergeLane, SwoInput, SwoStage, VendorInput } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { ActionMap, TrackMap } from '@/components/concierge/ActionMap';
+import { ActionMap } from '@/components/concierge/ActionMap';
+import { LaneBoard } from '@/components/concierge/LaneBoard';
 import { SlidePanel, type PanelState } from '@/components/concierge/SlidePanel';
 import type { Run } from '@/components/concierge/SwoCard';
 import { field, Flash, Head } from '@/components/rs/RsBits';
@@ -14,10 +15,10 @@ import { Modal } from '@/components/ui/Modal';
 import { SwoForm } from './SwoPage';
 
 type View = 'track' | 'assign';
-export const VIEWS: { key: View; label: string; hint: string }[] = [{ key: 'track', label: 'Track', hint: 'progress — tap a count for the cards, tap a vendor for paid-not-back' }, { key: 'assign', label: 'Assign', hint: 'Assign / Move — look up, click a node, scan, COMMIT' }];
+export const VIEWS: { key: View; label: string; hint: string }[] = [{ key: 'track', label: 'Track', hint: 'lane board — tap a count for the cards (panel slides in from the right), tap a vendor name for paid-not-back' }, { key: 'assign', label: 'Assign', hint: 'Assign / Move — look up a job, click a station or safe, scan, Commit' }];
 export const readView = (userId?: string): View => { const v = localStorage.getItem(`rollisuite.concierge.view.${userId ?? 'anon'}`); return v === 'assign' || v === 'action' ? 'assign' : 'track'; };
 
-// CONCIERGE — one map, two views. TRACK = progress (tappable counts → slide-out cards, aging / late / redo on the nodes). ASSIGN = the Assign / Move contract (lookup → strip → node = destination → COMMIT). Same state; last view remembered per user.
+// CONCIERGE — TRACK = the lane board (count grid; tappable counts → slide-out cards). ASSIGN = the /rw/assign DestinationMap with the vendor track config (lookup → legal nodes → destination → COMMIT). Same state; last view remembered per user.
 export default function ConciergePage() {
   const { user } = useAuth(); const viewKey = `rollisuite.concierge.view.${user?.id ?? 'anon'}`;
   const [view, setViewState] = useState<View>(() => readView(user?.id)); const setView = (v: View) => { setViewState(v); localStorage.setItem(viewKey, v); };
@@ -32,11 +33,11 @@ export default function ConciergePage() {
   const total = lanes.reduce((t, l) => t + l.rows.length, 0);
   return <div data-testid="concierge-page" className="space-y-4">
     <Head title="Concierge" sub={`${lanes.length} vendor lanes · ${total} shop work orders · ${VIEWS.find((v) => v.key === view)!.hint}`} action={<>
-      <div data-testid="concierge-view-toggle" className="mr-2 inline-flex rounded-sm border border-line text-xs">{VIEWS.map((v) => <button key={v.key} type="button" data-testid={`concierge-view-${v.key}`} data-selected={view === v.key} onClick={() => setView(v.key)} className={`inline-flex items-center gap-1 px-3 py-1 font-semibold uppercase tracking-wide ${view === v.key ? 'bg-ink text-white' : 'text-ink-500 hover:bg-canvas'}`}>{v.key === 'track' ? <Route size={12} /> : <MousePointerClick size={12} />}{v.label}</button>)}</div>
+      <div data-testid="concierge-view-toggle" className="mr-2 inline-flex rounded-sm border border-line text-xs">{VIEWS.map((v) => <button key={v.key} type="button" data-testid={`concierge-view-${v.key}`} data-selected={view === v.key} onClick={() => setView(v.key)} className={`inline-flex items-center gap-1 px-3 py-1 font-semibold uppercase tracking-wide ${view === v.key ? 'bg-ink text-white' : 'text-ink-500 hover:bg-canvas'}`}>{v.key === 'track' ? <LayoutList size={12} /> : <MousePointerClick size={12} />}{v.label}</button>)}</div>
       <Button size="sm" data-testid="concierge-add-vendor" onClick={() => setVendorForm(true)}><Plus size={12} /> Vendor</Button><Button size="sm" variant="primary" data-testid="concierge-send" onClick={() => setForm({})}><Truck size={12} /> Send to vendor</Button></>} />
     <Flash msg={msg} error={error} />
     <div className={panel ? 'lg:pr-[33.333%]' : ''}>
-      <div className={view === 'track' ? '' : 'hidden'}><TrackMap lanes={lanes} onOpenStage={openStage} onOutstanding={(vendorId) => setPanel(panel?.kind === 'outstanding' && panel.vendorId === vendorId ? null : { kind: 'outstanding', vendorId })} selected={panel?.kind === 'stage' ? { vendorId: panel.vendorId, stage: panel.stage } : null} /></div>
+      <div className={view === 'track' ? '' : 'hidden'}><LaneBoard lanes={lanes} onOpenStage={openStage} onOutstanding={(vendorId) => setPanel(panel?.kind === 'outstanding' && panel.vendorId === vendorId ? null : { kind: 'outstanding', vendorId })} selected={panel?.kind === 'stage' ? { vendorId: panel.vendorId, stage: panel.stage } : null} /></div>
       <div className={view === 'assign' ? '' : 'hidden'}><ActionMap lanes={lanes} run={run} active={view === 'assign'} onLookup={(ids, title) => setPanel({ kind: 'lookup', swoIds: ids, title })} pickedId={picked} onPickedConsumed={() => setPicked(null)} /></div>
     </div>
     <SlidePanel state={panel} lanes={lanes} run={run} onClose={closePanel} onPick={view === 'track' ? (w) => { setPicked(w.id); closePanel(); setView('assign'); } : undefined} />

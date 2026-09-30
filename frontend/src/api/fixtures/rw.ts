@@ -32,7 +32,10 @@ export const RW_STATIONS: RwStation[] = [
 ];
 
 // Saved part positions (precedence 1). Parts not listed derive from job status + department.
-export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: RwStationKey; status: PartStatus; tech?: string }>>> = {
+export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: RwStationKey; status: PartStatus; tech?: string; item?: string }>>> = {
+  // Job detail v2 demo seeds — multi-item job (1/3 · 2/3 · 3/3, head finished) and an outsourced head at James, delayed
+  'j-mi1': { head: { station: 'safe_await_band', status: 'waiting', tech: 'Leo', item: '1/3' }, band: { station: 'band_assign', status: 'in_progress', tech: 'MAM', item: '2/3' }, case: { station: 'mgr_safe_polish_in', status: 'waiting', tech: 'Vienna', item: '3/3' } },
+  'j-os1': { head: { station: 'wm_bench_3', status: 'in_progress', tech: 'Leo' } },
   'j-01': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'Leo' } },
   'j-04': { head: { station: 'wm_bench_2', status: 'in_progress', tech: 'Leo' } },
   'j-24': { head: { station: 'wm_bench_3', status: 'in_progress', tech: 'Leo' } },

@@ -9,4 +9,5 @@ export const componentSeeds: Record<string, { key: ComponentKey; by: string; at:
   'j-r3': [{ key: 'band', by: 'Leo', at: daysAgo(1, 15) }], // Calloway Datejust — bracelet refinished, waiting in the safe; head still on Bench 2 (client split view)
   'j-t2': [{ key: 'band', by: 'Walter', at: daysAgo(2, 14) }, { key: 'case', by: 'Walter', at: daysAgo(1, 16) }], // RolliShop trade — awaiting Walter's review
   'j-05': [{ key: 'band', by: 'Walter', at: daysAgo(5, 10) }, { key: 'case', by: 'Walter', at: daysAgo(5, 16) }], // E02015 in testing
+  'j-mi1': [{ key: 'head', by: 'Leo', at: daysAgo(1, 14) }], // E02063 multi-item — item 1/3 (head) finished, 2/3 band in progress, 3/3 case waiting for the polisher
 };

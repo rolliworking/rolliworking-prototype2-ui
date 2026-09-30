@@ -4222,7 +4222,7 @@ const derivePlacement = (j: Job, c: JobComponent): { station: RwStationKey; stat
 const ensureParts = (j: Job): JobComponent[] => {
   const comps = ensureComponents(j);
   comps.forEach((c) => {
-    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: 'seeded position' }); } }
+    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.itemLabel = seed.item; c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: 'seeded position' }); } }
   });
   return comps;
 };
@@ -5914,6 +5914,8 @@ const seedSwo = () => {
     mk('v-james', 'j-32', ['head'], 'Dial + hands relume — tritium-tone match', 'at_vendor', { daysAgo: 9, pointPerson: 'MM', predictedCompletion: d(1), stageAt: ago(5) }),
     mk('v-james', 'j-04', ['head'], 'Hands relume only', 'inspection', { daysAgo: 24, pointPerson: 'MM', predictedCompletion: d(-3), stageAt: ago(2), invoices: [inv('vi-06', 'JM-2201', 260, 4)] }),
     mk('v-james', 'j-20', ['head'], 'Full dial relume — delayed at vendor', 'at_vendor', { daysAgo: 30, pointPerson: 'MM', predictedCompletion: d(-5), stageAt: ago(22) }),
+    // Job detail v2 demo: E02064 head at James, 6 days past the promised date → red blocker on the vendor stage of the flow line
+    mk('v-james', 'j-os1', ['head'], 'Dial + hands relume — tritium tone (5513 matte dial)', 'at_vendor', { daysAgo: 21, pointPerson: 'MM', predictedCompletion: d(-6), stageAt: ago(16), invoices: [inv('vi-os1', 'JM-2240', 900, 15)] }),
     // Chronosky — overflow watchmaking, ships (domestic), PREPAY — the exposure case
     mk('v-chronosky', 'j-21', ['head'], 'Full service — cal. 3135, overflow', 'at_vendor', { daysAgo: 12, pointPerson: 'Vienna', predictedCompletion: d(20), stageAt: ago(9), invoices: [inv('vi-07', 'CS-5520', 1450, 12, { daysAgo: 12, method: 'ACH', ourRef: 'ACH-5520', by: 'MH', bill: 'QBO-BILL-STUB-3110' })], qboStatus: 'queued', qboBillId: 'QBO-BILL-STUB-3110' }),
     mk('v-chronosky', 'j-22', ['head'], 'Full service — cal. 3235, overflow', 'at_vendor', { daysAgo: 8, pointPerson: 'Vienna', predictedCompletion: d(24), stageAt: ago(5), invoices: [inv('vi-08', 'CS-5531', 1450, 8, { daysAgo: 8, method: 'ACH', ourRef: 'ACH-5531', by: 'MH', bill: 'QBO-BILL-STUB-3111' })], qboStatus: 'queued', qboBillId: 'QBO-BILL-STUB-3111' }),
@@ -6128,3 +6130,104 @@ export const RW_STATION_OPTIONS: { key: string; label: string }[] = [
   { key: 'wm_bench_1', label: 'WM Bench 1' }, { key: 'wm_bench_2', label: 'WM Bench 2' }, { key: 'wm_bench_3', label: 'WM Bench 3' }, { key: 'uncase', label: 'Uncase' }, { key: 'movement_service', label: 'Movement service' }, { key: 'parts_approval', label: 'Parts approval' }, { key: 'recase_test', label: 'Recase + test' },
   { key: 'polish_room', label: 'Polish room' }, { key: 'refinish', label: 'Refinish' }, { key: 'band_assign', label: 'Band tech bench' }, { key: 'band_qc', label: 'Band QC' }, { key: 'final_assembly', label: 'Final assembly' }, { key: 'testing', label: 'Testing' }, { key: 'shipping', label: 'Shipping' },
 ];
+
+
+// ---- JOB DETAIL v2 (2026-09-30, MH brief) — "where is it and where is it in the process": one process line per component, custody from the custody record (never from status), add-ons since the estimate ----
+export type FlowStageKey = 'intake' | 'queue' | 'progress' | 'qc' | 'finished' | 'v_route' | 'v_vendor' | 'v_return' | 'v_received' | 'v_inspect';
+export interface FlowBlocker { text: string; tone: 'red' | 'amber' }
+export interface FlowStage { key: FlowStageKey; label: string; vendor?: string; state: 'done' | 'current' | 'todo'; note?: string; blocker?: FlowBlocker }
+export interface FlowCustody { holder: string; where: string; since?: string; source: 'custody' | 'derived' }
+export interface FlowLine { key: ComponentKey; code: 'H' | 'B' | 'C'; label: string; itemLabel?: string; stages: FlowStage[]; custody: FlowCustody; mismatch?: string; finished: boolean; swoId?: string; vendorName?: string }
+export interface JobFlow { lines: FlowLine[]; done: number; total: number; split: boolean; statusStage: FlowStageKey }
+const FLOW_LABEL: Record<FlowStageKey, string> = { intake: 'Intake', queue: 'In queue', progress: 'In progress', qc: 'QC', finished: 'Finished', v_route: 'In route', v_vendor: 'At vendor', v_return: 'Returning', v_received: 'Received', v_inspect: 'Inspection' };
+const STATUS_STAGE: Record<JobStatus, FlowStageKey> = { intake: 'intake', in_review: 'intake', awaiting_customer_approval: 'intake', approved: 'queue', in_service: 'progress', testing: 'qc', awaiting_manager_review: 'qc', ready_to_ship: 'finished', closed: 'finished' };
+const SHOP_STAGES: FlowStageKey[] = ['intake', 'queue', 'progress', 'qc', 'finished'];
+const V_KEY: Partial<Record<SwoStage, FlowStageKey>> = { sent: 'v_route', at_vendor: 'v_vendor', inbound: 'v_return', received: 'v_received', inspection: 'v_inspect' };
+// Custody station → process stage. Await/into safes = the component's own work is done, waiting for reunification (QC boundary).
+const stationStage = (k: RwStationKey): FlowStageKey => (k === 'pre_approval' ? 'intake' : k.endsWith('pre_queue') ? 'queue' : k === 'finished' ? 'finished' : k === 'final_assembly' || k === 'testing' || k.includes('await') || k.startsWith('into_safe') ? 'qc' : 'progress');
+// Which custody stages are consistent with a job status — anything else is a real status/custody mismatch (shown, never hidden)
+const CUSTODY_OK: Record<FlowStageKey, FlowStageKey[]> = { intake: ['intake', 'queue'], queue: ['intake', 'queue'], progress: ['queue', 'progress', 'qc'], qc: ['qc'], finished: ['finished'], v_route: [], v_vendor: [], v_return: [], v_received: [], v_inspect: [] };
+const COMP_CODE: Record<ComponentKey, 'H' | 'B' | 'C'> = { head: 'H', band: 'B', case: 'C' };
+const flowLine = (j: Job, c: JobComponent, swo: Swo | undefined, hold: JobHold | undefined, pr: PartsRequest | undefined): FlowLine => {
+  const pl = derivePlacement(j, c); const saved = !!c.station; const vendorHeld = !!c.custodyTech?.startsWith('vendor:');
+  const vendor = swo ? byId(rs.vendors, swo.vendorId) : vendorHeld ? rs.vendors.find((v) => v.id === c.custodyTech!.slice(7)) : undefined;
+  const statusStage = STATUS_STAGE[j.status]; const done = !!c.completedAt;
+  let cur: FlowStageKey = statusStage;
+  if (statusStage === 'progress') cur = pl.status === 'not_started' ? 'queue' : done ? 'qc' : 'progress';
+  let keys: FlowStageKey[] = SHOP_STAGES; let note: Partial<Record<FlowStageKey, string>> = {}; let vKey: FlowStageKey | undefined;
+  if (swo && vendor) {
+    const leg = laneStagesFor(vendor).filter((s) => s !== 'queue' && s !== 'fulfilled').map((s) => V_KEY[s]!);
+    keys = ['intake', 'queue', ...leg, 'qc', 'finished'];
+    const bs = baseStage(swo.stage); vKey = bs === 'queue' ? 'queue' : V_KEY[bs];
+    // the vendor leg only moves the dot once the job is actually in service — before approval the process position stays at Intake / In queue
+    if (statusStage === 'progress' && vKey) cur = vKey;
+    if (bs === 'queue') note = { queue: `queued for ${vendor.name}` };
+  }
+  const idx = keys.indexOf(cur);
+  const blockers: Partial<Record<FlowStageKey, FlowBlocker>> = {};
+  if (j.status === 'awaiting_customer_approval') blockers.intake = { text: 'awaiting client approval', tone: 'red' };
+  if (hold) blockers[cur] = { text: `${hold.type === 'parts' ? 'Parts' : 'Outsource'} hold · ${hold.reason}`, tone: 'red' };
+  if (pr) blockers[cur] = { text: `awaiting client approval · ${pr.number}${pr.items?.[0]?.description ? ` · ${pr.items[0].description}` : ''}`, tone: 'red' };
+  if (swo && vendor && vKey && swo.stage !== 'fulfilled') {
+    const today = new Date().toISOString().slice(0, 10); const exp = swo.predictedCompletion; const md = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (swoIsLate(swo)) blockers[vKey] = { text: `${vendor.name} · delayed ${Math.round((Date.now() - new Date(`${exp!}T12:00:00`).getTime()) / 86_400_000)}d past ${md(exp!)}${swo.redoCycles.length ? ` · redo ×${swo.redoCycles.length}` : ''}`, tone: 'red' };
+    else if (exp && ['sent', 'at_vendor', 'inbound'].includes(baseStage(swo.stage)) && (new Date(exp).getTime() - new Date(today).getTime()) / 86_400_000 <= 2) blockers[vKey] = { text: `${vendor.name} · at risk · due ${md(exp)}`, tone: 'amber' };
+  }
+  const stages: FlowStage[] = keys.map((k, i) => ({ key: k, label: FLOW_LABEL[k], vendor: k.startsWith('v_') ? vendor?.name : undefined, state: i < idx ? 'done' : i === idx ? 'current' : 'todo', note: k === cur && done && cur === 'qc' && statusStage === 'progress' ? 'complete · waiting for the other components' : note[k], blocker: blockers[k] }));
+  const last = c.history?.[c.history.length - 1];
+  const custody: FlowCustody = vendorHeld
+    ? { holder: `At vendor: ${vendor?.name ?? c.custodyTech!.slice(7)}`, where: swo ? `${swo.number} · ${swoStageLabel(swo.stage)}` : 'outsourced', since: last?.at, source: 'custody' }
+    : saved ? { holder: c.custodyTech ?? 'unassigned', where: stationOf(pl.station).label, since: last?.at, source: 'custody' }
+    : { holder: c.custodyTech ?? c.completedBy ?? 'no custody scan yet', where: stationOf(pl.station).label, source: 'derived' };
+  const custodyStage = vendorHeld ? 'progress' : stationStage(pl.station);
+  const mismatch = (saved || vendorHeld) && !CUSTODY_OK[statusStage].includes(custodyStage) ? `Status says ${FLOW_LABEL[statusStage]} · custody says ${vendorHeld ? custody.holder : stationOf(pl.station).label}` : undefined;
+  return { key: c.key, code: COMP_CODE[c.key], label: PART_LABEL[c.key], itemLabel: c.itemLabel, stages, custody, mismatch, finished: done || statusStage === 'finished', swoId: swo?.id, vendorName: vendor?.name };
+};
+export const jobFlowSync = (j: Job): JobFlow => {
+  seedSwo();
+  const comps = store.jobs.some((x) => x.id === j.id) ? ensureParts(j) : j.components?.length ? j.components : ensureComponents({ ...j, components: undefined });
+  const hold = activeHold(j); const pr = store.partsRequests.find((r) => r.jobId === j.id && r.status === 'awaiting_client');
+  const legs = swos.filter((w) => !w.synth && w.jobId === j.id && w.stage !== 'fulfilled');
+  const lines = comps.map((c, i) => flowLine(j, c, legs.find((w) => w.components.includes(c.key)), hold, i === 0 ? pr : undefined));
+  return { lines, done: lines.filter((l) => l.finished).length, total: lines.length, split: lines.length > 1, statusStage: STATUS_STAGE[j.status] };
+};
+export async function getJobFlow(jobId: string): Promise<JobFlow> { return resolve(jobFlowSync(getJobRow(jobId))); }
+// Vendor legs of a job for the info-only Outsource card (open first, fulfilled as history) — never the synthetic volume rows
+export async function getJobVendorLegs(jobId: string): Promise<SwoWithRefs[]> { seedSwo(); return resolve(swos.filter((w) => !w.synth && w.jobId === jobId).sort((a, b) => Number(a.stage === 'fulfilled') - Number(b.stage === 'fulfilled') || b.createdAt.localeCompare(a.createdAt)).map(swoRefs)); }
+
+// Add-ons since the estimate: derived rows are the truth (client-approved parts requests + estimate-revision lines added after the first send); manual rows cover counter / phone approvals and are flagged + audited
+export type AddonChannel = 'portal' | 'email' | 'phone' | 'counter' | 'text';
+export const ADDON_CHANNELS: { key: AddonChannel; label: string }[] = [{ key: 'portal', label: 'Portal' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' }, { key: 'counter', label: 'At the counter' }, { key: 'text', label: 'Text' }];
+export interface JobAddon { id: string; jobId: string; at: string; description: string; approver: string; channel: AddonChannel; amount: number; source: 'parts_request' | 'estimate_revision' | 'manual'; ref?: string; note?: string; loggedBy?: string }
+export interface JobAddonsView { rows: JobAddon[]; total: number; since?: string }
+export interface AddonInput { description: string; approver: string; channel: AddonChannel; amount: number; note?: string; at?: string }
+const manualAddons: JobAddon[] = []; let addonsSeeded = false;
+const seedAddons = () => { if (addonsSeeded) return; addonsSeeded = true; const j = store.jobs.find((x) => x.id === 'j-30'); if (!j) return; manualAddons.push({ id: 'ao-01', jobId: 'j-30', at: daysAgoIso(3), description: 'Crown + tube replacement — found at uncasing', approver: fullNameOf(byId(fx.clients, j.clientId)), channel: 'counter', amount: 185, source: 'manual', note: 'Client stopped by · approved verbally at the desk', loggedBy: 'Vienna' }); };
+const prAddon = (r: PartsRequest, client: string): JobAddon | null => {
+  if (!['approved', 'on_order', 'received'].includes(r.status)) return null;
+  const at = r.clientDecidedAt ?? r.history?.find((h) => h.action === 'client approved')?.at; if (!at) return null;
+  const part = r.partId ? store.parts.find((p) => p.id === r.partId) : undefined;
+  const amount = (r.items?.length ? r.items.reduce((t, i) => t + (i.price ?? 0) * i.qty, 0) : (part?.price ?? 0) * r.qty);
+  return { id: `ao-${r.id}`, jobId: r.jobId, at, description: r.items?.map((i) => `${i.description}${i.qty > 1 ? ` ×${i.qty}` : ''}`).join(', ') || `${part?.name ?? 'Part'}${r.qty > 1 ? ` ×${r.qty}` : ''}`, approver: r.decidedBy?.includes('(client)') ? r.decidedBy.replace(' (client)', '') : client, channel: r.emailId ? 'email' : 'portal', amount, source: 'parts_request', ref: r.number };
+};
+const revisionAddons = (e: Estimate, client: string): JobAddon[] => {
+  if (!e.sentAt) return [];
+  const firstSent = [...e.revisions].filter((r) => r.status !== 'draft').sort((a, b) => a.revision - b.revision)[0]; if (!firstSent) return [];
+  const before = new Set(firstSent.lines.map((l) => l.id));
+  return e.lines.filter((l) => !before.has(l.id)).map((l) => ({ id: `ao-${e.id}-${l.id}`, jobId: e.jobId ?? '', at: e.approvedAt ?? e.updatedAt, description: l.description, approver: e.approvedAt ? client : 'pending approval', channel: e.approvedVia === 'portal' ? 'portal' as AddonChannel : 'counter' as AddonChannel, amount: l.qty * l.unitPrice, source: 'estimate_revision' as const, ref: `${e.number} rev ${e.revision}` }));
+};
+export async function getJobAddons(jobId: string): Promise<JobAddonsView> {
+  seedAddons(); const j = store.jobs.find((x) => x.id === jobId); if (!j) return resolve({ rows: [], total: 0 });
+  const client = fullNameOf(byId(fx.clients, j.clientId)); const e = j.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined;
+  const rows = [...store.partsRequests.filter((r) => r.jobId === jobId).map((r) => prAddon(r, client)).filter((x): x is JobAddon => !!x), ...(e ? revisionAddons(e, client) : []), ...manualAddons.filter((a) => a.jobId === jobId)].sort((a, b) => b.at.localeCompare(a.at));
+  return resolve({ rows, total: rows.reduce((t, r) => t + r.amount, 0), since: e?.sentAt ?? j.createdAt });
+}
+export async function addJobAddon(jobId: string, input: AddonInput): Promise<JobAddon> {
+  seedAddons(); const j = getJobRow(jobId); const a = actor();
+  if (!input.description.trim()) throw new Error('Describe the add-on'); if (!input.approver.trim()) throw new Error('Who approved it?'); if (!(input.amount >= 0)) throw new Error('Amount must be 0 or more');
+  const row: JobAddon = { id: newId('ao'), jobId, at: input.at ?? new Date().toISOString(), description: input.description.trim(), approver: input.approver.trim(), channel: input.channel, amount: Math.round(input.amount * 100) / 100, source: 'manual', note: input.note?.trim() || undefined, loggedBy: a.by };
+  manualAddons.push(row);
+  jobStamp(j, `Add-on logged · ${row.description} · ${fmtMoney(row.amount)} · approved by ${row.approver} (${row.channel}) · manual`);
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} add-on (manual) · ${row.description} · ${fmtMoney(row.amount)} · approved by ${row.approver} via ${row.channel}` });
+  return resolve(row);
+}

@@ -4,13 +4,13 @@ BASE="http://localhost:3000"
 async def nav(page, path):
     await page.evaluate("(p) => { window.history.pushState({}, '', p); window.dispatchEvent(new PopStateEvent('popstate')); }", path); await page.wait_for_timeout(1500)
 async def tcounts(page, v):
-    return await page.locator(f"[data-testid^='tnode-count-{v}-']").evaluate_all("els=>Object.fromEntries(els.map(e=>[e.dataset.testid.split('-').pop(), +e.dataset.count]))")
+    return await page.locator(f"[data-testid^='cell-{v}-']").evaluate_all("els=>Object.fromEntries(els.map(e=>[e.dataset.testid.split('-').pop(), +e.dataset.count]))")
 async def acounts(page, v):
-    return await page.locator(f"[data-testid^='anode-count-{v}-']").evaluate_all("els=>Object.fromEntries(els.map(e=>[e.dataset.testid.split('-').pop(), +e.dataset.count]))")
+    await view(page, "track"); c = await tcounts(page, v); await view(page, "assign"); return c
 async def view(page, v):
     await page.locator(f"[data-testid='concierge-view-{v}']").click(); await page.wait_for_timeout(400)
 async def load_from_track(page, vendor, stage, idx=0):
-    await view(page, "track"); await page.locator(f"[data-testid='tnode-count-{vendor}-{stage}']").click(); await page.wait_for_timeout(500)
+    await view(page, "track"); await page.locator(f"[data-testid='cell-{vendor}-{stage}']").click(); await page.wait_for_timeout(500)
     await page.locator("[data-testid^='panel-pick-']").nth(idx).click(); await page.wait_for_timeout(500)
 async def main():
     pad = len(sys.argv) > 1 and sys.argv[1] == "pad"
@@ -27,21 +27,21 @@ async def main():
         await nav(page, "/rw/concierge" if pad else "/concierge")
         # TRACK checks
         await view(page, "track")
-        print("toggle labels:", await page.locator("[data-testid='concierge-view-toggle'] button").all_inner_texts(), "default view track visible:", await page.locator("[data-testid='concierge-track']").is_visible(), "assign hidden:", not await page.locator("[data-testid='concierge-assign']").is_visible())
-        print("track: no lookup bar visible:", not await page.locator("[data-testid='action-lookup-input']").is_visible(), "| ages:", await page.locator("[data-testid^='tnode-age-v-chronosky-']").all_inner_texts())
+        print("toggle labels:", await page.locator("[data-testid='concierge-view-toggle'] button").all_inner_texts(), "lane board visible:", await page.locator("[data-testid='concierge-board']").is_visible(), "assign hidden:", not await page.locator("[data-testid='concierge-assign']").is_visible())
+        print("track: no lookup bar visible:", not await page.locator("[data-testid='action-lookup-input']").is_visible())
         c0 = await tcounts(page, "v-chronosky"); print("chronosky before:", c0)
-        await page.locator("[data-testid='tlane-name-v-chronosky']").click(); await page.wait_for_timeout(400); print("outstanding panel:", await page.locator("[data-testid='concierge-panel']").get_attribute("data-kind")); await page.locator("[data-testid='panel-close']").click(); await page.wait_for_timeout(200)
-        await page.locator("[data-testid='tnode-count-v-chronosky-queue']").click(); await page.wait_for_timeout(500)
-        print("stage panel:", await page.locator("[data-testid='panel-title']").inner_text(), "| node highlighted:", await page.locator("[data-testid='tnode-count-v-chronosky-queue']").get_attribute("aria-pressed"), "| picks:", await page.locator("[data-testid^='panel-pick-']").count(), "| label:", (await page.locator("[data-testid^='panel-pick-']").first.inner_text())[:40])
+        await page.locator("[data-testid='lane-name-v-chronosky']").click(); await page.wait_for_timeout(400); print("outstanding panel:", await page.locator("[data-testid='concierge-panel']").get_attribute("data-kind")); await page.locator("[data-testid='panel-close']").click(); await page.wait_for_timeout(200)
+        await page.locator("[data-testid='cell-v-chronosky-queue']").click(); await page.wait_for_timeout(500)
+        print("stage panel:", await page.locator("[data-testid='panel-title']").inner_text(), "| cell highlighted:", await page.locator("[data-testid='cell-v-chronosky-queue']").get_attribute("data-selected"), "| picks:", await page.locator("[data-testid^='panel-pick-']").count(), "| label:", (await page.locator("[data-testid^='panel-pick-']").first.inner_text())[:40])
         await page.screenshot(path=f"/app/memory/tools/shots/track_{'pad' if pad else 'desk'}.png")
         # pick → switches to ASSIGN with the job loaded
         await page.locator("[data-testid^='panel-pick-']").first.click(); await page.wait_for_timeout(500)
         print("switched to assign:", await page.locator("[data-testid='concierge-view-assign']").get_attribute("data-selected"), "| strip:", await page.locator("[data-testid='action-strip']").get_attribute("data-count"), "| panel closed:", await page.locator("[data-testid='concierge-panel']").count()==0)
         # second job via Track again (strip must survive the flip)
         await load_from_track(page, "v-chronosky", "queue", 1)
-        print("strip after 2nd pick:", await page.locator("[data-testid='action-strip']").get_attribute("data-count"), "| assign counts display-only (no button):", await page.locator("button[data-testid^='anode-count-']").count() == 0, "| legal:", await page.locator("[data-testid^='anode-v-chronosky-'][data-legal='true']").evaluate_all("els=>els.map(e=>e.dataset.testid.split('-').pop())"))
+        print("strip after 2nd pick:", await page.locator("[data-testid='action-strip']").get_attribute("data-count"), "| numbers on assign map:", await page.locator("[data-testid='vendor-destination-map']").evaluate("el=>/\\b\\d{1,3}\\b/.test(el.innerText)"), "| safes:", await page.locator("[data-testid='vendor-destination-map'] [data-testid='safe-icon']").count(), "| legal:", await page.locator("[data-testid^='dest-node-v-chronosky:'][data-legal='true']").evaluate_all("els=>els.map(e=>e.dataset.testid.split(':').pop())"), "| current pulse:", await page.locator("[data-testid='dest-node-v-chronosky:queue'][data-current='true']").count(), "| dim rows:", await page.locator("[data-testid^='dest-row-'].opacity-40").count())
         ests = await page.locator("[data-testid^='action-sel-'] span.font-mono").all_inner_texts(); print("ests:", ests)
-        await page.locator("[data-testid='anode-v-chronosky-box']").click(); await page.wait_for_timeout(300); print("bottom:", await page.locator("[data-testid='action-bottom-title']").inner_text())
+        await page.locator("[data-testid='dest-node-v-chronosky:box']").click(); await page.wait_for_timeout(300); print("bottom:", await page.locator("[data-testid='action-bottom-title']").inner_text())
         await page.locator("[data-testid='action-commit']").click(force=True); await page.wait_for_timeout(300); print("refused w/o scan:", (await page.locator("[data-testid='action-error']").inner_text())[:70])
         for e in ests: await page.locator("[data-testid='action-scan-input']").fill(e); await page.keyboard.press("Enter"); await page.wait_for_timeout(200)
         await page.locator("[data-testid='action-commit']").click(force=True); await page.wait_for_timeout(900)
@@ -49,14 +49,14 @@ async def main():
         await view(page, "track"); print("track counts after pack (live):", await tcounts(page, "v-chronosky"))
         # redo from Jacques inspection
         await load_from_track(page, "v-jacques", "inspection", 0)
-        await page.locator("[data-testid='anode-v-jacques-box']").click(); await page.wait_for_timeout(300); print("redo kind:", await page.locator("[data-testid='action-bottom']").get_attribute("data-kind"))
+        await page.locator("[data-testid='dest-node-v-jacques:box']").click(); await page.wait_for_timeout(300); print("redo kind:", await page.locator("[data-testid='action-bottom']").get_attribute("data-kind"))
         est = (await page.locator("[data-testid^='action-sel-'] span.font-mono").all_inner_texts())[0]; await page.locator("[data-testid='action-scan-input']").fill(est); await page.keyboard.press("Enter"); await page.wait_for_timeout(200)
         await page.locator("[data-testid='action-commit']").click(force=True); await page.wait_for_timeout(300); print("refused w/o reason:", (await page.locator("[data-testid='action-error']").inner_text())[:60])
         await page.locator("[data-testid='action-reason']").fill("Clasp gap 0.4 mm — fails QC"); await page.locator("[data-testid='action-commit']").click(force=True); await page.wait_for_timeout(900)
         print("jacques after redo:", await acounts(page, "v-jacques"))
         # Received without scan refuses
         await load_from_track(page, "v-chronosky", "inbound", 0)
-        await page.locator("[data-testid='anode-v-chronosky-arrival']").click(); await page.wait_for_timeout(300); r0 = await acounts(page, "v-chronosky")
+        await page.locator("[data-testid='dest-node-v-chronosky:arrival']").click(); await page.wait_for_timeout(300); r0 = await acounts(page, "v-chronosky")
         await page.locator("[data-testid='action-commit']").click(force=True); await page.wait_for_timeout(300); print("received refused:", (await page.locator("[data-testid='action-error']").inner_text())[:60], "| unchanged:", r0 == await acounts(page, "v-chronosky"))
         await page.screenshot(path=f"/app/memory/tools/shots/assign_{'pad' if pad else 'desk'}.png")
         # wedge scanner only while ASSIGN visible

@@ -353,6 +353,7 @@ export interface JobComponent {
   rework: ComponentRework[];
   // E18 — physical part on the shop floor
   station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; history?: PartMove[];
+  itemLabel?: string; // multi-item jobs: "1/3" · "2/3" · "3/3" as written on the Receive Watch labels
 }
 export type PartStatus = 'not_started' | 'in_progress' | 'waiting' | 'reunited' | 'fulfilled';
 export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo'; note?: string }

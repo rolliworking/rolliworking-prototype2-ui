@@ -37,6 +37,8 @@ const rows: Row[] = [
   // Second same-name pair — only ONE has a watch in-house right now (search highlight scenario)
   ['c-34', 'Daniel', 'Okafor', 'd.okafor@example.com', '(312) 555-0134', 'Chicago', 'IL'],
   ['c-35', 'Daniel', 'Okafor', 'daniel.okafor.mia@example.com', '(305) 555-0135', 'Miami', 'FL'],
+  ['c-36', 'Helena', 'Marsh', 'helena.marsh@example.com', '(212) 555-0136', 'New York', 'NY'],
+  ['c-37', 'Victor', 'Adeyemi', 'victor.adeyemi@example.com', '(917) 555-0137', 'Brooklyn', 'NY'],
 ];
 
 const tradeIds = new Set(['c-11', 'c-25', 'c-31']);

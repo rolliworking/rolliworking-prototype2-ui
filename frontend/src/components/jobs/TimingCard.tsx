@@ -5,8 +5,9 @@ import type { TimingTest } from '@/api/client';
 import { Card } from '@/components/ui/Card';
 import { TimingHistory } from '@/pages/rw/testing/RwTestingTestPage';
 
-export const TimingCard = ({ jobId, watchId, status }: { jobId: string; watchId: string; status: string }) => {
+export const TimingCard = ({ jobId, watchId, status, bare }: { jobId: string; watchId: string; status: string; bare?: boolean }) => {
   const [tests, setTests] = useState<TimingTest[]>([]);
   useEffect(() => { api.getTimingTests({ watchId }).then(setTests); }, [watchId, status]);
+  if (bare) return <div data-testid="job-timing-card"><div className="mb-2 flex items-center justify-between text-xs text-ink-500"><span>{tests.filter((t) => t.jobId === jobId).length} on this job · {tests.length} on this watch · newest first</span>{status === 'testing' && <Link data-testid="job-open-rollitime" to={`/rt/test/${jobId}`} className="text-brand hover:underline">Open in RolliTime →</Link>}</div><TimingHistory tests={tests} compact /></div>;
   return <Card title="Timing tests (RolliTime)" subtitle={`${tests.filter((t) => t.jobId === jobId).length} on this job · ${tests.length} on this watch · newest first`} action={status === 'testing' ? <Link data-testid="job-open-rollitime" to={`/rt/test/${jobId}`} className="text-xs text-brand hover:underline">Open in RolliTime →</Link> : undefined} testId="job-timing-card"><TimingHistory tests={tests} compact /></Card>;
 };
