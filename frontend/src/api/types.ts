@@ -765,7 +765,7 @@ export interface PartsRequest {
 }
 
 // M3KE capture — append-only training-data plumbing (manager resolutions + supervisor selections)
-export interface M3keEvent { id: string; kind: 'resolved' | 'selected'; description: string; reference: string; caliber?: string; partId: string; partNumber: string; price?: number; resolvedBy: string; ts: string; requestId?: string }
+export interface M3keEvent { id: string; kind: 'resolved' | 'selected' | 'inspection_opinion'; description: string; reference: string; caliber?: string; partId: string; partNumber: string; price?: number; resolvedBy: string; ts: string; requestId?: string }
 export interface PadSuggestion { part: Part; learned: boolean; source: 'learned' | 'ref' | 'caliber'; hint?: string }
 export interface PadPartsContext { job: JobWithRefs; reference: string; caliber?: string; caliberParts: PadSuggestion[] }
 export interface PadConditionView { source: 'report' | 'inspection' | 'none'; issuedBy?: string; issuedAt?: string; notes?: string; rows: { component: string; grade: string; note?: string }[] }

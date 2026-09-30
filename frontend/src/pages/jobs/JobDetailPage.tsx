@@ -6,6 +6,7 @@ import type { JobAction, JobWithRefs, LabelJob, PartsRequestWithRefs, SalesOrder
 import { useAuth } from '@/auth/AuthContext';
 import { JobCallsLine } from '@/components/clients/CallLedger';
 import { AuthCapturePanel } from '@/components/inspection/GuidedAuthCapture';
+import { OpinionCard } from '@/components/inspection/OpinionCard';
 import { LabelPrintDialog } from '@/components/intake/LabelBits';
 import { PackageCustodyCard } from '@/components/intake/TwoScanBits';
 import { AddOnsPanel } from '@/components/jobs/AddOnsPanel';
@@ -133,6 +134,7 @@ export default function JobDetailPage() {
               <div className="border-t border-line pt-3"><div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Report to client · portal-first</div><InspectionReportPanel job={j} run={run} /></div>
             </div>
           </CollapsedCard>
+          <OpinionCard jobId={j.id} onChange={() => void load()} />
           <Card title="Outsource / concierge" subtitle="Information only — vendor, stage, expected date, health, point person, tracking · moves happen on the Concierge board" testId="job-vendor-card"><OutsourceInfo jobId={j.id} /></Card>
           <MoreSection j={j} run={run} prs={prs} setOpenPr={setOpenPr} />
         </div>

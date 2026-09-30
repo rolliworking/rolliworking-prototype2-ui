@@ -96,6 +96,8 @@ import ConciergePage from '@/pages/rs/ConciergePage';
 import SwoListPage from '@/pages/rs/SwoPage';
 import SwoHubPage from '@/pages/rs/SwoHubPage';
 import RwMessagesPage from '@/pages/rw/RwMessagesPage';
+import RwInspectPage from '@/pages/rw/RwInspectPage';
+import InspectionSetupPage from '@/pages/setup/InspectionSetupPage';
 import AccessControlPage from '@/pages/rs/AccessControlPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
 import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
@@ -186,6 +188,8 @@ export default function App() {
             <Route path="picking" element={<RwPickingPage />} />
             <Route path="evidence" element={<RwEvidencePage />} />
             <Route path="messages" element={<RwMessagesPage />} />
+            <Route path="inspect" element={<RwInspectPage />} />
+            <Route path="inspect/:jobId" element={<RwInspectPage />} />
             <Route path="testing" element={<RwTestingQueuePage />} />
             <Route path="testing/test/:jobId" element={<RwTestingTestPage />} />
             <Route path="today" element={<HitlistIndex />} />
@@ -266,6 +270,7 @@ export default function App() {
               <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/access" element={<AccessControlPage />} />
+              <Route path="/setup/inspection" element={<InspectionSetupPage />} />
               <Route path="/wm-kiosk" element={<WmKioskPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />

@@ -66,3 +66,8 @@ Rules: code is truth; file paths, exported names and signatures are copied from 
 - `onInboundCall(event: InboundCallEvent {number, at, direction:'inbound', answered?, voicemail?}): Promise<ScreenPop>` → `receiveInboundCall` writes a `CallEvent` and screen-pops (`onScreenPop(listener)`); `simulateKnownCall/UnknownCall/MissedCall/MissedUnknown` drive the "Simulate call" menu. Call ledger `CallEvent {id, at, direction, number, clientId?, answeredBy?, station, outcome, durationSec?, jobId?, notes[], afterHours, resolved*}`. Real: a Vonage webhook posts the event to a backend that calls the same adapter. **Google Home / Nest: nothing exists** (no setup page). **Microsoft Graph: nothing exists.**
 
 ## 14. Kiosk check-in — `pages/kiosk/KioskPage.tsx` → `client.ts` `kioskSubmit(...)` (creates a `ServiceRequest`, audit `kiosk`); RGTime — `client.ts` RG block (`rg.*` localStorage, geofence `RG_DEFAULT_SETTINGS`, NFC tag URLs `/rg/clock?station=`). No external service.
+
+## WatchM8 seam — inspection opinion labels (2026-09-30)
+- **Source**: `src/api/inspectionLabels.ts` — every saved opinion label (`{jobId, component, opinion, confidence, variant, tags[], notes, ref, serialEra, model, by, at, station, revision}`) + its guided-photo ids.
+- **Out**: (1) `m3keEvents` row `kind: 'inspection_opinion'` (append-only learning log); (2) `watchm8Export()` — read-only `WatchM8Record[]` (label + photo ids + controlled-photo count + specimen / 2nd-opinion flags), shown in Setup → Inspection → *Data out*. Only `controlled=true` shots (fixed kiosk / inspection-station rig) are the training set; bench ad-hoc shots carry labels but are flagged out.
+- **Direction**: RS → WatchM8 only. Nothing reads back. MOCK — no transport yet; the export table is the contract.

@@ -164,6 +164,7 @@ export default function SetupPage() {
           </tbody>
         </Table>
       </Card>
+      <Card title="Inspection" subtitle="Variant sets (per ref × component) · guided shot lists · findings tags · WatchM8 export" testId="setup-inspection-card" action={<Link to="/setup/inspection" data-testid="setup-open-inspection" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Inspection <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">Every inspection produces per-component opinion labels attached to guided photos. Opinions are revisable; nothing is a verdict. Exemplars are our own photos only.</p></Card>
       {isAdmin && <SetupAuditsCard />}
       {isAdmin && <SetupGradingCard />}
       <SetupRsPanels />

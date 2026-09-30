@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import * as il from '@/api/inspectionLabels';
 import type { IntegrationTile, JobWithRefs, QboQueueRow, Report, SalesOrderWithRefs } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { downloadCsv, field, Flash, Head, Tabs, useLoad } from '@/components/rs/RsBits';
@@ -32,6 +33,8 @@ export function LabelsPage() {
 
 // ---- Reports ---------------------------------------------------------------------------------------
 const REPORTS = [{ key: 'funnel', label: 'Estimate funnel' }, { key: 'throughput', label: 'Job throughput' }, { key: 'aging', label: 'Aging' }, { key: 'pnl', label: 'Department P&L' }, { key: 'completions', label: 'Tech completions' }] as const;
+// Label quality (inspection labels item 4) — blind second opinions: agreement / disagreement per component
+const LabelQualityCard = () => { il.ensureSeed(); const q = il.labelQuality(); return <Card title="Label quality · blind second opinions" subtitle={`${q.requested} requested · ${q.submitted} submitted · ${q.agree} agree · ${q.disagree} disagree${q.rate !== null ? ` · ${q.rate}% agreement` : ''}`} bodyClassName="p-0" testId="report-label-quality"><Table><thead><tr><Th>Job</Th><Th>Component</Th><Th>Requested by</Th><Th>Second inspector</Th><Th>Result</Th></tr></thead><tbody>{q.rows.map((r) => <tr key={r.id} data-testid={`label-quality-${r.id}`} data-agree={r.agree}><Td className="font-mono text-xs">{r.jobId}</Td><Td className="text-xs">{il.componentLabel(r.component)}</Td><Td className="text-xs">{r.requestedBy}</Td><Td className="text-xs">{r.submittedBy ?? <span className="text-ink-400">pending</span>}</Td><Td className={`text-xs font-semibold ${r.agree === undefined ? 'text-ink-400' : r.agree ? 'text-moss-700' : 'text-rose-700'}`}>{r.agree === undefined ? '—' : r.agree ? 'agrees' : 'DISAGREES'}</Td></tr>)}{!q.rows.length && <tr><Td className="text-xs text-ink-400">No second opinions yet</Td></tr>}</tbody></Table></Card>; };
 export function ReportsPage() {
   const [sp] = useSearchParams(); const initial = REPORTS.find((r) => r.key === sp.get('key'))?.key ?? 'funnel';
   const [key, setKey] = useState<typeof REPORTS[number]['key']>(initial);
@@ -44,6 +47,7 @@ export function ReportsPage() {
     {r && <Card title={r.title} subtitle={r.note} bodyClassName="p-0" testId={`report-${r.key}`}><Table><thead><tr>{r.columns.map((c) => <Th key={c} className={money(c) || /count|jobs|estimates|total|^\d{4}-\d{2}$/.test(c) ? 'text-right' : ''}>{c}</Th>)}</tr></thead><tbody>
       {r.rows.map((row) => <tr key={row.label} data-testid={`report-row-${row.label}`}>{r.columns.map((c) => { const v = row.values[c]; return <Td key={c} className={`text-xs ${typeof v === 'number' ? 'tabular text-right' : ''} ${row.label === 'total' || row.label === 'in_progress' ? 'font-semibold' : ''}`}>{typeof v === 'number' && money(c) ? fmtMoneyCents(v) : v ?? ''}</Td>; })}</tr>)}
     </tbody></Table></Card>}
+    <LabelQualityCard />
     {stats && <div data-testid="report-reconcile" className="text-[11px] text-ink-500">Dashboard now: open estimates {stats.openEstimates} · awaiting approval {stats.awaitingApproval} · in progress {stats.inProgress} · awaiting pickup {stats.awaitingPickup} · revenue this month {fmtMoneyCents(stats.revenueThisMonth)}</div>}
   </div>;
 }

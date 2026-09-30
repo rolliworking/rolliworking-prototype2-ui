@@ -3,6 +3,8 @@ import { Camera, Check, KeyRound, Search, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import * as il from '@/api/inspectionLabels';
+import { SpecimenBanner } from '@/components/inspection/OpinionCard';
 import type { PackagePhoto, SalesOrderWithRefs } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { PhotoCapture } from '@/components/intake/ReceiveBits';
@@ -105,7 +107,8 @@ export default function PickupStationPage() {
                 <PhotoCapture onAdd={(p) => setPhotos((x) => [...x, ...p])} />
                 {photos.length > 0 && <div className="mt-2 flex gap-1.5" data-testid="pickup-photo-grid">{photos.map((p) => <img key={p.id} src={p.dataUrl} alt="hand-back" className="h-14 w-20 rounded-sm object-cover ring-1 ring-line" />)}</div>}
                 {order.balanceDue > 0 && <label className="mt-3 block text-xs text-rose-700">Balance due {fmtMoneyCents(order.balanceDue)} — payment bypass reason (logged)<input data-testid="pickup-bypass" value={bypass} onChange={(e) => setBypass(e.target.value)} placeholder="Why release unpaid" className={`${field} mt-1 block w-full`} /></label>}
-                <div className="mt-3 flex items-center justify-between"><Button onClick={() => setStep(2)}>Back</Button><Button variant="primary" data-testid="pickup-complete" disabled={photos.length === 0} onClick={complete}><Camera size={13} /> Complete pickup</Button></div>
+                {order.job && <div className="mt-3"><SpecimenBanner jobId={order.job.id} onChange={() => void refreshOrder()} /></div>}
+                <div className="mt-3 flex items-center justify-between"><Button onClick={() => setStep(2)}>Back</Button><Button variant="primary" data-testid="pickup-complete" disabled={photos.length === 0 || !!(order.job && il.pickupGate(order.job.id))} title={order.job && il.pickupGate(order.job.id) ? 'Specimen capture pending — complete the controlled shot list or have a manager waive' : undefined} onClick={complete}><Camera size={13} /> {order.job && il.pickupGate(order.job.id) ? 'Specimen capture pending' : 'Complete pickup'}</Button></div>
               </Card>
             )}
           </div>

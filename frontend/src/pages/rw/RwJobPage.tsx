@@ -1,4 +1,4 @@
-import { ArrowLeft, Watch as WatchIcon, Wrench } from 'lucide-react';
+import { ArrowLeft, Camera, Watch as WatchIcon, Wrench } from 'lucide-react';
 import { RatingBadge } from '@/components/clients/RatingBadge';
 import { KioskRequirementBanner } from '@/components/rw/KioskRequirementBanner';
 import { useCallback, useEffect, useState } from 'react';
@@ -43,6 +43,7 @@ export default function RwJobPage() {
       <div><div className="flex flex-wrap items-center gap-2"><h1 data-testid="rw-job-number" className="font-mono text-xl font-semibold text-white">{j.number}</h1><StatusWithHold job={j} /><KindPill kind={j.kind} client={j.client} /><PriorityPill priority={j.priority} /><WorkflowBadges workflow={j.workflow} /><ClientRequestBadge n={api.openClientRequests(j).length} testId="rw-job-client-requests-badge" /></div><div className="mt-1"><AwayBreadcrumbs jobId={j.id} dark /></div><div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">{fullName(j.client)} <RatingBadge clientId={j.clientId} testId="rw-job-client-rating" /> · owner {j.owner ?? '—'} · assignees {j.assignees.join(', ') || 'none'}</div></div>
       <div data-testid="rw-job-actions" className="flex flex-wrap items-center justify-end gap-1.5">
         {actions.map((a) => <span key={a.key} className="inline-flex items-center gap-1"><Button data-testid={`rw-act-${a.key}`} disabled={!!blocked(a)} title={blocked(a) || undefined} variant={a.tone === 'primary' ? 'primary' : 'secondary'} className={a.tone === 'danger' ? '!border-rose-400/40 !text-rose-300' : undefined} onClick={() => act(a)}>{a.label}</Button>{a.provisional && <Provisional note={a.provisional} />}</span>)}
+        <Link to={`/rw/inspect/${j.id}`} data-testid="rw-act-inspect" className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-white/15 px-3 text-[13px] font-medium text-slate-200 hover:bg-white/10"><Camera size={13} /> Inspect · shots + opinions</Link>
         {j.status !== 'closed' && <Button data-testid="rw-act-parts-request" onClick={async () => { try { setOpenPr(await api.openPartsRequest(j.id)); } catch (er) { setError(er instanceof Error ? er.message : 'Failed'); } }}><Wrench size={13} /> Parts request</Button>}
       </div>
     </div>
