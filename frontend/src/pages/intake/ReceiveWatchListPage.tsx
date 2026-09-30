@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import { ScanInput, Stamp } from '@/components/intake/IntakeBits';
+import { WbpClientRows } from '@/components/shared/WbpDots';
 import { Card } from '@/components/ui/Card';
 import { DeptBadge, StatusPill } from '@/components/ui/Pills';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
@@ -42,7 +43,7 @@ export default function ReceiveWatchListPage() {
                 <tr key={p.id} data-testid={`inspection-row-${p.id}`} className="transition-colors hover:bg-canvas/70">
                   <Td className="font-mono text-xs font-medium text-ink">{p.estimate?.number}</Td>
                   <Td className="font-mono text-xs text-ink-500">{p.subNumber}</Td>
-                  <Td>{p.client ? fullName(p.client) : '—'}</Td>
+                  <Td>{p.client ? <>{fullName(p.client)}<div><WbpClientRows clientId={p.client.id} compact testId={`inspection-wbp-${p.id}`} /></div></> : '—'}</Td>
                   <Td>{p.estimate?.watch && <>{p.estimate.watch.brand} {p.estimate.watch.model} <span className="font-mono text-xs text-ink-400">{p.estimate.watch.reference}</span></>}</Td>
                   <Td><span className="flex gap-1">{Array.from(new Set(p.estimate?.lines.map((l) => l.dept))).map((d) => <DeptBadge key={d} code={d} />)}</span></Td>
                   <Td className="capitalize text-ink-700">{p.bin}</Td>
@@ -65,7 +66,7 @@ export default function ReceiveWatchListPage() {
                 <tr key={p.id} data-testid={`inspection-done-${p.id}`} data-status={p.status}>
                   <Td className="font-mono text-xs font-medium text-ink">{p.estimate?.number}</Td>
                   <Td className="font-mono text-xs text-ink-500">{p.subNumber}</Td>
-                  <Td>{p.client ? fullName(p.client) : '—'}</Td>
+                  <Td>{p.client ? <>{fullName(p.client)}<div><WbpClientRows clientId={p.client.id} compact testId={`inspection-wbp-${p.id}`} /></div></> : '—'}</Td>
                   <Td><span className="flex gap-1">{(p.workflow ?? []).map((d) => <DeptBadge key={d} code={d} />)}</span></Td>
                   <Td><StatusPill status={p.status} /></Td>
                   <Td><span className="tabular">{p.inspectedAt && fmtDate(p.inspectedAt)}</span> <Stamp by={p.inspectedBy} station={p.arrivedStation} /></Td>

@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { OwnerChip } from '@/components/ui/Pills';
+import { WbpJobDots } from '@/components/shared/WbpDots';
 import { estDigits, fmtTime } from '@/lib/format';
 import { useEffect, useState } from 'react';
 
@@ -23,6 +24,7 @@ export const PinnedList = ({ items, onDismiss, dense }: { items: PinnedItem[]; o
             : p.clientId ? <Link to={`/clients/${p.clientId}`} className="hover:underline">{estDigits(p.title)}</Link>
             : p.estimateId ? <Link to={`/estimates/${p.estimateId}`} className="hover:underline">{estDigits(p.title)}</Link>
             : estDigits(p.title)}
+            {p.jobId && <span className="ml-1.5"><WbpJobDots jobId={p.jobId} testId={`pinned-wbp-${p.id}`} /></span>}
           </div>
           {!dense && <div className="text-[11px] text-ink-400">pinned by {p.createdBy} · {fmtTime(p.createdAt)} · {p.assignedTo.type === 'role' ? `role · ${p.assignedTo.role}` : 'for me'}{p.taskId && ' · from a task'}</div>}
         </div>

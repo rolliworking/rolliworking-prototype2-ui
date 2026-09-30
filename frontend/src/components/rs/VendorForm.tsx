@@ -4,6 +4,7 @@ import type { Vendor, VendorInput } from '@/api/client';
 import { field } from '@/components/rs/RsBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { PresetsEditor } from '@/components/concierge/SwoBits';
 
 const TERMS = ['Net 30', 'Net 15', 'Net 45', 'Net 60', 'Due on receipt', 'Prepaid', 'Credit card on file'];
 const METHODS = ['Email PO (PDF)', 'Vendor portal', 'Phone', 'Fax', 'EDI'];
@@ -40,6 +41,7 @@ export const VendorForm = ({ vendor, onClose, onSaved }: { vendor?: Vendor; onCl
       </div>
         <L k="shippingNotes" label="Shipping / ordering notes"><textarea data-testid="vendor-shipping-notes" rows={2} value={f.shippingNotes ?? ''} onChange={(e) => set({ shippingNotes: e.target.value })} className={`${field} mt-1 block w-full`} /></L>
       </div>
+      {f.kind === 'outsource' && <PresetsEditor value={f.commonlySent ?? []} onChange={(v) => set({ commonlySent: v })} />}
       <L k="notes" label="Internal notes"><textarea data-testid="vendor-notes" rows={2} value={f.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} className={`${field} mt-1 block w-full`} /></L>
       <label className="flex items-center gap-2 text-xs text-ink-700"><input type="checkbox" data-testid="vendor-active" checked={f.active !== false} onChange={(e) => set({ active: e.target.checked })} /> Active — inactive vendors drop out of Generate PO / New PO pickers but stay in purchase history</label>
       {error && <div data-testid="vendor-form-error" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</div>}

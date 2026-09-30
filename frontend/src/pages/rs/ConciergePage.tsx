@@ -1,6 +1,6 @@
 import { LayoutList, MousePointerClick, Plus, Truck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import * as cz from '@/api/concierge';
 import type { ConciergeLane, SwoInput, SwoStage, VendorInput } from '@/api/client';
@@ -12,6 +12,7 @@ import type { Run } from '@/components/concierge/SwoCard';
 import { field, Flash, Head } from '@/components/rs/RsBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { PresetsEditor } from '@/components/concierge/SwoBits';
 import { SwoForm } from './SwoPage';
 
 type View = 'track' | 'assign';
@@ -22,7 +23,7 @@ export const readView = (userId?: string): View => { const v = localStorage.getI
 export default function ConciergePage() {
   const { user } = useAuth(); const viewKey = `rollisuite.concierge.view.${user?.id ?? 'anon'}`;
   const [view, setViewState] = useState<View>(() => readView(user?.id)); const setView = (v: View) => { setViewState(v); localStorage.setItem(viewKey, v); };
-  const [lanes, setLanes] = useState<ConciergeLane[]>([]); const [sp, setSp] = useSearchParams();
+  const nav = useNavigate(); const [lanes, setLanes] = useState<ConciergeLane[]>([]); const [sp, setSp] = useSearchParams();
   const [panel, setPanel] = useState<PanelState>(() => { const l = sp.get('lane'); const st = sp.get('stage') as SwoStage | null; const swo = sp.get('swo'); return swo ? { kind: 'lookup', swoIds: [swo], title: 'Shop work order' } : l && st ? { kind: 'stage', vendorId: l, stage: st } : null; });
   const [picked, setPicked] = useState<string | null>(null); const [form, setForm] = useState<Partial<SwoInput> | null>(null); const [vendorForm, setVendorForm] = useState(false); const [msg, setMsg] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => { cz.syncConciergeAlerts(); setLanes(await api.getConciergeBoard()); }, []);
@@ -34,14 +35,14 @@ export default function ConciergePage() {
   return <div data-testid="concierge-page" className="space-y-4">
     <Head title="Concierge" sub={`${lanes.length} vendor lanes · ${total} shop work orders · ${VIEWS.find((v) => v.key === view)!.hint}`} action={<>
       <div data-testid="concierge-view-toggle" className="mr-2 inline-flex rounded-sm border border-line text-xs">{VIEWS.map((v) => <button key={v.key} type="button" data-testid={`concierge-view-${v.key}`} data-selected={view === v.key} onClick={() => setView(v.key)} className={`inline-flex items-center gap-1 px-3 py-1 font-semibold uppercase tracking-wide ${view === v.key ? 'bg-ink text-white' : 'text-ink-500 hover:bg-canvas'}`}>{v.key === 'track' ? <LayoutList size={12} /> : <MousePointerClick size={12} />}{v.label}</button>)}</div>
-      <Button size="sm" data-testid="concierge-add-vendor" onClick={() => setVendorForm(true)}><Plus size={12} /> Vendor</Button><Button size="sm" variant="primary" data-testid="concierge-send" onClick={() => setForm({})}><Truck size={12} /> Send to vendor</Button></>} />
+      <Button size="sm" data-testid="concierge-add-vendor" onClick={() => setVendorForm(true)}><Plus size={12} /> Vendor</Button><Button size="sm" variant="primary" data-testid="concierge-send" onClick={() => setForm({})}><Truck size={12} /> New SWO</Button></>} />
     <Flash msg={msg} error={error} />
     <div className={panel ? 'lg:pr-[33.333%]' : ''}>
       <div className={view === 'track' ? '' : 'hidden'}><LaneBoard lanes={lanes} onOpenStage={openStage} onOutstanding={(vendorId) => setPanel(panel?.kind === 'outstanding' && panel.vendorId === vendorId ? null : { kind: 'outstanding', vendorId })} selected={panel?.kind === 'stage' ? { vendorId: panel.vendorId, stage: panel.stage } : null} /></div>
       <div className={view === 'assign' ? '' : 'hidden'}><ActionMap lanes={lanes} run={run} active={view === 'assign'} onLookup={(ids, title) => setPanel({ kind: 'lookup', swoIds: ids, title })} pickedId={picked} onPickedConsumed={() => setPicked(null)} /></div>
     </div>
     <SlidePanel state={panel} lanes={lanes} run={run} onClose={closePanel} onPick={view === 'track' ? (w) => { setPicked(w.id); closePanel(); setView('assign'); } : undefined} />
-    {form && <SwoForm init={form} onClose={() => setForm(null)} onSaved={(m) => { setForm(null); void run(async () => undefined, m); }} />}
+    {form && <SwoForm init={form} onClose={() => setForm(null)} onSaved={(_m, hubId) => { setForm(null); nav(`/swo/${hubId}`); }} />}
     {vendorForm && <VendorQuickForm onClose={() => setVendorForm(false)} onSaved={(m) => { setVendorForm(false); void run(async () => undefined, m); }} />}
   </div>;
 }
@@ -60,6 +61,7 @@ const VendorQuickForm = ({ onClose, onSaved }: { onClose: () => void; onSaved: (
       <label>Payment terms<select data-testid="cv-terms" value={f.paymentTerms} onChange={(e) => set('paymentTerms', e.target.value)} className={`${field} mt-1 w-full`}><option value="on_receipt">Pay on receipt (default)</option><option value="prepay">Prepay — exposure tracked</option></select></label>
       <label>Predicted turnaround (days)<input type="number" inputMode="numeric" data-testid="cv-lead" value={f.leadTimeDays ?? 0} onChange={(e) => set('leadTimeDays', Number(e.target.value))} className={`${field} mt-1 w-full`} /></label>
       <label className="inline-flex items-center gap-1"><input type="checkbox" data-testid="cv-intl" checked={f.country !== 'US'} onChange={(e) => set('country', e.target.checked ? 'INTL' : 'US')} disabled={f.ships === false} /> International (customs on labels)</label>
+      <div className="col-span-2"><PresetsEditor value={f.commonlySent ?? []} onChange={(v) => set('commonlySent', v)} testId="cv-presets" /></div>
     </div>
     {err && <p className="mt-2 text-xs text-rose-700">{err}</p>}
     <div className="mt-3 flex justify-end gap-2"><Button size="sm" onClick={onClose}>Cancel</Button><Button size="sm" variant="primary" data-testid="cv-save" onClick={() => api.saveVendor({ ...f, contact: f.contact || f.name }).then((v) => onSaved(`Vendor ${v.name} added — ${f.ships === false ? 'hand-off lane' : 'shipping lane'}${f.paymentTerms === 'prepay' ? ' · prepay' : ''}`)).catch((e) => setErr(e instanceof Error ? e.message : 'Failed'))}>Create vendor</Button></div>

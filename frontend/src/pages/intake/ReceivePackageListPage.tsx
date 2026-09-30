@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { PackageWithRefs } from '@/api/client';
 import { PhotoStrip, Stamp } from '@/components/intake/IntakeBits';
+import { WbpClientRows } from '@/components/shared/WbpDots';
 import { OpenScanCard } from '@/components/intake/TwoScanBits';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
@@ -16,7 +17,7 @@ const Row = ({ p, action }: { p: PackageWithRefs; action?: string }) => {
   return <tr data-testid={`receive-row-${p.id}`} className="transition-colors hover:bg-canvas/70">
     <Td className="font-mono text-xs font-medium text-ink">{p.subNumber}{p.shelfBin && <span className="ml-1 rounded-sm bg-sky-50 px-1 py-0.5 text-[10px] font-semibold text-sky-800">{p.shelfBin}</span>}</Td>
     <Td className="font-mono text-xs text-ink-500">{p.trackingNumber ?? '—'}</Td>
-    <Td>{p.client ? fullName(p.client) : <span className="italic text-ink-400">unknown</span>}</Td>
+    <Td>{p.client ? <>{fullName(p.client)}<div><WbpClientRows clientId={p.client.id} compact testId={`receive-wbp-${p.id}`} /></div></> : <span className="italic text-ink-400">unknown</span>}</Td>
     <Td className="font-mono text-xs">{p.estimate?.number ?? '—'}</Td>
     <Td>{p.contents.length ? <span className="text-ink-700">{p.contents.join(', ')}</span> : <span className="text-ink-300">—</span>}</Td>
     <Td>{p.photos.length ? <PhotoStrip photos={p.photos.slice(0, 3)} size="sm" /> : <span className="text-ink-300">—</span>}</Td>

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { IntercomButton, PageBanner } from '@/components/layout/IntercomPanel';
 import { RoleTabBar } from '@/components/rw/RoleTabBar';
 import { MessagesButton } from '@/components/layout/MessagesPopover';
-import { CornerLookup } from '@/components/layout/CornerLookup';
+import { MessageBubble } from '@/components/layout/MessageBubble';
 import { ViewAsPicker } from '@/components/layout/ViewAs';
 
 export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTier[]; end?: boolean }[] = [
@@ -40,6 +40,7 @@ export const RW_NAV: { key: string; label: string; path: string; tiers: AccessTi
 ];
 
 const JOB_LINK = /^\/jobs\/([^/?#]+)$/;
+const SWO_LINK = /^\/swo\/([^/?#]+)$/;
 // Supervisor tab bar (MM: Pad · Team hitlist · Queue · Assign · Messages) — visible to any pad-tier role even below manager tier
 const SUPERVISOR_NAV = ['pad', 'band', 'hitlist', 'queue', 'assign', 'jobs'];
 
@@ -62,6 +63,7 @@ export default function RwShell() {
     const p = url.pathname; if (p.startsWith('/rw')) return;
     e.preventDefault(); e.stopPropagation();
     const m = JOB_LINK.exec(p); if (m) { nav(`/rw/jobs/${m[1]}${url.hash}`); return; }
+    const sw = SWO_LINK.exec(p); if (sw) { nav(`/rw/swo/${sw[1]}`); return; }
     setBlocked(p);
   };
   return (
@@ -79,9 +81,9 @@ export default function RwShell() {
         {blocked && <div data-testid="rw-blocked" className="flex items-center gap-2 border-b border-rose-900/50 bg-rose-950/60 px-4 py-1.5 text-xs text-rose-200"><ShieldOff size={12} /> <span className="font-mono">{blocked}</span> is a RolliSuite screen — not reachable from RolliWorking (access boundary). Use a front-desk station.<button onClick={() => setBlocked(null)} className="ml-auto text-rose-300 hover:text-white">dismiss</button></div>}
         <main className={`rw-dark min-h-0 flex-1 overflow-y-auto ${fullscreen ? '' : 'p-4'} ${user ? 'pb-16' : ''}`}>
           {user || bench ? <Outlet /> : <RwSignIn />}
-          {user && !bench && !fullscreen && <CornerLookup variant="rw" />}
         </main>
         {user && <RoleTabBar />}
+        {user && <MessageBubble variant="rw" />}
       </div>
     </MoneyContext.Provider>
   );

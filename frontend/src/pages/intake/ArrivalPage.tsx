@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Carrier, PackageWithRefs, ShelfRow } from '@/api/client';
 import { Stamp } from '@/components/intake/IntakeBits';
+import { WbpClientRows } from '@/components/shared/WbpDots';
 import { ArrivalSession, OpenScanCard, ShelfBoard, ShelveCard } from '@/components/intake/TwoScanBits';
 import { useIntakeCounts } from '@/components/intake/IntakeLayout';
 import { Button } from '@/components/ui/Button';
@@ -100,7 +101,7 @@ export default function ArrivalPage() {
                 <Td>{p.shelfBin ? <span data-testid={`arrival-bin-${p.id}`} className="rounded-sm bg-sky-50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-800">{p.shelfBin}</span> : <button type="button" data-testid={`arrival-shelve-${p.id}`} onClick={() => setPending(p)} className="text-[11px] text-amber-800 underline">no bin — shelve</button>}</Td>
                 <Td className="text-ink-700">{p.carrier}{p.signatureNoted && <span className="ml-1 text-[10px] text-ink-400">SIG</span>}</Td>
                 <Td className="font-mono text-xs text-ink-500">{p.trackingNumber ?? '—'}</Td>
-                <Td>{p.client ? <span className="font-medium text-ink">{fullName(p.client)}</span> : <span className="italic text-ink-400">unknown</span>}</Td>
+                <Td>{p.client ? <><span className="font-medium text-ink">{fullName(p.client)}</span><div><WbpClientRows clientId={p.client.id} compact testId={`arrival-wbp-${p.id}`} /></div></> : <span className="italic text-ink-400">unknown</span>}</Td>
                 <Td><StatusPill status={p.status} /></Td>
                 <Td><span className="tabular text-ink">{fmtTime(p.arrivedAt)}</span> <Stamp by={p.arrivedBy} station={p.arrivedStation} /></Td>
                 <Td className="text-right">

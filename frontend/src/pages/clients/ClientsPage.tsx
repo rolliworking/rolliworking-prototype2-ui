@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import { IdentifierSearch } from '@/components/clients/IdentifierSearch';
 import { NewClientFromCall } from '@/components/clients/NewClientFromCall';
+import { WbpClientRows } from '@/components/shared/WbpDots';
 import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/Button';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
@@ -28,7 +29,7 @@ export default function ClientsPage() {
           <tbody>
             {(rows ?? []).map((r) => (
               <tr key={r.client.id} data-testid={`directory-row-${r.client.id}`} className="transition-colors hover:bg-canvas">
-                <Td className="font-medium text-ink"><Link to={`/clients/${r.client.id}`} className="hover:underline" data-testid={`directory-link-${r.client.id}`}>{fullName(r.client)}</Link>{r.client.company && <span className="ml-1.5 text-xs font-normal text-ink-400">{r.client.company}</span>}</Td>
+                <Td className="font-medium text-ink"><Link to={`/clients/${r.client.id}`} className="hover:underline" data-testid={`directory-link-${r.client.id}`}>{fullName(r.client)}</Link>{r.client.company && <span className="ml-1.5 text-xs font-normal text-ink-400">{r.client.company}</span>}<div className="mt-0.5"><WbpClientRows clientId={r.client.id} compact testId={`directory-wbp-${r.client.id}`} /></div></Td>
                 <Td className="text-ink-500"><span className="block truncate">{r.client.email}</span><span className="font-mono text-[11px]">{r.client.phone}</span></Td>
                 <Td className="text-ink-500">{r.client.city}, {r.client.state}</Td>
                 <Td className="tabular text-right">{r.watchCount}{r.inHouse > 0 && <span className="ml-1 text-[11px] text-moss-700">{r.inHouse} in</span>}</Td>

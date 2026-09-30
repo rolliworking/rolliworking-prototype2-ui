@@ -7,8 +7,10 @@ import { RatingBadge } from '@/components/clients/RatingBadge';
 import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { ClientRequestBadge } from '@/components/jobs/ClientRequests';
 import { AtRiskTag } from '@/components/jobs/ComponentWaitChips';
+import { AwayBreadcrumbs } from '@/components/jobs/OutsourceInfo';
 import { KindPill, OwnerBadge, PriorityPill, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
 import { TailPill } from '@/components/sales/SalesBits';
+import { WbpClientRows, WbpLegend } from '@/components/shared/WbpDots';
 import { Modal } from '@/components/ui/Modal';
 import { fmtDate, fullName } from '@/lib/format';
 
@@ -49,6 +51,7 @@ export const ItemHeader = ({ job: j, so, reload }: { job: JobWithRefs; so: Sales
           {j.wireWarnings?.length ? <span data-testid="job-wire-warning" title={j.wireWarnings.join(' · ')} className="rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">unmapped live status · {j.wireWarnings.length}</span> : null}
           <ClientRefPill value={api.jobClientRef(j)} sample={`Your watch is ready for pickup — ${j.watch.brand} ${j.watch.model} (${j.number})`} onSave={async (v) => { await api.setJobClientRef(j.id, v); await reload(); }} testId="job-client-ref" />
         </div>
+        <div className="mt-1.5"><AwayBreadcrumbs jobId={j.id} /></div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-500">
           <span><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> <RatingBadge clientId={j.clientId} testId="job-client-rating" /> · {j.client.email} · {j.client.phone}</span>
           {j.pkg ? <Link to={`/intake/receive/${j.pkg.id}`} data-testid="job-package-link" className="inline-flex items-center gap-1 text-brand hover:underline"><Inbox size={12} /> Request {j.pkg.subNumber}</Link> : <span data-testid="job-package-none" className="text-ink-400">No request record (SUB-)</span>}
@@ -56,6 +59,7 @@ export const ItemHeader = ({ job: j, so, reload }: { job: JobWithRefs; so: Sales
           {so && <Link to={`/sales/${so.id}`} data-testid="job-so-link" className="inline-flex items-center gap-1 text-brand hover:underline"><Receipt size={12} /> {so.number}</Link>}
           <span data-testid="item-dates" className="text-ink-400">{j.dueAt ? `Due ${fmtDate(j.dueAt)}` : 'No due date'} · Created {fmtDate(j.createdAt)} by {j.createdBy}{j.intakeDate ? ` · On hand since ${fmtDate(j.intakeDate)}` : ''}{j.finishedAt ? ` · Finished ${fmtDate(j.finishedAt)}` : ''}</span>
         </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="job-wbp-row"><WbpClientRows clientId={j.clientId} currentJobId={j.id} testId="job-wbp" /><WbpLegend /></div>
       </div>
     </div>
   </section>

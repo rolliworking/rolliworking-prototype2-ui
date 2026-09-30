@@ -1,4 +1,5 @@
 import { CornerLookup } from '@/components/layout/CornerLookup';
+import { MessageBubble } from '@/components/layout/MessageBubble';
 import { Component, useEffect, useState, type ReactNode } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
@@ -52,7 +53,8 @@ export default function AppShell() {
       <div className="flex h-full flex-col">
         <PrototypeBanner />
         <ApiToast />
-        <CornerLookup variant="rs" />
+        <CornerLookup variant="rs" pill={false} />
+        <MessageBubble />
         <div className="flex min-h-0 flex-1">
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">

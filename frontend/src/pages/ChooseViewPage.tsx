@@ -1,6 +1,7 @@
 import { Camera, ClipboardCheck, Eye, UserRound } from 'lucide-react';
 import { Link, Navigate } from 'react-router-dom';
 import * as api from '@/api/client';
+import { staffInitials } from '@/api/hitlist';
 import type { User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { useViewAs } from '@/components/layout/ViewAs';
@@ -16,8 +17,7 @@ const GROUPS: { key: string; label: string; pick: (u: User) => boolean }[] = [
   { key: 'band', label: 'Band / Polish · report to JV', pick: (u) => !hasReports(u) && u.reportsTo === 'u-jv' },
   { key: 'frontdesk', label: 'Front desk · report to VC / MH', pick: (u) => !hasReports(u) && (u.reportsTo === 'u-vienna' || u.reportsTo === api.OWNER_USER_ID) },
 ];
-const INITIALS: Record<string, string> = { Vienna: 'VC', Chyna: 'CM', Walter: 'WB', Leo: 'LEO' };
-const initials = (u: User) => INITIALS[u.shortName] ?? (u.shortName.length <= 3 ? u.shortName.toUpperCase() : u.shortName.slice(0, 2).toUpperCase());
+const initials = staffInitials;
 export default function ChooseViewPage() {
   const { realUser, loading } = useAuth(); const { isOwner, start, own } = useViewAs();
   if (loading) return null;

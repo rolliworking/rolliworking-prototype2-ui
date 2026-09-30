@@ -1,6 +1,7 @@
 import { ArrowLeft, FilePlus2, Mail, MapPin, Phone } from 'lucide-react';
 import { RatingBadge } from '@/components/clients/RatingBadge';
 import { CallCounter } from '@/components/clients/CallLedger';
+import { WbpClientRows, WbpLegend } from '@/components/shared/WbpDots';
 import { Link } from 'react-router-dom';
 import type { Client360 } from '@/api/client';
 import { fmtDate, fmtMoneyCents, fullName, humanize, relativeTime } from '@/lib/format';
@@ -34,6 +35,7 @@ export const ClientHeader = ({ data }: { data: Client360 }) => {
             <span className="inline-flex items-center gap-1.5"><MapPin size={13} className="text-ink-400" /> {client.street}, {client.city}, {client.state}</span>
             {summary.lastContactAt && <span className="text-xs text-ink-400">last contact {relativeTime(summary.lastContactAt)} · {fmtDate(summary.lastContactAt)}</span>}
           </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1"><WbpClientRows clientId={client.id} testId="client360-wbp" /><WbpLegend /></div>
         </div>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
           <Stat label="Watches" value={`${summary.watchCount} · ${summary.inHouse} in house`} testId="stat-watches" />

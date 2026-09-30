@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ScreenPop } from '@/api/client';
 import * as tel from '@/api/telephony';
 import { useCompanion } from '@/components/companion/CompanionPanel';
+import { WbpClientRows } from '@/components/shared/WbpDots';
 import { fullName } from '@/lib/format';
 
 // Dev menu: 📞 Simulate incoming call (MOCK of the Vonage VIP webhook → src/api/telephony.ts)
@@ -36,6 +37,7 @@ export const CallPopToast = () => {
       {pop.kind === 'known' ? <button data-testid="call-pop-open" onClick={() => { nav(`/clients/${pop.client.id}`); setOpen(true); end(); }} className="min-w-0 flex-1 text-left">
         <div className="text-[13px] font-semibold">Incoming: {fullName(pop.client)} <span data-testid="call-pop-rating" title={pop.rating.tooltip} className="ml-1 rounded-sm bg-white/15 px-1.5 font-mono text-[11px]">{pop.rating.badge}</span></div>
         <div className="text-[11px] text-white/70">{pop.inService} in service · {pop.needsReply} needs reply · {pop.client.phone} — tap to open Job Lookup</div>
+        <div className="mt-1.5"><WbpClientRows clientId={pop.client.id} compact dark testId="call-pop-wbp" /></div>
       </button> : <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold">Unknown caller ({pop.number})</div>
         <button data-testid="call-pop-new-client" onClick={() => { setPop(null); nav(`/clients?new=1&phone=${encodeURIComponent(pop.number)}`); }} className="mt-1.5 inline-flex items-center gap-1 rounded-sm bg-white px-2 py-1 text-[11px] font-semibold text-ink"><UserPlus size={12} /> New client / new request</button>

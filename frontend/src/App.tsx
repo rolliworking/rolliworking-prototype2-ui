@@ -93,6 +93,8 @@ import PartsKnowledgePage from '@/pages/workshop/PartsKnowledgePage';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import SetupPage from '@/pages/SetupPage';
 import ConciergePage from '@/pages/rs/ConciergePage';
+import SwoListPage from '@/pages/rs/SwoPage';
+import SwoHubPage from '@/pages/rs/SwoHubPage';
 import RwMessagesPage from '@/pages/rw/RwMessagesPage';
 import AccessControlPage from '@/pages/rs/AccessControlPage';
 import PurchasingPage from '@/pages/rs/PurchasingPage';
@@ -178,6 +180,7 @@ export default function App() {
             <Route path="history" element={<RwHistoryPage />} />
             <Route path="device" element={<RwDevicePage />} />
             <Route path="concierge" element={<RwRoleGuard pad><RwConciergePage /></RwRoleGuard>} />
+            <Route path="swo/:id" element={<RwRoleGuard pad><div className="mx-2 my-1"><SwoHubPage /></div></RwRoleGuard>} />
             <Route path="reports" element={<RwReportsPage />} />
             <Route path="bench" element={<RwBenchPage />} />
             <Route path="picking" element={<RwPickingPage />} />
@@ -275,7 +278,8 @@ export default function App() {
               <Route path="/parts" element={<PartsPage />} />
               <Route path="/appointments" element={<SchedulePage />} />
               <Route path="/concierge" element={<ConciergePage />} />
-              <Route path="/swo" element={<Navigate to="/concierge" replace />} />
+              <Route path="/swo" element={<SwoListPage />} />
+              <Route path="/swo/:id" element={<SwoHubPage />} />
               <Route path="/purchasing" element={<PurchasingPage />} />
               <Route path="/purchasing/vendors" element={<VendorsPage />} />
               <Route path="/purchasing/vendors/:id" element={<VendorDetailPage />} />

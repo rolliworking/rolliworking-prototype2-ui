@@ -1,8 +1,9 @@
 import clsx from 'clsx';
 import { FileText, Inbox, MessageSquare, Receipt, Truck, User, Watch as WatchIcon, Wrench, type LucideIcon } from 'lucide-react';
 import type { IdentifierKind, SearchHit, SearchResults } from '@/api/client';
+import { WbpClientRows } from '@/components/shared/WbpDots';
 
-const ICON: Record<IdentifierKind, LucideIcon> = { client: User, watch: WatchIcon, estimate: FileText, job: Wrench, sales_order: Receipt, package: Inbox, request: MessageSquare, shipment: Truck };
+const ICON: Record<IdentifierKind, LucideIcon> = { client: User, watch: WatchIcon, estimate: FileText, job: Wrench, sales_order: Receipt, package: Inbox, request: MessageSquare, shipment: Truck, swo: Truck };
 
 export const flattenHits = (r: SearchResults | null): SearchHit[] => (r ? r.groups.flatMap((g) => g.hits) : []);
 
@@ -48,6 +49,7 @@ export const SearchHitList = ({ results, active, onHover, onPick, dense }: Props
                         {h.kind !== 'client' && <span className="truncate text-xs text-ink-500">{h.clientName}</span>}
                       </div>
                       <div className="truncate text-[11px] text-ink-500">{h.detail}</div>
+                      {h.kind === 'client' && <div className="mt-0.5"><WbpClientRows clientId={h.id} compact testId={`search-hit-wbp-${h.id}`} /></div>}
                     </div>
                     <span className="shrink-0 rounded-sm bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-ink-500">{h.matched}</span>
                   </button>

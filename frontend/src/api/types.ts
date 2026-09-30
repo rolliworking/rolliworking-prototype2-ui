@@ -828,7 +828,7 @@ export interface ServiceRequest {
   kiosk?: KioskDetails;
 }
 
-export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request' | 'shipment';
+export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request' | 'shipment' | 'swo';
 
 // ---- Inbound shipping (pre-arrival) + tracking lookup -------------------------------------------------
 export type ShipStage = 'label_requested' | 'label_sent' | 'in_transit' | 'delivered_unscanned' | 'arrived';
@@ -1012,9 +1012,9 @@ export interface StaffInboxThread { client: Client; messages: Message[]; unread:
 
 // ---- E9 RS modules: purchasing, inventory, templates, users admin, evidence ----------------------
 
-export interface Vendor { ships?: boolean; location?: string; work?: string; paymentTerms?: 'on_receipt' | 'prepay'; id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line'; kind?: VendorKind; country?: string }
+export interface Vendor { ships?: boolean; location?: string; work?: string; paymentTerms?: 'on_receipt' | 'prepay'; id: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; createdVia?: 'seed' | 'vendors_screen' | 'csv_import' | 'po_line'; kind?: VendorKind; country?: string; commonlySent?: string[] }
 export type VendorKind = 'parts' | 'outsource';
-export interface VendorInput { ships?: boolean; location?: string; work?: string; paymentTerms?: 'on_receipt' | 'prepay'; id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; kind?: VendorKind; country?: string }
+export interface VendorInput { ships?: boolean; location?: string; work?: string; paymentTerms?: 'on_receipt' | 'prepay'; id?: string; name: string; contact: string; email: string; phone: string; terms: string; division: Division; active?: boolean; notes?: string; accountRef?: string; minOrder?: string; preferredMethod?: string; leadTimeDays?: number; shippingNotes?: string; kind?: VendorKind; country?: string; commonlySent?: string[] }
 export interface VendorSummary { vendor: Vendor; partsLinked: number; lastOrderAt?: string; avgTurnaroundDays?: number; openPos: number }
 export interface VendorPartRow { partId: string; partNumber: string; name: string; lastPrice?: number; lastAt?: string; buys: number; avgCost: number | null; cheapestElsewhere?: { vendorName: string; price: number } }
 

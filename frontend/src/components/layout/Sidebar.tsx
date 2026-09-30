@@ -1,8 +1,9 @@
 import clsx from 'clsx';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, History } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
+import { LOOKUP_OPEN_EVENT } from '@/components/layout/CornerLookup';
 import { NAV_GROUPS, navForUser, type NavGroup, type NavItem } from '@/config/navigation';
 
 const rowCls = (active: boolean) => clsx('group relative flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13px] transition-colors duration-150', active ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06] hover:text-white');
@@ -41,6 +42,9 @@ export const Sidebar = () => {
           })}
         </ul>
       </nav>
+      <div className="border-t border-white/10 px-2 py-2">
+        <button type="button" data-testid="sidebar-history-lookup" onClick={() => window.dispatchEvent(new Event(LOOKUP_OPEN_EVENT))} title="Client / job history lookup — name · email · est# · SO# · job#" className={clsx(rowCls(false), 'w-full')}><History size={15} strokeWidth={1.9} className="shrink-0 text-[#93a1b4] group-hover:text-white" /><span className="truncate">History lookup</span></button>
+      </div>
       <div className="border-t border-white/10 px-4 py-3 text-[11px] text-[#8b98aa]"><div className="font-medium text-[#c7d0dc]">Access tier</div><div data-testid="sidebar-tier" className="capitalize">{user!.accessTier}</div></div>
     </aside>
   );

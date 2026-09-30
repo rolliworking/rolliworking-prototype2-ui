@@ -97,8 +97,12 @@ export const ActionMap = ({ lanes, run, onLookup, pad, pickedId, onPickedConsume
   const focusVendor = dest?.vendorId ?? stripVendor;
   const dimRows = useMemo(() => new Set(focusVendor ? cfg.rows.filter((r) => r.key !== focusVendor && r.key !== `${focusVendor}_ramp`).map((r) => r.key) : []), [cfg, focusVendor]);
   const find = useCallback((text: string) => { const t = text.trim().replace(/^E/i, '').toLowerCase(); if (!t) return null; const hit = (r: SwoWithRefs) => r.number.toLowerCase() === t || r.jobNumber.replace(/^E/, '').toLowerCase() === t || r.jobNumber.toLowerCase() === t || r.synth?.reference.toLowerCase() === t || r.outbound?.tracking.toLowerCase() === t; return rows.find((r) => r.stage !== 'fulfilled' && hit(r)) ?? rows.find(hit) ?? null; }, [rows]);
-  // typed lookup = not a custody scan; wedge / camera / scan box = the custody scan itself
-  const addChip = useCallback((text: string, scanned: boolean) => { const w = find(text); if (!w) { setErr(`No open vendor job matches “${text.trim()}”`); return; } setErr(null); setChips((s) => (s.some((c) => c.id === w.id) ? s.map((c) => (c.id === w.id ? { ...c, scanned: c.scanned || scanned } : c)) : [...s, { id: w.id, scanned }])); }, [find]);
+  // typed lookup = not a custody scan; wedge / camera / scan box = the custody scan itself. An SWO barcode (SWO1004 / 1004) is a CONTAINER: every open line in the box lands as a scanned chip — trim any before commit.
+  const addChip = useCallback((text: string, scanned: boolean) => {
+    const t = text.trim();
+    if (api.isSwoCode(t) || /^\d{4}$/.test(t)) { const hub = api.hubOpenLineIds(t); if (hub) { if (!hub.ids.length) { setErr(`${hub.hub.number} has no open lines — every line is fulfilled`); return; } setErr(null); setChips((s) => { const next = [...s]; hub.ids.forEach((id) => { const i = next.findIndex((c) => c.id === id); if (i >= 0) next[i] = { ...next[i], scanned: next[i].scanned || scanned }; else next.push({ id, scanned }); }); return next; }); return; } }
+    const w = find(text); if (!w) { setErr(`No open vendor job or SWO matches “${t}”`); return; } setErr(null); setChips((s) => (s.some((c) => c.id === w.id) ? s.map((c) => (c.id === w.id ? { ...c, scanned: c.scanned || scanned } : c)) : [...s, { id: w.id, scanned }]));
+  }, [find]);
   const lookup = useCallback((text: string) => { addChip(text, false); setQ(''); }, [addChip]);
   const scan = useCallback((text: string) => { addChip(text, true); setScanQ(''); }, [addChip]);
   const remove = (id: string) => setChips((s) => s.filter((c) => c.id !== id));
@@ -115,7 +119,17 @@ export const ActionMap = ({ lanes, run, onLookup, pad, pickedId, onPickedConsume
     if (needsReason && !reason.trim()) { setErr(`${legalChips.some((x) => x.v.legal.kind === 'redo') ? 'Redo' : 'Back'} needs a reason — one reason covers the batch. Nothing moved.`); return; }
     const moved = ready.map((x) => x.w.id); const kinds = new Set(ready.map((x) => x.v.legal.kind));
     const verb = kinds.has('back') ? 'moved back' : kinds.has('redo') ? 'redo opened → vendor' : d.node === 'box' ? 'packed · label printed · return label queued · vendor emailed' : d.node === 'arrival' ? 'arrival scan · custody back' : d.lock ? 'custody scan' : `status move by ${user?.shortName ?? 'staff'}`;
-    await run(async () => { for (const { w, v } of ready) { const lg = v.legal; if (lg.kind === 'back') await api.sendBackSwo(w.id, reason); else if (lg.kind === 'redo') await cz.startRedo(w.id, reason); else if (lg.to === 'sent') { await api.createSwoOutboundLabel(w.id); await api.queueSwoReturnLabel(w.id, w.predictedCompletion); } else if ((lg.to === 'inbound' || lg.to === 'redo_inbound') && !w.returnLabel) { await api.queueSwoReturnLabel(w.id, w.predictedCompletion); await api.advanceSwo(w.id, lg.to); } else await api.advanceSwo(w.id, lg.to as SwoStage); } }, `${moved.length} → ${d.label} · ${destVendor} · ${verb}${refused.length ? ` · ${refused.length} refused (still in the strip)` : ''}`);
+    await run(async () => {
+      // labels follow the selection: lines of the same box that ship together get ONE outbound + ONE return label
+      const byHub = new Map<string, typeof ready>(); ready.forEach((x) => { const k = x.w.hubId ?? `solo-${x.w.id}`; byHub.set(k, [...(byHub.get(k) ?? []), x]); });
+      for (const [k, group] of byHub) {
+        const hubId = k.startsWith('solo-') ? null : k;
+        const ship = group.filter((x) => x.v.legal.to === 'sent'); const ret = group.filter((x) => (x.v.legal.to === 'inbound' || x.v.legal.to === 'redo_inbound') && !x.w.returnLabel);
+        if (hubId && ship.length) { await api.createHubShipment(hubId, 'outbound', ship.map((x) => x.w.id)); await api.createHubShipment(hubId, 'return', ship.map((x) => x.w.id)); }
+        if (hubId && ret.length) await api.createHubShipment(hubId, 'return', ret.map((x) => x.w.id));
+        for (const { w, v } of group) { const lg = v.legal; if (lg.kind === 'back') await api.sendBackSwo(w.id, reason); else if (lg.kind === 'redo') await cz.startRedo(w.id, reason); else if (lg.to === 'sent') { if (!hubId) { await api.createSwoOutboundLabel(w.id); await api.queueSwoReturnLabel(w.id, w.predictedCompletion); } } else if ((lg.to === 'inbound' || lg.to === 'redo_inbound') && !w.returnLabel && !hubId) { await api.queueSwoReturnLabel(w.id, w.predictedCompletion); await api.advanceSwo(w.id, lg.to); } else await api.advanceSwo(w.id, lg.to as SwoStage); }
+      }
+    }, `${moved.length} → ${d.label} · ${destVendor} · ${verb}${refused.length ? ` · ${refused.length} refused (still in the strip)` : ''}`);
     setChips((s) => s.filter((c) => !moved.includes(c.id))); setReason('');
   };
   const inputCls = pad ? 'py-3 text-base' : 'py-2 text-sm';
@@ -136,6 +150,7 @@ export const ActionMap = ({ lanes, run, onLookup, pad, pickedId, onPickedConsume
     {strip.length > 0 && <div data-testid="action-strip" data-count={strip.length} data-legal={legalChips.length} data-refused={refused.length} className="flex flex-wrap items-center gap-1.5 text-xs text-slate-300">
       {judged.map(({ chip, w, v }) => { const h = cz.swoHealth(w); const bad = !!v && !v.ok; const good = !!v?.ok && (!destIsCustody || chip.scanned); const tone = bad ? 'border-rose-400/70 bg-rose-500/15' : good ? 'border-emerald-400/60 bg-emerald-400/10' : 'border-white/15 bg-white/[0.04]'; return <div key={w.id} data-testid={`action-sel-${w.id}`} data-scanned={chip.scanned} data-verdict={v ? (v.ok ? 'legal' : 'refused') : 'pending'} className={`flex flex-wrap items-center gap-2 rounded-md border px-2 py-1 ${tone}`}>
         <span className="font-mono text-base font-semibold text-amber-300">{w.jobNumber.replace(/^E/, '')}</span>
+        {w.hubId && <span data-testid={`action-hub-${w.id}`} className="rounded bg-amber-400/15 px-1.5 font-mono text-[10px] font-semibold text-amber-200">{w.number}</span>}
         <span className="max-w-[180px] truncate" title={`${w.clientName} · ${w.watchLabel}`}>{w.clientName} · {w.watchLabel}</span>
         <span className="rounded bg-white/10 px-1.5 text-[10px] uppercase">{w.vendor.name.replace(' (CM)', '')}</span>
         <span className="rounded bg-white/10 px-1.5 text-[10px]">{api.swoStageLabel(w.stage)}</span>
