@@ -5,6 +5,7 @@ import * as hl from '@/api/hitlist';
 import type { Assignee, Division, JobWithRefs, Role } from '@/api/client';
 import type { MessageStatus, SentRow } from '@/api/hitlist';
 import { useAuth } from '@/auth/AuthContext';
+import { MessageText } from './MessageText';
 import { fmtTime } from '@/lib/format';
 
 // Dictation = browser Web Speech API (Chrome / Safari on iPad). Appends the final transcript to the text. No cloud STT in the prototype.
@@ -73,7 +74,7 @@ export const SentList = ({ dark, tick = 0, testId = 'sent' }: { dark?: boolean; 
   return <ul data-testid={`${testId}-list`} className={`divide-y ${dark ? 'divide-white/10' : 'divide-line/70'}`}>
     {rows.map((r) => <li key={r.id} data-testid={`${testId}-${r.id}`} className="flex items-start gap-2 py-1.5 text-xs">
       {r.photo && <img src={r.photo.dataUrl} alt="" className="h-8 w-11 shrink-0 rounded-sm object-cover" />}
-      <div className="min-w-0 flex-1"><div className={`truncate ${dark ? 'text-slate-100' : 'text-ink'}`}>{r.text ?? 'Photo'}</div><div className={`text-[10px] ${muted}`}>to <b>{r.toLabel}</b>{r.jobNumber && <> · <span className="font-mono">{r.jobNumber}</span></>} · {fmtTime(r.createdAt)}{r.doneBy && <> · done by {r.doneBy}</>}</div></div>
+      <div className="min-w-0 flex-1"><div className={`truncate ${dark ? 'text-slate-100' : 'text-ink'}`}>{r.text ? <MessageText text={r.text} pad={dark} dark={dark} /> : 'Photo'}</div><div className={`text-[10px] ${muted}`}>to <b>{r.toLabel}</b>{r.jobNumber && <> · <span className="font-mono">{r.jobNumber}</span></>} · {fmtTime(r.createdAt)}{r.doneBy && <> · done by {r.doneBy}</>}</div></div>
       <StatusChip status={r.status} dark={dark} />
     </li>)}
     {!rows.length && <li className={`py-3 text-xs ${muted}`}>Nothing sent yet.</li>}

@@ -3,6 +3,7 @@ import { StatusChip } from '@/components/layout/MessageComposer';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as hl from '@/api/hitlist';
+import { MessageText } from '@/components/layout/MessageText';
 import type { InboxRow } from '@/api/hitlist';
 import type { User } from '@/api/client';
 import { Card } from '@/components/ui/Card';
@@ -21,7 +22,7 @@ export const InboxPanel = ({ me, items, onChange, jobBase = '/jobs' }: { me: Use
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${i.unread ? 'bg-sky-600' : 'bg-transparent ring-1 ring-line'}`} aria-label={i.unread ? 'unread' : 'read'} />
         {i.photo ? <button type="button" data-testid={`inbox-photo-${i.id}`} onClick={() => { setOpen(i); if (i.unread) void toggle(i); }} className="relative shrink-0"><img src={i.photo.dataUrl} alt="" className="h-14 w-20 rounded-sm object-cover ring-1 ring-line" /><span className="absolute bottom-0.5 left-0.5 inline-flex items-center gap-0.5 rounded-sm bg-ink/70 px-1 text-[9px] font-medium uppercase text-white"><Camera size={9} /> photo</span></button> : <span className="grid h-14 w-20 shrink-0 place-items-center rounded-sm bg-canvas text-ink-300"><Mail size={16} /></span>}
         <div className="min-w-0 flex-1">
-          <div className={`text-[13px] ${i.unread ? 'font-semibold text-ink' : 'text-ink-700'}`} data-testid={`inbox-text-${i.id}`}>{i.text ?? (i.photo ? 'Photo' : '')}</div>
+          <div className={`text-[13px] ${i.unread ? 'font-semibold text-ink' : 'text-ink-700'}`} data-testid={`inbox-text-${i.id}`}>{i.text ? <MessageText text={i.text} /> : i.photo ? 'Photo' : ''}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-400">from <OwnerChip owner={i.from} /><span>{i.station} · {fmtDate(i.createdAt)} {fmtTime(i.createdAt)}</span>{i.to.type === 'role' && <span className="rounded-sm bg-canvas px-1 font-mono text-[10px]">#{i.to.role}{i.claimedBy ? ` · claimed by ${i.claimedBy}` : ' · unclaimed'}</span>}{i.to.type === 'station' && <span data-testid={`inbox-station-${i.id}`} className="rounded-sm bg-canvas px-1 text-[10px]">to this station</span>}<StatusChip status={i.status} />
             {i.jobId && <Link to={`${jobBase}/${i.jobId}`} data-testid={`inbox-job-${i.id}`} onClick={() => { if (i.unread) void toggle(i); }} className="font-mono font-semibold text-brand hover:underline">{i.jobNumber}</Link>}{i.jobLabel && <span className="truncate">{i.jobLabel}</span>}{i.replyToId && <span data-testid={`inbox-reply-tag-${i.id}`} className="rounded-sm bg-moss-50 px-1 font-semibold text-moss-700">reply</span>}
             {i.from !== me.shortName && <button type="button" data-testid={`inbox-reply-${i.id}`} onClick={() => { setReplying(replying === i.id ? null : i.id); setReply(''); }} className="inline-flex items-center gap-1 font-medium text-brand hover:underline"><Reply size={11} /> Reply</button>}</div>

@@ -82,4 +82,4 @@ async def main():
         await page.screenshot(path="/app/memory/tools/shots/msg_rw.png")
         print("page errors:", errs)
         await b.close()
-asyncio.run(main())
+if __name__ == "__main__": asyncio.run(main())

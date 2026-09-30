@@ -6,6 +6,7 @@ import * as hl from '@/api/hitlist';
 import type { InboxRow } from '@/api/hitlist';
 import type { User } from '@/api/client';
 import { StatusChip } from './MessageComposer';
+import { MessageText } from './MessageText';
 import { OwnerChip } from '@/components/ui/Pills';
 import { fmtTime } from '@/lib/format';
 
@@ -22,7 +23,7 @@ export const MessageInbox = ({ me, dark, pad, tick, onChange, onReply, jobBase }
         {r.photo && <button type="button" data-testid={`msg-inbox-photo-${r.id}`} onClick={(e) => { e.stopPropagation(); setOpen(r); void read(r); }} className="shrink-0"><img src={r.photo.dataUrl} alt="" className={`h-12 w-16 rounded-sm object-cover ring-1 ${dark ? 'ring-white/20' : 'ring-line'}`} /></button>}
         <div className="min-w-0 flex-1">
           <div className={`flex flex-wrap items-center gap-x-1.5 text-[10px] ${muted}`}><OwnerChip owner={r.from} /><span>{fmtTime(r.createdAt)} · {r.station}</span>{r.to.type === 'role' && <span className="font-mono">#{r.to.role}{r.claimedBy ? ` · ${r.claimedBy}` : ' · unclaimed'}</span>}{r.to.type === 'station' && <span data-testid={`msg-inbox-station-${r.id}`}>to this station</span>}{r.replyToId && <span className={dark ? 'text-emerald-300' : 'text-moss-700'}>reply</span>}</div>
-          <div data-testid={`msg-inbox-text-${r.id}`} className={clsx('mt-0.5 text-[13px] leading-snug', r.unread ? (dark ? 'font-semibold text-white' : 'font-semibold text-ink') : dark ? 'text-slate-200' : 'text-ink-700')}>{r.text ?? (r.photo ? 'Photo' : '')}</div>
+          <div data-testid={`msg-inbox-text-${r.id}`} className={clsx('mt-0.5 text-[13px] leading-snug', r.unread ? (dark ? 'font-semibold text-white' : 'font-semibold text-ink') : dark ? 'text-slate-200' : 'text-ink-700')}>{r.text ? <MessageText text={r.text} pad={pad} dark={dark} /> : r.photo ? 'Photo' : ''}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {r.jobId && <Link to={`${jobBase}/${r.jobId}`} data-testid={`msg-inbox-job-${r.id}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] font-semibold hover:underline ${dark ? 'text-accent' : 'text-brand'}`}>{r.jobNumber}</Link>}
             <StatusChip status={r.status} dark={dark} />
