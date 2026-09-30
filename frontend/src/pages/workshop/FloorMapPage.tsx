@@ -29,7 +29,7 @@ export default function FloorMapPage() {
               <div className="flex flex-wrap gap-1">
                 {lane.jobs.map((j) => (
                   <Link key={j.id} to={canOpenJobs ? `/jobs/${j.id}` : `/clients/${j.clientId}?hit=job-${j.id}`} data-testid={`floor-chip-${j.id}`} title={`${j.number} · ${j.client.lastName} · ${j.watch.model} · ${j.assignees.join(', ') || 'unassigned'}`} className={clsx('inline-flex items-center gap-1 rounded-full border bg-surface px-2 py-0.5 text-[11px] shadow-card transition-transform hover:-translate-y-px', j.priority === 'urgent' ? 'border-rose-300' : j.priority === 'high' ? 'border-orange-200' : 'border-line')}>
-                    <span className="font-mono font-semibold text-ink">{j.number.slice(-4)}</span><WorkflowBadges workflow={j.workflow} />{j.assignees[0] && <span className="text-ink-400">{j.assignees[0]}</span>}
+                    <span className="font-mono font-semibold text-ink">{j.number.slice(-4)}</span><WorkflowBadges workflow={j.workflow} jobId={j.id} />{j.assignees[0] && <span className="text-ink-400">{j.assignees[0]}</span>}
                   </Link>
                 ))}
               </div>

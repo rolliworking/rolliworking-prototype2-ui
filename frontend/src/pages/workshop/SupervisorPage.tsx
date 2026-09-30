@@ -14,7 +14,7 @@ const Chip = ({ j, onAssign, techs }: { j: JobWithRefs; onAssign: (job: JobWithR
   <li data-testid={`sup-job-${j.id}`} className="flex items-center gap-2 rounded-sm border border-line bg-surface px-2 py-1.5 text-xs">
     <Link to={`/jobs/${j.id}`} className="font-mono font-semibold text-ink hover:underline">{j.number}</Link>
     <span className="truncate text-ink-700">{fullName(j.client)} · {j.watch.model}</span>
-    <WorkflowBadges workflow={j.workflow} /><StatusPill status={j.status} />{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}
+    <WorkflowBadges workflow={j.workflow} jobId={j.id} /><StatusPill status={j.status} />{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}
     <span className="ml-auto flex items-center gap-1">{techs.map((t) => { const on = j.assignees.includes(t); return <button key={t} type="button" data-testid={`sup-assign-${j.id}-${t.toLowerCase()}`} aria-pressed={on} onClick={() => onAssign(j, t, !on)} className={`h-6 rounded-sm border px-1.5 text-[11px] ${on ? 'border-ink bg-ink text-white' : 'border-line text-ink-500 hover:border-ink-300'}`}>{t}</button>; })}</span>
   </li>
 );
@@ -54,7 +54,7 @@ export default function SupervisorPage() {
             <ul className="divide-y divide-line/70">{b?.holds.map((j) => { const h = api.activeHold(j)!; return <li key={j.id} data-testid={`sup-hold-${j.id}`} className="px-4 py-2 text-xs"><div className="flex items-center gap-2"><PauseCircle size={11} className="text-rose-600" /><Link to={`/jobs/${j.id}`} className="font-mono font-semibold text-ink hover:underline">{j.number}</Link><HoldBadge job={j} compact /><span className="ml-auto text-ink-400">{fmtDate(h.placedAt)} · {h.placedBy} · {h.station}</span></div><div className="mt-0.5 truncate text-ink-700">{h.reason}</div><div className="text-[11px] text-ink-400">parked from {h.priorStatus.replace(/_/g, ' ')} · assignees {j.assignees.join(', ') || 'none'} · {j.holds.length} hold event{j.holds.length === 1 ? '' : 's'} on record</div></li>; })}{b && b.holds.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">Nothing parked.</li>}</ul>
           </Card>
           <Card title="QC queue" subtitle={`${b?.qcQueue.length ?? 0} in testing`} testId="sup-qc" bodyClassName="p-0">
-            <ul className="divide-y divide-line/70">{b?.qcQueue.map((j) => <li key={j.id} data-testid={`sup-qc-${j.id}`} className="flex items-center gap-2 px-4 py-2 text-xs"><Link to={`/jobs/${j.id}`} className="font-mono font-semibold text-ink hover:underline">{j.number}</Link><span className="truncate text-ink-700">{fullName(j.client)} · {j.watch.model}</span><WorkflowBadges workflow={j.workflow} /><span className="ml-auto text-ink-400">{j.assignees.join(', ') || 'unassigned'}</span></li>)}{b && b.qcQueue.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">Nothing in testing.</li>}</ul>
+            <ul className="divide-y divide-line/70">{b?.qcQueue.map((j) => <li key={j.id} data-testid={`sup-qc-${j.id}`} className="flex items-center gap-2 px-4 py-2 text-xs"><Link to={`/jobs/${j.id}`} className="font-mono font-semibold text-ink hover:underline">{j.number}</Link><span className="truncate text-ink-700">{fullName(j.client)} · {j.watch.model}</span><WorkflowBadges workflow={j.workflow} jobId={j.id} /><span className="ml-auto text-ink-400">{j.assignees.join(', ') || 'unassigned'}</span></li>)}{b && b.qcQueue.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">Nothing in testing.</li>}</ul>
           </Card>
         </div>
       </div>

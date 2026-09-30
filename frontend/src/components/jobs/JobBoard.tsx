@@ -1,12 +1,13 @@
 import clsx from 'clsx';
 import { ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
-import { ChevronDown, ChevronRight, PauseCircle } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpDown, ChevronDown, ChevronRight, PauseCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobStatus, JobWithRefs } from '@/api/client';
 import { AssigneeChips, HoldBadge, JobCard, KindPill, OwnerBadge, PriorityPill, WorkflowBadges, isOverdue } from '@/components/jobs/JobBits';
 import { StatusPill } from '@/components/ui/Pills';
+import { wbpSortKey } from '@/components/shared/WbpDots';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents, fullName, humanize } from '@/lib/format';
 
@@ -45,16 +46,16 @@ export const JobBoard = ({ jobs }: { jobs: JobWithRefs[] }) => {
 export const JobGroupedList = ({ jobs }: { jobs: JobWithRefs[] }) => {
   const navigate = useNavigate();
   const groups = groupByLane(jobs);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ closed: true });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ closed: true }); const [sortWbp, setSortWbp] = useState(false);
   const toggle = (l: Lane) => setCollapsed((c) => ({ ...c, [l]: !c[l] }));
   return (
     <Table testId="jobs-table">
       <thead>
-        <tr><Th>Job</Th><Th>Kind</Th><Th>Client</Th><Th>Watch</Th><Th>Workflow</Th><Th>Status</Th><Th>Priority</Th><Th>Owner</Th><Th>Assignees</Th><Th className="text-right">Due</Th><Th className="text-right">Total</Th></tr>
+        <tr><Th>Job</Th><Th>Kind</Th><Th>Client</Th><Th>Watch</Th><Th><button type="button" data-testid="jobs-sort-wbp" aria-pressed={sortWbp} onClick={() => setSortWbp((v) => !v)} title="Sort: red first, then blue, then green" className={clsx('inline-flex items-center gap-1 uppercase', sortWbp && 'text-ink')}>W · B · P {sortWbp ? <ArrowDownWideNarrow size={10} /> : <ArrowUpDown size={10} />}</button></Th><Th>Status</Th><Th>Priority</Th><Th>Owner</Th><Th>Assignees</Th><Th className="text-right">Due</Th><Th className="text-right">Total</Th></tr>
       </thead>
       <tbody>
         {LANES.map((lane) => {
-          const rows = groups[lane];
+          const rows = sortWbp ? [...groups[lane]].sort((a, b) => wbpSortKey(a.id) - wbpSortKey(b.id)) : groups[lane];
           if (rows.length === 0) return null;
           return [
             <tr key={`${lane}-h`} className="bg-canvas/70">
@@ -70,7 +71,7 @@ export const JobGroupedList = ({ jobs }: { jobs: JobWithRefs[] }) => {
                 <Td><KindPill kind={j.kind} /></Td>
                 <Td className="font-medium text-ink">{fullName(j.client)}</Td>
                 <Td><span className="text-ink">{j.watch.brand} {j.watch.model}</span> <span className="ml-1 font-mono text-xs text-ink-400">{j.watch.reference}</span></Td>
-                <Td><WorkflowBadges workflow={j.workflow} /></Td>
+                <Td><WorkflowBadges workflow={j.workflow} jobId={j.id} /></Td>
                 <Td><span className="inline-flex items-center gap-1.5"><StatusPill status={j.status} /><HoldBadge job={j} compact /></span></Td>
                 <Td><PriorityPill priority={j.priority} /></Td>
                 <Td><OwnerBadge owner={j.owner} compact /></Td>

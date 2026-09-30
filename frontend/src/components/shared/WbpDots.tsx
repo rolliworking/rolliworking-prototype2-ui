@@ -31,3 +31,13 @@ export const WbpLegend = ({ dark }: { dark?: boolean }) => <span data-testid="wb
   <span className="font-semibold uppercase tracking-wide">W·B·P</span>
   {([['ok', 'on track'], ['finished', 'finished'], ['blocked', 'blocker'], ['none', 'no leg']] as [WbpState, string][]).map(([s, l]) => <span key={s} className="inline-flex items-center gap-1"><span className={clsx('inline-block h-2 w-2 rounded-full', (dark ? DOT_DARK : DOT)[s])} />{l}</span>)}
 </span>;
+
+// PM (precious metals) is a department flag, not a leg — small amber tag after the dots
+export const PmTag = ({ workflow, dark, testId }: { workflow: string[]; dark?: boolean; testId?: string }) => workflow.includes('PM') ? <span data-testid={testId ?? 'pm-tag'} title="Precious metals — department flag" className={clsx('inline-flex h-4 items-center rounded-sm px-1 font-mono text-[9px] font-bold', dark ? 'bg-amber-400/20 text-amber-200' : 'bg-amber-50 text-amber-800 ring-1 ring-amber-200')}>PM</span> : null;
+
+// List cell = this job's own dots + PM tag (replaces the dept letter chips — an empty ring already says "no such leg")
+export const WbpJobCell = ({ jobId, workflow, dark, testId }: { jobId: string; workflow: string[]; dark?: boolean; testId?: string }) => <span data-testid={testId ?? `wbp-cell-${jobId}`} className="inline-flex items-center gap-1.5"><WbpJobDots jobId={jobId} dark={dark} /><PmTag workflow={workflow} dark={dark} /></span>;
+
+// Sort: red first, then blue, then green, then no legs
+const SORT_RANK: Record<WbpState, number> = { blocked: 0, finished: 1, ok: 2, none: 3 };
+export const wbpSortKey = (jobId: string) => { const row = api.wbpForJobSync(jobId); return row ? Math.min(...api.WBP_LEGS.map((l) => SORT_RANK[row.legs[l.key].state])) : 4; };

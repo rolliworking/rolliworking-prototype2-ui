@@ -88,7 +88,7 @@ export default function ShopTimePage() {
               <li key={j.id} data-testid={`on-hand-${j.id}`} className="flex items-center gap-2 px-3 py-1.5 text-xs">
                 <button type="button" onClick={() => { setJobId(j.id); minRef.current?.focus(); }} className="font-mono font-medium text-ink hover:underline">{j.number}</button>
                 <span className="truncate text-ink-500">{fullName(j.client)}</span>
-                <WorkflowBadges workflow={j.workflow} />
+                <WorkflowBadges workflow={j.workflow} jobId={j.id} />
                 <StatusPill status={j.status} />
                 <span className="ml-auto inline-flex items-center gap-1 tabular text-ink-400"><Clock size={10} /> {totals[j.id] ?? 0}m</span>
               </li>

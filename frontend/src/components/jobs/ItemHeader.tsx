@@ -8,9 +8,9 @@ import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { ClientRequestBadge } from '@/components/jobs/ClientRequests';
 import { AtRiskTag } from '@/components/jobs/ComponentWaitChips';
 import { AwayBreadcrumbs } from '@/components/jobs/OutsourceInfo';
-import { KindPill, OwnerBadge, PriorityPill, StatusWithHold, WorkflowBadges } from '@/components/jobs/JobBits';
+import { KindPill, OwnerBadge, PriorityPill, StatusWithHold } from '@/components/jobs/JobBits';
 import { TailPill } from '@/components/sales/SalesBits';
-import { WbpClientRows, WbpLegend } from '@/components/shared/WbpDots';
+import { PmTag, WbpClientRows, WbpLegend } from '@/components/shared/WbpDots';
 import { Modal } from '@/components/ui/Modal';
 import { fmtDate, fullName } from '@/lib/format';
 
@@ -43,7 +43,7 @@ export const ItemHeader = ({ job: j, so, reload }: { job: JobWithRefs; so: Sales
           <StatusWithHold job={j} />
           <PriorityPill priority={j.priority} testId="job-priority" />
           <KindPill kind={j.kind} testId="job-kind-pill" client={j.client} />
-          <WorkflowBadges workflow={j.workflow} />
+          <PmTag workflow={j.workflow} testId="job-pm-tag" />
           <OwnerBadge owner={j.owner} testId="job-owner" />
           <TailPill stage={api.tailStage(j)} testId="job-tail" />
           <ClientRequestBadge n={api.openClientRequests(j).length} testId="job-client-requests-badge" />

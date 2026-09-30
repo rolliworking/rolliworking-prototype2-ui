@@ -37,7 +37,7 @@ export default function BenchPage() {
                 <li key={j.id} data-testid={`bench-job-${j.id}`} className="flex items-center gap-3 px-4 py-2 text-[13px]">
                   <Link to={`/jobs/${j.id}`} className="font-mono text-xs font-semibold text-ink hover:underline">{j.number}</Link>
                   <span className="truncate text-ink">{fullName(j.client)} · {j.watch.brand} {j.watch.model}</span>
-                  <KindPill kind={j.kind} /><WorkflowBadges workflow={j.workflow} /><StatusPill status={api.awaitingComponents(j) ? 'awaiting_components' : j.status} />{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}
+                  <KindPill kind={j.kind} /><WorkflowBadges workflow={j.workflow} jobId={j.id} /><StatusPill status={api.awaitingComponents(j) ? 'awaiting_components' : j.status} />{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}
                   {j.components.length > 1 && <ComponentChips job={j} />}<ComponentDoneButtons job={j} run={runBench} />
                   <span className="ml-auto flex items-center gap-2 text-xs">
                     {j.dueAt && <span className={isOverdue(j) ? 'font-semibold text-rose-700' : 'text-ink-400'}>{fmtDate(j.dueAt)}</span>}

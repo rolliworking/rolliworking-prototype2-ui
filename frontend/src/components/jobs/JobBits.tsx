@@ -10,6 +10,7 @@ import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { DeptBadge, OwnerChip, StatusPill } from '@/components/ui/Pills';
+import { WbpJobCell } from '@/components/shared/WbpDots';
 import { fmtDate, fullName } from '@/lib/format';
 import { TailPill } from '@/components/sales/SalesBits';
 
@@ -78,8 +79,9 @@ export const AssigneeChips = ({ assignees }: { assignees: string[] }) => (
   assignees.length ? <span className="inline-flex items-center gap-0.5">{assignees.map((a) => <OwnerChip key={a} owner={a} />)}</span> : <span className="text-[11px] text-ink-400">unassigned</span>
 );
 
-export const WorkflowBadges = ({ workflow, className }: { workflow: string[]; className?: string }) => (
-  <span className={clsx('inline-flex items-center gap-0.5', className)} title={`Workflow ${workflow.join(' → ')}`}>
+// With a jobId this renders the job's own W·B·P dots + PM tag (MH: letters are redundant once the dots exist); letters only remain for rows without a job
+export const WorkflowBadges = ({ workflow, jobId, className, dark }: { workflow: string[]; jobId?: string; className?: string; dark?: boolean }) => (
+  jobId ? <WbpJobCell jobId={jobId} workflow={workflow} dark={dark} /> : <span className={clsx('inline-flex items-center gap-0.5', className)} title={`Workflow ${workflow.join(' → ')}`}>
     {workflow.map((d) => <DeptBadge key={d} code={d} />)}
   </span>
 );
@@ -100,7 +102,7 @@ export const JobCard = ({ job: j }: { job: JobWithRefs }) => (
   <Link to={`/jobs/${j.id}`} data-testid={`job-card-${j.id}`} className="block rounded-md border border-line bg-surface px-2 py-1.5 shadow-card transition-[transform,border-color] duration-150 hover:-translate-y-px hover:border-ink-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
     <div className="flex items-center justify-between gap-2">
       <span className="font-mono text-[11px] font-semibold text-ink">{j.number}</span>
-      <div className="flex items-center gap-1">{api.threadNeedsReplyFor({ kind: 'job', id: j.id }) && <span data-testid={`reply-indicator-${j.id}`} title="Client reply waiting" className="rounded bg-rose-50 px-1 text-[10px] font-semibold text-rose-700">reply</span>}{j.kind !== 'service' && <KindPill kind={j.kind} />}{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} /></div>
+      <div className="flex items-center gap-1">{api.threadNeedsReplyFor({ kind: 'job', id: j.id }) && <span data-testid={`reply-indicator-${j.id}`} title="Client reply waiting" className="rounded bg-rose-50 px-1 text-[10px] font-semibold text-rose-700">reply</span>}{j.kind !== 'service' && <KindPill kind={j.kind} />}{j.priority !== 'normal' && <PriorityPill priority={j.priority} />}<WorkflowBadges workflow={j.workflow} jobId={j.id} /></div>
     </div>
     <div className="truncate text-xs leading-tight"><span className="font-medium text-ink">{fullName(j.client)}</span> <span className="text-ink-500">· {j.watch.model}</span> <span className="font-mono text-[10px] text-ink-400">{j.watch.reference}</span></div>
     <ComponentWaitChips jobId={j.id} compact />
