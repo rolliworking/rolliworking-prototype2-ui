@@ -82,3 +82,14 @@ State machines and guards (`source/STATE-MACHINES.md`), field lists and validati
 | Browser print dialog (`window.print()`) for SO print/PDF, appraisal, inspection form, RC estimate; **label "printing" = mock printer list + `setLabelPrinted`** | `LabelBits.tsx`, print views | printer agent / PDF service |
 | Mock TOTP `000000`, mocked RC verification link in the Sent, mock pay page `/pay/:token` | RC block, `PayPage` | real TOTP + email + payment host |
 | Cloudflare / Vite dev-server 429s during testing | environment | n/a |
+
+## Added 2026-10-01 (Pickup Station — five gated steps)
+| prototype scaffolding | where | replacement |
+|---|---|---|
+| **Inline mock phone** (`PhoneFrame`) rendering `/rc/pickup/:token` next to the station QR — exists only because the prototype keeps state per tab | `components/sales/pickup/PickupBits.tsx`, `StepVerify.tsx` | nothing: the client's own phone opens the tokened page; the station learns of the confirm via a realtime subscription / poll on the pickup session |
+| `onPickupEvent` in-memory listener set (reverse-QR confirm, frames) | `client.ts` Pickup Station v2 section | server push (WebSocket / SSE) on the SO |
+| **Simulate scan (dev)** button, **Placeholder shot** shutters, placeholder evidence frames, `?fast=1` 6-second strip — all gated on `import.meta.env.DEV` | `PickupBits.tsx`, `StepVerify.tsx`, `EvidenceStrip.tsx` | none (absent in production builds) |
+| `MOCK_OCR_MAY_PASS = true` — a MOCK serial read (placeholder photo / model down) may pass the gate in the prototype | `client.ts` | **false**: a mock result can never release a watch; only a manager override can |
+| `sendSms` Vonage MOCK receipt + Outbox row | `api/telephony.ts` | Vonage Messages API behind the same seam |
+| `pickupEvidenceSweep()` runs when a station reads the queue / session (90 s rule) | `client.ts` | scheduled job server-side; Hitlist pin via the same key `pickup-evidence:<so>` |
+| Frames / ID photo stored as data URLs on the SO with `retention` dates (not enforced) | `types.ts PickupSession.retention` | object storage with lifecycle rules (frames 90 d, proxy ID 30 d, summary rows permanent) |
