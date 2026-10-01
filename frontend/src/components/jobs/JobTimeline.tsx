@@ -1,5 +1,7 @@
 import clsx from 'clsx';
 import { ArrowRight, Mail, PauseCircle, PlayCircle, StickyNote } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { jobReleaseLineSync } from '@/api/client';
 import type { JobWithRefs } from '@/api/client';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtDate, fmtTime } from '@/lib/format';
@@ -9,6 +11,7 @@ const ACTION_LABEL: Record<string, string> = { create: 'Created', start_review: 
 type Row = { id: string; at: string; by: string; station: string; kind: 'transition' | 'hold' | 'release' | 'note'; body: React.ReactNode; tone?: string };
 
 export const JobTimeline = ({ job: j }: { job: JobWithRefs }) => {
+  const release = jobReleaseLineSync(j.id); // one record: the pickup session on the SO — the close row reads it live
   const rows: Row[] = [
     ...j.timeline.map((t) => ({
       id: t.id, at: t.at, by: t.by, station: t.station, kind: 'transition' as const,
@@ -17,7 +20,7 @@ export const JobTimeline = ({ job: j }: { job: JobWithRefs }) => {
         <span className="inline-flex flex-wrap items-center gap-1.5">
           <span className="font-medium">{ACTION_LABEL[t.action] ?? t.action}</span>
           {t.from && <><StatusPill status={t.from} /><ArrowRight size={10} className="text-ink-400" /></>}<StatusPill status={t.to} />
-          {t.reason && <span className="text-ink-500">— {t.reason}</span>}
+          {t.action === 'close' && release ? <span className="text-ink-500" data-testid="timeline-release-line">— {release.text} · <Link to={`/sales/${release.soId}`} className="text-brand hover:underline">{release.soNumber}</Link></span> : t.reason && <span className="text-ink-500">— {t.reason}</span>}
           {t.emailQueued && <span className="inline-flex items-center gap-0.5 text-[10px] text-brand" title="Client email recorded in Sent"><Mail size={10} /> emailed</span>}
         </span>
       ),

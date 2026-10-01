@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { LegacyBanner } from '@/components/LegacyBits';
 import { SoPrintButton } from '@/components/sales/SoPrint';
+import { PickupSessionCard } from '@/components/sales/PickupSessionCard';
 import type { Address, Client, SOLineInput, SalesOrderWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { FulfillMenu, ZeroBalanceBadge, ZeroBalanceModal } from '@/components/sales/FulfillMenu';
@@ -155,8 +156,8 @@ export default function SalesOrderDetailPage() {
                 {o.cancelledAt && <><dt className="text-ink-500">Cancelled</dt><dd className="text-rose-700">{fmtDate(o.cancelledAt)}</dd></>}
               </dl>
               {o.shipment && <div className="mt-3 border-t border-line pt-2 text-xs" data-testid="so-shipment"><div className="text-ink">{o.shipment.service} · insured {fmtMoneyCents(o.shipment.coverage)}{o.shipment.bypassReason && <span className="ml-1 text-rose-700">· payment bypass</span>}</div><img src={o.shipment.labelDataUrl} alt="Mock label" className="mt-1 w-full rounded-sm ring-1 ring-line" /></div>}
-              {o.pickupSession && o.pickupSession.photos.length > 0 && <div className="mt-2 flex gap-1.5">{o.pickupSession.photos.map((p) => <img key={p.id} src={p.dataUrl} alt="hand-back" className="h-14 w-20 rounded-sm object-cover ring-1 ring-line" />)}</div>}
             </Card>
+            <PickupSessionCard order={o} />
           </div>
         )}
       </div>

@@ -1,0 +1,43 @@
+import clsx from 'clsx';
+import { Film, ShieldAlert } from 'lucide-react';
+import * as api from '@/api/client';
+import type { SalesOrderWithRefs } from '@/api/client';
+import { SerialCompare } from '@/components/sales/pickup/StepsLate';
+import { Card } from '@/components/ui/Card';
+import { fmtDate, fmtMoneyCents, fmtTime, fullName } from '@/lib/format';
+
+const EV_TONE: Record<string, string> = { pending: 'bg-amber-50 text-amber-800 ring-amber-200', complete: 'bg-moss-50 text-moss-800 ring-moss-200', incomplete: 'bg-rose-50 text-rose-700 ring-rose-200', bypassed: 'bg-rose-50 text-rose-700 ring-rose-200' };
+const when = (iso: string) => `${fmtDate(iso)} ${fmtTime(iso)}`;
+
+// THE pickup record — frames, OCR crops + three-way compare, verify method, resend log, every exception with its approver. Job timeline + Client 360 show one derived line that points here.
+export const PickupSessionCard = ({ order: o }: { order: SalesOrderWithRefs }) => {
+  const s = o.pickupSession; const resends = o.pickupResends ?? []; const aborts = o.pickupAborts ?? [];
+  if (!s && resends.length === 0 && aborts.length === 0) return null;
+  const ev = s?.evidenceStatus; const frames = s?.frames ?? []; const expected = s?.framesExpected ?? api.PICKUP_FRAMES;
+  return (
+    <Card title="Pickup session" subtitle={s ? api.pickupSummaryLine(s, fullName(o.client)) : 'no release yet — resend / stop history below'} testId="so-pickup-session" action={ev && <span data-testid="so-pickup-evidence" data-status={ev} className={clsx('rounded-sm px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1', EV_TONE[ev])}>{ev === 'bypassed' ? 'no camera evidence' : `evidence ${frames.length}/${expected} · ${ev}`}</span>}>
+      {s && (
+        <div className="space-y-3 text-xs">
+          <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1">
+            <dt className="text-ink-500">Released</dt><dd data-testid="so-pickup-released">{when(s.at)} · {s.by} · {s.station}</dd>
+            <dt className="text-ink-500">Identity</dt><dd data-testid="so-pickup-verify">{s.adminOverride ? 'ADMIN MARK (no verification)' : s.verifyMethod ? api.PICKUP_VERIFY_LABEL[s.verifyMethod] : s.codeUsed ? 'Code' : 'Proxy'}{s.codeUsed && ` · code generation ${s.codeGeneration ?? 1}`}{s.proxyName && ` · ${s.proxyName}${s.proxyApproval ? ` · approved by ${s.proxyApproval.by} (“${s.proxyApproval.reason}”)` : ''}`}</dd>
+            {s.itemConfirmed && <><dt className="text-ink-500">Item</dt><dd>confirmed against intake photos by {s.itemConfirmed.by} · {fmtTime(s.itemConfirmed.at)}</dd></>}
+            {s.paymentBypass && <><dt className="text-ink-500">Payment</dt><dd data-testid="so-pickup-payment-bypass" className="inline-flex items-center gap-1 text-rose-700"><ShieldAlert size={11} /> BYPASS · released with {fmtMoneyCents(s.paymentBypass.amount)} outstanding · approved by {s.paymentBypass.by} · “{s.paymentBypass.reason}”</dd></>}
+            {s.cameraBypass && <><dt className="text-ink-500">Camera</dt><dd data-testid="so-pickup-camera-bypass" className="inline-flex items-center gap-1 text-rose-700"><ShieldAlert size={11} /> released without camera evidence · approved by {s.cameraBypass.by} · “{s.cameraBypass.reason}”</dd></>}
+            {s.retention && <><dt className="text-ink-500">Retention</dt><dd className="text-ink-500">{s.retention.policy} · frames until {fmtDate(s.retention.framesUntil)}{s.retention.idPhotoUntil && ` · ID photo until ${fmtDate(s.retention.idPhotoUntil)}`}</dd></>}
+          </dl>
+          {(s.intakePhoto || s.handbackPhoto || s.proxyIdPhoto) && <div className="flex gap-2">{s.intakePhoto && <figure><img src={s.intakePhoto.dataUrl} alt="intake" className="h-24 w-32 rounded-sm object-cover ring-1 ring-line" /><figcaption className="mt-0.5 text-[10px] text-ink-500">Intake</figcaption></figure>}{s.handbackPhoto && <figure><img data-testid="so-pickup-handback" src={s.handbackPhoto.dataUrl} alt="hand-back" className="h-24 w-32 rounded-sm object-cover ring-1 ring-line" /><figcaption className="mt-0.5 text-[10px] text-ink-500">Hand-back</figcaption></figure>}{s.proxyIdPhoto && <figure><img src={s.proxyIdPhoto.dataUrl} alt="proxy ID" className="h-24 w-32 rounded-sm object-cover ring-1 ring-line" /><figcaption className="mt-0.5 text-[10px] text-ink-500">Proxy ID (expires)</figcaption></figure>}</div>}
+          {s.serialCheck && <SerialCompare check={s.serialCheck} testId="so-pickup-serial" />}
+          {ev && ev !== 'bypassed' && (
+            <div>
+              <div className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500"><Film size={11} /> Client camera strip · {frames.length}/{expected}{s.evidenceStartedAt && ` · started ${fmtTime(s.evidenceStartedAt)}`}{s.evidenceCompletedAt && ` · complete ${fmtTime(s.evidenceCompletedAt)}`}{s.evidenceFlaggedAt && ` · flagged ${fmtTime(s.evidenceFlaggedAt)}`}</div>
+              <div data-testid="so-pickup-frames" className="mt-1 flex gap-1.5">{Array.from({ length: expected }, (_, i) => frames[i]).map((f, i) => f ? <figure key={f.id}><img src={f.dataUrl} alt={`frame ${f.seq}`} className="h-16 w-[86px] rounded-sm object-cover ring-1 ring-line" /><figcaption className="mt-0.5 font-mono text-[10px] text-ink-500">#{f.seq} · {fmtTime(f.at)}</figcaption></figure> : <div key={i} className={clsx('grid h-16 w-[86px] place-items-center rounded-sm text-[10px]', ev === 'incomplete' ? 'bg-rose-50 text-rose-700' : 'bg-canvas text-ink-400')}>{ev === 'incomplete' ? 'missing' : 'waiting'}</div>)}</div>
+            </div>
+          )}
+        </div>
+      )}
+      {resends.length > 0 && <div className="mt-3 border-t border-line pt-2 text-xs"><div className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Code resends</div><ul data-testid="so-pickup-resends" className="mt-1 space-y-0.5 text-ink-700">{[...resends].reverse().map((r, i) => <li key={i}>gen {r.generation} · {r.channel.toUpperCase()} → {r.to} · {when(r.at)} · {r.by}{r.smsId && <span className="text-ink-400"> · {r.smsId}</span>}</li>)}</ul></div>}
+      {aborts.length > 0 && <div className="mt-3 border-t border-line pt-2 text-xs"><div className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Stopped pickups</div><ul data-testid="so-pickup-aborts" className="mt-1 space-y-0.5 text-ink-700">{[...aborts].reverse().map((a, i) => <li key={i}>{a.step} · “{a.reason}” · {when(a.at)} · {a.by}</li>)}</ul></div>}
+    </Card>
+  );
+};

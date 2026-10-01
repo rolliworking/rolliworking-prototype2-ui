@@ -62,6 +62,7 @@ import RcPartsPage from '@/pages/rc/RcPartsPage';
 import RcReportPage from '@/pages/rc/RcReportPage';
 import RcMessagesPage from '@/pages/rc/RcMessagesPage';
 import RcNotFound from '@/pages/rc/RcNotFound';
+import RcPickupConfirmPage from '@/pages/rc/RcPickupConfirmPage';
 import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
@@ -227,6 +228,7 @@ export default function App() {
             <Route path="parts/:id" element={<RcPartsPage />} />
             <Route path="report/:token" element={<RcReportPage />} />
             <Route path="inspection/:token" element={<RcInspectionFormPage />} />
+            <Route path="pickup/:token" element={<RcPickupConfirmPage />} />
             <Route path="messages" element={<RcMessagesPage />} />
             <Route path="*" element={<RcNotFound />} />
           </Route>

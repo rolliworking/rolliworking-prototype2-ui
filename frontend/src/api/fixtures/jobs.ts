@@ -103,6 +103,22 @@ const build = (s: Seed): Job => {
   };
 };
 
+// Pickup Station fixtures: ready_to_ship jobs with an explicit INTAKE photo (photoType 'intake') so step 1 / step 4 have something to compare against
+const intakeShot = (number: string, serial: string, d: number) => ({ ...seedPhoto(`Intake ${number} · serial ${serial}`), id: `jp-intake-${number}`, photoType: 'intake' as const, slot: 'Intake — serial engraving', clientVisible: false, at: daysAgo(d, 9), by: 'Vienna', station: 'Front Desk 1' });
+const pickupJobs = (): Job[] => {
+  const rows: [string, string, string, string, DeptCode[], string, number, JobStatus, EstimateLine[]][] = [
+    ['j-pu1', 'E02090', 'c-03', 'w-pu1', ['W', 'P'], 'E4K7P2M9', 18, 'ready_to_ship', [line('Movement service — cal. 3285', 1250, 'W'), line('Case & bracelet refinish', 340, 'P')]],
+    ['j-pu2', 'E02091', 'c-05', 'w-pu2', ['W'], 'Q8M3N5R2', 21, 'ready_to_ship', [line('Movement service — cal. 3230', 1150, 'W'), line('Gaskets + pressure test 300m', 180, 'W')]],
+    ['j-pu3', 'E02092', 'c-06', 'w-pu3', ['B'], 'L2V8B4T6', 15, 'ready_to_ship', [line('Titanium bracelet — replace clasp spring & re-pin', 260, 'B')]],
+    ['j-pu4', 'E02093', 'c-07', 'w-pu4', ['W', 'B'], 'D7H2K9W4', 24, 'ready_to_ship', [line('Movement service — cal. 3285', 1250, 'W'), line('Jubilee bracelet tighten', 220, 'B')]],
+    ['j-pu5', 'E02094', 'c-08', 'w-pu5', ['P'], 'F3R9Q6N1', 19, 'ready_to_ship', [line('Case & bracelet refinish — brushed/polished', 380, 'P')]],
+    ['j-pu6', 'E02095', 'c-17', 'w-pu6', ['W', 'B', 'P'], 'A9T4M2K8', 17, 'ready_to_ship', [line('Complete movement service — cal. 3235', 1450, 'W'), line('Jubilee re-pin', 180, 'B'), line('Case & bracelet refinish', 340, 'P')]],
+    ['j-pu7', 'E02096', 'c-19', 'w-pu7', ['W'], 'B6N1R8V3', 30, 'closed', [line('Movement service — cal. MT5652', 1100, 'W')]],
+    ['j-pu8', 'E02097', 'c-20', 'w-pu8', ['P'], 'H2P7L4Q9', 26, 'closed', [line('Case & bracelet refinish', 340, 'P')]],
+  ];
+  return rows.map(([id, number, clientId, watchId, workflow, serial, d, status, lines]) => { const j = build({ id, number, clientId, watchId, workflow, status, owner: 'concierge', assignees: ['Leo'], createdDaysAgo: d, dueInDays: status === 'closed' ? undefined : 0, lines }); j.photos.unshift(intakeShot(number, serial, d)); return j; });
+};
+
 export const jobs: Job[] = [
   // Born from converted estimates — on the bench
   build({ id: 'j-01', number: 'E02011', estimateId: 'e-01', clientId: 'c-01', watchId: 'w-01', workflow: ['W'], status: 'in_service', priority: 'high', owner: 'manager', assignees: ['Leo'], createdDaysAgo: 9, dueInDays: 12, notes: ['Movement uncased. Mainspring shows fatigue — replacing under service.'] }),
@@ -167,6 +183,8 @@ export const jobs: Job[] = [
   build({ id: 'j-ib1', number: 'E02080', clientId: 'c-24', watchId: 'w-67', workflow: ['W', 'B', 'P'], status: 'in_service', owner: 'manager', assignees: ['Leo', 'Sam', 'Dre'], createdDaysAgo: 6, dueInDays: 9, hold: { type: 'parts', reason: 'Jubilee clasp — 2 links + spring bar set on order from RSC (ETA Oct 6)', daysAgo: 2, component: 'band' }, notes: ['Bracelet links stretched past spec — parts priced and approved by the client on the portal.'], lines: [line('Complete movement service — cal. 3285', 1550, 'W'), line('Jubilee bracelet — 2 links + clasp spring', 420, 'B'), line('Case & bezel refinish — brushed / polished', 395, 'P')] }),
   // Calloway's Submariner came BACK after pickup (E01871, collected a year ago) — warranty return linked to the original job
   build({ id: 'j-wr1', number: 'E02081', clientId: 'c-30', watchId: 'w-40', workflow: ['W'], status: 'in_review', kind: 'warranty', priority: 'high', owner: 'manager', assignees: ['Leo'], createdDaysAgo: 2, dueInDays: 5, returnOf: { jobId: 'j-r1', reason: 'Crown no longer screws down since pickup — returned under the 2-year service warranty' }, notes: ['Returned 2 days ago at the front desk — crown tube thread checked at intake, likely tube replacement under warranty.'], lines: [line('Warranty — crown + tube replacement', 0, 'W')] }),
+  // Pickup Station v2 — ready at the counter (one per gate demo) + two already handed over. Each carries an intake photo whose label shows the engraved serial (placeholder → MOCK OCR path).
+  ...pickupJobs(),
   build({ id: 'j-pd1', number: 'E02079', clientId: 'c-02', watchId: 'w-66', workflow: ['W', 'B', 'P'], status: 'in_service', owner: 'manager', assignees: ['Leo', 'Sam', 'Dre'], createdDaysAgo: 8, dueInDays: 6, hold: { type: 'parts', reason: 'Waiting on Oyster clasp spring + 2 links (ref 97200) from RSC — ETA Oct 8', daysAgo: 4, component: 'band' }, notes: ['Clasp spring fatigued — parts approval priced, going to the client; RSC backorder expected.'], lines: [line('Complete movement service — cal. 3235', 1450, 'W'), line('Oyster bracelet stretch repair + clasp spring', 380, 'B'), line('Case & bezel refinish — brushed / polished', 395, 'P')] }),
 ];
 

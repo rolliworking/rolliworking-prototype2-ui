@@ -12,6 +12,8 @@ export const stations: Station[] = [
   { id: 'st-jv-pad', name: 'Workshop pad (JV)', division: 'rolliworks', deviceType: 'pad' },
   { id: 'st-kiosk-fd', name: 'Front-desk check-in kiosk', division: 'rolliworks', deviceType: 'kiosk' },
   { id: 'st-kiosk-wm', name: 'WM room photo kiosk', division: 'rolliworks', deviceType: 'kiosk' },
+  // Pickup Station cameras are ROLES, not people: the counter cam shoots item / QR / hand-back, the client cam records the 60 s hand-over strip
+  { id: 'st-pu-cam', name: 'Pickup client camera', division: 'rolliworks', deviceType: 'kiosk', cameraRole: 'client' },
 ];
 
 // The device this prototype runs on is mocked as already registered to this station.

@@ -22,3 +22,15 @@ export const answerHere = (callId: string) => { cancel(callId); return calls.cal
 export const hangUp = (callId: string) => { cancel(callId); return calls.callEnded(callId); };
 // Click-to-call: originate from the signed-in user's extension
 export const dial = (input: { clientId?: string; number?: string; jobId?: string }) => calls.startOutboundCall(input);
+
+// ---- Outbound SMS — MOCK of the Vonage Messages API (Pickup Station code resend). Returns a carrier-style receipt; client.ts logs it to the SO timeline + Outbox. ----
+export interface SmsReceipt { id: string; to: string; maskedTo: string; text: string; at: string; status: 'queued' | 'failed'; provider: 'vonage-mock' }
+const smsLedger: SmsReceipt[] = [];
+export const maskPhone = (n: string) => { const d = n.replace(/\D/g, ''); return d.length >= 4 ? `•••-•••-${d.slice(-4)}` : '(no phone on file)'; };
+export const sendSms = (to: string, text: string): SmsReceipt => {
+  const ok = to.replace(/\D/g, '').length >= 7;
+  const r: SmsReceipt = { id: `sms-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, to, maskedTo: maskPhone(to), text, at: new Date().toISOString(), status: ok ? 'queued' : 'failed', provider: 'vonage-mock' };
+  smsLedger.unshift(r);
+  return r;
+};
+export const smsLog = (): SmsReceipt[] => [...smsLedger];

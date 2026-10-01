@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtMoney, fmtTime } from '@/lib/format';
 
-const KIND: Record<BypassEvent['kind'], { label: string; icon: typeof Camera; tone: string }> = { receiving_camera: { label: 'Receiving · camera bypass', icon: Camera, tone: 'bg-sky-50 text-sky-800 ring-sky-200' }, payment_release: { label: 'Payment-release bypass', icon: CreditCard, tone: 'bg-amber-50 text-amber-900 ring-amber-200' }, other: { label: 'Bypass', icon: ShieldAlert, tone: 'bg-canvas text-ink-700 ring-line' } };
+const KIND: Record<BypassEvent['kind'], { label: string; icon: typeof Camera; tone: string }> = { receiving_camera: { label: 'Receiving · camera bypass', icon: Camera, tone: 'bg-sky-50 text-sky-800 ring-sky-200' }, pickup_camera: { label: 'Pickup · camera bypass', icon: Camera, tone: 'bg-rose-50 text-rose-800 ring-rose-200' }, payment_release: { label: 'Payment-release bypass', icon: CreditCard, tone: 'bg-amber-50 text-amber-900 ring-amber-200' }, other: { label: 'Bypass', icon: ShieldAlert, tone: 'bg-canvas text-ink-700 ring-line' } };
 const legit = (e: BypassEvent) => e.kind === 'payment_release' && e.context.minutesSincePayment !== undefined && e.context.minutesSincePayment <= 10;
 
 // Owner accountability surface — the first real instance of the "manager hit list": live client-asset $ on premises + every bypass use, newest first.

@@ -70,3 +70,10 @@ export async function draftJobSummary(ctx: JobSummaryContext): Promise<{ text: s
   try { const { fields } = await post<{ fields: SummaryFields }>('job-summary', { context: ctx }); if (!fields?.job_status) throw new Error('empty'); const f: SummaryFields = { ...fields, target_date: fields.target_date || 'to be confirmed' }; return { text: fillSummaryTemplate(ctx, f), fields: f, source: 'claude' }; }
   catch { const f = localSummaryFields(ctx); return { text: fillSummaryTemplate(ctx, f), fields: f, source: 'local' }; }
 }
+
+// 6. Pickup Station step 4 — serial OCR on two crops (intake vs hand-back) in ONE call. Suggest → three-way compare → a person decides; never releases on its own.
+export interface SerialOcr { intake: { serial: string | null; confidence: number | null }; handback: { serial: string | null; confidence: number | null }; notes?: string }
+export async function readSerials(intakeDataUrl: string, handbackDataUrl: string): Promise<SerialOcr> {
+  const mime = (d: string) => d.slice(5, d.indexOf(';')) || 'image/jpeg';
+  return post<SerialOcr>('read-serials', { intakeBase64: intakeDataUrl, intakeMime: mime(intakeDataUrl), handbackBase64: handbackDataUrl, handbackMime: mime(handbackDataUrl) });
+}

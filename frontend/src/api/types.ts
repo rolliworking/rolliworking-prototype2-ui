@@ -31,6 +31,7 @@ export interface Station {
   division: Division;
   receptionMode?: boolean;
   deviceType?: 'desktop' | 'pad' | 'kiosk';
+  cameraRole?: 'counter' | 'client'; // Pickup Station: counter cam = item/QR/hand-back shots · client cam = the 6-frame hand-over strip
 }
 
 export type CameraStatus = 'captured' | 'no_camera' | 'denied';
@@ -644,6 +645,25 @@ export interface Shipment extends Stamp {
   bypassReason?: string;
 }
 
+// ---- Pickup Station v2 (MH 2026-10-01): five gated steps · ONE PickupSession record · SO card, job timeline and Client 360 row all derive from it ----
+export type PickupVerifyMethod = 'qr_scan' | 'code' | 'proxy' | 'reverse_qr';
+export type PickupEvidenceStatus = 'pending' | 'complete' | 'incomplete' | 'bypassed';
+export type SerialCheckResult = 'match' | 'mismatch' | 'unreadable';
+export type SerialPair = 'intake_vs_record' | 'handback_vs_record' | 'intake_vs_handback';
+// A second person (manager tier, never the staffer running the pickup) approved an exception — reason required, logged everywhere
+export interface ManagerApproval { by: string; at: string; reason: string }
+export interface PickupFrame { id: string; seq: number; at: string; dataUrl: string; cameraRole: 'client'; station: string }
+export interface SerialRead { value: string | null; confidence: number | null }
+export interface PickupSerialCheck { record: string; intake: SerialRead; handback: SerialRead; result: SerialCheckResult; failedPair?: SerialPair; source: 'claude' | 'mock'; at: string; override?: ManagerApproval }
+export interface PickupResend { at: string; by: string; channel: 'email' | 'sms'; to: string; generation: number; smsId?: string }
+export interface PickupCodeHistory { code: string; generation: number; issuedAt: string; replacedAt?: string; replacedVia?: 'email' | 'sms' | 'push' }
+export interface ReverseQrToken { token: string; issuedAt: string; expiresAt: string; station: string; usedAt?: string; confirmedAt?: string; declinedAt?: string }
+export interface PickupRetention { framesUntil: string; idPhotoUntil?: string; policy: string }
+export interface PickupAbort { at: string; by: string; step: string; reason: string }
+export interface PickupVerifyDraft { method: PickupVerifyMethod; at: string; codeUsed?: string; proxyName?: string; proxyIdPhoto?: PackagePhoto; proxyApproval?: ManagerApproval; reverseToken?: string }
+// In-progress counter session — every step writes a fact here; confirmPickup() re-validates ALL of them before anything is released
+export interface PickupDraft { startedAt: string; by: string; station: string; itemConfirmed?: { at: string; by: string; intakePhotoId?: string }; paymentBypass?: ManagerApproval & { amount: number }; verify?: PickupVerifyDraft; intakePhoto?: PackagePhoto; handbackPhoto?: PackagePhoto; serialCheck?: PickupSerialCheck }
+
 export interface PickupSession extends Stamp {
   id: string;
   codeUsed?: string;
@@ -653,6 +673,22 @@ export interface PickupSession extends Stamp {
   lineQty: Record<string, number>;
   bypassReason?: string;
   adminOverride?: boolean;
+  verifyMethod?: PickupVerifyMethod;
+  itemConfirmed?: { at: string; by: string; intakePhotoId?: string };
+  intakePhoto?: PackagePhoto;
+  handbackPhoto?: PackagePhoto;
+  serialCheck?: PickupSerialCheck;
+  paymentBypass?: ManagerApproval & { amount: number };
+  proxyApproval?: ManagerApproval;
+  cameraBypass?: ManagerApproval;
+  frames?: PickupFrame[];
+  framesExpected?: number;
+  evidenceStatus?: PickupEvidenceStatus;
+  evidenceStartedAt?: string;
+  evidenceCompletedAt?: string;
+  evidenceFlaggedAt?: string;
+  retention?: PickupRetention;
+  codeGeneration?: number;
 }
 
 // One row per "Send invoice" — what the client was told at that moment (the link itself always shows the LIVE balance)
@@ -689,6 +725,13 @@ export interface SalesOrder {
   invoiceSends: InvoiceSend[];
   pickupCode?: string;
   pickupCodeIssuedAt?: string;
+  pickupCodeGeneration?: number;
+  pickupCodeHistory?: PickupCodeHistory[];
+  pickupResends?: PickupResend[];
+  reverseQr?: ReverseQrToken;
+  pickupDraft?: PickupDraft;
+  pickupAborts?: PickupAbort[];
+  pickupDemo?: 'item_mismatch' | 'serial_mismatch' | 'serial_unreadable'; // SEED ONLY — drives the mock OCR / demo copy for the gate-failure fixtures
   shippingAddress?: Address;
   shippingInfoRequestedAt?: string;
   tracking?: string;

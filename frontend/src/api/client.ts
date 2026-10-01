@@ -1,7 +1,8 @@
 // The ONLY data-access module in the app. Screens call these functions and nothing else.
 // Today they resolve from local fixtures; later this file alone is repointed at the real API.
 import * as fx from './fixtures';
-import { fillSummaryTemplate, localSummaryFields } from './ai';
+import { fillSummaryTemplate, localSummaryFields, readSerials } from './ai';
+import { sendSms } from './telephony';
 import type {
   ComponentKey,
   CompletionsReport,
@@ -102,6 +103,15 @@ import type {
   Message,
   NeedsYouItem,
   PickupWindow,
+  PickupSession,
+  PickupDraft,
+  PickupAbort,
+  PickupFrame,
+  PickupVerifyMethod,
+  PickupSerialCheck,
+  PickupResend,
+  ManagerApproval,
+  ReverseQrToken,
   PortalDocument,
   PortalHistoryRow,
   PortalHome,
@@ -164,7 +174,7 @@ const store = {
   messages: fx.messages.map((m): Message => ({ ...m })),
   jobMessages: fx.jobMessages.map((m) => ({ ...m, mentions: [...m.mentions], notify: [...m.notify], readBy: [...m.readBy] })),
   magicLinks: readJson<MagicLink[]>('rollisuite.rc.magicLinks', []),
-  counters: { sub: 314, label: 3, estimate: 1058, job: Math.max(2030, ...fx.jobs.map((j) => Number(j.number.replace(/\D/g, '')) || 0)), so: 107, pr: 44 },
+  counters: { sub: 314, label: 3, estimate: 1058, job: Math.max(2030, ...fx.jobs.map((j) => Number(j.number.replace(/\D/g, '')) || 0)), so: Math.max(107, ...fx.salesOrders.map((o) => (o.number.startsWith('SO-26-') ? Number(o.number.slice(6)) : 0))), pr: 44 },
 };
 // ---- B2B client reference (their barcode / internal tracking #) — captured at Receive Watch, lives on the estimate, threads into every client email subject for that job ----
 // FINAL FORMAT (user decision): bracketed prefix "[REF: <ref>] <subject>"
@@ -2268,33 +2278,230 @@ export async function confirmShipment(id: string, input: ConfirmShipmentInput): 
   return resolve(soRefs(o));
 }
 
-export interface ConfirmPickupInput { code?: string; proxyName?: string; proxyIdPhoto?: PackagePhoto; photos: PackagePhoto[]; lineQty?: Record<string, number>; bypassReason?: string }
-// Pickup Station complete: verify code (or proxy name + ID photo), photos required, consume code, picked_up_qty, custody closes. Signature-free (locked decision).
-export async function confirmPickup(id: string, input: ConfirmPickupInput): Promise<SalesOrderWithRefs> {
+// ---- Pickup Station v2 — five gated steps (MH 2026-10-01). Every step writes a fact into o.pickupDraft; confirmPickup() re-validates ALL of them before anything leaves. ----
+// Gates: 1 item confirmed · 2 balance $0 (sole exception: manager-approved bypass, approver ≠ runner) · 3 identity (QR / code / proxy+manager / reverse QR) · 4 serial check match (or manager override) · 5 first client-camera frame.
+export const PICKUP_FRAMES = 6;
+export const PICKUP_FRAME_WINDOW_MS = 60_000;
+export const PICKUP_EVIDENCE_TIMEOUT_MS = 90_000;
+export const REVERSE_QR_TTL_MS = 10 * 60_000;
+export const PICKUP_RETENTION = { framesDays: 90, idPhotoDays: 30, policy: 'Frames kept 90 days · proxy ID photo 30 days · summary rows permanent' };
+export const MOCK_OCR_MAY_PASS = true; // PROTOTYPE ONLY — Keeper sets false: a placeholder photo must never release a watch
+export const PICKUP_VERIFY_LABEL: Record<PickupVerifyMethod, string> = { qr_scan: 'QR scanned', code: 'Code typed', proxy: 'Proxy + ID', reverse_qr: 'Reverse QR (client phone)' };
+
+export interface PickupContext { order: SalesOrderWithRefs; draft?: PickupDraft; intakePhotos: PackagePhoto[]; recordSerial: string; codeGeneration: number; codeIssuedAt?: string; resends: PickupResend[]; reverseQr?: ReverseQrToken; aborts: PickupAbort[]; blockers: string[] }
+export interface ManagerApprovalInput { managerId: string; pin: string; reason: string }
+type PickupEventKind = 'reverse_confirmed' | 'reverse_declined' | 'frame' | 'evidence';
+const pickupListeners = new Set<(e: { soId: string; kind: PickupEventKind }) => void>();
+export const onPickupEvent = (fn: (e: { soId: string; kind: PickupEventKind }) => void) => { pickupListeners.add(fn); return () => { pickupListeners.delete(fn); }; };
+const emitPickup = (soId: string, kind: PickupEventKind) => pickupListeners.forEach((fn) => { try { fn({ soId, kind }); } catch { /* listener gone */ } });
+
+const normPickupCode = (x: string) => x.toUpperCase().replace(/[^A-Z0-9]/g, '');
+const normSerial = (x: string | null | undefined) => (x ? x.toUpperCase().replace(/[^A-Z0-9]/g, '') : '');
+const isPlaceholderPhoto = (dataUrl: string) => dataUrl.startsWith('data:image/svg') || /^https?:\/\//.test(dataUrl);
+const intakePhotosOf = (j: Job | null): PackagePhoto[] => {
+  if (!j) return [];
+  const fixture = fx.jobPhotos.filter((p) => p.jobId === j.id && p.kind === 'intake').map((p): PackagePhoto => ({ id: p.id, source: 'upload', dataUrl: p.url, slot: p.slot, photoType: 'intake' }));
+  const own = j.photos.filter((p) => p.photoType === 'intake');
+  const list = [...own, ...fixture];
+  return list.length ? list : j.photos.slice(0, 2);
+};
+const pickupDraftOf = (o: SalesOrder): PickupDraft => { if (!o.pickupDraft) throw new Error('Start the pickup from step 1 first'); return o.pickupDraft; };
+// Second-person rule: a manager who is NOT the staffer at the counter enters their own PIN + a reason
+const approveAsManager = (input: ManagerApprovalInput): ManagerApproval => {
+  const a = actor(); const m = fx.users.find((u) => u.id === input.managerId);
+  if (!m || m.accessTier !== 'manager' || m.disabled) throw new Error('Pick an active manager');
+  if (a.user && m.id === a.user.id) throw new Error('A different person must approve — the staffer running the pickup cannot approve their own exception');
+  if (m.pin !== input.pin && m.password !== input.pin) throw new Error('Manager PIN does not match');
+  if (!input.reason.trim()) throw new Error('A reason is required');
+  return { by: m.shortName, at: new Date().toISOString(), reason: input.reason.trim() };
+};
+export async function getApprovingManagers(): Promise<User[]> { const a = actor(); return resolve(fx.users.filter((u) => u.accessTier === 'manager' && !u.disabled && u.id !== a.user?.id)); }
+
+const pickupBlockers = (o: SalesOrder): string[] => {
+  const d = o.pickupDraft; const out: string[] = [];
+  if (!d?.itemConfirmed) out.push('Step 1 · item not confirmed against the intake photos');
+  if (o.balanceDue > 0 && !d?.paymentBypass) out.push(`Step 2 · balance due ${fmtMoney(o.balanceDue)}`);
+  if (!d?.verify) out.push('Step 3 · identity not verified'); else if (d.verify.method === 'proxy' && !d.verify.proxyApproval) out.push('Step 3 · proxy release needs a manager approval');
+  if (!d?.handbackPhoto) out.push('Step 4 · hand-back photo missing'); else if (!d.serialCheck) out.push('Step 4 · serial check not run'); else if (d.serialCheck.result !== 'match' && !d.serialCheck.override) out.push(`Step 4 · serial ${d.serialCheck.result === 'unreadable' ? 'unreadable' : 'MISMATCH'} — retake or manager override`); else if (d.serialCheck.source === 'mock' && !MOCK_OCR_MAY_PASS && !d.serialCheck.override) out.push('Step 4 · MOCK OCR result cannot release a watch');
+  return out;
+};
+const pickupCtx = (o: SalesOrder): PickupContext => ({ order: soRefs(o), draft: o.pickupDraft, intakePhotos: intakePhotosOf(o.jobId ? store.jobs.find((j) => j.id === o.jobId) ?? null : null), recordSerial: (() => { const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; return j ? store.watches.find((w) => w.id === j.watchId)?.serial ?? '' : ''; })(), codeGeneration: o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0), codeIssuedAt: o.pickupCodeIssuedAt, resends: o.pickupResends ?? [], reverseQr: o.reverseQr, aborts: o.pickupAborts ?? [], blockers: pickupBlockers(o) });
+export async function getPickupContext(id: string): Promise<PickupContext> { pickupEvidenceSweep(); return resolve(pickupCtx(getSO(id))); }
+
+// Step 1 — open the counter session (resets any half-finished draft from a previous customer)
+export async function pickupStart(id: string): Promise<PickupContext> {
   const o = getSO(id);
   if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not in the pickup queue');
   if (o.channel === 'ship' && o.shippingAddress) throw new Error('Order has outbound ship products — send staff to Ship Station');
-  const codeOk = !!o.pickupCode && input.code?.trim().toUpperCase().replace(/\s/g, '') === o.pickupCode.replace(/\s/g, '');
-  const proxyOk = !!input.proxyName?.trim() && !!input.proxyIdPhoto;
-  if (!codeOk && !proxyOk) throw new Error('Verify identity: pickup code, or proxy name + government ID photo');
-  if (input.photos.length === 0) throw new Error('Hand-back photos are required to complete');
-  if (!o.isPaid && !input.bypassReason?.trim()) throw new Error(`Balance due ${fmtMoney(o.balanceDue)} — take payment or log a bypass reason`);
-  const a = actor();
-  const lineQty = input.lineQty ?? {};
+  const a = actor(); o.pickupDraft = { startedAt: new Date().toISOString(), by: a.by, station: a.station };
+  soStamp(o, 'Pickup started · step 1 customer / item'); return resolve(pickupCtx(o));
+}
+export async function pickupConfirmItem(id: string, intakePhotoId?: string): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); const a = actor();
+  d.itemConfirmed = { at: new Date().toISOString(), by: a.by, intakePhotoId }; soStamp(o, 'Step 1 · same item confirmed against intake photos'); return resolve(pickupCtx(o));
+}
+// Any gate can stop the pickup — the stop is a record (why, where, who), not a silent back button
+export async function pickupAbort(id: string, step: string, reason: string): Promise<PickupContext> {
+  const o = getSO(id); if (!reason.trim()) throw new Error('Say why the pickup stopped'); const a = actor();
+  o.pickupAborts = [...(o.pickupAborts ?? []), { at: new Date().toISOString(), by: a.by, step, reason: reason.trim() }]; o.pickupDraft = undefined; o.reverseQr = undefined;
+  soStamp(o, `PICKUP STOPPED at ${step} · ${reason.trim()}`); if (o.jobId) jobStamp(byId(store.jobs, o.jobId), `Pickup stopped at ${step} · ${reason.trim()} · ${o.number}`);
+  if (step.startsWith('step 1')) upsertSystemPin(`pickup-item:${o.id}`, { title: `Pickup stopped · ${o.number} · item did not match intake photos`, subtitle: reason.trim(), assignedTo: MH_ASSIGNEE, priority: 'high', link: `/sales/${o.id}` });
+  return resolve(pickupCtx(o));
+}
+// Step 2 — the ONLY way past a balance: a different manager approves, reason required, logged on the SO + Hitlist at release
+export async function pickupApproveBypass(id: string, input: ManagerApprovalInput): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); if (o.balanceDue <= 0) throw new Error('Nothing owed — no bypass needed');
+  const ap = approveAsManager(input); d.paymentBypass = { ...ap, amount: o.balanceDue };
+  soStamp(o, `Step 2 · PAYMENT BYPASS approved by ${ap.by} · ${fmtMoney(o.balanceDue)} outstanding · ${ap.reason}`); return resolve(pickupCtx(o));
+}
+// Step 3 — resend rotates the code: the old one dies immediately (safer; the station explains a stale email instead of accepting it)
+export async function pickupResendCode(id: string, channel: 'email' | 'sms'): Promise<PickupContext> {
+  const o = getSO(id); const c = byId(fx.clients, o.clientId); const a = actor(); const now = new Date().toISOString();
+  const gen = (o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0)) + 1;
+  if (o.pickupCode) { o.pickupCodeHistory = [...(o.pickupCodeHistory ?? []).filter((h) => h.code !== o.pickupCode), { code: o.pickupCode, generation: gen - 1, issuedAt: o.pickupCodeIssuedAt ?? now, replacedAt: now, replacedVia: channel }]; }
+  issuePickupCode(o); o.pickupCodeGeneration = gen;
+  const text = `RolliWorks pickup code for ${o.number}: ${o.pickupCode}. Show this message or the QR at the counter. Earlier codes no longer work.`;
+  let to = c.email; let smsId: string | undefined;
+  if (channel === 'email') soEmail(o, 'Your new pickup code', `${text}\n\nQR payload: RSPU:${o.number}:${o.pickupCode}`);
+  else { const r = sendSms(c.phone, text); if (r.status === 'failed') throw new Error('No usable mobile number on file — send by email'); to = r.maskedTo; smsId = r.id; queueOutbox({ id: `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.phone, toName: fullNameOf(c), relatedRef: o.number, status: 'pending', subject: `SMS → ${r.maskedTo} — ${o.number} (vonage-mock ${r.id})`, body: text, createdAt: now, createdBy: a.by, station: a.station }); }
+  o.pickupResends = [...(o.pickupResends ?? []), { at: now, by: a.by, channel, to: channel === 'email' ? to.replace(/^(.{2}).*(@.*)$/, '$1•••$2') : to, generation: gen, smsId }];
+  soStamp(o, `Step 3 · code rotated → generation ${gen} · ${channel.toUpperCase()} to ${o.pickupResends[o.pickupResends.length - 1].to}${smsId ? ` · ${smsId}` : ''} · previous code void`); soTotals(o);
+  return resolve(pickupCtx(o));
+}
+// QR payload = RSPU:<SO>:<code> (also accepts the bare code). Same rotation-aware check for scanned, typed and simulated input.
+export async function pickupVerifyCode(id: string, raw: string, via: 'qr_scan' | 'code'): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o);
+  const payload = raw.trim(); const m = /^RSPU:([^:]+):(.+)$/i.exec(payload);
+  if (m && normPickupCode(m[1]) !== normPickupCode(o.number)) { soStamp(o, `Step 3 · verify FAILED · ${via} · QR belongs to ${m[1]}`); throw new Error(`That QR is for ${m[1]}, not ${o.number}`); }
+  const code = normPickupCode(m ? m[2] : payload);
+  if (!code) throw new Error('Scan or type the code');
+  if (!o.pickupCode) throw new Error('No code on record — resend one or use proxy verification');
+  if (normPickupCode(o.pickupCode) === code) { d.verify = { method: via, at: new Date().toISOString(), codeUsed: o.pickupCode }; soStamp(o, `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL[via]} · generation ${o.pickupCodeGeneration ?? 1}`); return resolve(pickupCtx(o)); }
+  const old = (o.pickupCodeHistory ?? []).find((h) => normPickupCode(h.code) === code);
+  soStamp(o, `Step 3 · verify FAILED · ${via} · ${old ? `stale code (generation ${old.generation})` : 'no match'}`);
+  if (old) throw new Error(`That code was replaced on ${new Date(old.replacedAt ?? old.issuedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} (generation ${old.generation} of ${o.pickupCodeGeneration ?? 1}) — ask the client for the newest message, or resend`);
+  throw new Error('Code does not match this order');
+}
+// Proxy = weakest path (no client-side proof): name + government ID photo + a manager's approval, all on the record
+export async function pickupVerifyProxy(id: string, proxyName: string, idPhoto: PackagePhoto | undefined, approval: ManagerApprovalInput): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o);
+  if (!proxyName.trim()) throw new Error('Proxy full name is required'); if (!idPhoto) throw new Error('Photograph the proxy’s government ID');
+  const ap = approveAsManager(approval);
+  d.verify = { method: 'proxy', at: new Date().toISOString(), proxyName: proxyName.trim(), proxyIdPhoto: idPhoto, proxyApproval: ap };
+  soStamp(o, `Step 3 · proxy release approved by ${ap.by} · ${proxyName.trim()} · ID photographed · ${ap.reason}`); return resolve(pickupCtx(o));
+}
+// Reverse QR: the STATION shows a QR; the client's phone opens /rc/pickup/<token> and taps Confirm. Single-use, 10 min, bound to this SO + station.
+export async function pickupIssueReverseQr(id: string): Promise<PickupContext> {
+  const o = getSO(id); pickupDraftOf(o); const a = actor(); const now = Date.now();
+  o.reverseQr = { token: `rq-${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + REVERSE_QR_TTL_MS).toISOString(), station: a.station };
+  soStamp(o, `Step 3 · reverse-QR token issued · expires ${new Date(now + REVERSE_QR_TTL_MS).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · bound to ${a.station}`); return resolve(pickupCtx(o));
+}
+export interface PortalPickupConfirm { soNumber: string; clientFirstName: string; watchLabel: string; station: string; expiresAt: string; shop: string; state: 'open' | 'confirmed' | 'declined' | 'expired' | 'used' }
+const soByReverseToken = (token: string) => { const o = store.salesOrders.find((x) => x.reverseQr?.token === token); if (!o?.reverseQr) throw new Error('This pickup link is not valid'); return o; };
+export async function portalGetPickupConfirm(token: string): Promise<PortalPickupConfirm> {
+  const o = soByReverseToken(token); const r = o.reverseQr!; const c = byId(fx.clients, o.clientId); const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; const w = j ? store.watches.find((x) => x.id === j.watchId) : undefined;
+  const state: PortalPickupConfirm['state'] = r.confirmedAt ? 'confirmed' : r.declinedAt ? 'declined' : r.usedAt ? 'used' : new Date(r.expiresAt).getTime() < Date.now() ? 'expired' : 'open';
+  return resolve({ soNumber: o.number, clientFirstName: c.firstName, watchLabel: w ? `${w.brand} ${w.model}` : 'your watch', station: r.station, expiresAt: r.expiresAt, shop: 'RolliWorks · Luxury Watch Service', state });
+}
+export async function portalConfirmPickup(token: string): Promise<PortalPickupConfirm> {
+  const o = soByReverseToken(token); const r = o.reverseQr!;
+  if (r.usedAt) throw new Error('This link was already used'); if (new Date(r.expiresAt).getTime() < Date.now()) throw new Error('This link expired — ask the counter to show a new QR');
+  const now = new Date().toISOString(); r.usedAt = now; r.confirmedAt = now;
+  if (o.pickupDraft) o.pickupDraft.verify = { method: 'reverse_qr', at: now, reverseToken: token };
+  await asClient(o.clientId, async () => { soStamp(o, `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL.reverse_qr} · client confirmed on their phone`); });
+  emitPickup(o.id, 'reverse_confirmed'); return portalGetPickupConfirm(token);
+}
+export async function portalDeclinePickup(token: string): Promise<PortalPickupConfirm> {
+  const o = soByReverseToken(token); const r = o.reverseQr!; if (r.usedAt) throw new Error('This link was already used');
+  const now = new Date().toISOString(); r.usedAt = now; r.declinedAt = now;
+  await asClient(o.clientId, async () => { soStamp(o, 'Step 3 · CLIENT DECLINED the reverse-QR confirmation — stop the hand-over'); });
+  upsertSystemPin(`pickup-declined:${o.id}`, { title: `Client declined pickup confirmation · ${o.number}`, subtitle: 'Someone at the counter tried to collect; the account holder said "not me"', assignedTo: MH_ASSIGNEE, priority: 'high', link: `/sales/${o.id}` });
+  emitPickup(o.id, 'reverse_declined'); return portalGetPickupConfirm(token);
+}
+// Step 4 — both crops → serial OCR (Claude when the photos are real; MOCK when either is a placeholder or the model is down) → three-way compare
+export async function pickupCheckSerial(id: string, intakePhoto: PackagePhoto, handbackPhoto: PackagePhoto): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); const record = normSerial(pickupCtx(o).recordSerial);
+  d.intakePhoto = intakePhoto; d.handbackPhoto = handbackPhoto; d.serialCheck = undefined;
+  let source: PickupSerialCheck['source'] = 'claude'; let intake: PickupSerialCheck['intake']; let handback: PickupSerialCheck['handback'];
+  const mock = () => { source = 'mock'; const scramble = record ? record.slice(0, 5) + (record[5] === '7' ? '1' : '7') + record.slice(6) : 'UNKNOWN'; intake = { value: record || null, confidence: record ? 0.93 : null }; handback = o.pickupDemo === 'serial_mismatch' ? { value: scramble, confidence: 0.91 } : o.pickupDemo === 'serial_unreadable' ? { value: null, confidence: 0.31 } : { value: record || null, confidence: record ? 0.9 : null }; };
+  if (isPlaceholderPhoto(intakePhoto.dataUrl) || isPlaceholderPhoto(handbackPhoto.dataUrl)) mock();
+  else { try { const r = await readSerials(intakePhoto.dataUrl, handbackPhoto.dataUrl); intake = { value: normSerial(r.intake.serial) || null, confidence: r.intake.confidence }; handback = { value: normSerial(r.handback.serial) || null, confidence: r.handback.confidence }; } catch { mock(); } }
+  const low = (x: PickupSerialCheck['intake']) => !x.value || (x.confidence ?? 0) < 0.6;
+  let result: PickupSerialCheck['result'] = 'match'; let failedPair: PickupSerialCheck['failedPair'];
+  if (low(intake!) || low(handback!)) result = 'unreadable';
+  else if (record && handback!.value !== record) { result = 'mismatch'; failedPair = 'handback_vs_record'; }
+  else if (record && intake!.value !== record) { result = 'mismatch'; failedPair = 'intake_vs_record'; }
+  else if (intake!.value !== handback!.value) { result = 'mismatch'; failedPair = 'intake_vs_handback'; }
+  d.serialCheck = { record, intake: intake!, handback: handback!, result, failedPair, source, at: new Date().toISOString() };
+  soStamp(o, `Step 4 · serial check ${result.toUpperCase()}${failedPair ? ` (${failedPair.replace(/_/g, ' ')})` : ''} · intake ${intake!.value ?? '—'} · hand-back ${handback!.value ?? '—'} · record ${record || '—'} · ${source === 'claude' ? 'Claude vision' : 'MOCK'}`);
+  return resolve(pickupCtx(o));
+}
+export async function pickupOverrideSerial(id: string, approval: ManagerApprovalInput): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); if (!d.serialCheck) throw new Error('Run the serial check first'); if (d.serialCheck.result === 'match') throw new Error('Nothing to override — serials match');
+  const ap = approveAsManager(approval); d.serialCheck.override = ap; soStamp(o, `Step 4 · serial ${d.serialCheck.result} OVERRIDDEN by ${ap.by} · ${ap.reason}`); return resolve(pickupCtx(o));
+}
+// Dev-only helper so "Simulate scan" exercises the exact same verify path as a real decode (the UI hides it outside dev builds)
+export async function pickupDevQrPayload(id: string): Promise<string> { if (!import.meta.env.DEV) throw new Error('Not available'); const o = getSO(id); return resolve(o.pickupCode ? `RSPU:${o.number}:${o.pickupCode}` : ''); }
+
+export const pickupSummaryLine = (s: PickupSession, clientName?: string): string => {
+  const who = s.proxyName ? `proxy ${s.proxyName}` : clientName ?? 'client';
+  const via = s.adminOverride ? 'ADMIN MARK' : s.verifyMethod ? PICKUP_VERIFY_LABEL[s.verifyMethod] : s.codeUsed ? 'code' : 'proxy';
+  const serial = s.serialCheck ? (s.serialCheck.override ? `serial ${s.serialCheck.result} — overridden by ${s.serialCheck.override.by}` : `serial ${s.serialCheck.result}${s.serialCheck.source === 'mock' ? ' (MOCK)' : ''}`) : null;
+  const ev = s.evidenceStatus === 'bypassed' ? 'released without camera evidence' : s.evidenceStatus ? `evidence ${s.frames?.length ?? 0}/${s.framesExpected ?? PICKUP_FRAMES}${s.evidenceStatus === 'pending' ? ' pending' : s.evidenceStatus === 'incomplete' ? ' INCOMPLETE' : ''}` : null;
+  return ['Released to ' + who, `via ${via}`, serial, s.paymentBypass ? `PAYMENT BYPASS ${s.paymentBypass.by}` : null, ev].filter(Boolean).join(' · ');
+};
+export interface ConfirmPickupInput { firstFrame?: PackagePhoto; cameraBypass?: ManagerApprovalInput; lineQty?: Record<string, number> }
+// Step 5 — commit. "Done" needs frame 1 from the client camera (or a manager-approved camera bypass); frames 2–6 keep arriving over the next 60 s.
+export async function confirmPickup(id: string, input: ConfirmPickupInput = {}): Promise<SalesOrderWithRefs> {
+  const o = getSO(id);
+  if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not in the pickup queue');
+  if (o.channel === 'ship' && o.shippingAddress) throw new Error('Order has outbound ship products — send staff to Ship Station');
+  const d = pickupDraftOf(o); const blockers = pickupBlockers(o); if (blockers.length) throw new Error(blockers[0]);
+  const cameraBypass = input.cameraBypass ? approveAsManager(input.cameraBypass) : undefined;
+  if (!input.firstFrame && !cameraBypass) throw new Error('Client camera: the first frame is required before Done — check the camera or have a manager approve a camera bypass');
+  const a = actor(); const now = new Date().toISOString(); const lineQty = input.lineQty ?? {};
   o.lines.forEach((l) => { l.pickedUpQty = Math.min(l.qty, l.pickedUpQty + (lineQty[l.id] ?? l.qty - l.pickedUpQty)); });
   const fully = o.lines.every((l) => l.pickedUpQty >= l.qty);
-  o.pickupSession = { id: newId('pks'), codeUsed: codeOk ? o.pickupCode : undefined, proxyName: input.proxyName?.trim() || undefined, proxyIdPhoto: input.proxyIdPhoto, photos: input.photos, lineQty, bypassReason: input.bypassReason?.trim() || undefined, at: new Date().toISOString(), by: a.by, station: a.station };
-  o.channel = 'pickup';
-  if (codeOk) o.pickupCode = undefined; // consumed
-  if (fully) { o.status = 'picked_up'; o.pickedUpAt = o.pickupSession.at; if (!o.fulfilledAt) o.fulfilledAt = o.pickedUpAt; } else o.status = 'partial_fulfilled';
+  const frames: PickupFrame[] = input.firstFrame ? [{ id: newId('pf'), seq: 1, at: now, dataUrl: input.firstFrame.dataUrl, cameraRole: 'client', station: a.station }] : [];
+  const plus = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+  o.pickupSession = { id: newId('pks'), at: now, by: a.by, station: a.station, codeUsed: d.verify!.codeUsed, proxyName: d.verify!.proxyName, proxyIdPhoto: d.verify!.proxyIdPhoto, proxyApproval: d.verify!.proxyApproval, verifyMethod: d.verify!.method, itemConfirmed: d.itemConfirmed, intakePhoto: d.intakePhoto, handbackPhoto: d.handbackPhoto, photos: d.handbackPhoto ? [d.handbackPhoto] : [], serialCheck: d.serialCheck, paymentBypass: d.paymentBypass, bypassReason: d.paymentBypass?.reason, cameraBypass, lineQty, frames, framesExpected: PICKUP_FRAMES, evidenceStatus: cameraBypass ? 'bypassed' : 'pending', evidenceStartedAt: cameraBypass ? undefined : now, retention: { framesUntil: plus(PICKUP_RETENTION.framesDays), idPhotoUntil: d.verify!.proxyIdPhoto ? plus(PICKUP_RETENTION.idPhotoDays) : undefined, policy: PICKUP_RETENTION.policy }, codeGeneration: o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0) };
+  o.channel = 'pickup'; o.pickupCode = undefined; o.pickupDraft = undefined; o.reverseQr = undefined;
+  if (fully) { o.status = 'picked_up'; o.pickedUpAt = now; if (!o.fulfilledAt) o.fulfilledAt = now; } else o.status = 'partial_fulfilled';
   soTotals(o);
-  if (o.pickupSession.bypassReason) logBypass({ kind: 'payment_release', orderId: o.id, jobNumber: o.number, reason: o.pickupSession.bypassReason, context: { invoiceAmount: o.total, minutesSincePayment: minutesSincePayment(o), detail: 'released at pickup station' } });
-  soStamp(o, `${fully ? 'Picked up' : 'Partial pickup'} · ${codeOk ? 'code verified' : `proxy ${input.proxyName} (ID photo)`}${o.pickupSession.bypassReason ? ` · PAYMENT BYPASS: ${o.pickupSession.bypassReason}` : ''}`);
-  if (fully) closeCustody(o, 'Picked up at counter');
+  if (o.pickupSession.paymentBypass) logBypass({ kind: 'payment_release', orderId: o.id, jobNumber: o.number, reason: `${o.pickupSession.paymentBypass.reason} · approved by ${o.pickupSession.paymentBypass.by}`, context: { invoiceAmount: o.total, minutesSincePayment: minutesSincePayment(o), detail: `released at pickup station · ${fmtMoney(o.pickupSession.paymentBypass.amount)} outstanding` } });
+  if (cameraBypass) logBypass({ kind: 'pickup_camera', orderId: o.id, jobNumber: o.number, reason: `${cameraBypass.reason} · approved by ${cameraBypass.by}`, context: { detail: 'released without client-camera evidence' } });
+  const summary = pickupSummaryLine(o.pickupSession, fullNameOf(byId(fx.clients, o.clientId)));
+  soStamp(o, `${fully ? 'PICKED UP' : 'Partial pickup'} · ${summary}`);
+  if (fully) closeCustody(o, summary);
   soEmail(o, fully ? 'Thank you — your watch is home' : 'Partial pickup recorded', fully ? 'Your watch was handed back at the counter today. Thank you for trusting us with it.' : 'Part of your order was collected today; the remaining items will be ready shortly.');
+  resolveSystemPin(`pickup-item:${o.id}`, 'pickup completed');
   return resolve(soRefs(o));
 }
-
+// Frames 2..6 arrive from the client camera after Done; 6/6 flips the record to complete
+export async function pickupAppendFrame(id: string, dataUrl: string): Promise<PickupSession> {
+  const o = getSO(id); const s = o.pickupSession; if (!s?.frames || s.evidenceStatus !== 'pending') throw new Error('No evidence capture open on this order');
+  const a = actor(); s.frames.push({ id: newId('pf'), seq: s.frames.length + 1, at: new Date().toISOString(), dataUrl, cameraRole: 'client', station: a.station });
+  if (s.frames.length >= (s.framesExpected ?? PICKUP_FRAMES)) { s.evidenceStatus = 'complete'; s.evidenceCompletedAt = new Date().toISOString(); soStamp(o, `Evidence complete · ${s.frames.length}/${s.framesExpected} frames · client camera`); if (o.jobId) jobStamp(byId(store.jobs, o.jobId), `Pickup evidence complete · ${s.frames.length}/${s.framesExpected} frames · ${o.number}`); resolveSystemPin(`pickup-evidence:${o.id}`, 'frames completed'); emitPickup(o.id, 'evidence'); }
+  else emitPickup(o.id, 'frame');
+  return resolve(s);
+}
+// Dead USB camera / closed tab → the strip never finishes. 90 s after Done the record is flagged and MH gets a Hitlist pin (ruling: a message is fine, cams are flaky).
+export const pickupEvidenceSweep = (): number => {
+  let n = 0;
+  for (const o of store.salesOrders) {
+    const s = o.pickupSession; if (!s || s.evidenceStatus !== 'pending' || !s.evidenceStartedAt) continue;
+    if (Date.now() - new Date(s.evidenceStartedAt).getTime() < PICKUP_EVIDENCE_TIMEOUT_MS) continue;
+    s.evidenceStatus = 'incomplete'; s.evidenceFlaggedAt = new Date().toISOString(); n++;
+    appendAudit({ type: 'sales', stationName: s.station, userShortName: undefined, detail: `${o.number} · Pickup evidence INCOMPLETE · ${s.frames?.length ?? 0}/${s.framesExpected ?? PICKUP_FRAMES} frames after ${PICKUP_EVIDENCE_TIMEOUT_MS / 1000}s · flagged to MH` });
+    upsertSystemPin(`pickup-evidence:${o.id}`, { title: `Pickup evidence incomplete · ${o.number} · ${s.frames?.length ?? 0}/${s.framesExpected ?? PICKUP_FRAMES} frames`, subtitle: `Client camera stopped early at ${s.station} — review the pickup session`, assignedTo: MH_ASSIGNEE, priority: 'high', standing: true, link: `/sales/${o.id}` });
+    emitPickup(o.id, 'evidence');
+  }
+  return n;
+};
+// Job timeline + any other reader derive the release line LIVE from the session (frames keep arriving after the close transition was written)
+export const jobReleaseLineSync = (jobId: string): { text: string; soId: string; soNumber: string } | undefined => { const o = store.salesOrders.find((x) => x.jobId === jobId && x.pickupSession); return o?.pickupSession ? { text: pickupSummaryLine(o.pickupSession, clientName(o.clientId)), soId: o.id, soNumber: o.number } : undefined; };
+export async function getPickupSession(id: string): Promise<PickupSession | undefined> { pickupEvidenceSweep(); return resolve(getSO(id).pickupSession); }
+export async function getOpenEvidenceCaptures(): Promise<{ order: SalesOrderWithRefs; session: PickupSession }[]> { pickupEvidenceSweep(); return resolve(store.salesOrders.filter((o) => o.pickupSession?.evidenceStatus === 'pending').map((o) => ({ order: soRefs(o), session: o.pickupSession! }))); }
 // Admin overrides (pack: allowed with an audit log; privileged roles) — manager tier
 export async function adminMarkComplete(id: string, mode: FulfillmentChannel, note: string): Promise<SalesOrderWithRefs> {
   const o = getSO(id);
@@ -2314,7 +2521,7 @@ const closeCustody = (o: SalesOrder, why: string) => {
   if (!o.jobId) return;
   const j = store.jobs.find((x) => x.id === o.jobId);
   if (!j || j.status === 'closed') return;
-  if (j.status === 'ready_to_ship') pushTransition(j, 'close', 'closed');
+  if (j.status === 'ready_to_ship') pushTransition(j, 'close', 'closed', why); // the reason IS the hand-over summary — one record, shown on the job timeline
   jobStamp(j, `Custody closed · ${why} · ${o.number}`);
 };
 
@@ -2651,7 +2858,7 @@ const custodyOf = (clientId: string): CustodyEvent[] => {
   store.salesOrders.filter((o) => o.clientId === clientId).forEach((o) => {
     const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) : undefined;
     if (o.shipment) out.push({ id: `cu-${o.id}-ship`, kind: 'shipped', at: o.shipment.at, by: o.shipment.by, station: o.shipment.station, detail: `${watchLabel(job?.watchId)} shipped · ${o.shipment.service} · ${o.shipment.tracking}`, salesOrderId: o.id, jobId: job?.id, watchId: job?.watchId, hitKey: `so-${o.id}`, path: `/sales/${o.id}` });
-    if (o.pickupSession) out.push({ id: `cu-${o.id}-pu`, kind: 'picked_up', at: o.pickupSession.at, by: o.pickupSession.by, station: o.pickupSession.station, detail: `${watchLabel(job?.watchId)} released at pickup${o.pickupSession.proxyName ? ` to ${o.pickupSession.proxyName}` : ''}${o.pickupSession.codeUsed ? ` · code ${o.pickupSession.codeUsed}` : ''}`, salesOrderId: o.id, jobId: job?.id, watchId: job?.watchId, hitKey: `so-${o.id}`, path: `/sales/${o.id}` });
+    if (o.pickupSession) out.push({ id: `cu-${o.id}-pu`, kind: 'picked_up', at: o.pickupSession.at, by: o.pickupSession.by, station: o.pickupSession.station, detail: `${watchLabel(job?.watchId)} · ${pickupSummaryLine(o.pickupSession, clientName(o.clientId))}`, salesOrderId: o.id, jobId: job?.id, watchId: job?.watchId, hitKey: `so-${o.id}`, path: `/sales/${o.id}` });
   });
   return out.sort((a, b) => b.at.localeCompare(a.at));
 };
@@ -4470,7 +4677,7 @@ export async function getCustodyByPerson(): Promise<CustodyByPerson[]> {
   return resolve([...groups.entries()].map(([tech, items]) => ({ tech, name: tech.startsWith('vendor:') ? `At vendor: ${rs.vendors.find((v) => v.id === tech.slice(7))?.name ?? tech.slice(7)}` : HOLDER_NAME[tech] ?? fx.users.find((u) => u.shortName === tech)?.displayName.split(' — ')[0] ?? tech, items: items.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber)) })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)));
 }
 // ---- MH HITLIST — owner accountability: client asset $ on premises + every bypass use (visibility feed, not a gate) ----
-export type BypassKind = 'receiving_camera' | 'payment_release' | 'other';
+export type BypassKind = 'receiving_camera' | 'payment_release' | 'pickup_camera' | 'other';
 export interface BypassEvent { id: string; kind: BypassKind; by: string; station: string; at: string; jobNumber?: string; orderId?: string; reason: string; context: { invoiceAmount?: number; minutesSincePayment?: number; detail?: string } }
 const hAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const bypasses: BypassEvent[] = [

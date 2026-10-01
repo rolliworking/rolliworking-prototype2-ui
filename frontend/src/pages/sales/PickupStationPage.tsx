@@ -1,21 +1,22 @@
 import clsx from 'clsx';
-import { Camera, Check, KeyRound, Search, UserRound } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Check, KeyRound, Search, Settings2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import * as il from '@/api/inspectionLabels';
-import { SpecimenBanner } from '@/components/inspection/OpinionCard';
-import type { PackagePhoto, SalesOrderWithRefs } from '@/api/client';
-import { Provisional } from '@/components/estimates/EstimateBits';
-import { PhotoCapture } from '@/components/intake/ReceiveBits';
-import { MoneyStrip, PaymentModal, SOBadge, SOLinesTable, SalesSubNav } from '@/components/sales/SalesBits';
+import type { PickupContext, SalesOrderWithRefs } from '@/api/client';
+import { SOBadge, SalesSubNav } from '@/components/sales/SalesBits';
+import { EvidenceStrip, useEvidenceCapture } from '@/components/sales/pickup/EvidenceStrip';
+import { CameraSettings } from '@/components/sales/pickup/PickupBits';
+import { StepInvoice, StepItem } from '@/components/sales/pickup/StepsEarly';
+import { StepComplete, StepPhotos } from '@/components/sales/pickup/StepsLate';
+import { StepVerify } from '@/components/sales/pickup/StepVerify';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
 import { fmtMoneyCents, fullName } from '@/lib/format';
 
 const STEPS = ['customer', 'invoice', 'verify', 'photos', 'complete'] as const;
-const field = 'h-8 rounded-sm border border-line bg-canvas px-2 text-[13px] focus:border-ink focus:outline-none';
+const GATES = ['Item confirmed', 'Balance cleared', 'Identity verified', 'Serial verified', 'First frame'] as const;
 
 export const Stepper = ({ steps, current, testId }: { steps: readonly string[]; current: number; testId: string }) => (
   <ol data-testid={testId} className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
@@ -23,107 +24,92 @@ export const Stepper = ({ steps, current, testId }: { steps: readonly string[]; 
   </ol>
 );
 
+// Right rail: what this order is + which gates are open — derived from the same draft confirmPickup() validates
+const GateRail = ({ ctx }: { ctx: PickupContext }) => {
+  const o = ctx.order; const d = ctx.draft;
+  const state = [!!d?.itemConfirmed, o.balanceDue <= 0 || !!d?.paymentBypass, !!d?.verify && (d.verify.method !== 'proxy' || !!d.verify.proxyApproval), !!d?.serialCheck && (d.serialCheck.result === 'match' || !!d.serialCheck.override), false];
+  return (
+    <Card title="Order" testId="pickup-side">
+      <dl className="grid grid-cols-[90px_1fr] gap-x-3 gap-y-1 text-xs"><dt className="text-ink-500">Status</dt><dd><StatusPill status={o.status} /></dd><dt className="text-ink-500">Balance</dt><dd data-testid="pickup-side-balance" className={clsx('tabular', o.balanceDue > 0 ? 'font-semibold text-rose-700' : 'text-moss-800')}>{fmtMoneyCents(o.balanceDue)}</dd><dt className="text-ink-500">Code</dt><dd className="font-mono">{o.pickupCode ? `••••-•• · gen ${ctx.codeGeneration}` : '—'}</dd>{o.pickupWindow && <><dt className="text-ink-500">Window</dt><dd data-testid="pickup-window">{new Date(o.pickupWindow.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {o.pickupWindow.slot}</dd></>}<dt className="text-ink-500">Detail</dt><dd><Link to={`/sales/${o.id}`} className="text-brand hover:underline">Open sales order</Link>{o.job && <> · <Link to={`/jobs/${o.job.id}`} className="font-mono text-brand hover:underline">{o.job.number}</Link></>}</dd></dl>
+      <ul data-testid="pickup-gates" className="mt-3 space-y-1 border-t border-line pt-2 text-xs">{GATES.map((g, i) => <li key={g} data-testid={`pickup-gate-${i + 1}`} data-ok={state[i]} className={clsx('inline-flex w-full items-center gap-1.5', state[i] ? 'text-moss-800' : 'text-ink-500')}>{state[i] ? <Check size={11} /> : <span className="inline-block h-[11px] w-[11px] rounded-full border border-ink-300" />} {i + 1}. {g}</li>)}</ul>
+      {ctx.aborts.length > 0 && <div data-testid="pickup-side-aborts" className="mt-2 border-t border-line pt-2 text-[11px] text-rose-700">Stopped before: {ctx.aborts.map((a) => `${a.step} (${a.by})`).join(' · ')}</div>}
+    </Card>
+  );
+};
+
 export default function PickupStationPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [queue, setQueue] = useState<SalesOrderWithRefs[]>([]);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<SalesOrderWithRefs[]>([]);
-  const [order, setOrder] = useState<SalesOrderWithRefs | null>(null);
+  const [ctx, setCtx] = useState<PickupContext | null>(null);
   const [step, setStep] = useState(0);
-  const [code, setCode] = useState('');
-  const [proxyName, setProxy] = useState('');
-  const [proxyId, setProxyId] = useState<PackagePhoto | undefined>();
-  const [photos, setPhotos] = useState<PackagePhoto[]>([]);
-  const [bypass, setBypass] = useState('');
-  const [pay, setPay] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<SalesOrderWithRefs | null>(null);
+  const [cams, setCams] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const evidence = useEvidenceCapture();
 
-  const reload = () => api.getPickupQueue().then(setQueue);
-  useEffect(() => { void reload(); searchRef.current?.focus(); }, []);
-  useEffect(() => { const so = params.get('so'); if (so) api.getSalesOrder(so).then((o) => { if (o) { setOrder(o); setStep(1); } }); }, [params]);
+  const reload = useCallback(() => api.getPickupQueue().then(setQueue), []);
+  useEffect(() => { void reload(); searchRef.current?.focus(); }, [reload]);
   useEffect(() => { if (!q.trim()) return setHits([]); const t = setTimeout(() => api.findSalesOrders(q).then((r) => setHits(r.filter((o) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)))), 120); return () => clearTimeout(t); }, [q]);
-
-  const pick = (o: SalesOrderWithRefs) => { setOrder(o); setStep(1); setError(null); if (o.channel === 'ship' && o.shippingAddress) setError('Order has outbound ship products — send staff to Ship Station'); };
-  const refreshOrder = async () => { if (order) setOrder(await api.getSalesOrder(order.id)); };
-  const verified = !!code.trim() || (!!proxyName.trim() && !!proxyId);
-
-  const complete = async () => {
-    if (!order) return;
-    try {
-      const r = await api.confirmPickup(order.id, { code: code || undefined, proxyName: proxyName || undefined, proxyIdPhoto: proxyId, photos, bypassReason: bypass || undefined });
-      setDone(r); setStep(4); await reload();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-  };
-  const reset = () => { setOrder(null); setStep(0); setCode(''); setProxy(''); setProxyId(undefined); setPhotos([]); setBypass(''); setDone(null); setError(null); navigate('/sales/pickup'); searchRef.current?.focus(); };
+  const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Failed');
+  const pick = useCallback((o: SalesOrderWithRefs) => { setError(null); api.pickupStart(o.id).then((c) => { setCtx(c); setStep(1); }).catch(fail); }, []);
+  useEffect(() => { const so = params.get('so'); if (so && !ctx) api.getSalesOrder(so).then((o) => o && pick(o)).catch(fail); }, [params, ctx, pick]);
+  const refresh = (c: PickupContext) => { setCtx(c); setError(null); };
+  const reset = () => { setCtx(null); setStep(0); setDone(null); setError(null); setQ(''); navigate('/sales/pickup'); void reload(); setTimeout(() => searchRef.current?.focus(), 50); };
+  const stopped = () => { setError(null); reset(); };
+  const go = (n: number) => () => { setError(null); setStep(n); };
+  const stepProps = ctx ? { ctx, refresh, onStopped: stopped, fail } : null;
 
   return (
-    <div data-testid="pickup-station-page" className="space-y-4">
+    <div data-testid="pickup-station-page" className="space-y-4 pb-16">
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-ink">Pickup Station</h1>
-          <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-ink-500">customer → invoice → verify → photos → complete · signature-free (locked decision) · custody closes on complete</p>
+          <p className="mt-0.5 text-xs text-ink-500">item → invoice → verify → photos → complete · every gate is enforced where the release is committed · signature-free (locked) · custody closes on Done</p>
         </div>
-        <SalesSubNav />
+        <div className="flex items-center gap-2">{ctx && !done && <Button size="sm" data-testid="pickup-leave" onClick={reset} title="Leave this pickup — the steps already done stay on the order; nothing is released"><X size={12} /> Leave · back to queue</Button>}<Button size="sm" data-testid="pickup-camera-settings-btn" onClick={() => setCams(true)}><Settings2 size={12} /> Cameras</Button><SalesSubNav /></div>
       </div>
-      <Stepper steps={STEPS} current={step} testId="pickup-steps" />
-      {error && <div data-testid="pickup-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
+      <Stepper steps={STEPS} current={done ? 5 : Math.max(0, step - 1)} testId="pickup-steps" />
+      {error && <div data-testid="pickup-error" className="flex items-start justify-between gap-2 rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700"><span>{error}</span><button type="button" aria-label="Dismiss" onClick={() => setError(null)}><X size={12} /></button></div>}
 
-      {step === 0 && (
-        <div className="grid grid-cols-[1fr_380px] gap-4">
+      {step === 0 && !done && (
+        <div className="grid grid-cols-[1fr_400px] gap-4">
           <Card title="Customer" subtitle="Scan or type: name, SO #, estimate #, job #, pickup code" testId="pickup-customer-card">
             <label className="relative block"><Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-400" /><input ref={searchRef} data-testid="pickup-search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && hits[0] && pick(hits[0])} placeholder="Start typing…" className="h-9 w-full rounded-sm border border-line bg-surface pl-7 pr-2 text-[14px] focus:border-ink focus:outline-none" /></label>
             <ul className="mt-2 divide-y divide-line/70">{hits.map((o) => <li key={o.id}><button type="button" data-testid={`pickup-hit-${o.id}`} onClick={() => pick(o)} className="flex w-full items-center gap-3 px-1 py-2 text-left text-[13px] hover:bg-canvas"><span className="font-mono text-xs font-medium">{o.number}</span><span className="font-medium text-ink">{fullName(o.client)}</span>{o.job && <span className="font-mono text-xs text-ink-400">{o.job.number}</span>}<StatusPill status={o.status} /><SOBadge order={o} /><span className="ml-auto tabular text-xs text-ink-500">{fmtMoneyCents(o.balanceDue)} due</span></button></li>)}</ul>
           </Card>
           <Card title="Ready queue" subtitle={`${queue.length} orders open / fulfilled, not routed to ship`} testId="pickup-queue" bodyClassName="p-0">
-            <ul className="divide-y divide-line/70">{queue.map((o) => <li key={o.id}><button type="button" data-testid={`pickup-queue-${o.id}`} onClick={() => pick(o)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-canvas"><span className="font-mono font-medium">{o.number}</span><span className="truncate text-ink-700">{fullName(o.client)}</span>{o.pickupCode && <span className="font-mono text-ink-400"><KeyRound size={10} className="mr-0.5 inline" />{o.pickupCode}</span>}<span className="ml-auto"><SOBadge order={o} /></span></button></li>)}</ul>
+            <ul className="divide-y divide-line/70">{queue.map((o) => <li key={o.id}><button type="button" data-testid={`pickup-queue-${o.id}`} onClick={() => pick(o)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-canvas"><span className="font-mono font-medium">{o.number}</span><span className="truncate text-ink-700">{fullName(o.client)}</span>{o.pickupCode && <span className="font-mono text-ink-400" title="code on record"><KeyRound size={10} className="mr-0.5 inline" />gen {o.pickupCodeGeneration ?? 1}</span>}{o.balanceDue > 0 && <span className="tabular text-rose-700">{fmtMoneyCents(o.balanceDue)} due</span>}<span className="ml-auto"><SOBadge order={o} /></span></button></li>)}</ul>
           </Card>
         </div>
       )}
 
-      {order && step >= 1 && step <= 3 && (
-        <div className="grid grid-cols-[1fr_380px] gap-4">
+      {stepProps && ctx && step >= 1 && step <= 5 && !done && (
+        <div className="grid grid-cols-[1fr_320px] gap-4">
           <div className="space-y-4">
-            <Card title={`Invoice · ${order.number}`} subtitle={`${fullName(order.client)}${order.job ? ` · job ${order.job.number}` : ''}${order.watch ? ` · ${order.watch.brand} ${order.watch.model}` : ''}`} testId="pickup-invoice-card" bodyClassName="p-0">
-              <SOLinesTable order={order} showFulfil />
-              <div className="p-4"><MoneyStrip order={order} />
-                {!order.qboInvoiceId && <p className="mt-2 inline-flex items-center gap-1 text-xs text-amber-800">Not fulfilled yet — no QBO invoice id <Provisional note="Pack: without an invoice id pickup may assume paid — UNKNOWN; we keep payment gated" /></p>}
-              </div>
-            </Card>
-            {step === 1 && <div className="flex items-center justify-between"><Button onClick={reset}>Back</Button><div className="flex gap-2">{order.balanceDue > 0 && <Button data-testid="pickup-take-payment" onClick={() => setPay(true)}>Record payment ({fmtMoneyCents(order.balanceDue)})</Button>}<Button variant="primary" data-testid="pickup-next-verify" onClick={() => setStep(2)}>Continue to verify →</Button></div></div>}
-            {step === 2 && (
-              <Card title="Verify identity" subtitle="Pickup code on the record, or a proxy: name + government ID photo" testId="pickup-verify-card">
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="text-xs text-ink-500">Pickup verification code<input data-testid="pickup-code" autoFocus value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="XXXX-XX" className={`${field} mt-1 block w-full font-mono text-[15px] tracking-wider`} /><span className="mt-1 block text-[11px] text-ink-400">{order.pickupCode ? 'A code was issued to the client by email.' : 'No code on record — use proxy verification or push to pickup first.'}</span></label>
-                  <div className="text-xs text-ink-500">Proxy (someone else collecting)<input data-testid="pickup-proxy-name" value={proxyName} onChange={(e) => setProxy(e.target.value)} placeholder="Proxy full name" className={`${field} mt-1 block w-full`} /><div className="mt-1.5">{proxyId ? <img src={proxyId.dataUrl} alt="ID" data-testid="pickup-proxy-id" className="h-16 rounded-sm ring-1 ring-line" /> : <PhotoCapture onAdd={(p) => setProxyId(p[0])} />}</div></div>
-                </div>
-                <div className="mt-3 flex items-center justify-between"><Button onClick={() => setStep(1)}>Back</Button><Button variant="primary" data-testid="pickup-next-photos" disabled={!verified} onClick={() => { const norm = (x: string) => x.toUpperCase().replace(/\s/g, ''); if (code.trim() && (!order.pickupCode || norm(code) !== norm(order.pickupCode))) { setError(order.pickupCode ? 'Pickup code does not match the record — check the email or use proxy verification' : 'No code on record — use proxy verification'); return; } setError(null); setStep(3); }}><UserRound size={13} /> Identity captured →</Button></div>
-              </Card>
-            )}
-            {step === 3 && (
-              <Card title="Hand-back photos" subtitle="Required to complete — watch + accessories as handed over" testId="pickup-photos-card">
-                <PhotoCapture onAdd={(p) => setPhotos((x) => [...x, ...p])} />
-                {photos.length > 0 && <div className="mt-2 flex gap-1.5" data-testid="pickup-photo-grid">{photos.map((p) => <img key={p.id} src={p.dataUrl} alt="hand-back" className="h-14 w-20 rounded-sm object-cover ring-1 ring-line" />)}</div>}
-                {order.balanceDue > 0 && <label className="mt-3 block text-xs text-rose-700">Balance due {fmtMoneyCents(order.balanceDue)} — payment bypass reason (logged)<input data-testid="pickup-bypass" value={bypass} onChange={(e) => setBypass(e.target.value)} placeholder="Why release unpaid" className={`${field} mt-1 block w-full`} /></label>}
-                {order.job && <div className="mt-3"><SpecimenBanner jobId={order.job.id} onChange={() => void refreshOrder()} /></div>}
-                <div className="mt-3 flex items-center justify-between"><Button onClick={() => setStep(2)}>Back</Button><Button variant="primary" data-testid="pickup-complete" disabled={photos.length === 0 || !!(order.job && il.pickupGate(order.job.id))} title={order.job && il.pickupGate(order.job.id) ? 'Specimen capture pending — complete the controlled shot list or have a manager waive' : undefined} onClick={complete}><Camera size={13} /> {order.job && il.pickupGate(order.job.id) ? 'Specimen capture pending' : 'Complete pickup'}</Button></div>
-              </Card>
-            )}
+            {step === 1 && <StepItem {...stepProps} onNext={go(2)} onBack={reset} />}
+            {step === 2 && <StepInvoice {...stepProps} onNext={go(3)} onBack={go(1)} />}
+            {step === 3 && <StepVerify {...stepProps} onNext={go(4)} onBack={go(2)} />}
+            {step === 4 && <StepPhotos {...stepProps} onNext={go(5)} onBack={go(3)} />}
+            {step === 5 && <StepComplete ctx={ctx} fail={fail} onBack={go(4)} onDone={(o, capturing) => { setDone(o); if (capturing) evidence.start(o); else evidence.reload(); void reload(); }} />}
           </div>
-          <Card title="Order" testId="pickup-side"><dl className="grid grid-cols-[90px_1fr] gap-x-3 gap-y-1 text-xs"><dt className="text-ink-500">Status</dt><dd><StatusPill status={order.status} /></dd><dt className="text-ink-500">Channel</dt><dd className="capitalize">{order.channel ?? '—'}</dd><dt className="text-ink-500">Code issued</dt><dd className="font-mono">{order.pickupCode ? '••••-••' : '—'}</dd>{order.pickupWindow && <><dt className="text-ink-500">Window</dt><dd data-testid="pickup-window">{new Date(order.pickupWindow.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {order.pickupWindow.slot}{order.pickupWindow.note && <span className="block text-ink-500">“{order.pickupWindow.note}”</span>}</dd></>}<dt className="text-ink-500">Detail</dt><dd><Link to={`/sales/${order.id}`} className="text-brand hover:underline">Open sales order</Link></dd></dl></Card>
+          <GateRail ctx={ctx} />
         </div>
       )}
 
-      {step === 4 && done && (
+      {done && (
         <Card accent="moss" title="Pickup complete" testId="pickup-done">
           <p className="text-[13px] text-ink">{done.number} · {fullName(done.client)} · <StatusPill status={done.status} testId="pickup-done-status" />{done.job && <> · job <Link to={`/jobs/${done.job.id}`} className="font-mono text-brand hover:underline">{done.job.number}</Link> closed, custody released</>}</p>
-          <p className="mt-1 text-xs text-ink-500">Code consumed · thank-you email recorded in Sent · audit stamped.</p>
+          {done.pickupSession && <p data-testid="pickup-done-summary" className="mt-1 text-xs text-ink-700">{api.pickupSummaryLine(done.pickupSession, fullName(done.client))}</p>}
+          <p className="mt-1 text-xs text-ink-500">{done.pickupSession?.evidenceStatus === 'bypassed' ? 'Released WITHOUT camera evidence (manager approved) · logged on the Hitlist.' : `Client camera is recording the hand-over strip in the background (${api.PICKUP_FRAMES} frames / ${api.PICKUP_FRAME_WINDOW_MS / 1000} s) — you can take the next customer.`} Code consumed · thank-you email recorded · <Link to={`/sales/${done.id}`} className="text-brand hover:underline">pickup session on the SO</Link>.</p>
           <Button variant="primary" className="mt-3" data-testid="pickup-reset" onClick={reset}>Next customer</Button>
         </Card>
       )}
-      {pay && order && <PaymentModal order={order} onClose={() => setPay(false)} onDone={async () => { setPay(false); await refreshOrder(); await reload(); }} />}
+      <EvidenceStrip captures={evidence.captures} reload={evidence.reload} />
+      {cams && <CameraSettings onClose={() => setCams(false)} />}
     </div>
   );
 }
