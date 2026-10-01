@@ -1,23 +1,31 @@
 import clsx from 'clsx';
 import { ChevronDown, ChevronRight, History } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
+import * as calls from '@/api/calls';
 import { LOOKUP_OPEN_EVENT } from '@/components/layout/CornerLookup';
 import { NAV_GROUPS, navForUser, type NavGroup, type NavItem } from '@/config/navigation';
 
 const rowCls = (active: boolean) => clsx('group relative flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-[13px] transition-colors duration-150', active ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06] hover:text-white');
 const childCls = ({ isActive }: { isActive: boolean }) => clsx('flex h-7 items-center gap-2 rounded-sm px-2 text-[12px]', isActive ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06] hover:text-white');
 
+// Missed-call badge on the Calls entry — open (uncleared) missed calls / voicemails
+const MissedBadge = ({ testId = 'nav-calls-missed', className = 'ml-auto' }: { testId?: string; className?: string }) => {
+  const [n, setN] = useState(() => calls.openMissedCountSync());
+  useEffect(() => calls.subscribeCalls(() => setN(calls.openMissedCountSync())), []);
+  return n > 0 ? <span data-testid={testId} title={`${n} missed call${n === 1 ? '' : 's'} waiting`} className={clsx('rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-4 text-white', className)}>{n}</span> : null;
+};
+
 // Expandable group: header is a page when the group has a path (Intake, Clients) or a plain folder (RW); children indent underneath.
 const Group = ({ g, items, pathname }: { g: NavGroup; items: NavItem[]; pathname: string }) => {
   const children = items.filter((i) => i.path !== g.path); const active = items.some((i) => pathname === i.path || pathname.startsWith(i.path + '/')); const [open, setOpen] = useState(active); const Icon = g.icon;
-  const inner = <><Icon size={15} strokeWidth={1.9} className="shrink-0 text-[#93a1b4] group-hover:text-white" /><span className="truncate">{g.label}</span><span className="ml-auto text-[10px] text-[#8b98aa]">{children.length}</span></>;
+  const inner = <><Icon size={15} strokeWidth={1.9} className="shrink-0 text-[#93a1b4] group-hover:text-white" /><span className="truncate">{g.label}</span>{!open && children.some((c) => c.key === 'calls') && <MissedBadge testId="nav-clients-missed" className="ml-auto" />}<span className={clsx('text-[10px] text-[#8b98aa]', open || !children.some((c) => c.key === 'calls') ? 'ml-auto' : 'ml-1')}>{children.length}</span></>;
   const toggle = <button type="button" data-testid={`nav-${g.key}-toggle`} aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${g.label}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }} className="grid h-6 w-6 place-items-center rounded-sm hover:bg-white/10">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>;
   return <li data-testid={`nav-${g.key}-group`}>
     {g.path ? <NavLink to={g.path} end data-testid={`nav-${g.key}`} className={({ isActive }) => clsx(rowCls(isActive || (active && !open)), isActive && 'before:absolute before:inset-y-1.5 before:left-0 before:w-[2px] before:rounded-r before:bg-white')}>{inner}{toggle}</NavLink>
       : <button type="button" data-testid={`nav-${g.key}`} data-toggle-testid={`nav-${g.key}-toggle`} aria-expanded={open} onClick={() => setOpen(!open)} className={clsx(rowCls(active && !open), 'w-full')}>{inner}<span className="grid h-6 w-6 place-items-center">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span></button>}
-    {open && <ul data-testid={`nav-${g.key}-items`} className="ml-3 border-l border-white/10 pl-1">{children.map((r) => { const RIcon = r.icon; return <li key={r.key}><NavLink to={r.path} end={r.path === '/jobs'} data-testid={`nav-${r.key}`} className={childCls}><RIcon size={13} className="shrink-0 text-[#93a1b4]" />{r.label}</NavLink></li>; })}</ul>}
+    {open && <ul data-testid={`nav-${g.key}-items`} className="ml-3 border-l border-white/10 pl-1">{children.map((r) => { const RIcon = r.icon; return <li key={r.key}><NavLink to={r.path} end={r.path === '/jobs'} data-testid={`nav-${r.key}`} className={childCls}><RIcon size={13} className="shrink-0 text-[#93a1b4]" />{r.label}{r.key === 'calls' && <MissedBadge />}</NavLink></li>; })}</ul>}
   </li>;
 };
 

@@ -21,6 +21,7 @@ import RwEvidencePage from '@/pages/rw/RwEvidencePage';
 import RwFloorPage from '@/pages/rw/RwFloorPage';
 import AssignMovePage from '@/pages/rw/AssignMovePage';
 import CustodyPage from '@/pages/rw/CustodyPage';
+import CallsPage from '@/pages/rs/CallsPage';
 import PartsPage from '@/pages/rs/PartsPage';
 import ApprovalsToSendPage from '@/pages/rs/ApprovalsToSendPage';
 import HitlistPage from '@/pages/rs/HitlistPage';
@@ -274,6 +275,7 @@ export default function App() {
               <Route path="/requests" element={<RequestsPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
+              <Route path="/calls" element={<CallsPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/access" element={<AccessControlPage />} />
               <Route path="/setup/inspection" element={<InspectionSetupPage />} />

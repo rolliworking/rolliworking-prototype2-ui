@@ -1,17 +1,19 @@
 import clsx from 'clsx';
 import * as api from '@/api/client';
-import type { WbpRow, WbpState } from '@/api/client';
+import type { WbpLeg, WbpRow, WbpState } from '@/api/client';
 import { estDigits } from '@/lib/format';
 
 // W·B·P dot row — one glance per job. Empty ring = no such leg · green = on track · blue = that line Finished · red = blocker. Derived in client.ts (wbpRowSync) from the Job page flow.
 const DOT: Record<WbpState, string> = { none: 'border border-ink-300 bg-transparent', ok: 'bg-emerald-500', finished: 'bg-sky-500', blocked: 'bg-rose-500 ring-2 ring-rose-200' };
 const DOT_DARK: Record<WbpState, string> = { none: 'border border-white/30 bg-transparent', ok: 'bg-emerald-400', finished: 'bg-sky-400', blocked: 'bg-rose-500 ring-2 ring-rose-400/40' };
 
-export const WbpDots = ({ row, outlined, dark, number, size = 'sm', testId }: { row: WbpRow; outlined?: boolean; dark?: boolean; number?: boolean; size?: 'sm' | 'lg'; testId?: string }) => {
-  const id = testId ?? `wbp-${row.jobId}`; const dot = size === 'lg' ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5'; const letter = size === 'lg' ? 'text-[11px]' : 'text-[9px]';
-  return <span data-testid={id} data-job={row.jobId} data-outlined={outlined || undefined} title={`${row.jobNumber}${row.watchLabel ? ` · ${row.watchLabel}` : ''}${outlined ? ' · this job' : ''}`} className={clsx('inline-flex items-center gap-1.5 rounded-sm px-1 py-0.5 align-middle', outlined && (dark ? 'bg-accent/10 ring-1 ring-accent' : 'bg-canvas ring-1 ring-ink'))}>
+export const WbpDots = ({ row, outlined, dark, number, size = 'sm', testId, onLeg }: { row: WbpRow; outlined?: boolean; dark?: boolean; number?: boolean; size?: 'sm' | 'lg' | 'xl'; testId?: string; onLeg?: (leg: WbpLeg, row: WbpRow) => void }) => {
+  const id = testId ?? `wbp-${row.jobId}`; const dot = size === 'xl' ? 'h-5 w-5' : size === 'lg' ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5'; const letter = size === 'xl' ? 'text-[13px]' : size === 'lg' ? 'text-[11px]' : 'text-[9px]';
+  return <span data-testid={id} data-job={row.jobId} data-outlined={outlined || undefined} title={`${row.jobNumber}${row.watchLabel ? ` · ${row.watchLabel}` : ''}${outlined ? ' · this job' : ''}`} className={clsx('inline-flex items-center rounded-sm px-1 py-0.5 align-middle', size === 'xl' ? 'gap-3' : 'gap-1.5', outlined && (dark ? 'bg-accent/10 ring-1 ring-accent' : 'bg-canvas ring-1 ring-ink'))}>
     {number && <span data-testid={`${id}-number`} className={clsx('font-mono font-semibold leading-none', letter, dark ? 'text-slate-200' : 'text-ink-700')}>{estDigits(row.jobNumber)}</span>}
-    {api.WBP_LEGS.map((l) => { const d = row.legs[l.key]; return <span key={l.key} data-testid={`${id}-${l.key}`} data-state={d.state} title={d.title} className="inline-flex items-center gap-0.5"><span className={clsx('font-mono font-semibold leading-none', letter, dark ? 'text-slate-400' : 'text-ink-500')}>{l.key}</span><span aria-hidden className={clsx('inline-block rounded-full', dot, (dark ? DOT_DARK : DOT)[d.state])} /></span>; })}
+    {api.WBP_LEGS.map((l) => { const d = row.legs[l.key]; const inner = <><span className={clsx('font-mono font-semibold leading-none', letter, dark ? 'text-slate-400' : 'text-ink-500')}>{l.key}</span><span aria-hidden className={clsx('inline-block rounded-full', dot, (dark ? DOT_DARK : DOT)[d.state])} /></>;
+      return onLeg ? <button key={l.key} type="button" data-testid={`${id}-${l.key}`} data-state={d.state} title={`${d.title} — open this line`} onClick={(e) => { e.stopPropagation(); onLeg(l.key, row); }} className="inline-flex items-center gap-1 rounded-sm px-0.5 hover:bg-white/10">{inner}</button>
+        : <span key={l.key} data-testid={`${id}-${l.key}`} data-state={d.state} title={d.title} className="inline-flex items-center gap-0.5">{inner}</span>; })}
   </span>;
 };
 

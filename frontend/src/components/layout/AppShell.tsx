@@ -8,7 +8,8 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { QuickAddProvider } from '@/components/today/QuickAddOverlay';
 import { CompanionDock, CompanionProvider } from '@/components/companion/CompanionPanel';
-import { CallPopToast } from '@/components/layout/CallPop';
+import { CallPopHost } from '@/components/layout/CallPop';
+import { roleKind } from '@/config/roles';
 
 // E17: banner reads config + last-call health. Click the chip to flip hybrid ↔ mock (safety line).
 export const PrototypeBanner = () => {
@@ -46,7 +47,9 @@ export class RouteErrorBoundary extends Component<{ children: ReactNode }, { err
 }
 
 export default function AppShell() {
-  useReceptionIdleSignOut();
+  useReceptionIdleSignOut(); const { user } = useAuth();
+  // Screen-pop only on desktop stations in front-desk / sales / manager tiers — never on workshop pads or supervisor tier
+  const popTier = !!user && (user.accessTier === 'manager' || roleKind(user) === 'concierge');
   return (
     <QuickAddProvider>
     <CompanionProvider>
@@ -64,7 +67,7 @@ export default function AppShell() {
             </main>
           </div>
           <CompanionDock />
-          <CallPopToast />
+          {popTier && <CallPopHost />}
         </div>
       </div>
     </CompanionProvider>

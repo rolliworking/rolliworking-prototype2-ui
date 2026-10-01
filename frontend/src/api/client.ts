@@ -5023,7 +5023,7 @@ export const techQuality = (tech: string, month: string): TechQuality => {
 
 
 // ---- Client rating — Attitude / Communication staff-set (concierge+), completed jobs DERIVED; logged old→new. Internal only: no portal read function touches this. ----
-import type { CallCounts, CallEvent, CallOutcome, ClientRating, InboundCallEvent, MissedCallRow, RatingChange, ScreenPop, Star } from './types';
+import type { CallEvent, ClientRating, RatingChange, Star } from './types';
 import type { DecisionInput, EngagementKind, InspectionDecisionRecord } from './types';
 const ratings = { rows: new Map<string, { attitude?: Star; communication?: Star; history: RatingChange[] }>([
   ['c-30', { attitude: 5, communication: 3, history: [{ at: new Date(Date.now() - 40 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'attitude', to: 5 }, { at: new Date(Date.now() - 40 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'communication', to: 3 }] }],
@@ -5031,9 +5031,12 @@ const ratings = { rows: new Map<string, { attitude?: Star; communication?: Star;
   ['c-10', { attitude: 2, communication: 4, history: [{ at: new Date(Date.now() - 12 * 86_400_000).toISOString(), by: 'Walter', station: 'Front Desk 2', field: 'attitude', from: 3, to: 2 }, { at: new Date(Date.now() - 60 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'attitude', to: 3 }, { at: new Date(Date.now() - 60 * 86_400_000).toISOString(), by: 'Vienna', station: 'Front Desk 1', field: 'communication', to: 4 }] }],
 ]), calls: [] as CallEvent[] };
 const completedJobsFor = (clientId: string) => store.jobs.filter((j) => j.clientId === clientId && (j.status === 'closed' || store.salesOrders.some((o) => o.jobId === j.id && (o.status === 'picked_up' || o.status === 'shipped')))).length;
+// c = lifetime items sent to us = every job ever opened for the client (open or closed); "New" when nobody has rated and nothing was ever sent
+const lifetimeItemsFor = (clientId: string) => store.jobs.filter((j) => j.clientId === clientId).length;
 export const clientRatingSync = (clientId: string): ClientRating => {
-  const r = ratings.rows.get(clientId); const completed = completedJobsFor(clientId); const a = r?.attitude; const c = r?.communication;
-  return { clientId, attitude: a, communication: c, completed, badge: `${a ?? '–'}/${c ?? '–'}/${completed}`, tooltip: `Attitude ${a ?? 'unrated'} · Communication ${c ?? 'unrated'} · ${completed} completed job${completed === 1 ? '' : 's'}`, history: [...(r?.history ?? [])].sort((x, y) => y.at.localeCompare(x.at)) };
+  const r = ratings.rows.get(clientId); const completed = completedJobsFor(clientId); const items = lifetimeItemsFor(clientId); const a = r?.attitude; const c = r?.communication;
+  const fresh = a === undefined && c === undefined && items === 0;
+  return { clientId, attitude: a, communication: c, items, completed, badge: fresh ? 'New' : `${a ?? '–'}/${c ?? '–'}/${items}`, tooltip: fresh ? 'New client — not yet rated, nothing sent to us yet' : `Temperament ${a ?? 'unrated'} · Responsiveness ${c ?? 'unrated'} · ${items} item${items === 1 ? '' : 's'} sent to us (${completed} completed)`, history: [...(r?.history ?? [])].sort((x, y) => y.at.localeCompare(x.at)) };
 };
 export async function getClientRating(clientId: string): Promise<ClientRating> { return resolve(clientRatingSync(clientId)); }
 export async function setClientRating(clientId: string, input: { attitude?: Star; communication?: Star }): Promise<ClientRating> {
@@ -5042,58 +5045,18 @@ export async function setClientRating(clientId: string, input: { attitude?: Star
   (['attitude', 'communication'] as const).forEach((f) => { const to = input[f]; if (to && to !== r[f]) { r.history.push({ at: now, by: a.by, station: a.station, field: f, from: r[f], to }); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Client rating · ${fullNameOf(byId(fx.clients, clientId))} · ${f} ${r[f] ?? '–'} → ${to}` }); r[f] = to; } });
   ratings.rows.set(clientId, r); return resolve(clientRatingSync(clientId));
 }
-// ---- Call ledger (mock of Vonage VIP, both directions later). Every call = a comms event on the client; missed calls weigh like unanswered email. ----
+// ---- Call ledger lives in ./calls.ts (Vonage mock: ring → live → ended / missed, dispositions, click-to-call). client.ts only owns the array + this bridge. ----
 const isAfterHours = (iso: string) => { const h = new Date(iso).getHours(); const d = new Date(iso).getDay(); return h < 9 || h >= 18 || d === 0; };
-const seedCall = (id: string, clientId: string | undefined, number: string, daysBack: number, hour: number, direction: 'in' | 'out', outcome: CallOutcome, by: string | undefined, jobId?: string, note?: string, dur?: number): CallEvent => { const at = new Date(Date.now() - daysBack * 86_400_000); at.setHours(hour, (id.length * 7) % 60, 0, 0); const iso = at.toISOString(); return { id, at: iso, direction, number, clientId, answeredBy: by, station: 'Front Desk 1', outcome, durationSec: dur, jobId, notes: note ? [{ at: iso, by: by ?? 'system', text: note }] : [], afterHours: isAfterHours(iso), resolvedAt: outcome === 'missed' && daysBack > 3 ? iso : undefined, resolvedBy: outcome === 'missed' && daysBack > 3 ? 'Vienna' : undefined, resolution: outcome === 'missed' && daysBack > 3 ? 'called_back' : undefined }; };
-ratings.calls.push(
-  seedCall('call-s01', 'c-30', '(203) 555-0130', 40, 11, 'in', 'answered', 'Vienna', 'j-r3', 'Asked when the Datejust would be ready; mentioned he is traveling in November.', 240),
-  seedCall('call-s02', 'c-30', '(203) 555-0130', 12, 15, 'out', 'answered', 'MH', 'j-r3', 'Explained the bracelet stretch finding; he wants the bracelet un-polished.', 380),
-  seedCall('call-s03', 'c-30', '(203) 555-0130', 6, 19, 'in', 'missed', undefined),
-  seedCall('call-s04', 'c-30', '(203) 555-0130', 5, 10, 'out', 'answered', 'Vienna', undefined, 'Returned last night’s call — booked a Thursday visit.', 150),
-  seedCall('call-s05', 'c-30', '(203) 555-0130', 0.6, 20, 'in', 'voicemail', undefined, undefined, 'Voicemail: “It’s Robert — call me about the Day-Date estimate when you can.”'),
-  seedCall('call-s06', 'c-05', '(212) 555-0105', 3, 12, 'in', 'answered', 'MH', undefined, undefined, 90),
-  seedCall('call-s07', undefined, '917-555-0144', 0.5, 7, 'in', 'missed', undefined),
-);
-const callRow = (c: CallEvent) => c;
-export async function receiveInboundCall(ev: InboundCallEvent): Promise<ScreenPop> {
-  const a = actor(); const digits = (p: string) => p.replace(/\D/g, '').slice(-10); const client = fx.clients.find((c) => digits(c.phone) === digits(ev.number)); const callId = newId('call');
-  const answered = ev.answered !== false; const outcome: CallOutcome = answered ? 'answered' : ev.voicemail ? 'voicemail' : 'missed';
-  ratings.calls.unshift({ id: callId, at: ev.at, direction: 'in', number: ev.number, clientId: client?.id, answeredBy: answered ? a.by : undefined, station: a.station, outcome, notes: [], afterHours: isAfterHours(ev.at) });
-  if (client) threadEvent(client.id, undefined, 'note', answered ? a.by : 'system', answered ? `Inbound call from ${ev.number} · answered by ${a.by} at ${a.station}` : `Missed call from ${ev.number}${outcome === 'voicemail' ? ' · voicemail left' : ''}`, undefined);
-  appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Inbound call · ${client ? fullNameOf(client) : `unknown ${ev.number}`} · ${outcome}${answered ? ` · ${a.by}` : ''}` });
-  if (!answered) return resolve({ kind: 'missed', client, number: ev.number, callId });
-  if (!client) return resolve({ kind: 'unknown', number: ev.number, callId });
-  return resolve({ kind: 'known', client, rating: clientRatingSync(client.id), inService: store.jobs.filter((j) => j.clientId === client.id && j.status !== 'closed' && j.simpleStatus === 'on_hand').length, needsReply: clientNeedsReplyCount(client.id), callId });
-}
-export interface CallFilter { clientId?: string; jobId?: string; direction?: 'in' | 'out'; staff?: string; from?: string; to?: string; openMissedOnly?: boolean }
-export async function getCallEvents(filter: CallFilter | string = {}): Promise<CallEvent[]> {
-  const f: CallFilter = typeof filter === 'string' ? { clientId: filter } : filter;
-  return resolve(ratings.calls.filter((c) => (!f.clientId || c.clientId === f.clientId) && (!f.jobId || c.jobId === f.jobId) && (!f.direction || c.direction === f.direction) && (!f.staff || c.answeredBy === f.staff) && (!f.from || c.at >= f.from) && (!f.to || c.at <= `${f.to}T23:59:59`) && (!f.openMissedOnly || ((c.outcome === 'missed' || c.outcome === 'voicemail') && !c.resolvedAt))).map(callRow).sort((a, b) => b.at.localeCompare(a.at)));
-}
-export const callCountsSync = (clientId?: string, jobId?: string): CallCounts => { const rows = ratings.calls.filter((c) => (!clientId || c.clientId === clientId) && (!jobId || c.jobId === jobId)); const m = monthKey(new Date().toISOString()); const missed = rows.filter((c) => c.outcome === 'missed' || c.outcome === 'voicemail'); return { total: rows.length, thisMonth: rows.filter((c) => monthKey(c.at) === m).length, missed: missed.length, openMissed: missed.filter((c) => !c.resolvedAt).length }; };
-export async function getCallCounts(clientId?: string, jobId?: string): Promise<CallCounts> { return resolve(callCountsSync(clientId, jobId)); }
-const callOf = (id: string) => { const c = ratings.calls.find((x) => x.id === id); if (!c) throw new Error('No such call'); return c; };
-// Manual "+ Log call" for off-system calls (cell phone, walk-up) — same fields, marked manual
-export async function logCall(input: { clientId: string; direction: 'in' | 'out'; durationSec?: number; jobId?: string; note?: string; at?: string }): Promise<CallEvent> {
-  const a = actor(); const c = byId(fx.clients, input.clientId); const at = input.at ?? new Date().toISOString();
-  const row: CallEvent = { id: newId('call'), at, direction: input.direction, number: c.phone, clientId: c.id, answeredBy: a.by, station: a.station, outcome: 'manual', durationSec: input.durationSec, jobId: input.jobId, notes: input.note?.trim() ? [{ at, by: a.by, text: input.note.trim() }] : [], afterHours: isAfterHours(at) };
-  ratings.calls.unshift(row); threadEvent(c.id, input.jobId ? { kind: 'job', id: input.jobId } : undefined, 'note', a.by, `${input.direction === 'in' ? 'Inbound' : 'Outbound'} call (logged manually)${input.note ? ` · ${input.note.trim()}` : ''}`, undefined);
-  if (input.jobId) jobStamp(getJobRow(input.jobId), `Call logged (manual, ${input.direction}) by ${a.by}${input.note ? ` · ${input.note.trim()}` : ''}`);
-  return resolve(row);
-}
-// Notes append (who/when stamped) — never overwrite; job link = one-tap "which job was this about?"
-export async function addCallNote(id: string, text: string): Promise<CallEvent> { const c = callOf(id); if (!text.trim()) throw new Error('Write a note first'); const a = actor(); c.notes.push({ at: new Date().toISOString(), by: a.by, text: text.trim() }); if (c.clientId) threadEvent(c.clientId, c.jobId ? { kind: 'job', id: c.jobId } : undefined, 'note', a.by, `Call note · ${text.trim()}`, undefined); if (c.jobId) jobStamp(getJobRow(c.jobId), `Call note by ${a.by} · ${text.trim()}`); return resolve(c); }
-export async function linkCallToJob(id: string, jobId?: string): Promise<CallEvent> { const c = callOf(id); c.jobId = jobId; if (jobId) jobStamp(getJobRow(jobId), `Call ${c.direction === 'in' ? 'from' : 'to'} client linked to this job by ${actor().by}`); return resolve(c); }
-// Missed call → Inbox Needs reply until someone clears it
-export async function getMissedCalls(): Promise<MissedCallRow[]> { return resolve(ratings.calls.filter((c) => (c.outcome === 'missed' || c.outcome === 'voicemail') && !c.resolvedAt).sort((a, b) => b.at.localeCompare(a.at)).map((call) => { const client = call.clientId ? byId(fx.clients, call.clientId) : undefined; return { call, client, badge: client ? clientRatingSync(client.id).badge : undefined }; })); }
-export async function resolveMissedCall(id: string, resolution: 'called_back' | 'handled', note?: string): Promise<CallEvent> {
-  const c = callOf(id); const a = actor(); if (c.resolvedAt) throw new Error('Already cleared'); c.resolvedAt = new Date().toISOString(); c.resolvedBy = a.by; c.resolution = resolution;
-  if (note?.trim()) c.notes.push({ at: c.resolvedAt, by: a.by, text: note.trim() });
-  if (resolution === 'called_back') ratings.calls.unshift({ id: newId('call'), at: c.resolvedAt, direction: 'out', number: c.number, clientId: c.clientId, answeredBy: a.by, station: a.station, outcome: 'answered', jobId: c.jobId, notes: note?.trim() ? [{ at: c.resolvedAt, by: a.by, text: note.trim() }] : [], afterHours: isAfterHours(c.resolvedAt) });
-  if (c.clientId) threadEvent(c.clientId, c.jobId ? { kind: 'job', id: c.jobId } : undefined, 'note', a.by, `${resolution === 'called_back' ? 'Called back' : 'Handled'} missed call from ${new Date(c.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${note ? ` · ${note.trim()}` : ''}`, undefined);
-  return resolve(c);
-}
-
+export const callsBridge = {
+  calls: () => ratings.calls, clients: () => fx.clients, jobs: () => store.jobs, estimates: () => store.estimates, outbox: () => store.outbox, messages: () => cx.messages, users: () => fx.users,
+  actor: () => actor(), newId, fullNameOf, isAfterHours, isActiveJob, needsReply: (clientId: string) => clientNeedsReplyCount(clientId), rating: (clientId: string) => clientRatingSync(clientId), wbp: (clientId: string) => wbpForClientSync(clientId),
+  threadEvent: (clientId: string, jobId: string | undefined, by: string, text: string) => { threadEvent(clientId, jobId ? { kind: 'job', id: jobId } : undefined, 'note', by, text, undefined); },
+  audit: (detail: string) => { const a = actor(); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); },
+  jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
+  addAddon: (jobId: string, input: AddonInput) => addJobAddon(jobId, input),
+};
+export const clientByIdSync = (id: string): Client | undefined => fx.clients.find((c) => c.id === id);
+export const jobNumberSync = (id: string): string | undefined => store.jobs.find((j) => j.id === id)?.number;
 
 // ---- INVENTORY DEEP SESSION — pricing intelligence · needs-ordering · auto-PO · PO labels · receiving flips · cycle-count lock/queue/variance $ ----
 import type { CountQueueRow, NeedsOrderingRow, PartPricing, PriceColor, PurchaseHistoryRow, ReorderRule, VarianceReport, VarianceRow } from './types';
@@ -6414,9 +6377,9 @@ export async function getJobVendorLegs(jobId: string): Promise<SwoWithRefs[]> { 
 // Add-ons since the estimate: derived rows are the truth (client-approved parts requests + estimate-revision lines added after the first send); manual rows cover counter / phone approvals and are flagged + audited
 export type AddonChannel = 'portal' | 'email' | 'phone' | 'counter' | 'text';
 export const ADDON_CHANNELS: { key: AddonChannel; label: string }[] = [{ key: 'portal', label: 'Portal' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' }, { key: 'counter', label: 'At the counter' }, { key: 'text', label: 'Text' }];
-export interface JobAddon { id: string; jobId: string; at: string; description: string; approver: string; channel: AddonChannel; amount: number; source: 'parts_request' | 'estimate_revision' | 'manual'; ref?: string; note?: string; loggedBy?: string }
+export interface JobAddon { id: string; jobId: string; at: string; description: string; approver: string; channel: AddonChannel; amount: number; source: 'parts_request' | 'estimate_revision' | 'manual'; ref?: string; note?: string; loggedBy?: string; pendingConfirmation?: boolean; confirmedAt?: string; confirmedVia?: 'portal' | 'email' | 'counter'; confirmedBy?: string }
 export interface JobAddonsView { rows: JobAddon[]; total: number; since?: string }
-export interface AddonInput { description: string; approver: string; channel: AddonChannel; amount: number; note?: string; at?: string }
+export interface AddonInput { description: string; approver: string; channel: AddonChannel; amount: number; note?: string; at?: string; pendingConfirmation?: boolean }
 const manualAddons: JobAddon[] = []; let addonsSeeded = false;
 const seedAddons = () => { if (addonsSeeded) return; addonsSeeded = true; const j = store.jobs.find((x) => x.id === 'j-30'); if (!j) return; manualAddons.push({ id: 'ao-01', jobId: 'j-30', at: daysAgoIso(3), description: 'Crown + tube replacement — found at uncasing', approver: fullNameOf(byId(fx.clients, j.clientId)), channel: 'counter', amount: 185, source: 'manual', note: 'Client stopped by · approved verbally at the desk', loggedBy: 'Vienna' }); };
 const prAddon = (r: PartsRequest, client: string): JobAddon | null => {
@@ -6441,10 +6404,21 @@ export async function getJobAddons(jobId: string): Promise<JobAddonsView> {
 export async function addJobAddon(jobId: string, input: AddonInput): Promise<JobAddon> {
   seedAddons(); const j = getJobRow(jobId); const a = actor();
   if (!input.description.trim()) throw new Error('Describe the add-on'); if (!input.approver.trim()) throw new Error('Who approved it?'); if (!(input.amount >= 0)) throw new Error('Amount must be 0 or more');
-  const row: JobAddon = { id: newId('ao'), jobId, at: input.at ?? new Date().toISOString(), description: input.description.trim(), approver: input.approver.trim(), channel: input.channel, amount: Math.round(input.amount * 100) / 100, source: 'manual', note: input.note?.trim() || undefined, loggedBy: a.by };
+  const row: JobAddon = { id: newId('ao'), jobId, at: input.at ?? new Date().toISOString(), description: input.description.trim(), approver: input.approver.trim(), channel: input.channel, amount: Math.round(input.amount * 100) / 100, source: 'manual', note: input.note?.trim() || undefined, loggedBy: a.by, pendingConfirmation: input.pendingConfirmation || undefined };
   manualAddons.push(row);
-  jobStamp(j, `Add-on logged · ${row.description} · ${fmtMoney(row.amount)} · approved by ${row.approver} (${row.channel}) · manual`);
-  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} add-on (manual) · ${row.description} · ${fmtMoney(row.amount)} · approved by ${row.approver} via ${row.channel}` });
+  const pend = row.pendingConfirmation ? ' · PENDING client confirmation (portal / email)' : '';
+  jobStamp(j, `Add-on logged · ${row.description} · ${fmtMoney(row.amount)} · approved by ${row.approver} (${row.channel}) · manual${pend}`);
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} add-on (manual) · ${row.description} · ${fmtMoney(row.amount)} · approved by ${row.approver} via ${row.channel}${pend}` });
+  // phone approvals (MH ruling b): a confirmation request goes out and the add-on stays pending until the client confirms by portal / email
+  if (row.pendingConfirmation) { const c = byId(fx.clients, j.clientId); queueOutbox({ id: newId('ob'), to: c.email, toName: fullNameOf(c), subject: `Please confirm — ${row.description} (${j.number})`, body: `Hi ${c.firstName},\n\nOn the phone today you approved: ${row.description} — ${fmtMoney(row.amount)}.\n\nPlease confirm with one tap in RolliConnect (or reply to this email) so we can proceed.\n\n— ${a.by}`, relatedRef: j.number, createdAt: row.at, createdBy: a.by, station: a.station, status: 'pending' }); }
+  return resolve(row);
+}
+// Client confirmed the phone approval (portal / email reply / at the counter) — the add-on becomes firm
+export async function confirmJobAddon(jobId: string, addonId: string, via: 'portal' | 'email' | 'counter'): Promise<JobAddon> {
+  seedAddons(); const j = getJobRow(jobId); const a = actor(); const row = manualAddons.find((x) => x.id === addonId && x.jobId === jobId); if (!row) throw new Error('No such add-on'); if (!row.pendingConfirmation) throw new Error('Already confirmed');
+  row.pendingConfirmation = false; row.confirmedAt = new Date().toISOString(); row.confirmedVia = via; row.confirmedBy = a.by;
+  jobStamp(j, `Add-on confirmed by client via ${via} · ${row.description} · ${fmtMoney(row.amount)}`);
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} add-on confirmed via ${via} · ${row.description}` });
   return resolve(row);
 }
 

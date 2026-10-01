@@ -1,4 +1,5 @@
-import { ArrowLeft, FilePlus2, Mail, MapPin, Phone } from 'lucide-react';
+import { ArrowLeft, FilePlus2, Mail, MapPin } from 'lucide-react';
+import { PhoneLink } from '@/components/shared/PhoneLink';
 import { RatingBadge } from '@/components/clients/RatingBadge';
 import { CallCounter } from '@/components/clients/CallLedger';
 import { WbpClientRows, WbpLegend } from '@/components/shared/WbpDots';
@@ -31,7 +32,7 @@ export const ClientHeader = ({ data }: { data: Client360 }) => {
           </div>
           <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-ink-700" data-testid="client360-contact">
             <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 hover:underline"><Mail size={13} className="text-ink-400" /> {client.email}</a>
-            <span className="inline-flex items-center gap-1.5 font-mono text-xs"><Phone size={13} className="text-ink-400" /> {client.phone}</span>
+            <PhoneLink number={client.phone} clientId={client.id} className="text-xs" testId="client360-phone" />
             <span className="inline-flex items-center gap-1.5"><MapPin size={13} className="text-ink-400" /> {client.street}, {client.city}, {client.state}</span>
             {summary.lastContactAt && <span className="text-xs text-ink-400">last contact {relativeTime(summary.lastContactAt)} · {fmtDate(summary.lastContactAt)}</span>}
           </div>

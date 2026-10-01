@@ -1,4 +1,4 @@
-import {
+import { PhoneCall,
   BarChart3,
   Boxes,
   Receipt,
@@ -64,6 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, group: 'intake', built: true, blurb: 'Quotes awaiting approval and approved work.' },
   { key: 'appointments', label: 'Schedule', path: '/appointments', icon: CalendarDays, tiers: ALL, group: 'intake', built: true, blurb: 'Drop-off & pick-up appointments on the calendar — same booking rules as the public link.' },
   { key: 'clients', label: 'Clients', path: '/clients', icon: Users, tiers: ALL, group: 'clients', built: true, blurb: 'Client 360 — search any identifier, see their whole world.' },
+  { key: 'calls', label: 'Calls', path: '/calls', icon: PhoneCall, tiers: MGR, group: 'clients', built: true, blurb: 'Global call log (Vonage): every call in and out, who answered, duration, disposition, recording link; missed-call badge.' },
   { key: 'jobs', label: 'Jobs', path: '/jobs', icon: Wrench, tiers: MGR, group: 'clients', built: true, blurb: 'Bench work in progress across departments.' },
   { key: 'all-jobs', label: 'All Jobs', path: '/jobs/all', icon: ListChecks, tiers: MGR, group: 'clients', built: true, blurb: 'Every job across the shop with combinable quick filters.' },
   { key: 'bench', label: 'Bench', path: '/bench', icon: Hammer, tiers: ALL, group: 'rw', built: true, blurb: 'My day — assigned jobs, next actions, holds, pull-next.' },

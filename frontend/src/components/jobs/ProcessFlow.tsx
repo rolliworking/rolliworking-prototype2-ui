@@ -1,4 +1,6 @@
 import { AlertTriangle, Check } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { FlowLine, FlowStage, JobWithRefs } from '@/api/client';
 import { fmtDate } from '@/lib/format';
@@ -35,8 +37,12 @@ const Custody = ({ line }: { line: FlowLine }) => {
   );
 };
 
-const LineRow = ({ line, split }: { line: FlowLine; split: boolean }) => (
-  <div data-testid={`flow-line-${line.key}`} data-finished={line.finished} className="grid grid-cols-[52px_1fr_230px] items-start gap-3">
+// ?leg=head|band|case (from a tapped W·B·P dot) lights that line and scrolls it into view
+const LineRow = ({ line, split, focus }: { line: FlowLine; split: boolean; focus?: boolean }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (focus) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [focus]);
+  return (
+  <div ref={ref} data-testid={`flow-line-${line.key}`} data-finished={line.finished} data-focus={focus || undefined} className={`grid grid-cols-[52px_1fr_230px] items-start gap-3 rounded-md ${focus ? '-mx-2 bg-accent/10 px-2 py-1.5 ring-1 ring-accent' : ''}`}>
     <div className="pt-0.5">
       <span data-testid={`flow-code-${line.key}`} className={`grid h-7 w-7 place-items-center rounded-sm font-mono text-[13px] font-bold ${line.finished ? 'bg-moss text-white' : 'bg-ink text-white'}`} title={line.label}>{line.code}</span>
       <div className="mt-0.5 text-[10px] leading-tight text-ink-500">{line.itemLabel ? <span data-testid={`flow-item-${line.key}`} className="font-mono font-semibold text-ink">{line.itemLabel} </span> : null}{split ? line.label : ''}</div>
@@ -44,10 +50,11 @@ const LineRow = ({ line, split }: { line: FlowLine; split: boolean }) => (
     <ol className="flex items-start pt-0.5">{line.stages.map((s, i) => <StageCol key={s.key} s={s} i={i} line={line} />)}</ol>
     <Custody line={line} />
   </div>
-);
+  );
+};
 
 export const ProcessFlow = ({ job }: { job: JobWithRefs }) => {
-  const flow = api.jobFlowSync(job);
+  const flow = api.jobFlowSync(job); const [sp] = useSearchParams(); const leg = sp.get('leg');
   const blockers = flow.lines.flatMap((l) => l.stages.filter((s) => s.blocker?.tone === 'red')).length; const mismatches = flow.lines.filter((l) => l.mismatch).length;
   return (
     <div data-testid="process-flow" data-done={flow.done} data-total={flow.total} data-split={flow.split}>
@@ -57,7 +64,7 @@ export const ProcessFlow = ({ job }: { job: JobWithRefs }) => {
         {mismatches > 0 && <span data-testid="flow-mismatches" className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-2 py-0.5 font-semibold text-amber-900 ring-1 ring-amber-300"><AlertTriangle size={11} /> {mismatches} status / custody mismatch{mismatches === 1 ? '' : 'es'}</span>}
         <span className="ml-auto inline-flex items-center gap-3 text-[10px] text-ink-400"><span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full bg-ink" /> done</span><span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" /> here now</span><span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full ring-2 ring-rose-500" /> blocker</span><span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-violet-700" /> vendor leg</span></span>
       </div>
-      <div className="space-y-5">{flow.lines.map((l) => <LineRow key={l.key} line={l} split={flow.split} />)}</div>
+      <div className="space-y-5">{flow.lines.map((l) => <LineRow key={l.key} line={l} split={flow.split} focus={!!leg && l.key === leg} />)}</div>
     </div>
   );
 };

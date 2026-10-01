@@ -1244,13 +1244,13 @@ export interface TechQuality { n: number; avg: number | null; byCategory: Record
 // ---- Client rating (STRICTLY internal — never /rc, never view-as-client, never emails/exports) ----------------------------------------
 export type Star = 1 | 2 | 3 | 4 | 5;
 export interface RatingChange { at: string; by: string; station: string; field: 'attitude' | 'communication'; from?: Star; to: Star }
-export interface ClientRating { clientId: string; attitude?: Star; communication?: Star; completed: number; badge: string; tooltip: string; history: RatingChange[] }
-// ---- Telephony seam (mock of Vonage VIP) — src/api/telephony.ts adapts inbound events into screen-pops + comms history ----------------
-export interface InboundCallEvent { number: string; at: string; direction: 'inbound'; answered?: boolean; voicemail?: boolean }
-export type ScreenPop = { kind: 'known'; client: Client; rating: ClientRating; inService: number; needsReply: number; callId: string } | { kind: 'unknown'; number: string; callId: string } | { kind: 'missed'; client?: Client; number: string; callId: string };
-export type CallOutcome = 'answered' | 'missed' | 'voicemail' | 'manual';
+// a = temperament 1–5 · b = responsiveness 1–5 · c = lifetime items sent to us (every job, open or closed). Never rated + nothing sent = "New".
+export interface ClientRating { clientId: string; attitude?: Star; communication?: Star; items: number; completed: number; badge: string; tooltip: string; history: RatingChange[] }
+// ---- Telephony seam (mock of Vonage Business) — src/api/telephony.ts adapts carrier events into src/api/calls.ts (ring → live → ended / missed) ----
+export type CallOutcome = 'ringing' | 'answered' | 'missed' | 'voicemail' | 'manual';
+export type CallDisposition = 'estimate_discussed' | 'approval_given' | 'status_inquiry' | 'pickup_scheduled' | 'voicemail' | 'missed';
 export interface CallNote { at: string; by: string; text: string }
-export interface CallEvent { id: string; at: string; direction: 'in' | 'out'; number: string; clientId?: string; answeredBy?: string; station: string; outcome: CallOutcome; durationSec?: number; jobId?: string; notes: CallNote[]; afterHours: boolean; resolvedAt?: string; resolvedBy?: string; resolution?: 'called_back' | 'handled' }
+export interface CallEvent { id: string; at: string; direction: 'in' | 'out'; number: string; clientId?: string; answeredBy?: string; station: string; outcome: CallOutcome; durationSec?: number; endedAt?: string; jobId?: string; disposition?: CallDisposition; recordingUrl?: string; notes: CallNote[]; afterHours: boolean; resolvedAt?: string; resolvedBy?: string; resolution?: 'called_back' | 'handled' }
 export interface CallCounts { total: number; thisMonth: number; missed: number; openMissed: number }
 export interface MissedCallRow { call: CallEvent; client?: Client; badge?: string }
 

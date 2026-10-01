@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobPhoto, JobWithRefs, SalesOrderWithRefs } from '@/api/client';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { PhoneLink } from '@/components/shared/PhoneLink';
 import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { ClientRequestBadge } from '@/components/jobs/ClientRequests';
 import { AtRiskTag } from '@/components/jobs/ComponentWaitChips';
@@ -53,7 +54,7 @@ export const ItemHeader = ({ job: j, so, reload }: { job: JobWithRefs; so: Sales
         </div>
         <div className="mt-1.5"><AwayBreadcrumbs jobId={j.id} /></div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-500">
-          <span><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> <RatingBadge clientId={j.clientId} testId="job-client-rating" /> · {j.client.email} · {j.client.phone}</span>
+          <span><Link to={`/clients/${j.clientId}`} className="font-medium text-ink hover:underline" data-testid="job-client-link">{fullName(j.client)}</Link> <RatingBadge clientId={j.clientId} testId="job-client-rating" /> · {j.client.email} · <PhoneLink number={j.client.phone} clientId={j.clientId} jobId={j.id} mono={false} testId="job-client-phone" /></span>
           {j.pkg ? <Link to={`/intake/receive/${j.pkg.id}`} data-testid="job-package-link" className="inline-flex items-center gap-1 text-brand hover:underline"><Inbox size={12} /> Request {j.pkg.subNumber}</Link> : <span data-testid="job-package-none" className="text-ink-400">No request record (SUB-)</span>}
           {j.estimate ? <Link to={`/estimates/${j.estimate.id}`} data-testid="job-estimate-link" className="inline-flex items-center gap-1 text-brand hover:underline"><FileText size={12} /> Est {j.estimate.number}</Link> : <span className="text-ink-400">No estimate linked</span>}
           {so && <Link to={`/sales/${so.id}`} data-testid="job-so-link" className="inline-flex items-center gap-1 text-brand hover:underline"><Receipt size={12} /> {so.number}</Link>}
