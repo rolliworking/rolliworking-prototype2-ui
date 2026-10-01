@@ -130,7 +130,6 @@ export const staffFolders = (): { name: string; count: number }[] => { const fir
 // Super-admin list (MH only): every staff one-shot message, newest first, with status + job + photo — read-only
 export interface AllMessageRow extends InboxItem { status: MessageStatus; toLabel: string; jobNumber?: string; jobLabel?: string }
 export const allMessagesSync = (staff?: string): AllMessageRow[] => inbox.filter((m) => !staff || m.from === staff || (m.to.type === 'user' && m.to.shortName === staff) || m.claimedBy === staff || m.doneBy === staff).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).map((m) => ({ ...m, status: messageStatus(m), toLabel: m.to.type === 'role' ? `#${m.to.role}${m.claimedBy ? ` → ${m.claimedBy}` : ''}` : b.label(m.to).split(' →')[0], ...jobRef(m.jobId) }));
-export const messageStaffNames = (): string[] => Array.from(new Set(inbox.flatMap((m) => [m.from, m.to.type === 'user' ? m.to.shortName : '', m.claimedBy ?? '']).filter((s) => s && s !== 'Vonage' && s !== 'system'))).sort();
 // Reply to an inbox message — lands in the ORIGINAL SENDER's inbox + hitlist (their bench iPad), never back at the shared kiosk it was sent from
 export async function replyToInbox(inboxId: string, text: string, fromOverride?: string): Promise<InboxItem> {
   const orig = inbox.find((x) => x.id === inboxId); if (!orig) throw new Error('Message not found'); if (!text.trim()) throw new Error('Type a reply');
