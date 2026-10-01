@@ -715,3 +715,11 @@ _Comprehensive frontend testing of the Inbox slide-out job-card panel feature (R
 
 _Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
 - (Optional/cosmetic) Normalize inbox-panel-request-source to Title Case ('Web form' / 'Call' / 'Walk-in') by either removing the uppercase CSS or storing proper-cased source string, so the rendered text matches the spec.
+
+## Iteration 71
+
+_Comprehensive frontend testing of RolliSuite 'ONE GENERAL INBOX — tag, don't assign' feature (iter 71). Signed in as Vienna, JV (restricted), and MH (super-admin) across three fresh contexts. Ran /app/tests/test_general_inbox_iter71.py covering 119 assertions: inbox sections/filters/lanes, pinned/live/quoted/answered section ordering, client-last data attribute + age chip + rose border, seeded tags on cv-ib1/cv-ib3, full right-click thread context menu (all 8 items), tag + untag flow, who=chyna filter, pin/unpin on cv-ib2 (from Answered lane), move-to-quoted + back from Quoted, hover-archive + unarchive on cv-ib1 (with tags cleared on archive), thread-view header (pin icon, 4 tag chips, Unpi…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix stale aria-pressed on thread-view header tag chips: in src/pages/InboxPage.tsx (~line 147) the chip `on` state must be derived from the latest conversation tags (e.g. subscribe to INBOX_REFRESH_EVENT or re-select the conversation from the store after `actions.tag`), so clicking thread-tag-<key> 
