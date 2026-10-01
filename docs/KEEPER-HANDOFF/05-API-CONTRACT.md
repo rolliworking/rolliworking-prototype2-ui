@@ -13,10 +13,10 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `clientRefSubject` **[post-E16]** **[post-refresh]** | sync | `= (subject: string, ref?: string) => (ref?.trim() ? `[REF: $` | mock | staff | audit, email → Sent | components/estimates/EstimateModals.tsx |
+| `clientRefSubject` **[post-E16]** **[post-refresh]** | sync | `= (subject: string, ref?: string) => (ref?.trim() ? `[REF: $` | mock | staff | audit, email → Outbox | components/estimates/EstimateModals.tsx |
 | `setClientRef` **[post-E16]** **[post-refresh]** | async | `(estimateId: string, ref: string): Promise<EstimateWithRefs>` | mock | staff | localStorage | pages/estimates/EstimateDetailPage.tsx |
-| `setJobClientRef` **[post-E16]** **[post-refresh]** | async | `(jobId: string, ref: string): Promise<void>` | mock | staff | audit, localStorage | pages/jobs/JobDetailPage.tsx |
-| `jobClientRef` **[post-E16]** **[post-refresh]** | sync | `= (j: Job &` | mock | staff | audit, localStorage | pages/jobs/JobDetailPage.tsx |
+| `setJobClientRef` **[post-E16]** **[post-refresh]** | async | `(jobId: string, ref: string): Promise<void>` | mock | staff | audit, localStorage | components/jobs/ItemHeader.tsx |
+| `jobClientRef` **[post-E16]** **[post-refresh]** | sync | `= (j: Job &` | mock | staff | audit, localStorage | components/jobs/ItemHeader.tsx |
 
 ## Station (device-bound)
 
@@ -36,8 +36,8 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `getDivisionStaff` | sync | `= (div: Division): User[] =>` | mock | staff | audit, localStorage | components/jobs/ComponentBits.tsx, components/jobs/JobTabs.tsx, components/layout/MessageComposer.tsx, components/layout/ViewAs.tsx, components/rw/RwBits.tsx, components/rw/bench/BenchLock.tsx, components/today/FlagTo.tsx, components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, components/today/StaffHitListModal.tsx, pages/ChooseViewPage.tsx, pages/InboxPage.tsx, pages/TodayPage.tsx, pages/kiosk/WmKioskPage.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwShell.tsx |
-| `getDivisionRoles` | sync | `= (div: Division): Role[] =>` | mock | staff | audit, localStorage | components/layout/MessageComposer.tsx, components/today/FlagTo.tsx, components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, pages/InboxPage.tsx |
+| `getDivisionStaff` | sync | `= (div: Division): User[] =>` | mock | staff | audit, localStorage | components/jobs/ComponentBits.tsx, components/jobs/JobTabs.tsx, components/layout/CallPop.tsx, components/layout/MessageComposer.tsx, components/layout/MessageDirectory.tsx, components/layout/ViewAs.tsx, components/rw/RwBits.tsx, components/rw/bench/BenchLock.tsx, components/today/FlagTo.tsx, components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, components/today/StaffHitListModal.tsx, pages/ChooseViewPage.tsx, pages/InboxPage.tsx, pages/TodayPage.tsx, pages/kiosk/WmKioskPage.tsx, pages/rs/CallsPage.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwShell.tsx |
+| `getDivisionRoles` | sync | `= (div: Division): Role[] =>` | mock | staff | audit, localStorage | components/layout/MessageComposer.tsx, components/layout/MessageDirectory.tsx, components/today/FlagTo.tsx, components/today/NewTaskForm.tsx, components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx, pages/InboxPage.tsx |
 
 ## Audit log
 
@@ -49,7 +49,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `OWNER_USER_ID` **[post-E16]** **[post-refresh]** | sync | `= 'u-michael';` | mock | staff | audit, localStorage | components/layout/ViewAs.tsx, pages/ChooseViewPage.tsx, pages/SignInPage.tsx, pages/rs/AccessControlPage.tsx, pages/sales/SalesOrderDetailPage.tsx |
+| `OWNER_USER_ID` **[post-E16]** **[post-refresh]** | sync | `= 'u-michael';` | mock | staff | audit, localStorage | components/layout/ViewAs.tsx, components/setup/AccessLimitsDrawer.tsx, pages/ChooseViewPage.tsx, pages/SignInPage.tsx, pages/TodayPage.tsx, pages/rs/AccessControlPage.tsx, pages/rw/RwShell.tsx, pages/sales/SalesOrderDetailPage.tsx |
 | `isOwnerSync` **[post-E16]** **[post-refresh]** | sync | `= (): boolean => realUserSync()?.id === OWNER_USER_ID && !viewAsSync();` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `getViewAs` **[post-E16]** **[post-refresh]** | async | `(): Promise<ViewAsState \| null>` | mock | none | audit | auth/AuthContext.tsx |
 | `continueAsSelf` **[post-E16]** **[post-refresh]** | async | `(): Promise<void>` | mock | staff | audit | components/layout/ViewAs.tsx |
@@ -60,6 +60,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `hasSignedInToday` | async | `(userId: string): Promise<boolean>` | mock | none | audit, localStorage | pages/rw/RwShell.tsx |
 | `getUsersSignedInToday` | async | `(): Promise<User[]>` | mock | none | audit, localStorage | components/layout/UserSwitcher.tsx, pages/SignInPage.tsx |
 | `switchUserWithPin` | async | `(userId: string, pin: string): Promise<User>` | mock | none | audit, localStorage | auth/AuthContext.tsx |
+| `signInWithTouchId` **[post-E16]** **[post-refresh]** | async | `(userId: string): Promise<User>` | mock | staff | audit, localStorage | auth/AuthContext.tsx |
 | `signOut` | async | `(): Promise<void>` | mock | staff | audit, localStorage | auth/AuthContext.tsx |
 
 ## Clients
@@ -68,7 +69,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `getClients` | async | `(): Promise<Client[]>` | mock | staff | none (read) | pages/intake/ArrivalPage.tsx |
 | `getClient` | async | `(id: string): Promise<Client \| null>` | mock | staff | none (read) | pages/estimates/EstimateCreatePage.tsx |
-| `searchClients` | async | `(query: string): Promise<Client[]>` | mock | staff | none (read) | components/estimates/EstimateForm.tsx, components/layout/CornerLookup.tsx, components/rw/FloorPanels.tsx |
+| `searchClients` | async | `(query: string): Promise<Client[]>` | mock | staff | none (read) | components/estimates/EstimateForm.tsx, components/layout/CallPop.tsx, components/layout/CornerLookup.tsx, components/rw/FloorPanels.tsx |
 
 ## Watches
 
@@ -88,7 +89,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `getJobsForClient` | async | `(clientId: string): Promise<JobWithRefs[]>` | mock | staff | none (read) | components/clients/CallLedger.tsx, components/layout/CallPop.tsx |
+| `getJobsForClient` | async | `(clientId: string): Promise<JobWithRefs[]>` | mock | staff | none (read) | components/clients/CallLedger.tsx, components/inbox/InboxJobCard.tsx |
 
 ## Dashboard
 
@@ -132,7 +133,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `findWatchBySerial` | async | `(reference: string, serial: string): Promise<WatchMatch \| null>` | mock | staff | label queue | pages/intake/ReceiveWatchPage.tsx |
 | `computeDiscrepancies` | sync | `(ctx: InspectionContext, input: ReceiveWatchInput): string[]` | mock | staff | audit | pages/intake/ReceiveWatchPage.tsx |
 | `receiveWatch` | async | `(packageId: string, input: ReceiveWatchInput): Promise<ReceiveWatchResult>` | mock | staff | audit | pages/intake/ReceiveWatchPage.tsx |
-| `getOutbox` | async | `(): Promise<OutboxEmail[]>` | mock | staff | audit, email → Sent, label queue | pages/intake/OutboxPage.tsx |
+| `getOutbox` | async | `(): Promise<OutboxEmail[]>` | mock | staff | audit, email → Outbox, label queue | pages/intake/SentPage.tsx |
 | `getLabelQueue` | async | `(): Promise<LabelJob[]>` | mock | staff | audit, label queue | pages/intake/LabelQueuePage.tsx, pages/rs/RsPages.tsx |
 | `setLabelPrinted` | async | `(id: string, printed: boolean): Promise<LabelJob>` | mock | staff | audit, label queue | components/intake/LabelBits.tsx, pages/intake/LabelQueuePage.tsx |
 
@@ -188,14 +189,15 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `componentsDone` | sync | `= (j: Job) => ensureComponents(j).filter((c) => c.completedAt).length;` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `componentsOutstanding` | sync | `= (j: Job): JobComponent[] => ensureComponents(j).filter((c) => !c.completedAt);` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `awaitingComponents` | sync | `= (j: Job) => j.status === 'in_service' && !activeHold(j) && componentsDone(j) > 0 && componentsOutstanding(j).length > 0;` | mock | staff | none (read) | components/jobs/ComponentBits.tsx, components/jobs/JobBoard.tsx, pages/rw/RwWmPage.tsx, pages/rw/RwWorkQueuePage.tsx, pages/workshop/BenchPage.tsx |
-| `canCompleteComponent` | sync | `= (j: Job) => j.status === 'in_service' && !activeHold(j);` | mock | staff | none (read) | components/jobs/ComponentBits.tsx |
+| `holdBlocks` **[post-E16]** **[post-refresh]** | sync | `= (j: Job, key?: ComponentKey): JobHold \| undefined =>` | mock | staff | audit, email → Outbox, job status | — (internal / other client.ts functions only) |
+| `canCompleteComponent` | sync | `= (j: Job, key?: ComponentKey) => j.status === 'in_service' && !holdBlocks(j, key);` | mock | staff | none (read) | components/jobs/ComponentBits.tsx |
 | `isTradeJob` **[post-E16]** | sync | `= (j: Job) => j.kind === 'trade';` | mock | staff | audit, job status | — (internal / other client.ts functions only) |
 | `isInternalTrade` **[post-E16]** | sync | `= (clientId: string) => !!byId(fx.clients, clientId).internal;` | mock | staff | none (read) | components/jobs/JobBits.tsx |
 | `TRADE_SEND_BACK` **[post-E16]** | sync | `:` | mock | staff | none (read) | components/jobs/JobBits.tsx |
-| `activeHold` | sync | `= (j: Job): JobHold \| undefined => j.holds.find((h) => !h.releasedAt);` | mock | staff | audit | components/jobs/JobBits.tsx, components/jobs/JobBoard.tsx, components/jobs/JobPanels.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwJobsPage.tsx, pages/rw/RwWmPage.tsx, pages/workshop/BenchPage.tsx, pages/workshop/SupervisorPage.tsx |
-| `legalJobActions` | sync | `(j: Job): JobAction[]` | mock | staff | audit, email → Sent | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
+| `activeHold` | sync | `= (j: Job): JobHold \| undefined => j.holds.find((h) => !h.releasedAt);` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx, components/jobs/JobBits.tsx, components/jobs/JobBoard.tsx, components/jobs/JobPanels.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwJobsPage.tsx, pages/rw/RwWmPage.tsx, pages/workshop/BenchPage.tsx, pages/workshop/SupervisorPage.tsx |
+| `legalJobActions` | sync | `(j: Job): JobAction[]` | mock | staff | audit, email → Outbox | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `canHold` | sync | `= (j: Job) => !activeHold(j) && j.simpleStatus === 'on_hand' && HOLDABLE.includes(j.status);` | mock | staff | audit | components/jobs/JobPanels.tsx |
-| `transitionJob` | async | `(id: string, actionKey: string, reason?: string): Promise<JobWithRefs>` | mock | staff | audit, email → Sent, job status | components/dashboard/TradeReviewPanel.tsx, pages/intake/IntakeStepPages.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
+| `transitionJob` | async | `(id: string, actionKey: string, reason?: string): Promise<JobWithRefs>` | mock | staff | audit, email → Outbox, job status | components/dashboard/TradeReviewPanel.tsx, pages/intake/IntakeStepPages.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
 | `completeComponent` | async | `(jobId: string, key: ComponentKey): Promise<JobWithRefs>` | mock | staff | audit, job status | components/jobs/ComponentBits.tsx |
 | `amendComponentAttribution` | async | `(jobId: string, key: ComponentKey, shortName: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/ComponentBits.tsx |
 | `getCompletionsReport` | async | `(): Promise<CompletionsReport>` | mock | staff | audit | — (internal / other client.ts functions only) |
@@ -203,14 +205,14 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `toggleAssignee` | async | `(id: string, shortName: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/JobPanels.tsx |
 | `JOB_KIND_CONFIG` | sync | `: Record<JobKind,` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx, components/jobs/InspectionPanel.tsx, components/jobs/JobBits.tsx, components/jobs/JobPanels.tsx, pages/jobs/JobCreatePage.tsx, pages/jobs/JobDetailPage.tsx |
 | `INSPECTION_QUESTIONS` | sync | `:` | mock | staff | none (read) | components/jobs/InspectionPanel.tsx |
-| `reviewGaps` | sync | `(j: Job): string[]` | mock | staff | audit, email → Sent, job status | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
+| `reviewGaps` | sync | `(j: Job): string[]` | mock | staff | audit, email → Outbox, job status | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `saveInspectionReport` | async | `(id: string, answers: Record<string, string>): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/InspectionPanel.tsx |
 | `ROLES` | sync | `: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker', 'polisher', 'band_tech'];` | mock | staff | none (read) | components/jobs/JobPanels.tsx, pages/SetupRsPanels.tsx |
 | `roleHolders` | sync | `= (role: Role): User[] => fx.users.filter((u) => holdsRole(u, role));` | mock | staff | audit | components/jobs/JobBits.tsx, components/jobs/JobPanels.tsx |
 | `setJobOwner` | async | `(id: string, role: Role \| null): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/JobPanels.tsx |
-| `placeHold` | async | `(id: string, type: HoldType, reason: string): Promise<JobWithRefs>` | mock | staff | audit | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
+| `placeHold` | async | `(id: string, type: HoldType, reason: string, component?: ComponentKey): Promise<JobWithRefs>` | mock | staff | audit | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `releaseHold` | async | `(id: string, note?: string): Promise<JobWithRefs>` | mock | staff | audit | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
-| `addJobNote` | async | `(id: string, text: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/JobPanels.tsx |
+| `addJobNote` | async | `(id: string, text: string): Promise<JobWithRefs>` | mock | staff | audit | components/inbox/InboxJobCard.tsx, components/jobs/JobPanels.tsx |
 
 ## ONE photo pipeline (D-390). Every entry point ends here: locked (private) by default, typed, stamped. Unlock = client sees it in RolliConnect.
 
@@ -221,7 +223,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `addJobPhoto` **[post-E16]** **[post-refresh]** | async | `(jobId: string, p: AddJobPhotoInput): Promise<PackagePhoto & Stamp>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `addJobPhotos` | async | `(id: string, photos: PackagePhoto[], photoType: PhotoType = 'bench'): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/JobPanels.tsx |
 | `updateJobFields` | async | `(id: string, patch: JobFieldsPatch): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/JobPanels.tsx |
-| `searchJobs` | async | `(query: string): Promise<JobWithRefs[]>` | mock | staff | none (read) | components/layout/CornerLookup.tsx, components/layout/MessageComposer.tsx, components/rw/FloorPanels.tsx, pages/JobsPage.tsx, pages/inspection/InspectionFormPage.tsx, pages/rw/AssignMovePage.tsx, pages/rw/RwJobsPage.tsx |
+| `searchJobs` | async | `(query: string): Promise<JobWithRefs[]>` | mock | staff | none (read) | components/layout/CornerLookup.tsx, components/layout/MessageComposer.tsx, components/layout/MessageDirectory.tsx, components/rw/FloorPanels.tsx, pages/JobsPage.tsx, pages/inspection/InspectionFormPage.tsx, pages/rw/AssignMovePage.tsx, pages/rw/RwInspectPage.tsx, pages/rw/RwJobsPage.tsx |
 | `createJob` | async | `(input: CreateJobInput): Promise<JobWithRefs>` | mock | staff | audit | pages/jobs/JobCreatePage.tsx |
 | `lineOpenFor` **[post-E16]** **[post-refresh]** | sync | `= (l: EstimateLine, kind: 'sales_order' \| 'job' \| 'intake') => !l.closedOut && !(l.conversions ?? []).some((c) => famOf(c.kind) === famOf(kind));` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `closeOutEstimateLine` **[post-E16]** **[post-refresh]** | async | `(estimateId: string, lineId: string, reason: string): Promise<EstimateWithRefs>` | mock | staff | audit | pages/estimates/EstimateDetailPage.tsx |
@@ -255,14 +257,14 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `parsePin` | sync | `= (raw: string, fallback: Assignee):` | mock | staff | audit | components/today/QuickAddOverlay.tsx |
 | `pinToHitList` | async | `(input: PinInput): Promise<PinnedItem>` | mock | staff | audit | components/today/PinBits.tsx, components/today/QuickAddOverlay.tsx |
-| `dismissPinned` | async | `(id: string): Promise<PinnedItem>` | mock | staff | audit | components/dashboard/HitListPanel.tsx, pages/TodayPage.tsx, pages/hitlist/TeamHitlistPage.tsx |
+| `dismissPinned` | async | `(id: string, reason?: string): Promise<PinnedItem>` | mock | staff | audit | components/dashboard/HitListPanel.tsx, pages/TodayPage.tsx, pages/hitlist/TeamHitlistPage.tsx |
 
 ## E5 Sales orders / fulfil / pickup / ship — PROMPT-PACK-invoicing-pickup-ship.md
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
 | `SO_BADGE` | sync | `= (o: SalesOrder): 'picked_up' \| 'shipped' \| 'paid' \| 'unpaid' => (o.pickedUpAt ? 'picked_up' : o.tracking \|\| o.shipDate ? 'shipped' : o.isPaid ? 'paid' : 'unpaid');` | mock | staff | none (read) | components/sales/SalesBits.tsx |
-| `tailStage` | sync | `(job: Job): TailStage \| null` | mock | staff | none (read) | components/jobs/JobBits.tsx, pages/jobs/JobDetailPage.tsx |
+| `tailStage` | sync | `(job: Job): TailStage \| null` | mock | staff | none (read) | components/jobs/ItemHeader.tsx, components/jobs/JobBits.tsx |
 | `getSalesOrderForJob` | async | `(jobId: string): Promise<SalesOrderWithRefs \| null>` | mock | staff | none (read) | pages/jobs/JobDetailPage.tsx |
 | `findSalesOrders` | async | `(query: string): Promise<SalesOrderWithRefs[]>` | mock | staff | none (read) | pages/sales/PickupStationPage.tsx, pages/sales/SalesOrdersPage.tsx, pages/sales/ShipStationPage.tsx |
 
@@ -328,7 +330,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `getPartsRequest` | async | `(id: string): Promise<PartsRequestWithRefs \| null>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `getPartsRequestsForJob` | async | `(jobId: string): Promise<PartsRequestWithRefs[]>` | mock | staff | audit | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `getPartsKnowledge` | async | `(): Promise<PartsKnowledgeEntry[]>` | mock | staff | audit | pages/workshop/PartsKnowledgePage.tsx |
-| `openPartsRequest` | async | `(jobId: string): Promise<PartsRequestWithRefs>` | mock | staff | audit | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwPartsPage.tsx |
+| `openPartsRequest` | async | `(jobId: string): Promise<PartsRequestWithRefs>` | mock | staff | audit | components/inbox/InboxJobCard.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwPartsPage.tsx |
 | `partsAssistantReply` | sync | `(query: string, job: Job):` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `partsChat` | async | `(requestId: string, text: string): Promise<PartsRequestWithRefs>` | mock | staff | audit | components/parts/PartsChat.tsx |
 | `attachPart` | async | `(requestId: string, partId: string, qty = 1, note?: string): Promise<PartsRequestWithRefs>` | mock | staff | audit, comms thread | components/parts/PartsChat.tsx |
@@ -342,7 +344,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
 | `getRequestsForClient` | async | `(clientId: string): Promise<ServiceRequest[]>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
-| `getClient360` | async | `(clientId: string): Promise<Client360 \| null>` | mock | staff | email → Sent | pages/clients/Client360Page.tsx |
+| `getClient360` | async | `(clientId: string): Promise<Client360 \| null>` | mock | staff | email → Outbox | pages/clients/Client360Page.tsx |
 | `getClientDirectory` | async | `(): Promise<ClientDirectoryRow[]>` | mock | staff | audit | pages/clients/ClientsPage.tsx |
 
 ## E8 RolliConnect — client portal. Same store, client-scoped reads, a handful of client-initiated writes
@@ -414,7 +416,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `portalConfirmPickupWindow` | async | `(clientId: string, id: string, date: string, slot: PickupWindow['slot'], note?: string): Promise<SalesOrderWithRefs>` | mock | client-portal | audit, localStorage | pages/rc/RcInvoicePage.tsx |
 | `portalSubmitShippingInfo` | async | `(clientId: string, id: string, address: Address, phone: string): Promise<SalesOrderWithRefs>` | mock | client-portal | audit, localStorage | pages/rc/RcInvoicePage.tsx |
 | `portalGetMessages` | async | `(clientId: string): Promise<Message[]>` | mock | client-portal | audit, localStorage | pages/rc/RcMessagesPage.tsx |
-| `portalSendMessage` | async | `(clientId: string, text: string, watchId?: string): Promise<Message>` | mock | client-portal | audit, localStorage | pages/rc/RcMessagesPage.tsx |
+| `portalSendMessage` | async | `(clientId: string, text: string, watchId?: string, opts:` | mock | client-portal | audit, localStorage | pages/rc/RcMessagesPage.tsx |
 | `getStaffInbox` | async | `(): Promise<StaffInboxThread[]>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `getStaffInboxUnread` | async | `(): Promise<number>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `markThreadRead` | async | `(clientId: string): Promise<void>` | mock | staff | audit, localStorage | — (internal / other client.ts functions only) |
@@ -473,7 +475,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `EVIDENCE_SLOTS` | sync | `:` | mock | staff | none (read) | components/companion/CompanionTabs.tsx, components/jobs/EvidencePanel.tsx, pages/rw/RwQcPage.tsx |
 | `PARTS_GRADES` | sync | `: PartsGrade[] = ['B', 'Ø/REPL', 'D/REPL'];` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx |
 | `EVIDENCE_REQUIRED` | sync | `: Record<JobKind, EvidenceSlot[]>` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwQcPage.tsx |
-| `evidenceGaps` | sync | `= (j: Job): EvidenceSlot[] => (j.status !== 'testing' ? [] : EVIDENCE_REQUIRED[j.kind].filter((s) => !rs.evidence.some((e) => e.jobId === j.id && e.slot === s)));` | mock | staff | audit, email → Sent, job status | components/jobs/EvidencePanel.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwQcPage.tsx |
+| `evidenceGaps` | sync | `= (j: Job): EvidenceSlot[] => (j.status !== 'testing' ? [] : EVIDENCE_REQUIRED[j.kind].filter((s) => !rs.evidence.some((e) => e.jobId === j.id && e.slot === s)));` | mock | staff | audit, email → Outbox, job status | components/jobs/EvidencePanel.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwQcPage.tsx |
 | `getEvidenceForJob` | async | `(jobId: string): Promise<EvidenceItem[]>` | mock | staff | none (read) | components/companion/CompanionTabs.tsx, components/jobs/EvidencePanel.tsx |
 | `getEvidenceForWatch` | async | `(watchId: string): Promise<(EvidenceItem &` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx |
 | `getEvidenceForClient` | async | `(clientId: string): Promise<(EvidenceItem &` | mock | staff | audit | components/jobs/EvidencePanel.tsx |
@@ -499,7 +501,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `labelPhoto` | async | `(input:` | mock | staff | audit | components/companion/CompanionTabs.tsx |
 | `companionCanSeeMoney` | sync | `= canSeeMoney;` | mock | staff | audit | — (internal / other client.ts functions only) |
 
-## E14 Comms hub — one thread-space per client; Sent-only sends; reply-token routing (mocked)
+## E14 Comms hub — one thread-space per client; Sent-record only (nothing leaves); reply-token routing (mocked)
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
@@ -508,7 +510,25 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `getClientFolder` | async | `(clientId: string): Promise<ConversationWithRefs[]>` | mock | staff | audit | pages/InboxPage.tsx |
 | `getThread` | async | `(id: string): Promise<ThreadView>` | mock | staff | audit | pages/InboxPage.tsx |
 | `clearMessage` **[post-E16]** **[post-refresh]** | async | `(conversationId: string, messageId: string): Promise<ThreadView>` | mock | staff | audit | pages/InboxPage.tsx |
-| `markConversationRead` | async | `(id: string): Promise<void>` | mock | staff | audit | pages/InboxPage.tsx |
+| `markConversationRead` | async | `(id: string): Promise<void>` | mock | staff | none (read) | pages/InboxPage.tsx |
+
+## Inbox job-card slide-out + sidebar badges (MH 2026-10-01)
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `inboxUnreadCountSync` **[post-E16]** **[post-refresh]** | sync | `= () =>` | mock | staff | none (read) | components/layout/Sidebar.tsx |
+| `openRequestsNoEstimateCountSync` **[post-E16]** **[post-refresh]** | sync | `= () => store.requests.filter((r) => r.status !== 'closed' && !r.estimateId && (r.division ?? 'rolliworks') === getSessionDivision()).length;` | mock | staff | none (read) | components/layout/Sidebar.tsx |
+| `requestByIdSync` **[post-E16]** **[post-refresh]** | sync | `= (id: string): ServiceRequest \| undefined => store.requests.find((r) => r.id === id);` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx |
+| `requestLegsSync` **[post-E16]** **[post-refresh]** | sync | `= (r: ServiceRequest): DeptCode[] => r.legs ?? (r.kiosk ? Array.from(new Set(r.kiosk.services.map((s) => KIOSK_LEG[s]))) : []);` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx |
+| `requestInstantRangeSync` **[post-E16]** **[post-refresh]** | sync | `= (r: ServiceRequest):` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx |
+| `ensureRequestThread` **[post-E16]** **[post-refresh]** | async | `(requestId: string): Promise<Conversation>` | mock | staff | none (read) | pages/RequestsPage.tsx |
+| `conversationForRequestSync` **[post-E16]** **[post-refresh]** | sync | `= (requestId: string): Conversation \| undefined => cx.conversations.find((c) => c.anchor?.kind === 'request' && c.anchor.id === requestId);` | mock | staff | audit | pages/RequestsPage.tsx |
+| `jobPickupSync` **[post-E16]** **[post-refresh]** | sync | `= (jobId: string):` | mock | staff | audit | components/inbox/InboxJobCard.tsx |
+| `jobReturnInfoSync` **[post-E16]** **[post-refresh]** | sync | `= (job: Job):` | mock | staff | audit | components/inbox/InboxJobCard.tsx, components/jobs/ItemHeader.tsx |
+| `jobsReturnedFromSync` **[post-E16]** **[post-refresh]** | sync | `= (jobId: string): Job[] => store.jobs.filter((j) => j.returnOfJobId === jobId);` | mock | staff | audit | components/inbox/InboxJobCard.tsx, components/jobs/ItemHeader.tsx |
+| `jobByIdSync` **[post-E16]** **[post-refresh]** | sync | `= (id: string): Job \| undefined => store.jobs.find((j) => j.id === id);` | mock | staff | audit | components/inbox/InboxJobCard.tsx |
+| `jobForEstimateSync` **[post-E16]** **[post-refresh]** | sync | `= (estimateId: string): Job \| undefined => store.jobs.find((j) => j.estimateId === estimateId);` | mock | staff | audit | components/inbox/InboxJobCard.tsx |
+| `watchByIdSync` **[post-E16]** **[post-refresh]** | sync | `= (id?: string): Watch \| undefined => (id ? store.watches.find((w) => w.id === id) : undefined);` | mock | staff | audit | components/inbox/InboxJobCard.tsx |
 | `assignConversation` | async | `(id: string, assignee: Assignee \| null): Promise<ConversationWithRefs>` | mock | staff | audit | pages/InboxPage.tsx |
 | `snoozeConversation` | async | `(id: string, untilIso: string): Promise<ConversationWithRefs>` | mock | staff | audit | pages/InboxPage.tsx |
 | `wakeConversation` | async | `(id: string): Promise<ConversationWithRefs>` | mock | staff | audit | pages/InboxPage.tsx |
@@ -531,12 +551,12 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `renderTemplateForEstimate` **[post-E16]** | async | `(estimateId: string, shopDefault = false): Promise<RenderedTemplate &` | mock | staff | audit, comms thread | components/estimates/EstimateModals.tsx |
 | `mergeValuesForConversation` **[post-E16]** | async | `(conversationId: string): Promise<Record<string, string>>` | mock | staff | audit, comms thread | pages/InboxPage.tsx |
 | `replyInThread` | async | `(id: string, input:` | mock | staff | audit, comms thread | pages/InboxPage.tsx |
-| `addThreadNote` | async | `(id: string, text: string): Promise<ConvMessage>` | mock | staff | audit, comms thread | pages/InboxPage.tsx |
+| `addThreadNote` | async | `(id: string, text: string): Promise<ConvMessage>` | mock | staff | audit, comms thread | components/inbox/InboxJobCard.tsx, pages/InboxPage.tsx |
 | `simulateInboundReply` | async | `(id: string, text: string): Promise<ConvMessage>` | mock | webhook | audit, comms thread | pages/InboxPage.tsx |
-| `threadNeedsReplyFor` | sync | `= (anchor: ConversationAnchor): ConversationWithRefs \| undefined =>` | mock | staff | email → Sent | components/jobs/JobBits.tsx, pages/estimates/EstimatesListPage.tsx |
-| `clientNeedsReplyCount` | sync | `= (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;` | mock | staff | comms thread | — (internal / other client.ts functions only) |
+| `threadNeedsReplyFor` | sync | `= (anchor: ConversationAnchor): ConversationWithRefs \| undefined =>` | mock | staff | email → Outbox | components/jobs/JobBits.tsx, pages/estimates/EstimatesListPage.tsx |
+| `clientNeedsReplyCount` | sync | `= (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;` | mock | staff | audit, comms thread | — (internal / other client.ts functions only) |
 | `threadsNeedingReplyForUser` | sync | `= (me: User) =>` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `getCommsUnread` | async | `(): Promise<number>` | mock | staff | email → Sent | — (internal / other client.ts functions only) |
+| `getCommsUnread` | async | `(): Promise<number>` | mock | staff | email → Outbox | — (internal / other client.ts functions only) |
 
 ## E15 Portal-first inspection report (MH 2026-09-25): emails notify, the portal renders
 
@@ -544,9 +564,9 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `REPORT_COMPONENTS` | const | `fixture re-export` | mock | staff | none (read) | components/jobs/InspectionReportPanel.tsx |
 | `COMPONENT_GRADES` | sync | `: ComponentGrade[] = ['good', 'fair', 'worn', 'replace'];` | mock | staff | none (read) | components/jobs/InspectionReportPanel.tsx |
-| `INSPECTION_SURVEY` **[post-E16]** | sync | `= ['How would you like us to reach you with updates?', 'Anything we should know about this watch?'];` | mock | staff | email → Sent | pages/rc/RcReportPage.tsx |
-| `getInspectionDecisions` **[post-E16]** | async | `(filter:` | mock | staff | email → Sent | components/jobs/JobDecisionRecords.tsx, pages/rc/RcWatchPage.tsx |
-| `portalAskAboutReport` **[post-E16]** | async | `(token: string, text: string): Promise<Message>` | mock | client-portal | email → Sent | pages/rc/RcReportPage.tsx |
+| `INSPECTION_SURVEY` **[post-E16]** | sync | `= ['How would you like us to reach you with updates?', 'Anything we should know about this watch?'];` | mock | staff | email → Outbox | pages/rc/RcReportPage.tsx |
+| `getInspectionDecisions` **[post-E16]** | async | `(filter:` | mock | staff | email → Outbox | components/jobs/JobDecisionRecords.tsx, pages/rc/RcWatchPage.tsx |
+| `portalAskAboutReport` **[post-E16]** | async | `(token: string, text: string): Promise<Message>` | mock | client-portal | email → Outbox | pages/rc/RcReportPage.tsx |
 | `getInspectionReportsForJob` | async | `(jobId: string): Promise<InspectionReportDoc[]>` | mock | staff | audit, comms thread, job status | components/jobs/InspectionReportPanel.tsx |
 | `issueInspectionReport` | async | `(jobId: string, grades:` | mock | staff | audit, comms thread, job status | components/jobs/InspectionReportPanel.tsx |
 | `portalGetInspectionReport` | async | `(token: string): Promise<PortalInspectionReport>` | mock | client-portal | job status | pages/rc/RcReportPage.tsx |
@@ -562,7 +582,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `timingPassed` **[post-E16]** | sync | `= (j: Job): TimingTest \| undefined =>` | mock | staff | none (read) | pages/rw/RwQcPage.tsx |
 | `testingStationScan` **[post-E16]** | async | `(label: string): Promise<JobWithRefs>` | mock | staff | none (read) | pages/rw/testing/RwTestingQueuePage.tsx |
 | `getTestingQueue` | async | `(): Promise<JobWithRefs[]>` | mock | staff | none (read) | pages/rw/testing/RwTestingQueuePage.tsx |
-| `findJobByLabel` | async | `(scan: string): Promise<JobWithRefs \| null>` | mock | staff | none (read) | components/rw/FloorPanels.tsx, pages/rw/AssignMovePage.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwEvidencePage.tsx |
+| `findJobByLabel` | async | `(scan: string): Promise<JobWithRefs \| null>` | mock | staff | none (read) | components/rw/FloorPanels.tsx, components/rw/pad/PadBin.tsx, pages/rw/AssignMovePage.tsx, pages/rw/RwBulkAssignPage.tsx, pages/rw/RwEvidencePage.tsx |
 | `getTimingTests` | async | `(filter:` | mock | staff | audit | components/jobs/TimingCard.tsx, pages/rw/testing/RwTestingTestPage.tsx |
 | `recordTimingTest` | async | `(jobId: string, input: TimingInput): Promise<TimingTest>` | mock | staff | audit | pages/rw/testing/RwTestingTestPage.tsx |
 
@@ -635,8 +655,9 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `polishGateScan` **[post-E16]** **[post-refresh]** | async | `(label: string, direction: GateDirection, track: GateTrack, assignTo?: string): Promise<GateScanResult>` | mock | staff | audit | pages/rw/RwFloorPage.tsx |
 | `bulkPartFor` **[post-E16]** **[post-refresh]** | sync | `= (to: RwStationKey, bandLabel: boolean): ComponentKey => (bandLabel \|\| stationOf(to).lane === 'band' ? 'band' : GATE_TARGET[to] \|\| to.includes('polish') ? 'case' : 'head');` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `resolveBulkLabel` **[post-E16]** **[post-refresh]** | async | `(label: string, to: RwStationKey): Promise<BulkRow>` | mock | staff | audit | components/rw/FloorPanels.tsx |
+| `stationLockedForMe` **[post-E16]** **[post-refresh]** | sync | `= (to: string) =>` | mock | staff | audit | components/rw/DestinationMap.tsx |
 | `bulkCommit` **[post-E16]** **[post-refresh]** | async | `(rows: BulkRow[], to: RwStationKey, handTo?: string): Promise<BulkResult[]>` | mock | staff | audit | components/rw/FloorPanels.tsx |
-| `jobSummaryContext` **[post-E16]** **[post-refresh]** | async | `(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext>` | mock | staff | none (read) | components/jobs/JobSummaryDraft.tsx |
+| `jobSummaryContext` **[post-E16]** **[post-refresh]** | async | `(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext>` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx, components/jobs/JobSummaryDraft.tsx |
 | `getCustodyByPerson` **[post-E16]** **[post-refresh]** | async | `(): Promise<CustodyByPerson[]>` | mock | staff | none (read) | pages/rw/CustodyPage.tsx |
 
 ## MH HITLIST — owner accountability: client asset $ on premises + every bypass use (visibility feed, not a gate)
@@ -644,14 +665,14 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
 | `getHitlist` **[post-E16]** **[post-refresh]** | async | `(): Promise<Hitlist>` | mock | staff | audit | pages/rs/HitlistPage.tsx |
-| `getGateScans` **[post-E16]** **[post-refresh]** | async | `(jobId?: string): Promise<GateScan[]>` | mock | staff | audit, email → Sent, job status | pages/rw/RwFloorPage.tsx |
-| `POLISHERS` **[post-E16]** **[post-refresh]** | sync | `= ['Walter', 'JV', 'Leo'];` | mock | staff | audit, email → Sent, job status | components/rw/FloorPanels.tsx, pages/rw/RwFloorPage.tsx |
-| `parseTechCode` **[post-E16]** | sync | `= (code: string): User \| undefined =>` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
-| `getScanSession` **[post-E16]** | sync | `= (): ScanSession => rw18.scanSession;` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
-| `scanTech` **[post-E16]** | async | `(code: string): Promise<ScanSession>` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
-| `scanLabelAssign` **[post-E16]** | async | `(label: string): Promise<ScanSession>` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
-| `undoOutbox` **[post-E16]** | async | `(id: string): Promise<void>` | mock | staff | audit, email → Sent, comms thread | pages/rw/RwBulkAssignPage.tsx |
-| `getQueuedOutbox` **[post-E16]** | async | `(): Promise<OutboxEmail[]>` | mock | staff | email → Sent, comms thread | pages/rw/RwBulkAssignPage.tsx |
+| `getGateScans` **[post-E16]** **[post-refresh]** | async | `(jobId?: string): Promise<GateScan[]>` | mock | staff | audit, job status | pages/rw/RwFloorPage.tsx |
+| `POLISHERS` **[post-E16]** **[post-refresh]** | sync | `= ['Walter', 'JV', 'Leo'];` | mock | staff | audit, email → Outbox, job status | components/rw/FloorPanels.tsx, pages/rw/RwFloorPage.tsx |
+| `parseTechCode` **[post-E16]** | sync | `= (code: string): User \| undefined =>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `getScanSession` **[post-E16]** | sync | `= (): ScanSession => rw18.scanSession;` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `scanTech` **[post-E16]** | async | `(code: string): Promise<ScanSession>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `scanLabelAssign` **[post-E16]** | async | `(label: string): Promise<ScanSession>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
+| `undoOutbox` **[post-E16]** | async | `(id: string): Promise<void>` | mock | staff | audit, email → Outbox, comms thread | pages/rw/RwBulkAssignPage.tsx |
+| `getQueuedOutbox` **[post-E16]** | async | `(): Promise<OutboxEmail[]>` | mock | staff | email → Outbox, comms thread | pages/rw/RwBulkAssignPage.tsx |
 | `getWorkQueue` **[post-E16]** | async | `(): Promise<WorkQueueRow[]>` | mock | staff | comms thread | pages/rw/RwWorkQueuePage.tsx |
 | `simulateClientReply` **[post-E16]** | async | `(jobId?: string): Promise<string>` | mock | webhook | comms thread | pages/rw/RwWorkQueuePage.tsx |
 | `clearClientReplied` **[post-E16]** | sync | `= (jobId: string) =>` | mock | staff | audit | — (internal / other client.ts functions only) |
@@ -659,7 +680,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `sendPartByScan` **[post-E16]** | async | `(label: string, to: 'safe' \| 'refinish', key?: ComponentKey): Promise<FloorDot>` | mock | staff | audit | pages/rw/RwWmPage.tsx |
 | `requestPartSimple` **[post-E16]** | async | `(jobId: string, description: string, qty: number, source: PartsRequest['source'] = 'wm'): Promise<PartsRequestWithRefs>` | mock | staff | audit | pages/rw/RwWmPage.tsx |
 | `getStationMemory` **[post-E16]** | sync | `= () => rw18.stationMemory;` | mock | staff | job status | pages/rw/RwStationScanPage.tsx |
-| `stationScan` **[post-E16]** | async | `(station: RwStationKey, label: string): Promise<FloorDot>` | mock | staff | job status | pages/rw/RwStationScanPage.tsx |
+| `stationScan` **[post-E16]** | async | `(station: RwStationKey, label: string): Promise<FloorDot>` | mock | staff | job status | pages/rw/RwDevicePage.tsx, pages/rw/RwShell.tsx, pages/rw/RwStationScanPage.tsx |
 | `ROOM_TECHS` **[post-E16]** **[post-refresh]** | sync | `: Record<PadRoom, string[]>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `ROOM_LABEL` **[post-E16]** **[post-refresh]** | sync | `: Record<PadRoom, string>` | mock | staff | none (read) | pages/rw/RwPadPage.tsx |
 | `getPadBoard` **[post-E16]** | async | `(room: PadRoom = 'wm'): Promise<PadCard[]>` | mock | staff | job status | pages/rw/RwPadPage.tsx |
@@ -678,7 +699,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `capturePadPhoto` **[post-E16]** | async | `(jobId: string, dataUrl: string, slotKey: string): Promise<JobWithRefs>` | mock | staff | none (read) | components/rw/pad/PadCamera.tsx |
 | `getRoomPartsHistory` **[post-E16]** | async | `(): Promise<(PartsRequestWithRefs &` | mock | staff | none (read) | components/rw/pad/PadHistory.tsx |
 | `getRoomSummary` **[post-E16]** | async | `(): Promise<RoomSummary>` | mock | staff | none (read) | pages/rw/RwPadPage.tsx |
-| `PART_LABELS` **[post-E16]** | sync | `= PART_LABEL;` | mock | staff | none (read) | pages/rw/RwWorkQueuePage.tsx |
+| `PART_LABELS` **[post-E16]** | sync | `= PART_LABEL;` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx, components/jobs/JobBits.tsx, pages/InboxPage.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwWorkQueuePage.tsx |
 
 ## Supervisor Pad v2 — Jobs (tech override + condition) · Parts (caliber query, reference search, M3KE) · Review (manager gate)
 
@@ -693,6 +714,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `getReviewQueue` **[post-E16]** | async | `(): Promise<` | mock | staff | audit | components/rw/pad/PadReview.tsx, pages/rw/RwPadPage.tsx |
 | `reviewItem` **[post-E16]** | async | `(requestId: string, index: number, patch:` | mock | staff | audit | components/rw/pad/PadReview.tsx |
 | `sendForClientApproval` **[post-E16]** | async | `(requestId: string): Promise<PartsRequestWithRefs>` | mock | staff | audit, comms thread | components/rw/pad/PadReview.tsx |
+| `sendReadyApproval` **[post-E16]** **[post-refresh]** | async | `(requestId: string): Promise<PartsRequestWithRefs>` | mock | staff | audit, comms thread | pages/rs/ApprovalsToSendPage.tsx |
 | `simulateClientPartsDecision` **[post-E16]** | async | `(requestId: string, decision: 'approve' \| 'decline'): Promise<PartsRequestWithRefs>` | mock | webhook | audit, comms thread | components/rw/pad/PadReview.tsx |
 | `padAllocate` **[post-E16]** | async | `(requestId: string): Promise<PartsRequestWithRefs>` | mock | staff | audit | components/rw/pad/PadReview.tsx |
 | `partsOnHand` **[post-E16]** | sync | `= (partId: string) => store.parts.find((p) => p.id === partId)?.stock ?? 0;` | mock | staff | audit | components/rw/pad/PadReview.tsx |
@@ -705,8 +727,8 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `openClientRequests` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => requestsOf(j).filter((r) => !r.check);` | mock | staff | audit | components/jobs/ClientRequests.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
-| `qcRequestGaps` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => (j.status === 'testing' ? openClientRequests(j) : []);` | mock | staff | audit, email → Sent, job status | components/jobs/ClientRequests.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
+| `openClientRequests` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => requestsOf(j).filter((r) => !r.check);` | mock | staff | audit | components/jobs/ClientRequests.tsx, components/jobs/ItemHeader.tsx, components/rw/pad/PadJobs.tsx, pages/rw/RwJobPage.tsx |
+| `qcRequestGaps` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => (j.status === 'testing' ? openClientRequests(j) : []);` | mock | staff | audit, email → Outbox, job status | components/jobs/ClientRequests.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
 | `addClientRequest` **[post-E16]** | async | `(jobId: string, text: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/ClientRequests.tsx |
 | `removeClientRequest` **[post-E16]** | async | `(jobId: string, reqId: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/ClientRequests.tsx |
 | `clientRequestAlert` **[post-E16]** | sync | `= (jobId: string): ClientRequestAlert \| null =>` | mock | staff | audit | pages/rw/RwBulkAssignPage.tsx, pages/rw/RwPadPage.tsx, pages/rw/RwStationScanPage.tsx, pages/rw/RwWmPage.tsx |
@@ -757,6 +779,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `STUCK_WORKING_DAYS` **[post-E16]** | sync | `= 4;` | mock | staff | audit, localStorage | — (internal / other client.ts functions only) |
 | `getBenchSettings` **[post-E16]** | sync | `= (): BenchSettings => (` | mock | station | audit, localStorage | pages/rw/RwBenchPage.tsx |
+| `isOwnerPin` **[post-E16]** **[post-refresh]** | sync | `= (pin: string) => fx.users.some((u) => u.id === OWNER_USER_ID && u.pin === pin);` | mock | staff | audit, localStorage | components/rw/bench/BenchSettings.tsx |
 | `verifySupervisorPin` **[post-E16]** | sync | `= (pin: string) => fx.users.some((u) => u.accessTier === 'manager' && u.pin === pin);` | mock | staff | audit, localStorage | components/rw/bench/BenchSettings.tsx |
 | `saveBenchSettings` **[post-E16]** | sync | `= (s: BenchSettings, supervisorPin: string): BenchSettings =>` | mock | station | audit, localStorage | components/rw/bench/BenchSettings.tsx |
 | `setKioskOffline` **[post-E16]** | sync | `= (on: boolean) =>` | mock | staff | audit, localStorage | — (internal / other client.ts functions only) |
@@ -810,23 +833,17 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `clientRatingSync` **[post-E16]** | sync | `= (clientId: string): ClientRating =>` | mock | staff | none (read) | components/clients/RatingBadge.tsx |
-| `getClientRating` **[post-E16]** | async | `(clientId: string): Promise<ClientRating>` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `setClientRating` **[post-E16]** | async | `(clientId: string, input:` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `clientRatingSync` **[post-E16]** | sync | `= (clientId: string): ClientRating =>` | mock | staff | audit, comms thread | components/clients/RatingBadge.tsx |
+| `getClientRating` **[post-E16]** | async | `(clientId: string): Promise<ClientRating>` | mock | staff | audit, email → Outbox, comms thread | — (internal / other client.ts functions only) |
+| `setClientRating` **[post-E16]** | async | `(clientId: string, input:` | mock | staff | audit, email → Outbox, comms thread | — (internal / other client.ts functions only) |
 
-## Call ledger (mock of Vonage VIP, both directions later). Every call = a comms event on the client; missed calls weigh like unanswered email.
+## Call ledger lives in ./calls.ts (Vonage mock: ring → live → ended / missed, dispositions, click-to-call). client.ts only owns the array + this bridge.
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `receiveInboundCall` **[post-E16]** | async | `(ev: InboundCallEvent): Promise<ScreenPop>` | mock | webhook | audit, comms thread | — (internal / other client.ts functions only) |
-| `getCallEvents` **[post-E16]** | async | `(filter: CallFilter \| string` | mock | staff | audit, comms thread | components/clients/CallLedger.tsx |
-| `callCountsSync` **[post-E16]** | sync | `= (clientId?: string, jobId?: string): CallCounts =>` | mock | staff | audit, comms thread | components/clients/CallLedger.tsx |
-| `getCallCounts` **[post-E16]** | async | `(clientId?: string, jobId?: string): Promise<CallCounts>` | mock | staff | audit, comms thread | — (internal / other client.ts functions only) |
-| `logCall` **[post-E16]** | async | `(input:` | mock | staff | audit, comms thread | components/clients/CallLedger.tsx |
-| `addCallNote` **[post-E16]** | async | `(id: string, text: string): Promise<CallEvent>` | mock | staff | audit, comms thread | components/clients/CallLedger.tsx, components/layout/CallPop.tsx |
-| `linkCallToJob` **[post-E16]** | async | `(id: string, jobId?: string): Promise<CallEvent>` | mock | staff | audit, comms thread | components/clients/CallLedger.tsx, components/layout/CallPop.tsx |
-| `getMissedCalls` **[post-E16]** | async | `(): Promise<MissedCallRow[]>` | mock | staff | comms thread | components/layout/MissedCallsPanel.tsx |
-| `resolveMissedCall` **[post-E16]** | async | `(id: string, resolution: 'called_back' \| 'handled', note?: string): Promise<CallEvent>` | mock | staff | comms thread | components/layout/MissedCallsPanel.tsx |
+| `callsBridge` **[post-E16]** **[post-refresh]** | sync | `` | mock | staff | audit, email → Outbox, comms thread | — (internal / other client.ts functions only) |
+| `clientByIdSync` **[post-E16]** **[post-refresh]** | sync | `= (id: string): Client \| undefined => fx.clients.find((c) => c.id === id);` | mock | staff | none (read) | components/clients/CallLedger.tsx, components/inbox/InboxJobCard.tsx |
+| `jobNumberSync` **[post-E16]** **[post-refresh]** | sync | `= (id: string): string \| undefined => store.jobs.find((j) => j.id === id)?.number;` | mock | staff | none (read) | components/clients/CallLedger.tsx, components/inbox/InboxJobCard.tsx |
 
 ## INVENTORY DEEP SESSION — pricing intelligence · needs-ordering · auto-PO · PO labels · receiving flips · cycle-count lock/queue/variance $
 
@@ -840,7 +857,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `PART_CATEGORIES` **[post-E16]** **[post-refresh]** | sync | `= ['Vintage Parts', 'Crystals', 'Crowns', 'Inserts', 'Mov-Parts', 'crystal gaskets', 'Bezels', 'Spring bar', 'Main Springs', 'Unique Resale'];` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `PART_CATEGORIES` **[post-E16]** **[post-refresh]** | sync | `= ['Vintage Parts', 'Crystals', 'Crowns', 'Inserts', 'Mov-Parts', 'crystal gaskets', 'Bezels', 'Spring bar', 'Main Springs', 'Unique Resale'];` | mock | staff | none (read) | components/setup/AccessLimitsDrawer.tsx |
 | `canonicalCategory` **[post-E16]** **[post-refresh]** | sync | `= (c: string): string => (PART_CATEGORIES.includes(c) ? c : LEGACY_CATEGORY[c] ?? (c.includes('spring') && !c.includes('bar') ? 'Main Springs' : c.includes('crystal') ? 'Crystals' : 'Mov-Parts'));` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `PART_SAFES` **[post-E16]** **[post-refresh]** | sync | `: PartSafe[] = [` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `searchPartsSync` **[post-E16]** **[post-refresh]** | sync | `= (q: string, limit = 25): Part[] =>` | mock | staff | audit | — (internal / other client.ts functions only) |
@@ -851,7 +868,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `savePart` **[post-E16]** **[post-refresh]** | async | `(input: PartInput): Promise<PartRow>` | mock | staff | audit | pages/rs/PartsPage.tsx |
 | `getReorderRule` **[post-E16]** **[post-refresh]** | sync | `= (partId: string): ReorderRule => inv.reorder.get(partId) ??` | mock | staff | audit | components/rs/PurchasingDeep.tsx |
 | `setReorderRule` **[post-E16]** **[post-refresh]** | async | `(partId: string, min: number, orderUpTo: number): Promise<ReorderRule>` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `queueNeedsOrdering` **[post-E16]** **[post-refresh]** | async | `(partId: string, reason: 'out_of_stock' \| 'pick_short', qty: number, ctx:` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `queueNeedsOrdering` **[post-E16]** **[post-refresh]** | async | `(partId: string, reason: 'out_of_stock' \| 'pick_short', qty: number, ctx:` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `getNeedsOrdering` **[post-E16]** **[post-refresh]** | async | `(): Promise<NeedsOrderingRow[]>` | mock | staff | audit | components/rs/PurchasingDeep.tsx |
 | `generatePurchaseOrder` **[post-E16]** **[post-refresh]** | async | `(vendorId: string, locationId = 'loc-a1'): Promise<PurchaseOrderWithRefs>` | mock | staff | audit | components/rs/PurchasingDeep.tsx |
 | `poRedLines` **[post-E16]** **[post-refresh]** | sync | `= (p: PurchaseOrder) => p.lines.filter((l) => priceColor(l.unitCost, l.avgAtOrder ?? partPricingSync(l.partId).avgCost) === 'red');` | mock | staff | audit | components/rs/PurchasingDeep.tsx |
@@ -925,7 +942,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `getEstimates` | sync | `= route('getEstimates', getEstimatesMock, real.getEstimates);` | real | staff | none (read) | pages/rs/RsPages.tsx |
 | `getEstimate` | sync | `= route('getEstimate', getEstimateMock, async (id: string) => (await real.getEstimate(id)) ?? getEstimateMock(id));` | real | staff | none (read) | components/companion/CompanionPanel.tsx, pages/estimates/EstimateDetailPage.tsx |
 | `getJobs` | sync | `= route('getJobs', getJobsMock, real.getJobs);` | real | staff | none (read) | components/today/NewTaskForm.tsx, pages/rs/RsPages.tsx |
-| `getJob` | sync | `= route('getJob', getJobMock, async (id: string) => (await real.getJob(id)) ?? getJobMock(id));` | real | staff | none (read) | components/companion/CompanionPanel.tsx, components/companion/CompanionTabs.tsx, components/layout/MessageComposer.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwJobPage.tsx, pages/rw/testing/RwTestingTestPage.tsx |
+| `getJob` | sync | `= route('getJob', getJobMock, async (id: string) => (await real.getJob(id)) ?? getJobMock(id));` | real | staff | none (read) | components/companion/CompanionPanel.tsx, components/companion/CompanionTabs.tsx, components/inbox/InboxJobCard.tsx, components/layout/MessageComposer.tsx, components/layout/MessageDirectory.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwInspectPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/testing/RwTestingTestPage.tsx |
 | `getSalesOrders` | sync | `= route('getSalesOrders', getSalesOrdersMock, real.getSalesOrders);` | real | staff | none (read) | components/layout/CornerLookup.tsx, pages/rs/RsPages.tsx |
 | `getSalesOrder` | sync | `= route('getSalesOrder', getSalesOrderMock, async (id: string) => (await real.getSalesOrder(id)) ?? getSalesOrderMock(id));` | real | staff | none (read) | pages/sales/PickupStationPage.tsx, pages/sales/SalesOrderDetailPage.tsx, pages/sales/ShipStationPage.tsx |
 | `getToday` | sync | `= route('getToday', getTodayMock, real.getToday);` | real | staff | none (read) | components/dashboard/HitListPanel.tsx, components/today/StaffHitListModal.tsx, pages/TodayPage.tsx |
@@ -1014,14 +1031,14 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `searchRwHistory` **[post-E16]** **[post-refresh]** | async | `(query: string): Promise<RwHistoryHit[]>` | mock | staff | email → Sent | pages/rw/RwHistoryPage.tsx |
-| `uniqComponents` **[post-E16]** **[post-refresh]** | sync | `= (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));` | mock | staff | email → Sent | components/estimates/ComponentChain.tsx, components/intake/IntakeHistoryBits.tsx |
+| `searchRwHistory` **[post-E16]** **[post-refresh]** | async | `(query: string): Promise<RwHistoryHit[]>` | mock | staff | email → Outbox | pages/rw/RwHistoryPage.tsx |
+| `uniqComponents` **[post-E16]** **[post-refresh]** | sync | `= (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));` | mock | staff | email → Outbox | components/estimates/ComponentChain.tsx, components/intake/IntakeHistoryBits.tsx |
 
 ## Sent emails for a job (read-only aggregation for the Supervisor Pad detail) — Sent rows whose ref is the job, its estimate, its SO or one of its parts requests; parts-approval status comes from the PR
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `getJobEmails` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<JobEmailRow[]>` | mock | staff | email → Sent | components/rw/pad/PadJobs.tsx |
+| `getJobEmails` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<JobEmailRow[]>` | mock | staff | email → Outbox | components/rw/pad/PadJobs.tsx |
 
 ## Shared job filter vocabulary — one list for the RS "All Jobs" view and the RW Reports section (modeled on the legacy RolliWorks Reports screen)
 
@@ -1109,7 +1126,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `ZERO_REASON_LABEL` **[post-E16]** **[post-refresh]** | sync | `: Record<ZeroBalanceReason, string>` | mock | staff | none (read) | components/sales/FulfillMenu.tsx, pages/rs/HitlistPage.tsx, pages/sales/SalesOrderDetailPage.tsx |
 | `zeroBalanceNoSync` **[post-E16]** **[post-refresh]** | async | `(id: string, reason: ZeroBalanceReason, notes: string): Promise<SalesOrderWithRefs>` | mock | staff | audit | components/sales/FulfillMenu.tsx |
-| `zeroBalanceLog` **[post-E16]** **[post-refresh]** | sync | `= (): ZeroBalanceRow[] => store.salesOrders.filter((o) => o.zeroBalance).map((o) => (` | mock | staff | audit, email → Sent, job status | — (internal / other client.ts functions only) |
+| `zeroBalanceLog` **[post-E16]** **[post-refresh]** | sync | `= (): ZeroBalanceRow[] => store.salesOrders.filter((o) => o.zeroBalance).map((o) => (` | mock | staff | audit, job status | — (internal / other client.ts functions only) |
 
 ## Sales order Fulfill menu actions (ported from the legacy SO screen)
 
@@ -1133,36 +1150,72 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `baseStage` **[post-E16]** **[post-refresh]** | sync | `= (k: SwoStage): Exclude<SwoStage, `redo_$` | mock | staff | none (read) | pages/rs/ConciergePage.tsx |
+| `baseStage` **[post-E16]** **[post-refresh]** | sync | `= (k: SwoStage): Exclude<SwoStage, `redo_$` | mock | staff | none (read) | components/concierge/ActionMap.tsx, components/concierge/SlidePanel.tsx, pages/rs/SwoHubPage.tsx |
 | `isRedoStage` **[post-E16]** **[post-refresh]** | sync | `= (k: SwoStage) => k.startsWith('redo_');` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `SWO_STAGES` **[post-E16]** **[post-refresh]** | sync | `:` | mock | staff | none (read) | pages/rs/SwoPage.tsx |
+| `SWO_STAGES` **[post-E16]** **[post-refresh]** | sync | `:` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `SHIP_LANE` **[post-E16]** **[post-refresh]** | sync | `: SwoStage[] = ['queue', 'sent', 'at_vendor', 'inbound', 'received', 'inspection', 'fulfilled'];` | mock | staff | none (read) | — (internal / other client.ts functions only) |
 | `NOSHIP_LANE` **[post-E16]** **[post-refresh]** | sync | `: SwoStage[] = ['queue', 'at_vendor', 'inspection', 'fulfilled'];` | mock | staff | none (read) | — (internal / other client.ts functions only) |
-| `laneStagesFor` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor): SwoStage[] => (v.ships === false ? NOSHIP_LANE : SHIP_LANE);` | mock | staff | audit | pages/rs/SwoPage.tsx |
-| `swoStageLabel` **[post-E16]** **[post-refresh]** | sync | `= (k: SwoStage) => `$` | mock | staff | audit | pages/rs/ConciergePage.tsx, pages/rs/SwoPage.tsx |
-| `nextSwoStage` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor, stage: SwoStage): SwoStage \| undefined =>` | mock | staff | none (read) | pages/rs/ConciergePage.tsx |
-| `prevSwoStage` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor, stage: SwoStage): SwoStage \| undefined =>` | mock | staff | audit | pages/rs/ConciergePage.tsx |
+| `laneStagesFor` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor): SwoStage[] => (v.ships === false ? NOSHIP_LANE : SHIP_LANE);` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `swoStageLabel` **[post-E16]** **[post-refresh]** | sync | `= (k: SwoStage) => `$` | mock | staff | audit | components/concierge/ActionMap.tsx, components/concierge/SlidePanel.tsx, components/concierge/SwoBits.tsx, components/concierge/SwoCard.tsx, components/jobs/OutsourceInfo.tsx |
+| `nextSwoStage` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor, stage: SwoStage): SwoStage \| undefined =>` | mock | staff | none (read) | components/concierge/ActionMap.tsx, components/concierge/SwoCard.tsx |
+| `prevSwoStage` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor, stage: SwoStage): SwoStage \| undefined =>` | mock | staff | audit | components/concierge/ActionMap.tsx, components/concierge/SwoCard.tsx |
 | `shipDaysFor` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor) => (v.ships === false ? 0 : isInternationalVendor(v) ? 5 : 2);` | mock | staff | none (read) | pages/rs/SwoPage.tsx |
 | `defaultExpectedAt` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor, from = new Date()) => new Date(from.getTime() + ((v.leadTimeDays ?? 10) + 2 * shipDaysFor(v)) * 86_400_000).toISOString().slice(0, 10);` | mock | staff | none (read) | pages/rs/SwoPage.tsx |
-| `isInternationalVendor` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor) => !!v.country && v.country !== 'US';` | mock | staff | none (read) | pages/rs/ConciergePage.tsx, pages/rs/SwoPage.tsx |
-| `getShopWorkOrders` **[post-E16]** **[post-refresh]** | async | `(): Promise<SwoWithRefs[]>` | mock | staff | audit | pages/rs/SwoPage.tsx |
+| `isInternationalVendor` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor) => !!v.country && v.country !== 'US';` | mock | staff | none (read) | components/concierge/LaneBoard.tsx, pages/rs/SwoPage.tsx |
+| `getShopWorkOrders` **[post-E16]** **[post-refresh]** | async | `(): Promise<SwoWithRefs[]>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `getShopWorkOrder` **[post-E16]** **[post-refresh]** | async | `(id: string): Promise<SwoWithRefs>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `getOutsourceVendors` **[post-E16]** **[post-refresh]** | async | `(): Promise<Vendor[]>` | mock | staff | audit | pages/rs/SwoPage.tsx |
-| `saveShopWorkOrder` **[post-E16]** **[post-refresh]** | async | `(i: SwoInput): Promise<SwoWithRefs>` | mock | staff | audit | pages/rs/SwoPage.tsx |
-| `createSwoOutboundLabel` **[post-E16]** **[post-refresh]** | async | `(id: string, customs?: Partial<SwoCustoms>): Promise<SwoWithRefs>` | mock | staff | audit | pages/rs/SwoPage.tsx |
-| `queueSwoReturnLabel` **[post-E16]** **[post-refresh]** | async | `(id: string, predictedCompletion?: string): Promise<SwoWithRefs>` | mock | staff | audit | pages/rs/SwoPage.tsx |
-| `advanceSwo` **[post-E16]** **[post-refresh]** | async | `(id: string, to: SwoStage): Promise<SwoWithRefs>` | mock | staff | audit | pages/rs/ConciergePage.tsx, pages/rs/SwoPage.tsx |
-| `sendBackSwo` **[post-E16]** **[post-refresh]** | async | `(id: string, reason: string): Promise<SwoWithRefs>` | mock | staff | audit | pages/rs/ConciergePage.tsx |
-| `swoIsLate` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => !!w.predictedCompletion && w.predictedCompletion < new Date().toISOString().slice(0, 10) && ['sent', 'at_vendor', 'inbound'].includes(baseStage(w.stage));` | mock | staff | none (read) | pages/rs/ConciergePage.tsx |
-| `swoPaidTotal` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => w.invoices.filter((i) => i.paid).reduce((t, i) => t + i.amount, 0);` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `saveShopWorkOrder` **[post-E16]** **[post-refresh]** | async | `(i: SwoInput): Promise<SwoWithRefs>` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `createSwoOutboundLabel` **[post-E16]** **[post-refresh]** | async | `(id: string, customs?: Partial<SwoCustoms>): Promise<SwoWithRefs>` | mock | staff | audit | components/concierge/ActionMap.tsx, components/concierge/SwoCard.tsx |
+| `queueSwoReturnLabel` **[post-E16]** **[post-refresh]** | async | `(id: string, predictedCompletion?: string): Promise<SwoWithRefs>` | mock | staff | audit | components/concierge/ActionMap.tsx, components/concierge/SwoCard.tsx |
+| `advanceSwo` **[post-E16]** **[post-refresh]** | async | `(id: string, to: SwoStage): Promise<SwoWithRefs>` | mock | staff | audit | components/concierge/ActionMap.tsx, components/concierge/SwoCard.tsx |
+| `sendBackSwo` **[post-E16]** **[post-refresh]** | async | `(id: string, reason: string): Promise<SwoWithRefs>` | mock | staff | audit | components/concierge/ActionMap.tsx, components/concierge/SwoCard.tsx |
+| `swoIsLate` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => !!w.predictedCompletion && w.predictedCompletion < new Date().toISOString().slice(0, 10) && ['sent', 'at_vendor', 'inbound'].includes(baseStage(w.stage));` | mock | staff | none (read) | components/concierge/SlidePanel.tsx |
+| `swoPaidTotal` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => w.invoices.filter((i) => i.paid).reduce((t, i) => t + i.amount, 0);` | mock | staff | audit | components/concierge/SlidePanel.tsx |
 | `swoUnpaidTotal` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => w.invoices.filter((i) => !i.paid).reduce((t, i) => t + i.amount, 0);` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `swoDaysAtStage` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => Math.max(0, Math.floor((Date.now() - new Date(w.stageAt ?? w.receivedAt ?? w.inboundAt ?? w.atVendorAt ?? w.sentAt ?? w.createdAt).getTime()) / 86_400_000));` | mock | staff | audit | pages/rs/ConciergePage.tsx |
-| `getConciergeBoard` **[post-E16]** **[post-refresh]** | async | `(): Promise<ConciergeLane[]>` | mock | staff | audit | pages/rs/ConciergePage.tsx |
+| `swoDaysAtStage` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => Math.max(0, Math.floor((Date.now() - new Date(w.stageAt ?? w.receivedAt ?? w.inboundAt ?? w.atVendorAt ?? w.sentAt ?? w.createdAt).getTime()) / 86_400_000));` | mock | staff | audit | components/concierge/SwoCard.tsx, pages/rs/SwoHubPage.tsx |
+| `getConciergeBoard` **[post-E16]** **[post-refresh]** | async | `(): Promise<ConciergeLane[]>` | mock | staff | audit | pages/rs/ConciergePage.tsx, pages/rw/RwConciergePage.tsx |
+| `jobOnVendorLane` **[post-E16]** **[post-refresh]** | sync | `= (jobId: string) =>` | mock | staff | none (read) | components/rw/pad/PadJobs.tsx |
 | `conciergeVendors` **[post-E16]** **[post-refresh]** | sync | `= (): Vendor[] => rs.vendors.filter((v) => v.kind === 'outsource' && v.active);` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `conciergeBridge` **[post-E16]** **[post-refresh]** | sync | `` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `setSwoPaid` **[post-E16]** **[post-refresh]** | async | `(): Promise<never>` | mock | staff | audit | — (internal / other client.ts functions only) |
 | `pushSwoToQbo` **[post-E16]** **[post-refresh]** | async | `(id: string): Promise<SwoWithRefs>` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `getSwoJobCandidates` **[post-E16]** **[post-refresh]** | async | `(q: string): Promise<` | mock | staff | audit | pages/rs/SwoPage.tsx |
+| `getSwoJobCandidates` **[post-E16]** **[post-refresh]** | async | `(q: string): Promise<` | mock | staff | none (read) | components/concierge/SwoBits.tsx, pages/rs/SwoPage.tsx |
+
+## SWO HUBS (MH 2026-09-30) — a Shop Work Order is a CONTAINER (the box / envelope / hand-off batch) that goes to a vendor; the LINES inside are job components + what was physically sent.
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `VENDOR_PRESETS` **[post-E16]** **[post-refresh]** | sync | `: Record<string, string[]>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `partKey` **[post-E16]** **[post-refresh]** | sync | `= (label: string) => label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');` | mock | staff | none (read) | components/concierge/SwoBits.tsx |
+| `vendorPresets` **[post-E16]** **[post-refresh]** | sync | `= (v: Vendor): string[] => v.commonlySent ?? VENDOR_PRESETS[v.id] ?? [];` | mock | staff | audit | components/concierge/SwoBits.tsx, pages/rs/SwoPage.tsx |
+| `hubOf` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo): SwoHub \| undefined => hubs.find((h) => h.id === w.hubId);` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `hubStage` **[post-E16]** **[post-refresh]** | sync | `= (h: SwoHub): SwoStage =>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `hubSet` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo \| SwoHub, patch:` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `sentSummary` **[post-E16]** **[post-refresh]** | sync | `= (parts: SentPart[] \| undefined) => (parts?.length ? parts.map((p) => p.label).join(' · ') : '');` | mock | staff | none (read) | pages/rs/SwoHubPage.tsx |
+| `hubViewSync` **[post-E16]** **[post-refresh]** | sync | `= (h: SwoHub): SwoHubView =>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `findHubByCode` **[post-E16]** **[post-refresh]** | sync | `= (code: string): SwoHub \| undefined =>` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `isSwoCode` **[post-E16]** **[post-refresh]** | sync | `= (code: string) => /^SWO\s*-?\d` | mock | staff | audit | components/concierge/ActionMap.tsx |
+| `swoLineBack` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo) => lineBack(w);` | mock | staff | audit | components/concierge/SwoBits.tsx |
+| `swoReceivable` **[post-E16]** **[post-refresh]** | sync | `= (w: Swo): boolean =>` | mock | staff | audit | components/concierge/SwoCard.tsx, pages/rs/SwoHubPage.tsx |
+| `hubOpenLineIds` **[post-E16]** **[post-refresh]** | sync | `= (code: string):` | mock | staff | audit | components/concierge/ActionMap.tsx |
+| `getSwoHub` **[post-E16]** **[post-refresh]** | async | `(idOrNumber: string): Promise<SwoHubView \| null>` | mock | staff | audit | pages/rs/SwoHubPage.tsx, pages/rs/SwoPage.tsx |
+| `getSwoHubs` **[post-E16]** **[post-refresh]** | async | `(): Promise<SwoHubView[]>` | mock | staff | audit | pages/rs/SwoPage.tsx |
+| `hubForLineSync` **[post-E16]** **[post-refresh]** | sync | `= (lineId: string): SwoHubView \| null =>` | mock | staff | audit | components/concierge/SlidePanel.tsx |
+| `createSwoHub` **[post-E16]** **[post-refresh]** | async | `(input:` | mock | staff | audit | pages/rs/SwoPage.tsx |
+| `addSwoLine` **[post-E16]** **[post-refresh]** | async | `(hubId: string, input: SwoLineInput): Promise<SwoHubView>` | mock | staff | audit | components/concierge/SwoBits.tsx, pages/rs/SwoPage.tsx |
+| `removeSwoLine` **[post-E16]** **[post-refresh]** | async | `(lineId: string): Promise<SwoHubView>` | mock | staff | audit | pages/rs/SwoHubPage.tsx |
+| `printSwoLabel` **[post-E16]** **[post-refresh]** | async | `(hubId: string): Promise<SwoHubView>` | mock | staff | audit | pages/rs/SwoHubPage.tsx |
+| `addSwoNote` **[post-E16]** **[post-refresh]** | async | `(hubId: string, text: string): Promise<SwoHubView>` | mock | staff | audit | pages/rs/SwoHubPage.tsx |
+| `createHubShipment` **[post-E16]** **[post-refresh]** | async | `(hubId: string, direction: 'outbound' \| 'return', lineIds: string[], customs?: Partial<SwoCustoms>, redoN?: number): Promise<SwoHubView>` | mock | staff | audit | components/concierge/ActionMap.tsx, pages/rs/SwoHubPage.tsx |
+| `simulateShipmentDelivered` **[post-E16]** **[post-refresh]** | async | `(hubId: string, shipmentId: string): Promise<SwoHubView>` | mock | webhook | audit | pages/rs/SwoHubPage.tsx |
+| `receiveSwoLine` **[post-E16]** **[post-refresh]** | async | `(lineId: string, returned: Record<string, boolean>): Promise<SwoHubView>` | mock | staff | audit | components/concierge/SwoBits.tsx |
+| `markPartReturned` **[post-E16]** **[post-refresh]** | async | `(lineId: string, key: string): Promise<SwoHubView>` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `updateSwoHub` **[post-E16]** **[post-refresh]** | async | `(hubId: string, patch:` | mock | staff | audit | pages/rs/SwoHubPage.tsx |
+| `moveSwoLines` **[post-E16]** **[post-refresh]** | async | `(lineIds: string[], dir: 'forward' \| 'back', reason?: string): Promise<MoveResult>` | mock | staff | none (read) | components/concierge/SlidePanel.tsx, pages/rs/SwoHubPage.tsx |
+| `moveLineToHub` **[post-E16]** **[post-refresh]** | async | `(lineId: string, hubCode: string): Promise<SwoHubView>` | mock | staff | audit | pages/rs/SwoHubPage.tsx |
+| `openHubsForVendor` **[post-E16]** **[post-refresh]** | sync | `= (vendorId: string): SwoHubView[] =>` | mock | staff | none (read) | pages/rs/SwoHubPage.tsx, pages/rs/SwoPage.tsx |
+| `jobAwaySync` **[post-E16]** **[post-refresh]** | sync | `= (jobId: string): AwayPart[] =>` | mock | staff | none (read) | components/jobs/OutsourceInfo.tsx |
 
 ## Feature switches (Setup, manager)
 
@@ -1196,10 +1249,117 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `accessOverridesFor` **[post-E16]** **[post-refresh]** | sync | `= (userId: string): Record<string, boolean> => (` | mock | staff | audit, localStorage | pages/rs/AccessControlPage.tsx |
 | `getAccessUsers` **[post-E16]** **[post-refresh]** | async | `(): Promise<User[]>` | mock | staff | audit, localStorage | pages/rs/AccessControlPage.tsx |
 | `setAccessOverride` **[post-E16]** **[post-refresh]** | async | `(userId: string, screenKey: string, screenLabel: string, value: AccessValue): Promise<Record<string, boolean>>` | mock | staff | audit, localStorage | pages/rs/AccessControlPage.tsx |
-| `getAccessLog` **[post-E16]** **[post-refresh]** | async | `(): Promise<AccessChange[]>` | mock | staff | none (read) | pages/rs/AccessControlPage.tsx |
+| `getAccessLog` **[post-E16]** **[post-refresh]** | async | `(): Promise<AccessChange[]>` | mock | staff | audit | pages/rs/AccessControlPage.tsx |
 
-_Total exports: 754 · baseline at E16: 296 · **[post-E16] new: 458** · baseline at 2026-09-26 refresh: 461 · **[post-refresh] new: 294**._
+## G6 Access control additions (MH 2026-09-30): enable / disable with reason, Limits drawer (lockedStations · partsCategories · pricing), org tree (reportsTo), containers owned, new user from template
 
-Post-refresh exports: `clientRefSubject`, `setClientRef`, `setJobClientRef`, `jobClientRef`, `isReceptionMode`, `receptionSource`, `OWNER_USER_ID`, `isOwnerSync`, `getViewAs`, `continueAsSelf`, `startViewAs`, `stopViewAs`, `inMyDivision`, `saleDateOf`, `getIntakePhotoQueue`, `getAwaitingApprovalQueue`, `SHELF_BINS`, `getShelf`, `shelvePackage`, `openScan`, `shelfPackagesSync`, `getPackageCustody`, `setItemScan`, `labelModel`, `parseRefSerial`, `setItemReceived`, `isInspectionPhoto`, `addPackageInspectionPhoto`, `getIntakeHistory`, `getLabelsForPackage`, `updateIntakeRecord`, `totalsFor as computeEstimateTotals`, `PHOTO_TYPES`, `addJobPhotoSync`, `addJobPhoto`, `lineOpenFor`, `closeOutEstimateLine`, `soScanGate`, `confirmSoClientByScan`, `overrideSoScanGate`, `RC_DEMO_TOTP`, `rcLookup`, `rcRequestSignup`, `rcVerifyInvite`, `rcSignup`, `rcConfirmTotp`, `rcSignIn`, `rcVerifyTotp`, `rcGetAccount`, `rcRegenerateBackupCodes`, `rcListAccounts`, `rcResetAccount`, `RC_DOC_META`, `rcDocAccess`, `getRcDocAccess`, `setRcDocAccess`, `rcDocTypeForPath`, `isPhotoUnlocked`, `setPhotoUnlocked`, `getVendorSummaries`, `getVendorDetail`, `isBandOnlyJob`, `bandLabelPayload`, `queueJobLabels`, `resolveScan`, `sameNameClients`, `duplicateNamesIn`, `setTemplateActive`, `clearMessage`, `RG_DEFAULT_SETTINGS`, `rgEffectivePunches`, `rgAllPunches`, `rgGetSettings`, `rgSaveSettings`, `rgIsOffline`, `rgDistanceM`, `rgQueueCount`, `rgSyncQueue`, `rgKioskStation`, `rgSetKioskStation`, `rgKioskPunch`, `getMyWeek`, `rgGetFlags`, `rgCorrectPunch`, `rgAddPunch`, `rgPayrollCsv`, `isSafeStation`, `isSplitFlow`, `GATE`, `polishGateScan`, `bulkPartFor`, `resolveBulkLabel`, `bulkCommit`, `jobSummaryContext`, `getCustodyByPerson`, `getHitlist`, `getGateScans`, `POLISHERS`, `ROOM_TECHS`, `ROOM_LABEL`, `sendLabelRequest`, `auditScopeFor`, `partPricingSync`, `getPartPricing`, `priceColor`, `PART_CATEGORIES`, `canonicalCategory`, `PART_SAFES`, `searchPartsSync`, `searchParts`, `getPartsModule`, `getCalibers`, `saveCaliber`, `savePart`, `getReorderRule`, `setReorderRule`, `queueNeedsOrdering`, `getNeedsOrdering`, `generatePurchaseOrder`, `poRedLines`, `acknowledgeRedLines`, `generatePoLabel`, `uploadPoLabel`, `importPurchaseCsv`, `vendorOpenPos`, `vendorHistory`, `locationBarcode`, `CYCLE_STALE_DAYS`, `getCountQueue`, `resolveLocationScan`, `resolvePartScan`, `postCycleCountV2`, `getVarianceReport`, `soRecordsLink`, `soRecordsLinkFor`, `getRequestPrefill`, `convertLegacy`, `MOCK_BILL_CSV`, `MOCK_BILL_FILENAME`, `getLabelLedger`, `parseBillCsv`, `getBillAudits`, `getBillAudit`, `createBillAudit`, `decideBillLine`, `draftDisputeReport`, `sendDisputeReport`, `markBillRecovered`, `API_BASE_URL`, `API_MODE`, `API_SOURCE`, `setApiMode`, `getApiHealth`, `subscribeApiHealth`, `API_TOAST_EVENT`, `isReal`, `techRevenueGoal`, `getDeptGoal`, `getTeamGoals`, `setTechGoal`, `setDeptGoal`, `getDeptDashboard`, `jobDaysInStage`, `jobPartsAllowance`, `setJobPartsAllowance`, `getJobParts`, `quickAddPart`, `returnJobPart`, `inferComponentCodes`, `estimateComponentCodes`, `setEstimateComponents`, `getVerificationChains`, `getJobVerificationChains`, `getItemVerificationChain`, `syncEstimateComponents`, `setEstimateItemComponents`, `getVerificationChain`, `getJobVerificationChain`, `KIOSK_STEPS`, `kioskRequiredSetting`, `setKioskRequired`, `getKioskStatus`, `startKioskSession`, `recordKioskShot`, `addKioskPhoto`, `getClientReviews`, `submitClientReview`, `getQboSetup`, `qboConnect`, `qboDisconnect`, `setQboToggle`, `qboSyncClient`, `qboSyncAllClients`, `qboResolveConflict`, `matchB2bLabel`, `attachB2bMatch`, `searchRwHistory`, `uniqComponents`, `getJobEmails`, `JOB_CATEGORIES`, `REPORT_STATUSES`, `QUICK_REPORTS`, `getJobReport`, `findInspectionPackage`, `decodeSerial`, `AUTHENTICITY`, `BRACELET_LINES`, `CONDITIONS`, `INSPECTION_COMPONENTS`, `type BraceletRepairLine`, `type InspComponent`, `type InspComponentEntry`, `type InspectionForm`, `type Condition`, `type Authenticity`, `inspectionNoteLibrary`, `inspectionQuickTags`, `dialVariantTags`, `learnInspectionNote`, `learnDialVariant`, `learnQuickTag`, `inspectionTotal`, `listInspectionForms`, `getInspectionForm`, `getInspectionFormByToken`, `newInspectionForm`, `saveInspectionForm`, `addInspectionPhoto`, `applySheetSuggestion`, `shortNameOf`, `actorInfo`, `hitlistBridge`, `appraisalBridge`, `benchBridge`, `auditAppointments`, `lookupApptRef`, `clientBrief`, `previewArrival`, `commitArrivals`, `ZERO_REASON_LABEL`, `zeroBalanceNoSync`, `zeroBalanceLog`, `sendSoReminder`, `getInvoiceLink`, `updateInvoice`, `simulatePaymentWebhook`, `qboReadBalance`, `getShipCart`, `qboSyncInvoice`, `deleteSalesOrder`, `baseStage`, `isRedoStage`, `SWO_STAGES`, `SHIP_LANE`, `NOSHIP_LANE`, `laneStagesFor`, `swoStageLabel`, `nextSwoStage`, `prevSwoStage`, `shipDaysFor`, `defaultExpectedAt`, `isInternationalVendor`, `getShopWorkOrders`, `getShopWorkOrder`, `getOutsourceVendors`, `saveShopWorkOrder`, `createSwoOutboundLabel`, `queueSwoReturnLabel`, `advanceSwo`, `sendBackSwo`, `swoIsLate`, `swoPaidTotal`, `swoUnpaidTotal`, `swoDaysAtStage`, `getConciergeBoard`, `conciergeVendors`, `conciergeBridge`, `setSwoPaid`, `pushSwoToQbo`, `getSwoJobCandidates`, `FEATURE_META`, `featureOn`, `getFeatureFlags`, `setFeatureFlag`, `getClientLabelLog`, `portalStartLabel`, `portalCancelLabel`, `portalCreateLabel`, `suggestInsuredByRef`, `accessOverrideSync`, `accessOverridesFor`, `getAccessUsers`, `setAccessOverride`, `getAccessLog`
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `PRICING_LIMITS` **[post-E16]** **[post-refresh]** | sync | `:` | mock | staff | none (read) | components/setup/AccessLimitsDrawer.tsx |
+| `DEFAULT_LIMITS` **[post-E16]** **[post-refresh]** | sync | `: UserLimits` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `limitsOf` **[post-E16]** **[post-refresh]** | sync | `= (u: User): UserLimits => u.limits ?? DEFAULT_LIMITS;` | mock | staff | audit | components/setup/AccessLimitsDrawer.tsx, components/setup/NewUserFromTemplate.tsx, pages/rs/AccessControlPage.tsx, pages/rw/RwShell.tsx |
+| `isDisabledSync` **[post-E16]** **[post-refresh]** | sync | `= (u: User) => !!u.disabled;` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `managerOf` **[post-E16]** **[post-refresh]** | sync | `= (userId: string): User \| undefined =>` | mock | staff | audit, localStorage | components/setup/NewUserFromTemplate.tsx, pages/rs/AccessControlPage.tsx |
+| `managerShortOf` **[post-E16]** **[post-refresh]** | sync | `= (shortName: string): string \| undefined =>` | mock | staff | localStorage | — (internal / other client.ts functions only) |
+| `directReports` **[post-E16]** **[post-refresh]** | sync | `= (userId: string): User[] => fx.users.filter((u) => u.reportsTo === userId && !u.disabled);` | mock | staff | audit, localStorage | components/setup/AccessLimitsDrawer.tsx, pages/ChooseViewPage.tsx |
+| `chainOf` **[post-E16]** **[post-refresh]** | sync | `= (userId: string): User[] =>` | mock | staff | audit, localStorage | components/setup/AccessLimitsDrawer.tsx |
+| `subtreeOf` **[post-E16]** **[post-refresh]** | sync | `= (rootId: string): User[] =>` | mock | staff | audit, localStorage | — (internal / other client.ts functions only) |
+| `inSubtree` **[post-E16]** **[post-refresh]** | sync | `= (rootId: string, userId: string) => rootId === userId \|\| chainOf(userId).some((m) => m.id === rootId);` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `getOrgTree` **[post-E16]** **[post-refresh]** | sync | `= (): OrgNode[] =>` | mock | staff | audit, localStorage | — (internal / other client.ts functions only) |
+| `CONTAINERS` **[post-E16]** **[post-refresh]** | sync | `: Container[] = [` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `containersOwnedBy` **[post-E16]** **[post-refresh]** | sync | `= (shortName: string) => CONTAINERS.filter((c) => c.owner === shortName);` | mock | staff | audit, localStorage | components/setup/AccessLimitsDrawer.tsx |
+| `setUserEnabled` **[post-E16]** **[post-refresh]** | async | `(userId: string, enabled: boolean, reason: string): Promise<User>` | mock | staff | none (read) | components/setup/AccessLimitsDrawer.tsx |
+| `setUserLimits` **[post-E16]** **[post-refresh]** | async | `(userId: string, patch:` | mock | staff | none (read) | components/setup/AccessLimitsDrawer.tsx |
+| `createUserFromTemplate` **[post-E16]** **[post-refresh]** | async | `(input: NewUserFromTemplate): Promise<User>` | mock | staff | none (read) | components/setup/NewUserFromTemplate.tsx |
+| `RW_STATION_OPTIONS` **[post-E16]** **[post-refresh]** | sync | `:` | mock | staff | none (read) | components/setup/AccessLimitsDrawer.tsx |
 
-Post-E16 exports (diff list for coverage): `clientRefSubject`, `setClientRef`, `setJobClientRef`, `jobClientRef`, `isReceptionMode`, `receptionSource`, `OWNER_USER_ID`, `isOwnerSync`, `getViewAs`, `continueAsSelf`, `startViewAs`, `stopViewAs`, `inMyDivision`, `saleDateOf`, `getIntakePhotoQueue`, `getAwaitingApprovalQueue`, `SHELF_BINS`, `getShelf`, `shelvePackage`, `openScan`, `shelfPackagesSync`, `getPackageCustody`, `setItemScan`, `labelModel`, `parseRefSerial`, `setItemReceived`, `isInspectionPhoto`, `addPackageInspectionPhoto`, `getIntakeHistory`, `getLabelsForPackage`, `updateIntakeRecord`, `totalsFor as computeEstimateTotals`, `isTradeJob`, `isInternalTrade`, `TRADE_SEND_BACK`, `PHOTO_TYPES`, `addJobPhotoSync`, `addJobPhoto`, `lineOpenFor`, `closeOutEstimateLine`, `soScanGate`, `confirmSoClientByScan`, `overrideSoScanGate`, `payLinkPath`, `payLinkUrl`, `sendInvoice`, `getPayPage`, `payViaLink`, `portalDeepLink`, `RC_DEMO_TOTP`, `rcLookup`, `rcRequestSignup`, `rcVerifyInvite`, `rcSignup`, `rcConfirmTotp`, `rcSignIn`, `rcVerifyTotp`, `rcGetAccount`, `rcRegenerateBackupCodes`, `rcListAccounts`, `rcResetAccount`, `RC_DOC_META`, `rcDocAccess`, `getRcDocAccess`, `setRcDocAccess`, `rcDocTypeForPath`, `isPhotoUnlocked`, `setPhotoUnlocked`, `portalRevokeLink`, `startViewAsClient`, `exitViewAsClient`, `portalPhotoSections`, `portalGetPhotoSections`, `portalGetRequestCards`, `SHOP_ADDRESS`, `portalRequestLabel`, `portalDropOff`, `portalRequestRequote`, `getVendorSummaries`, `getVendorDetail`, `isBandOnlyJob`, `bandLabelPayload`, `queueJobLabels`, `resolveScan`, `sameNameClients`, `duplicateNamesIn`, `setTemplateActive`, `clearMessage`, `personalTemplateFor`, `getPersonalTemplates`, `getAllPersonalTemplates`, `getTemplateVariants`, `savePersonalTemplate`, `deletePersonalTemplate`, `unrenderTemplate`, `renderTemplateForEstimate`, `mergeValuesForConversation`, `INSPECTION_SURVEY`, `getInspectionDecisions`, `portalAskAboutReport`, `timingPassed`, `testingStationScan`, `RG_DEFAULT_SETTINGS`, `rgEffectivePunches`, `rgAllPunches`, `rgGetSettings`, `rgSaveSettings`, `rgIsOffline`, `rgDistanceM`, `rgQueueCount`, `rgSyncQueue`, `rgKioskStation`, `rgSetKioskStation`, `rgKioskPunch`, `getMyWeek`, `rgGetFlags`, `rgCorrectPunch`, `rgAddPunch`, `rgPayrollCsv`, `isSafeStation`, `RW_STATIONS`, `getShopFloor`, `movePart`, `SCAN_UNDO_MS`, `undoScanComplete`, `markReunited`, `finishGate`, `finishJob`, `getPartHistory`, `isSplitFlow`, `GATE`, `polishGateScan`, `bulkPartFor`, `resolveBulkLabel`, `bulkCommit`, `jobSummaryContext`, `getCustodyByPerson`, `getHitlist`, `getGateScans`, `POLISHERS`, `parseTechCode`, `getScanSession`, `scanTech`, `scanLabelAssign`, `undoOutbox`, `getQueuedOutbox`, `getWorkQueue`, `simulateClientReply`, `clearClientReplied`, `getWmRoom`, `sendPartByScan`, `requestPartSimple`, `getStationMemory`, `stationScan`, `ROOM_TECHS`, `ROOM_LABEL`, `getPadBoard`, `padAdvance`, `padSendBack`, `SEND_BACK_REASONS`, `partSuggestions`, `recordPartPick`, `submitPadPartsRequest`, `getApprovalsQueue`, `approvalAction`, `getPickingQueue`, `pickAction`, `getJobPhotoViews`, `PHOTO_SLOTS`, `capturePadPhoto`, `getRoomPartsHistory`, `getRoomSummary`, `PART_LABELS`, `caliberOf`, `getPadPartsContext`, `padSearchParts`, `padRecordSelection`, `submitPadRequest`, `getPadRequests`, `getReviewQueue`, `reviewItem`, `sendForClientApproval`, `simulateClientPartsDecision`, `padAllocate`, `partsOnHand`, `getM3keEvents`, `getRoomTechs`, `padSetTech`, `getPadCondition`, `openClientRequests`, `qcRequestGaps`, `addClientRequest`, `removeClientRequest`, `clientRequestAlert`, `ackClientRequests`, `checkClientRequest`, `uncheckClientRequest`, `getStaffInboxRows`, `getColleagueInbox`, `SHIP_STAGE_LABEL`, `getInboundBoard`, `getShipment`, `getShipmentsForClient`, `getShipmentForEstimate`, `prepareLabel`, `createInboundLabel`, `sendLabelRequest`, `resendLabelEmail`, `followUpLabel`, `voidAndReissue`, `simulateTrackingEvent`, `clientStatusLine`, `isManagerTier`, `staffForMention`, `getJobThreads`, `postJobMessage`, `getMessageInbox`, `unreadMessageCount`, `markJobThreadRead`, `STUCK_WORKING_DAYS`, `getBenchSettings`, `verifySupervisorPin`, `saveBenchSettings`, `setKioskOffline`, `benchPinIn`, `cacheBenchBoard`, `readCachedBenchBoard`, `getBenchBoard`, `getTradeAccounts`, `tradeScanIn`, `getTradeReviewQueue`, `TRADE_PATH`, `tradePathIndex`, `AUDIT_LOCATIONS`, `valueTierOf`, `auditScopeFor`, `getAuditLocations`, `getAuditStaleDays`, `setAuditStaleDays`, `getAuditLive`, `startAudit`, `cancelAudit`, `auditScan`, `auditResolve`, `finishAudit`, `getAuditSessions`, `getGradeCategories`, `addGradeCategory`, `toggleGradeCategory`, `gradeGateFor`, `getGradeGate`, `recordWorkGrade`, `getWorkGrades`, `techQuality`, `clientRatingSync`, `getClientRating`, `setClientRating`, `receiveInboundCall`, `getCallEvents`, `callCountsSync`, `getCallCounts`, `logCall`, `addCallNote`, `linkCallToJob`, `getMissedCalls`, `resolveMissedCall`, `partPricingSync`, `getPartPricing`, `priceColor`, `PART_CATEGORIES`, `canonicalCategory`, `PART_SAFES`, `searchPartsSync`, `searchParts`, `getPartsModule`, `getCalibers`, `saveCaliber`, `savePart`, `getReorderRule`, `setReorderRule`, `queueNeedsOrdering`, `getNeedsOrdering`, `generatePurchaseOrder`, `poRedLines`, `acknowledgeRedLines`, `generatePoLabel`, `uploadPoLabel`, `importPurchaseCsv`, `vendorOpenPos`, `vendorHistory`, `locationBarcode`, `CYCLE_STALE_DAYS`, `getCountQueue`, `resolveLocationScan`, `resolvePartScan`, `postCycleCountV2`, `getVarianceReport`, `soRecordsLink`, `soRecordsLinkFor`, `getRequestPrefill`, `convertLegacy`, `MOCK_BILL_CSV`, `MOCK_BILL_FILENAME`, `getLabelLedger`, `parseBillCsv`, `getBillAudits`, `getBillAudit`, `createBillAudit`, `decideBillLine`, `draftDisputeReport`, `sendDisputeReport`, `markBillRecovered`, `API_BASE_URL`, `API_MODE`, `API_SOURCE`, `setApiMode`, `getApiHealth`, `subscribeApiHealth`, `API_TOAST_EVENT`, `isReal`, `techRevenueGoal`, `getDeptGoal`, `getTeamGoals`, `setTechGoal`, `setDeptGoal`, `getDeptDashboard`, `jobDaysInStage`, `jobPartsAllowance`, `setJobPartsAllowance`, `getJobParts`, `quickAddPart`, `returnJobPart`, `inferComponentCodes`, `estimateComponentCodes`, `setEstimateComponents`, `getVerificationChains`, `getJobVerificationChains`, `getItemVerificationChain`, `syncEstimateComponents`, `setEstimateItemComponents`, `getVerificationChain`, `getJobVerificationChain`, `KIOSK_STEPS`, `kioskRequiredSetting`, `setKioskRequired`, `getKioskStatus`, `startKioskSession`, `recordKioskShot`, `addKioskPhoto`, `getClientReviews`, `submitClientReview`, `getQboSetup`, `qboConnect`, `qboDisconnect`, `setQboToggle`, `qboSyncClient`, `qboSyncAllClients`, `qboResolveConflict`, `matchB2bLabel`, `attachB2bMatch`, `searchRwHistory`, `uniqComponents`, `getJobEmails`, `JOB_CATEGORIES`, `REPORT_STATUSES`, `QUICK_REPORTS`, `getJobReport`, `findInspectionPackage`, `decodeSerial`, `AUTHENTICITY`, `BRACELET_LINES`, `CONDITIONS`, `INSPECTION_COMPONENTS`, `type BraceletRepairLine`, `type InspComponent`, `type InspComponentEntry`, `type InspectionForm`, `type Condition`, `type Authenticity`, `inspectionNoteLibrary`, `inspectionQuickTags`, `dialVariantTags`, `learnInspectionNote`, `learnDialVariant`, `learnQuickTag`, `inspectionTotal`, `listInspectionForms`, `getInspectionForm`, `getInspectionFormByToken`, `newInspectionForm`, `saveInspectionForm`, `addInspectionPhoto`, `applySheetSuggestion`, `shortNameOf`, `actorInfo`, `hitlistBridge`, `appraisalBridge`, `benchBridge`, `auditAppointments`, `lookupApptRef`, `clientBrief`, `previewArrival`, `commitArrivals`, `ZERO_REASON_LABEL`, `zeroBalanceNoSync`, `zeroBalanceLog`, `sendSoReminder`, `getInvoiceLink`, `updateInvoice`, `simulatePaymentWebhook`, `qboReadBalance`, `getShipCart`, `qboSyncInvoice`, `deleteSalesOrder`, `baseStage`, `isRedoStage`, `SWO_STAGES`, `SHIP_LANE`, `NOSHIP_LANE`, `laneStagesFor`, `swoStageLabel`, `nextSwoStage`, `prevSwoStage`, `shipDaysFor`, `defaultExpectedAt`, `isInternationalVendor`, `getShopWorkOrders`, `getShopWorkOrder`, `getOutsourceVendors`, `saveShopWorkOrder`, `createSwoOutboundLabel`, `queueSwoReturnLabel`, `advanceSwo`, `sendBackSwo`, `swoIsLate`, `swoPaidTotal`, `swoUnpaidTotal`, `swoDaysAtStage`, `getConciergeBoard`, `conciergeVendors`, `conciergeBridge`, `setSwoPaid`, `pushSwoToQbo`, `getSwoJobCandidates`, `FEATURE_META`, `featureOn`, `getFeatureFlags`, `setFeatureFlag`, `getClientLabelLog`, `portalStartLabel`, `portalCancelLabel`, `portalCreateLabel`, `suggestInsuredByRef`, `accessOverrideSync`, `accessOverridesFor`, `getAccessUsers`, `setAccessOverride`, `getAccessLog`
+## JOB DETAIL v2 (2026-09-30, MH brief) — "where is it and where is it in the process": one process line per component, custody from the custody record (never from status), add-ons since the estimate
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `jobFlowSync` **[post-E16]** **[post-refresh]** | sync | `= (j: Job): JobFlow =>` | mock | staff | none (read) | components/jobs/ProcessFlow.tsx |
+| `getJobFlow` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<JobFlow>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `getJobVendorLegs` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<SwoWithRefs[]>` | mock | staff | none (read) | components/jobs/OutsourceInfo.tsx |
+| `ADDON_CHANNELS` **[post-E16]** **[post-refresh]** | sync | `:` | mock | staff | none (read) | components/jobs/AddOnsPanel.tsx |
+| `getJobAddons` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<JobAddonsView>` | mock | staff | audit | components/jobs/AddOnsPanel.tsx |
+| `addJobAddon` **[post-E16]** **[post-refresh]** | async | `(jobId: string, input: AddonInput): Promise<JobAddon>` | mock | staff | none (read) | components/jobs/AddOnsPanel.tsx |
+| `confirmJobAddon` **[post-E16]** **[post-refresh]** | async | `(jobId: string, addonId: string, via: 'portal' \| 'email' \| 'counter'): Promise<JobAddon>` | mock | staff | audit | components/jobs/AddOnsPanel.tsx |
+
+## W·B·P DOT ROWS (MH 2026-09-30): one glance per job — W = head / movement, B = bracelet, P = case / polish. Derived from the same per-component flow as the Job page.
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `WBP_LEGS` **[post-E16]** **[post-refresh]** | sync | `:` | mock | staff | none (read) | components/shared/WbpDots.tsx |
+| `wbpRowSync` **[post-E16]** **[post-refresh]** | sync | `= (j: Job): WbpRow =>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `wbpForJobSync` **[post-E16]** **[post-refresh]** | sync | `= (jobId: string): WbpRow \| null =>` | mock | staff | none (read) | components/inbox/InboxJobCard.tsx, components/layout/CallPop.tsx, components/layout/MessageText.tsx, components/shared/WbpDots.tsx |
+| `wbpForClientSync` **[post-E16]** **[post-refresh]** | sync | `= (clientId: string, firstJobId?: string): WbpRow[] => store.jobs.filter((j) => j.clientId === clientId && j.status !== 'closed').sort((a, b) => Number(b.id === firstJobId) - Number(a.id === firstJobId) \|\| a.number.local` | mock | staff | audit, comms thread | components/inbox/InboxJobCard.tsx, components/shared/WbpDots.tsx |
+| `getWbpForClient` **[post-E16]** **[post-refresh]** | async | `(clientId: string, firstJobId?: string): Promise<WbpRow[]>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+
+## Staff presence for the message directory — DERIVED, never toggled: clocked out → away · on a call or signed in at a Front Desk → with client · else at bench
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `staffPresenceSync` **[post-E16]** **[post-refresh]** | sync | `= (u: User): PresenceView =>` | mock | staff | none (read) | components/layout/MessageDirectory.tsx |
+
+## AUTO-PO THRESHOLD (MH 2026-09-30) — runs on every stock movement / count close / needs-ordering entry / hitlist read. Inventory is the shared pool (RW + RS) → global parts.
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `AUTO_PO_THRESHOLD` **[post-E16]** **[post-refresh]** | sync | `= 400; export const AUTO_PO_WAIT_DAYS = 14;` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `autoPoTitle` **[post-E16]** **[post-refresh]** | sync | `= (p: PurchaseOrder) => `$` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `openAutoDraft` **[post-E16]** **[post-refresh]** | sync | `= (vendorId: string) => rs.pos.find((p) => p.vendorId === vendorId && p.status === 'draft' && p.auto);` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `autoPoSweepSync` **[post-E16]** **[post-refresh]** | sync | `= (): AutoPoVendorState[] =>` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `getAutoPoState` **[post-E16]** **[post-refresh]** | async | `(): Promise<AutoPoVendorState[]>` | mock | staff | audit | — (internal / other client.ts functions only) |
+
+## MH DAILY · APPROVALS TO SEND — every parts approval priced and ready but not yet sent to the client. MH's item stands (refreshes live, clears at zero); VC gets a normal item.
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `approvalsToSendSync` **[post-E16]** **[post-refresh]** | sync | `= (): ApprovalToSend[] => store.partsRequests.filter((r) => r.status === 'pending_review').map((r) => (` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `getApprovalsToSend` **[post-E16]** **[post-refresh]** | async | `(): Promise<ApprovalToSend[]>` | mock | staff | audit | pages/rs/ApprovalsToSendPage.tsx |
+| `approvalsToSendSweepSync` **[post-E16]** **[post-refresh]** | sync | `= () =>` | mock | staff | audit | — (internal / other client.ts functions only) |
+
+## Inventory reports bridge (api/inventoryReports.ts): consumption adjustment + spending optimization read stock / history / POs here and write approved rules back
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `registerDaySweep` **[post-E16]** **[post-refresh]** | sync | `= (fn: () => void) =>` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `runDaySweeps` **[post-E16]** **[post-refresh]** | sync | `= () => daySweeps.forEach((f) =>` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `invBridge` **[post-E16]** **[post-refresh]** | sync | `` | mock | staff | audit | — (internal / other client.ts functions only) |
+
+## JV BIN — a container in the custody model (2026-09-30, MH ruling). The bin HOLDS custody: tickets inside show custody JV and their location follows the bin.
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `BIN_TEAM` **[post-E16]** **[post-refresh]** | sync | `= ['Dre', 'Sam', 'Nico', 'MAM'];` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `isBinCode` **[post-E16]** **[post-refresh]** | sync | `= (s: string) => s.trim().toUpperCase() === BIN_CODE \|\| s.trim().toUpperCase() === BIN_KEY.toUpperCase();` | mock | staff | audit | components/rw/FloorPanels.tsx, components/rw/pad/PadBin.tsx |
+| `isBinSafeCode` **[post-E16]** **[post-refresh]** | sync | `= (s: string) => s.trim().toUpperCase() === BIN_SAFE_CODE;` | mock | staff | audit | components/rw/pad/PadBin.tsx |
+| `getBin` **[post-E16]** **[post-refresh]** | async | `(): Promise<BinView>` | mock | staff | audit | components/rw/FloorPanels.tsx, components/rw/pad/PadBin.tsx, pages/rw/RwPadPage.tsx |
+| `binCountLine` **[post-E16]** **[post-refresh]** | sync | `= (v: BinView) => `$` | mock | staff | audit | components/rw/FloorPanels.tsx, components/rw/pad/PadBin.tsx |
+| `assignToBin` **[post-E16]** **[post-refresh]** | async | `(jobIds: string[]): Promise<` | mock | staff | audit | — (internal / other client.ts functions only) |
+| `binToSafe` **[post-E16]** **[post-refresh]** | async | `(opts:` | mock | staff | audit | components/rw/pad/PadBin.tsx |
+| `binOutOfSafe` **[post-E16]** **[post-refresh]** | async | `(): Promise<` | mock | staff | none (read) | components/rw/pad/PadBin.tsx |
+| `binEnter` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<BinRow>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
+| `binHandTo` **[post-E16]** **[post-refresh]** | async | `(jobId: string, tech: string): Promise<BinRow>` | mock | staff | none (read) | components/rw/pad/PadBin.tsx |
+| `binTakeBack` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<BinRow>` | mock | staff | none (read) | components/rw/pad/PadBin.tsx |
+| `resolveBinLabel` **[post-E16]** **[post-refresh]** | async | `(label: string): Promise<BulkRow>` | mock | staff | none (read) | components/rw/FloorPanels.tsx |
+| `binCommit` **[post-E16]** **[post-refresh]** | async | `(rows: BulkRow[], target: BinTarget, binScanned: boolean): Promise<` | mock | staff | none (read) | components/rw/FloorPanels.tsx |
+
+## CLIENT PORTAL — W·B·P dots + reply loop (MH 2026-09-30). Same WbpDots positions, client mapping only: empty = not part of this service · green = moving · red = not moving (ANY internal blocker — no vendor names, no hold reasons) · blue = done.
+
+| export | kind | signature | source | auth expected | side effects | callers |
+|---|---|---|---|---|---|---|
+| `portalDotsSync` **[post-E16]** **[post-refresh]** | sync | `= (j: Job): PortalDotRow =>` | mock | client-portal | none (read) | — (internal / other client.ts functions only) |
+| `portalFlowSync` **[post-E16]** **[post-refresh]** | sync | `= (j: Job): PortalFlowLine[] => jobFlowSync(j).lines.map((l) =>` | mock | client-portal | none (read) | — (internal / other client.ts functions only) |
+| `portalGetDots` **[post-E16]** **[post-refresh]** | async | `(clientId: string, jobId: string): Promise<PortalDotRow>` | mock | client-portal | audit | — (internal / other client.ts functions only) |
+| `portalGetPartsRequest` **[post-E16]** **[post-refresh]** | async | `(clientId: string, id: string): Promise<PortalPartsView>` | mock | client-portal | audit | pages/rc/RcPartsPage.tsx |
+| `portalDecideParts` **[post-E16]** **[post-refresh]** | async | `(clientId: string, id: string, decision: 'approve' \| 'decline'): Promise<PortalPartsView>` | mock | client-portal | audit | pages/rc/RcPartsPage.tsx |
+| `askContext` **[post-E16]** **[post-refresh]** | async | `(conversationId: string, messageId: string): Promise<JobSummaryContext>` | mock | staff | audit | components/comms/AskDraftCard.tsx |
+| `updateAskDraft` **[post-E16]** **[post-refresh]** | async | `(conversationId: string, messageId: string, patch:` | mock | staff | audit | components/comms/AskDraftCard.tsx |
+| `sendAskReply` **[post-E16]** **[post-refresh]** | async | `(conversationId: string, messageId: string, text: string): Promise<ConvMessage>` | mock | staff | audit | components/comms/AskDraftCard.tsx |
+
+_Total exports: 859 · baseline at E16: 296 · **[post-E16] new: 563** · baseline at 2026-09-26 refresh: 461 · **[post-refresh] new: 408**._
+
+Post-refresh exports: `clientRefSubject`, `setClientRef`, `setJobClientRef`, `jobClientRef`, `isReceptionMode`, `receptionSource`, `OWNER_USER_ID`, `isOwnerSync`, `getViewAs`, `continueAsSelf`, `startViewAs`, `stopViewAs`, `signInWithTouchId`, `inMyDivision`, `saleDateOf`, `getIntakePhotoQueue`, `getAwaitingApprovalQueue`, `SHELF_BINS`, `getShelf`, `shelvePackage`, `openScan`, `shelfPackagesSync`, `getPackageCustody`, `setItemScan`, `labelModel`, `parseRefSerial`, `setItemReceived`, `isInspectionPhoto`, `addPackageInspectionPhoto`, `getIntakeHistory`, `getLabelsForPackage`, `updateIntakeRecord`, `totalsFor as computeEstimateTotals`, `holdBlocks`, `PHOTO_TYPES`, `addJobPhotoSync`, `addJobPhoto`, `lineOpenFor`, `closeOutEstimateLine`, `soScanGate`, `confirmSoClientByScan`, `overrideSoScanGate`, `RC_DEMO_TOTP`, `rcLookup`, `rcRequestSignup`, `rcVerifyInvite`, `rcSignup`, `rcConfirmTotp`, `rcSignIn`, `rcVerifyTotp`, `rcGetAccount`, `rcRegenerateBackupCodes`, `rcListAccounts`, `rcResetAccount`, `RC_DOC_META`, `rcDocAccess`, `getRcDocAccess`, `setRcDocAccess`, `rcDocTypeForPath`, `isPhotoUnlocked`, `setPhotoUnlocked`, `getVendorSummaries`, `getVendorDetail`, `isBandOnlyJob`, `bandLabelPayload`, `queueJobLabels`, `resolveScan`, `sameNameClients`, `duplicateNamesIn`, `setTemplateActive`, `clearMessage`, `inboxUnreadCountSync`, `openRequestsNoEstimateCountSync`, `requestByIdSync`, `requestLegsSync`, `requestInstantRangeSync`, `ensureRequestThread`, `conversationForRequestSync`, `jobPickupSync`, `jobReturnInfoSync`, `jobsReturnedFromSync`, `jobByIdSync`, `jobForEstimateSync`, `watchByIdSync`, `RG_DEFAULT_SETTINGS`, `rgEffectivePunches`, `rgAllPunches`, `rgGetSettings`, `rgSaveSettings`, `rgIsOffline`, `rgDistanceM`, `rgQueueCount`, `rgSyncQueue`, `rgKioskStation`, `rgSetKioskStation`, `rgKioskPunch`, `getMyWeek`, `rgGetFlags`, `rgCorrectPunch`, `rgAddPunch`, `rgPayrollCsv`, `isSafeStation`, `isSplitFlow`, `GATE`, `polishGateScan`, `bulkPartFor`, `resolveBulkLabel`, `stationLockedForMe`, `bulkCommit`, `jobSummaryContext`, `getCustodyByPerson`, `getHitlist`, `getGateScans`, `POLISHERS`, `ROOM_TECHS`, `ROOM_LABEL`, `sendReadyApproval`, `sendLabelRequest`, `isOwnerPin`, `auditScopeFor`, `callsBridge`, `clientByIdSync`, `jobNumberSync`, `partPricingSync`, `getPartPricing`, `priceColor`, `PART_CATEGORIES`, `canonicalCategory`, `PART_SAFES`, `searchPartsSync`, `searchParts`, `getPartsModule`, `getCalibers`, `saveCaliber`, `savePart`, `getReorderRule`, `setReorderRule`, `queueNeedsOrdering`, `getNeedsOrdering`, `generatePurchaseOrder`, `poRedLines`, `acknowledgeRedLines`, `generatePoLabel`, `uploadPoLabel`, `importPurchaseCsv`, `vendorOpenPos`, `vendorHistory`, `locationBarcode`, `CYCLE_STALE_DAYS`, `getCountQueue`, `resolveLocationScan`, `resolvePartScan`, `postCycleCountV2`, `getVarianceReport`, `soRecordsLink`, `soRecordsLinkFor`, `getRequestPrefill`, `convertLegacy`, `MOCK_BILL_CSV`, `MOCK_BILL_FILENAME`, `getLabelLedger`, `parseBillCsv`, `getBillAudits`, `getBillAudit`, `createBillAudit`, `decideBillLine`, `draftDisputeReport`, `sendDisputeReport`, `markBillRecovered`, `API_BASE_URL`, `API_MODE`, `API_SOURCE`, `setApiMode`, `getApiHealth`, `subscribeApiHealth`, `API_TOAST_EVENT`, `isReal`, `techRevenueGoal`, `getDeptGoal`, `getTeamGoals`, `setTechGoal`, `setDeptGoal`, `getDeptDashboard`, `jobDaysInStage`, `jobPartsAllowance`, `setJobPartsAllowance`, `getJobParts`, `quickAddPart`, `returnJobPart`, `inferComponentCodes`, `estimateComponentCodes`, `setEstimateComponents`, `getVerificationChains`, `getJobVerificationChains`, `getItemVerificationChain`, `syncEstimateComponents`, `setEstimateItemComponents`, `getVerificationChain`, `getJobVerificationChain`, `KIOSK_STEPS`, `kioskRequiredSetting`, `setKioskRequired`, `getKioskStatus`, `startKioskSession`, `recordKioskShot`, `addKioskPhoto`, `getClientReviews`, `submitClientReview`, `getQboSetup`, `qboConnect`, `qboDisconnect`, `setQboToggle`, `qboSyncClient`, `qboSyncAllClients`, `qboResolveConflict`, `matchB2bLabel`, `attachB2bMatch`, `searchRwHistory`, `uniqComponents`, `getJobEmails`, `JOB_CATEGORIES`, `REPORT_STATUSES`, `QUICK_REPORTS`, `getJobReport`, `findInspectionPackage`, `decodeSerial`, `AUTHENTICITY`, `BRACELET_LINES`, `CONDITIONS`, `INSPECTION_COMPONENTS`, `type BraceletRepairLine`, `type InspComponent`, `type InspComponentEntry`, `type InspectionForm`, `type Condition`, `type Authenticity`, `inspectionNoteLibrary`, `inspectionQuickTags`, `dialVariantTags`, `learnInspectionNote`, `learnDialVariant`, `learnQuickTag`, `inspectionTotal`, `listInspectionForms`, `getInspectionForm`, `getInspectionFormByToken`, `newInspectionForm`, `saveInspectionForm`, `addInspectionPhoto`, `applySheetSuggestion`, `shortNameOf`, `actorInfo`, `hitlistBridge`, `appraisalBridge`, `benchBridge`, `auditAppointments`, `lookupApptRef`, `clientBrief`, `previewArrival`, `commitArrivals`, `ZERO_REASON_LABEL`, `zeroBalanceNoSync`, `zeroBalanceLog`, `sendSoReminder`, `getInvoiceLink`, `updateInvoice`, `simulatePaymentWebhook`, `qboReadBalance`, `getShipCart`, `qboSyncInvoice`, `deleteSalesOrder`, `baseStage`, `isRedoStage`, `SWO_STAGES`, `SHIP_LANE`, `NOSHIP_LANE`, `laneStagesFor`, `swoStageLabel`, `nextSwoStage`, `prevSwoStage`, `shipDaysFor`, `defaultExpectedAt`, `isInternationalVendor`, `getShopWorkOrders`, `getShopWorkOrder`, `getOutsourceVendors`, `saveShopWorkOrder`, `createSwoOutboundLabel`, `queueSwoReturnLabel`, `advanceSwo`, `sendBackSwo`, `swoIsLate`, `swoPaidTotal`, `swoUnpaidTotal`, `swoDaysAtStage`, `getConciergeBoard`, `jobOnVendorLane`, `conciergeVendors`, `conciergeBridge`, `setSwoPaid`, `pushSwoToQbo`, `getSwoJobCandidates`, `VENDOR_PRESETS`, `partKey`, `vendorPresets`, `hubOf`, `hubStage`, `hubSet`, `sentSummary`, `hubViewSync`, `findHubByCode`, `isSwoCode`, `swoLineBack`, `swoReceivable`, `hubOpenLineIds`, `getSwoHub`, `getSwoHubs`, `hubForLineSync`, `createSwoHub`, `addSwoLine`, `removeSwoLine`, `printSwoLabel`, `addSwoNote`, `createHubShipment`, `simulateShipmentDelivered`, `receiveSwoLine`, `markPartReturned`, `updateSwoHub`, `moveSwoLines`, `moveLineToHub`, `openHubsForVendor`, `jobAwaySync`, `FEATURE_META`, `featureOn`, `getFeatureFlags`, `setFeatureFlag`, `getClientLabelLog`, `portalStartLabel`, `portalCancelLabel`, `portalCreateLabel`, `suggestInsuredByRef`, `accessOverrideSync`, `accessOverridesFor`, `getAccessUsers`, `setAccessOverride`, `getAccessLog`, `PRICING_LIMITS`, `DEFAULT_LIMITS`, `limitsOf`, `isDisabledSync`, `managerOf`, `managerShortOf`, `directReports`, `chainOf`, `subtreeOf`, `inSubtree`, `getOrgTree`, `CONTAINERS`, `containersOwnedBy`, `setUserEnabled`, `setUserLimits`, `createUserFromTemplate`, `RW_STATION_OPTIONS`, `jobFlowSync`, `getJobFlow`, `getJobVendorLegs`, `ADDON_CHANNELS`, `getJobAddons`, `addJobAddon`, `confirmJobAddon`, `WBP_LEGS`, `wbpRowSync`, `wbpForJobSync`, `wbpForClientSync`, `getWbpForClient`, `staffPresenceSync`, `AUTO_PO_THRESHOLD`, `autoPoTitle`, `openAutoDraft`, `autoPoSweepSync`, `getAutoPoState`, `approvalsToSendSync`, `getApprovalsToSend`, `approvalsToSendSweepSync`, `registerDaySweep`, `runDaySweeps`, `invBridge`, `BIN_TEAM`, `isBinCode`, `isBinSafeCode`, `getBin`, `binCountLine`, `assignToBin`, `binToSafe`, `binOutOfSafe`, `binEnter`, `binHandTo`, `binTakeBack`, `resolveBinLabel`, `binCommit`, `portalDotsSync`, `portalFlowSync`, `portalGetDots`, `portalGetPartsRequest`, `portalDecideParts`, `askContext`, `updateAskDraft`, `sendAskReply`
+
+Post-E16 exports (diff list for coverage): `clientRefSubject`, `setClientRef`, `setJobClientRef`, `jobClientRef`, `isReceptionMode`, `receptionSource`, `OWNER_USER_ID`, `isOwnerSync`, `getViewAs`, `continueAsSelf`, `startViewAs`, `stopViewAs`, `signInWithTouchId`, `inMyDivision`, `saleDateOf`, `getIntakePhotoQueue`, `getAwaitingApprovalQueue`, `SHELF_BINS`, `getShelf`, `shelvePackage`, `openScan`, `shelfPackagesSync`, `getPackageCustody`, `setItemScan`, `labelModel`, `parseRefSerial`, `setItemReceived`, `isInspectionPhoto`, `addPackageInspectionPhoto`, `getIntakeHistory`, `getLabelsForPackage`, `updateIntakeRecord`, `totalsFor as computeEstimateTotals`, `holdBlocks`, `isTradeJob`, `isInternalTrade`, `TRADE_SEND_BACK`, `PHOTO_TYPES`, `addJobPhotoSync`, `addJobPhoto`, `lineOpenFor`, `closeOutEstimateLine`, `soScanGate`, `confirmSoClientByScan`, `overrideSoScanGate`, `payLinkPath`, `payLinkUrl`, `sendInvoice`, `getPayPage`, `payViaLink`, `portalDeepLink`, `RC_DEMO_TOTP`, `rcLookup`, `rcRequestSignup`, `rcVerifyInvite`, `rcSignup`, `rcConfirmTotp`, `rcSignIn`, `rcVerifyTotp`, `rcGetAccount`, `rcRegenerateBackupCodes`, `rcListAccounts`, `rcResetAccount`, `RC_DOC_META`, `rcDocAccess`, `getRcDocAccess`, `setRcDocAccess`, `rcDocTypeForPath`, `isPhotoUnlocked`, `setPhotoUnlocked`, `portalRevokeLink`, `startViewAsClient`, `exitViewAsClient`, `portalPhotoSections`, `portalGetPhotoSections`, `portalGetRequestCards`, `SHOP_ADDRESS`, `portalRequestLabel`, `portalDropOff`, `portalRequestRequote`, `getVendorSummaries`, `getVendorDetail`, `isBandOnlyJob`, `bandLabelPayload`, `queueJobLabels`, `resolveScan`, `sameNameClients`, `duplicateNamesIn`, `setTemplateActive`, `clearMessage`, `inboxUnreadCountSync`, `openRequestsNoEstimateCountSync`, `requestByIdSync`, `requestLegsSync`, `requestInstantRangeSync`, `ensureRequestThread`, `conversationForRequestSync`, `jobPickupSync`, `jobReturnInfoSync`, `jobsReturnedFromSync`, `jobByIdSync`, `jobForEstimateSync`, `watchByIdSync`, `personalTemplateFor`, `getPersonalTemplates`, `getAllPersonalTemplates`, `getTemplateVariants`, `savePersonalTemplate`, `deletePersonalTemplate`, `unrenderTemplate`, `renderTemplateForEstimate`, `mergeValuesForConversation`, `INSPECTION_SURVEY`, `getInspectionDecisions`, `portalAskAboutReport`, `timingPassed`, `testingStationScan`, `RG_DEFAULT_SETTINGS`, `rgEffectivePunches`, `rgAllPunches`, `rgGetSettings`, `rgSaveSettings`, `rgIsOffline`, `rgDistanceM`, `rgQueueCount`, `rgSyncQueue`, `rgKioskStation`, `rgSetKioskStation`, `rgKioskPunch`, `getMyWeek`, `rgGetFlags`, `rgCorrectPunch`, `rgAddPunch`, `rgPayrollCsv`, `isSafeStation`, `RW_STATIONS`, `getShopFloor`, `movePart`, `SCAN_UNDO_MS`, `undoScanComplete`, `markReunited`, `finishGate`, `finishJob`, `getPartHistory`, `isSplitFlow`, `GATE`, `polishGateScan`, `bulkPartFor`, `resolveBulkLabel`, `stationLockedForMe`, `bulkCommit`, `jobSummaryContext`, `getCustodyByPerson`, `getHitlist`, `getGateScans`, `POLISHERS`, `parseTechCode`, `getScanSession`, `scanTech`, `scanLabelAssign`, `undoOutbox`, `getQueuedOutbox`, `getWorkQueue`, `simulateClientReply`, `clearClientReplied`, `getWmRoom`, `sendPartByScan`, `requestPartSimple`, `getStationMemory`, `stationScan`, `ROOM_TECHS`, `ROOM_LABEL`, `getPadBoard`, `padAdvance`, `padSendBack`, `SEND_BACK_REASONS`, `partSuggestions`, `recordPartPick`, `submitPadPartsRequest`, `getApprovalsQueue`, `approvalAction`, `getPickingQueue`, `pickAction`, `getJobPhotoViews`, `PHOTO_SLOTS`, `capturePadPhoto`, `getRoomPartsHistory`, `getRoomSummary`, `PART_LABELS`, `caliberOf`, `getPadPartsContext`, `padSearchParts`, `padRecordSelection`, `submitPadRequest`, `getPadRequests`, `getReviewQueue`, `reviewItem`, `sendForClientApproval`, `sendReadyApproval`, `simulateClientPartsDecision`, `padAllocate`, `partsOnHand`, `getM3keEvents`, `getRoomTechs`, `padSetTech`, `getPadCondition`, `openClientRequests`, `qcRequestGaps`, `addClientRequest`, `removeClientRequest`, `clientRequestAlert`, `ackClientRequests`, `checkClientRequest`, `uncheckClientRequest`, `getStaffInboxRows`, `getColleagueInbox`, `SHIP_STAGE_LABEL`, `getInboundBoard`, `getShipment`, `getShipmentsForClient`, `getShipmentForEstimate`, `prepareLabel`, `createInboundLabel`, `sendLabelRequest`, `resendLabelEmail`, `followUpLabel`, `voidAndReissue`, `simulateTrackingEvent`, `clientStatusLine`, `isManagerTier`, `staffForMention`, `getJobThreads`, `postJobMessage`, `getMessageInbox`, `unreadMessageCount`, `markJobThreadRead`, `STUCK_WORKING_DAYS`, `getBenchSettings`, `isOwnerPin`, `verifySupervisorPin`, `saveBenchSettings`, `setKioskOffline`, `benchPinIn`, `cacheBenchBoard`, `readCachedBenchBoard`, `getBenchBoard`, `getTradeAccounts`, `tradeScanIn`, `getTradeReviewQueue`, `TRADE_PATH`, `tradePathIndex`, `AUDIT_LOCATIONS`, `valueTierOf`, `auditScopeFor`, `getAuditLocations`, `getAuditStaleDays`, `setAuditStaleDays`, `getAuditLive`, `startAudit`, `cancelAudit`, `auditScan`, `auditResolve`, `finishAudit`, `getAuditSessions`, `getGradeCategories`, `addGradeCategory`, `toggleGradeCategory`, `gradeGateFor`, `getGradeGate`, `recordWorkGrade`, `getWorkGrades`, `techQuality`, `clientRatingSync`, `getClientRating`, `setClientRating`, `callsBridge`, `clientByIdSync`, `jobNumberSync`, `partPricingSync`, `getPartPricing`, `priceColor`, `PART_CATEGORIES`, `canonicalCategory`, `PART_SAFES`, `searchPartsSync`, `searchParts`, `getPartsModule`, `getCalibers`, `saveCaliber`, `savePart`, `getReorderRule`, `setReorderRule`, `queueNeedsOrdering`, `getNeedsOrdering`, `generatePurchaseOrder`, `poRedLines`, `acknowledgeRedLines`, `generatePoLabel`, `uploadPoLabel`, `importPurchaseCsv`, `vendorOpenPos`, `vendorHistory`, `locationBarcode`, `CYCLE_STALE_DAYS`, `getCountQueue`, `resolveLocationScan`, `resolvePartScan`, `postCycleCountV2`, `getVarianceReport`, `soRecordsLink`, `soRecordsLinkFor`, `getRequestPrefill`, `convertLegacy`, `MOCK_BILL_CSV`, `MOCK_BILL_FILENAME`, `getLabelLedger`, `parseBillCsv`, `getBillAudits`, `getBillAudit`, `createBillAudit`, `decideBillLine`, `draftDisputeReport`, `sendDisputeReport`, `markBillRecovered`, `API_BASE_URL`, `API_MODE`, `API_SOURCE`, `setApiMode`, `getApiHealth`, `subscribeApiHealth`, `API_TOAST_EVENT`, `isReal`, `techRevenueGoal`, `getDeptGoal`, `getTeamGoals`, `setTechGoal`, `setDeptGoal`, `getDeptDashboard`, `jobDaysInStage`, `jobPartsAllowance`, `setJobPartsAllowance`, `getJobParts`, `quickAddPart`, `returnJobPart`, `inferComponentCodes`, `estimateComponentCodes`, `setEstimateComponents`, `getVerificationChains`, `getJobVerificationChains`, `getItemVerificationChain`, `syncEstimateComponents`, `setEstimateItemComponents`, `getVerificationChain`, `getJobVerificationChain`, `KIOSK_STEPS`, `kioskRequiredSetting`, `setKioskRequired`, `getKioskStatus`, `startKioskSession`, `recordKioskShot`, `addKioskPhoto`, `getClientReviews`, `submitClientReview`, `getQboSetup`, `qboConnect`, `qboDisconnect`, `setQboToggle`, `qboSyncClient`, `qboSyncAllClients`, `qboResolveConflict`, `matchB2bLabel`, `attachB2bMatch`, `searchRwHistory`, `uniqComponents`, `getJobEmails`, `JOB_CATEGORIES`, `REPORT_STATUSES`, `QUICK_REPORTS`, `getJobReport`, `findInspectionPackage`, `decodeSerial`, `AUTHENTICITY`, `BRACELET_LINES`, `CONDITIONS`, `INSPECTION_COMPONENTS`, `type BraceletRepairLine`, `type InspComponent`, `type InspComponentEntry`, `type InspectionForm`, `type Condition`, `type Authenticity`, `inspectionNoteLibrary`, `inspectionQuickTags`, `dialVariantTags`, `learnInspectionNote`, `learnDialVariant`, `learnQuickTag`, `inspectionTotal`, `listInspectionForms`, `getInspectionForm`, `getInspectionFormByToken`, `newInspectionForm`, `saveInspectionForm`, `addInspectionPhoto`, `applySheetSuggestion`, `shortNameOf`, `actorInfo`, `hitlistBridge`, `appraisalBridge`, `benchBridge`, `auditAppointments`, `lookupApptRef`, `clientBrief`, `previewArrival`, `commitArrivals`, `ZERO_REASON_LABEL`, `zeroBalanceNoSync`, `zeroBalanceLog`, `sendSoReminder`, `getInvoiceLink`, `updateInvoice`, `simulatePaymentWebhook`, `qboReadBalance`, `getShipCart`, `qboSyncInvoice`, `deleteSalesOrder`, `baseStage`, `isRedoStage`, `SWO_STAGES`, `SHIP_LANE`, `NOSHIP_LANE`, `laneStagesFor`, `swoStageLabel`, `nextSwoStage`, `prevSwoStage`, `shipDaysFor`, `defaultExpectedAt`, `isInternationalVendor`, `getShopWorkOrders`, `getShopWorkOrder`, `getOutsourceVendors`, `saveShopWorkOrder`, `createSwoOutboundLabel`, `queueSwoReturnLabel`, `advanceSwo`, `sendBackSwo`, `swoIsLate`, `swoPaidTotal`, `swoUnpaidTotal`, `swoDaysAtStage`, `getConciergeBoard`, `jobOnVendorLane`, `conciergeVendors`, `conciergeBridge`, `setSwoPaid`, `pushSwoToQbo`, `getSwoJobCandidates`, `VENDOR_PRESETS`, `partKey`, `vendorPresets`, `hubOf`, `hubStage`, `hubSet`, `sentSummary`, `hubViewSync`, `findHubByCode`, `isSwoCode`, `swoLineBack`, `swoReceivable`, `hubOpenLineIds`, `getSwoHub`, `getSwoHubs`, `hubForLineSync`, `createSwoHub`, `addSwoLine`, `removeSwoLine`, `printSwoLabel`, `addSwoNote`, `createHubShipment`, `simulateShipmentDelivered`, `receiveSwoLine`, `markPartReturned`, `updateSwoHub`, `moveSwoLines`, `moveLineToHub`, `openHubsForVendor`, `jobAwaySync`, `FEATURE_META`, `featureOn`, `getFeatureFlags`, `setFeatureFlag`, `getClientLabelLog`, `portalStartLabel`, `portalCancelLabel`, `portalCreateLabel`, `suggestInsuredByRef`, `accessOverrideSync`, `accessOverridesFor`, `getAccessUsers`, `setAccessOverride`, `getAccessLog`, `PRICING_LIMITS`, `DEFAULT_LIMITS`, `limitsOf`, `isDisabledSync`, `managerOf`, `managerShortOf`, `directReports`, `chainOf`, `subtreeOf`, `inSubtree`, `getOrgTree`, `CONTAINERS`, `containersOwnedBy`, `setUserEnabled`, `setUserLimits`, `createUserFromTemplate`, `RW_STATION_OPTIONS`, `jobFlowSync`, `getJobFlow`, `getJobVendorLegs`, `ADDON_CHANNELS`, `getJobAddons`, `addJobAddon`, `confirmJobAddon`, `WBP_LEGS`, `wbpRowSync`, `wbpForJobSync`, `wbpForClientSync`, `getWbpForClient`, `staffPresenceSync`, `AUTO_PO_THRESHOLD`, `autoPoTitle`, `openAutoDraft`, `autoPoSweepSync`, `getAutoPoState`, `approvalsToSendSync`, `getApprovalsToSend`, `approvalsToSendSweepSync`, `registerDaySweep`, `runDaySweeps`, `invBridge`, `BIN_TEAM`, `isBinCode`, `isBinSafeCode`, `getBin`, `binCountLine`, `assignToBin`, `binToSafe`, `binOutOfSafe`, `binEnter`, `binHandTo`, `binTakeBack`, `resolveBinLabel`, `binCommit`, `portalDotsSync`, `portalFlowSync`, `portalGetDots`, `portalGetPartsRequest`, `portalDecideParts`, `askContext`, `updateAskDraft`, `sendAskReply`

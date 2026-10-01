@@ -24,33 +24,33 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 
 | type | emitted by (function / stamp helper in client.ts) | UI filter chip |
 |---|---|---|
-| `sign_in` | `benchPinIn`, `signInWithPasswordMock`, `switchUserWithPin` | Sign-ins (with sign_in_failed, sign_out) |
-| `sign_in_failed` | `benchPinIn`, `signInWithPasswordMock`, `switchUserWithPin` | All only |
+| `sign_in` | `benchPinIn`, `signInWithPasswordMock`, `signInWithTouchId`, `switchUserWithPin` | Sign-ins (with sign_in_failed, sign_out) |
+| `sign_in_failed` | `assertEnabled`, `benchPinIn`, `signInWithPasswordMock`, `switchUserWithPin` | All only |
 | `sign_out` | `signOut` | All only |
 | `station_registered` | `readStation`, `registerStation` | Station (all station_*) |
 | `station_renamed` | `renameStation` | All only |
 | `station_reset` | `resetDeviceRegistration` | All only |
 | `intake` | `commitArrivals`, `shipStamp`, `stamp` | Intake |
 | `estimate` | `closeRequest`, `convertLegacy`, `estStamp`, `overrideSoScanGate`, `setKioskRequired`, `writeClientRef` | Estimates |
-| `job` | `advanceSwo`, `bulkCommit`, `conciergeBridge`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox` | Jobs (with task, pin, parts) |
+| `job` | `addJobAddon`, `addSwoLine`, `advanceSwo`, `binEvent`, `bulkCommit`, `conciergeBridge`, `confirmJobAddon`, `createHubShipment`, `createSwoHub`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `printSwoLabel`, `receiveSwoLine`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox`, `updateSwoHub` | Jobs (with task, pin, parts) |
 | `task` | `taskStamp` | All only |
 | `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
 | `sales` | `convertLegacy`, `soStamp` | Sales |
 | `parts` | `approvalAction`, `partsStamp` | All only |
 | `portal` | `portalStamp`, `replyToClient` | RolliConnect |
 | `purchasing` | `rsStamp` | All only |
-| `inventory` | `pickAction` | All only |
+| `inventory` | `invBridge`, `pickAction` | All only |
 | `setup` | `addGradeCategory`, `setAuditStaleDays`, `toggleGradeCategory` | All only |
 | `evidence` | (stamp helper — see below) | All only |
 | `labels` | (stamp helper — see below) | All only |
 | `accounting` | `baStamp`, `deleteSalesOrder`, `qboLog`, `zeroBalanceNoSync` | All only |
 | `companion` | `cpStamp` | All only |
-| `comms` | `clearMessage`, `cxStamp`, `deletePersonalTemplate`, `exitViewAsClient`, `learnDialVariant`, `learnInspectionNote`, `receiveInboundCall`, `saveInspectionForm`, `savePersonalTemplate`, `setClientRating`, `startViewAsClient`, `submitClientReview` | All only |
+| `comms` | `callsBridge`, `clearMessage`, `cxStamp`, `deletePersonalTemplate`, `exitViewAsClient`, `learnDialVariant`, `learnInspectionNote`, `portalAskArrived`, `saveInspectionForm`, `savePersonalTemplate`, `setClientRating`, `startViewAsClient`, `submitClientReview` | All only |
 | `rollitime` | `rtStamp`, `setTechGoal` | All only |
 | `rgtime` | `rgAudit` | RGTime |
 | `kiosk` | `kioskAudit`, `resolveKioskMatch`, `saveBenchSettings` | Kiosk |
 | `appointments` | `auditAppointments` | All only |
-| `settings` | `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setRcDocAccess` | All only |
+| `settings` | `accessLog`, `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setRcDocAccess` | All only |
 | `shipping` | `portalCreateLabel` | All only |
 | `view_as_started` | `startViewAs` | All only |
 | `session_continued_as_self` | `continueAsSelf` | All only |

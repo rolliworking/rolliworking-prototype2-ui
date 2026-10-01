@@ -195,9 +195,9 @@ _E15 verified: Portal inspection report page (/rc/report/:token), staff 'Issue i
 - [ ] Invalid token /rc/report/NOPE → rc-report-error
 - [ ] j-11 shows report-status-rep-01 'superseded' + report-status-rep-02 'issued', links /rc/report/IR-ELEANOR-V1 and /rc/report/IR-ELEANOR-V2, status 'awaiting customer approval'
 - [ ] j-18: report-issue-open disabled with 0 photos; enabled after PhotoCapture upload
-- [ ] report-form → grade Gaskets=replace + notes → report-issue → toast 'Report issued · notification queued to Sent' and new row with link /rc/report/IR-E02028-V1-BCQC (matches IR-E02028-V1-…)
+- [ ] report-form → grade Gaskets=replace + notes → report-issue → toast 'Report issued · notification queued to Outbox' and new row with link /rc/report/IR-E02028-V1-BCQC (matches IR-E02028-V1-…)
 - [ ] j-18 status flips to 'awaiting customer approval'
-- [ ] Sent top email: subject 'Your inspection report is ready — Datejust 36', 4-line body 'Hello Hannah,' + inspection body + '▶ https://…/rc/report/IR-E02028-V1-BCQC' + signature, NO unfilled {{…}} tokens, NO line items
+- [ ] Outbox top email: subject 'Your inspection report is ready — Datejust 36', 4-line body 'Hello Hannah,' + inspection body + '▶ https://…/rc/report/IR-E02028-V1-BCQC' + signature, NO unfilled {{…}} tokens, NO line items
 - [ ] Composer template 'inspection_ready' on cv-01 preview: 4 non-empty lines, 'Hello Harrison,' + '▶ http…/rc/watches/w-01' (falls back to watch page — no issued report on j-01), no {{…}} leftovers
 - [ ] /setup lists inspection_ready, invoice_ready, evidence_available (9 templates present in fixture)
 - [ ] RolliConnect magic-link flow: /rc → email → /rc/auth/c-02-<token> → /rc/home; Needs-you shows 'Review the inspection report for your Cosmograph Daytona'; watch card has rc-watch-report-w-02 'Inspection report ready →' linking /rc/report/IR-ELEANOR-V2
@@ -209,7 +209,7 @@ _Action items raised (fixed in the following commit unless noted in SESSION-LOG)
 
 ## Iteration 24
 
-_E12 RolliTime timing bench — end-to-end frontend testing of /rt shell, sign-in, testing queue, scan resolution, Witschi-style timing test page, auto-evaluation, PASS + REJECT flows, watch history append-only, job page timing card, Sent notifications, integrations tile, and audit-log rows. All spec bullets verified pass._
+_E12 RolliTime timing bench — end-to-end frontend testing of /rt shell, sign-in, testing queue, scan resolution, Witschi-style timing test page, auto-evaluation, PASS + REJECT flows, watch history append-only, job page timing card, Outbox notifications, integrations tile, and audit-log rows. All spec bullets verified pass._
 
 - [ ] /rt with no staff session shows rt-sign-in card grid (rt-card-u-michael present); wrong password → rt-error 'Incorrect password'; correct michael123 → rt-queue-page; header rt-user shows MH; rt-sign-out present.
 - [ ] Queue: rt-queue-count '2 jobs in testing · oldest first'; rows rt-queue-j-05 (E02015 Submariner) and rt-queue-j-16 (E02026 Lady-Datejust) with caliber label (Generic mechanical (provisional) shown since ref 279174/116610LV do not match seeded refPrefixes — matches spec's 'watch tolerance may be generic — fine' note).
@@ -221,10 +221,10 @@ _E12 RolliTime timing bench — end-to-end frontend testing of /rt shell, sign-i
 - [ ] Fill all six positions rate=2 beat=0.3 amp=250 reserve=50 → rt-avg-row shows AVG +2 Δ 0 beat 0.3 amp 250; rt-eval renders 'Suggested: PASS'.
 - [ ] Change rt-CL-rate=40 → rt-suggested 'Suggested: REJECT' with flags 'Δ 38 s/d ≥ 30'.
 - [ ] REJECT with empty rt-reason → rt-error 'A rejection reason is required'.
-- [ ] Reject with reason 'Amplitude drift after 24h' → rt-done 'E02026 rejected — back to in progress under MM' + Sent notice line; new timing entry in done panel with tech override badge (auto suggested pass).
+- [ ] Reject with reason 'Amplitude drift after 24h' → rt-done 'E02026 rejected — back to in progress under MM' + Outbox notice line; new timing entry in done panel with tech override badge (auto suggested pass).
 - [ ] rt-back-queue returns to queue; queue count drops to 1 job; rt-queue-j-16 removed.
 - [ ] In-app nav to /jobs/j-16: status pill 'in service'; timeline mentions 'Amplitude drift after 24h' rejection reason; job-timing-card shows 2 tests (new REJECT + tt-01) for this watch, newest first.
-- [ ] Sent top email (Intake → Sent): E02026 present, subject/body reflect back-to-in-progress notice.
+- [ ] Outbox top email (Intake → Outbox): E02026 present, subject/body reflect back-to-in-progress notice.
 - [ ] PASS flow on j-05: rt-pass enabled after full fill; rt-done 'E02015 passed — moved to the QC queue'; job-timing-card + job-open-rollitime link present on /jobs/j-05; status remains 'testing'.
 - [ ] /integrations tile: RolliTime present, health 'not connected — stub', blurb mentions /rt.
 - [ ] /setup/audit-log: 'rollitime' audit rows visible with 'timing REJECT · generic · Amplitude drift after 24h · flags: none · OVERRIDE (auto-eval suggested pass)' (timing PASS row confirmed in separate session).
@@ -331,13 +331,13 @@ _Action items raised (fixed in the following commit unless noted in SESSION-LOG)
 
 ## Iteration 30
 
-_Frontend-only E2E of Shipping — Inbound (/shipping/inbound) as MM. Verified sign-in, page load, KPI strip, stage tabs with counts, 4 stages end-to-end (create label with FedEx → Sent email queued, resend/follow-up/void+reissue with reissued badge, in-transit simulate to out-for-delivery, delivered_unscanned rose row with 5h chip), TrackingPanel for sh-06 (Inbound·to us, UPS·Next Day Air Saver, insured $6,400, newest-first events with Louisville, copyable client one-liner containing 'on its way to us with UPS' and 'Louisville', Copy → 'Copied', close), Outbound sh-09 (Outbound·to client, client line contains 'on its way to you'). Global search returns SHIPMENTS group for tracking#, est# and…_
+_Frontend-only E2E of Shipping — Inbound (/shipping/inbound) as MM. Verified sign-in, page load, KPI strip, stage tabs with counts, 4 stages end-to-end (create label with FedEx → Outbox email queued, resend/follow-up/void+reissue with reissued badge, in-transit simulate to out-for-delivery, delivered_unscanned rose row with 5h chip), TrackingPanel for sh-06 (Inbound·to us, UPS·Next Day Air Saver, insured $6,400, newest-first events with Louisville, copyable client one-liner containing 'on its way to us with UPS' and 'Louisville', Copy → 'Copied', close), Outbound sh-09 (Outbound·to client, client line contains 'on its way to you'). Global search returns SHIPMENTS group for tracking#, est# and…_
 
 - [ ] kpis: {"labels-to-send": "3", "outstanding": "2", "in-transit": "2", "arriving-today": "1", "unscanned": "1", "outstanding_hint": "contains '1 over 30 days' with rose-700"}
 - [ ] tab_counts: {"label_requested": "3", "label_sent": "2", "in_transit": "2", "delivered_unscanned": "1"}
 - [ ] stage1: {"sh-01": "$28,500", "sh-02": "$9,800", "sh-03": "$4,200", "sh-03_age": "9d amber"}
 - [ ] create_label_sh-03: {"prefilled_value": "4200", "validation": "Address verified (Parcel Pro) \u00b7 cleaned to 675 Madison Ave, \u2026", "carrier_fedex_click": true, "confirm_flash": "Label created \u00b7 FedEx 918605230066 \u00b7 insured $4,200 \u00b7 email queued", "counts_afte
-- [ ] stage2: {"sh-04_out": "3d green", "sh-05_out": "34d rose", "resend_sh-04": "Label email re-queued to Sent", "followup_sh-05": "Follow-up reminder queued", "void_sh-04": "Label voided \u00b7 back to Label Requests (reissue)", "sh-04_gone_from_stage2": true, "sh-04_in
+- [ ] stage2: {"sh-04_out": "3d green", "sh-05_out": "34d rose", "resend_sh-04": "Label email re-queued to Outbox", "followup_sh-05": "Follow-up reminder queued", "void_sh-04": "Label voided \u00b7 back to Label Requests (reissue)", "sh-04_gone_from_stage2": true, "sh-04_in
 - [ ] stage3: {"arriving_today_section": true, "arriving-sh-07": true, "sh-06_last_before": "In transit \u00b7 Louisville, KY", "sim_sh-06_flash": "Tracking event simulated", "sh-06_last_after": "Out for delivery \u00b7 New York, NY", "arriving_count_after_sim": 2, "sim_sh-
 - [ ] stage4: {"sh-08_row_rose": true, "sh-08_unscanned": "5h red", "arrival_href": "/intake"}
 - [ ] tracking_panel_sh-06: {"direction": "Inbound \u00b7 to us", "carrier": "UPS \u00b7 UPS Next Day Air Saver", "insured": "$6,400", "event_0": "In transit \u00b7 Louisville, KY \u00b7 Arrived at hub", "client_line_ok": true, "copy_becomes_Copied": true, "close_works": true}
@@ -657,3 +657,61 @@ _Action items raised (fixed in the following commit unless noted in SESSION-LOG)
 - Manual retest of T3/T7/T8/T9 (main agent can self-test since happy paths already validated; report shows only environmental blockers, no code defects surfaced).
 - Optionally add `aria-disabled="true"` to owner-row access cells.
 - Confirm PhotosPanel post-work chip testid matches exactly `photo-type-post-work` (current source may render `photo-type-post_work` -- please verify).
+
+## Iteration 63
+
+_Frontend-only regression pass for G5 Hitlist, G6 Access control, G7 accent theme, G8 iPad shell / device / offline / container reconcile, and supervisor-pad Send to vendor. All three smoke scripts executed against the mock-mode app (localStorage rollisuite.api.mode=mock, client-side nav). Most flows pass; 2 real bugs found around the SWO form validation + concierge count integration, plus one behavioural gap on the pad toast._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- SwoForm: disable swo-save while swo-work is empty (trim whitespace).
+- Verify pad-toast is actually mounted after SWO save on /rw/band and /rw/pad — expected copy 'queued on the Concierge board · custody unchanged until the outbound scan'.
+- Investigate why concierge cell data-counts are all '10' and why Send-to-vendor does not increment the target vendor's queue cell.
+
+_Issues reported in this iteration (all fixed by the following commit unless noted in SESSION-LOG):_
+- Concierge /concierge: Every cell-v-<vendor>-<stage> across 5 lanes × 4-7 stages reports the same data-count='10' which looks like a placeholder/derivation issue and prevents verifying count deltas. Please confirm whether counts are supposed to be per-vendor/stage aggregates.
+
+## Iteration 64
+
+_Frontend-only verification of the rebuilt Job Detail page (/jobs/:id) in MOCK mode. All 11 spec bullets pass: j-30 renders item-header, process-flow (3 lines, blocker + custody labels), add-ons panel (2 seeded rows, $705 total), collapsed 'Original estimate' + 'Inspection report', 9-section 'More' block in correct order with correct counts (photos=1, parts=4), photo-strip data-count=1 with working lightbox open+close, actions bar with print-label/parts-request/pin/status action, and NO job-send-to-vendor button anywhere. j-mi1 multi-item shows '1 / 3 components finished' with per-line 1/3, 2/3, 3/3 and head line data-finished='true' at QC current with 'complete · waiting for the other compon…_
+
+
+## Iteration 65
+
+_Comprehensive frontend-only smoke of the two new features: W·B·P dot rows across all mount points and the global floating Message Bubble (SEND/INBOX/SENT). Executed /app/memory/tools/smoke_wbp_msg.py (existing self-test) plus a supplementary script /app/memory/tools/smoke_wbp_msg_extra.py covering /intake/receive, empty-send error, ib-12 station-message details, done→reopen, view-as Leo unread propagation, top-bar messages-btn regression, and process-flow regression. All checks pass with 0 page errors._
+
+
+## Iteration 66
+
+_Comprehensive frontend testing of RolliSuite INSPECTION LABELS feature. 45/47 checks passed (95.7%). All core flows verified: j-r1 seeds (8 opinions, counterfeit dial, blind 2nd opinion from MM, specimen banner done, 9+adhoc shots, revision history), revision+tags typeahead with new-tag prompt, shareable toggle, guided shots (bezel 4-step overlay, shutter/next/retake/close), variant picker on j-08 (MK1-4 tiles + unsure/none, MK2 select, none→candidate, r2 save), blind 2nd opinion (MH request → MM view blind with banner and hidden chip → agrees), Offer-to-acquire inbox message, Setup→Inspection (variant sets for 124300 dial, candidate promotion to MK5, shot lists count 9, tag confirmation, WM…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Investigate E02040 pad error path: either enforce 'Opinion is required' validation on the pad's inspect-opinion-<component>-save when no opinion selected, or confirm which job number the spec intended (j-r3/E02040 already has seeded state).
+- Verify SpecimenBanner recomputes data-done after Aftermarket/Counterfeit is applied on the pad; expected to flip to 'false' when controlled shots for that component are missing.
+
+## Iteration 67
+
+_Comprehensive frontend verification of JOSEPH'S BIN (JV bin) feature across JV pad Bin tab and MH desk Assign/Move. 46/46 checks passed (100%), zero page errors. JV pad flow (26 checks): Bin tab header 'JV bin · JV workshop · at JV's bench', counts '9 assigned · 3 out with team · 6 should be in the bin', list counts in=6/out=3/due=4, hand-to Dre (in=5,out=4,subtext mentions Dre), take back (6/3), scan E02077 back in (7/2), scan E02034 shows pad-toast-err 'not in the bin — tickets enter at Vienna's safe', night BIN-JV without safe keeps state unchanged, SAFE-VC arms (data-armed=true), BIN-JV opens bin-confirm-sheet with line '9 assigned · 2 out with team · 7 should be in the bin — confirm?', …_
+
+
+## Iteration 68
+
+_Frontend-only verification of CLIENT PORTAL W·B·P DOTS + REPLY LOOP end-to-end in a single tab (SPA nav after first load; mock mode forced via init script). All 10 spec areas pass: portal sign-in; home dots + legend (dismiss/toggle/reopen) + green-dot hint stays on page; watch page dots+flow+projected 'October 7'; red tap → Ask with prefill/context/ask-note and component tag; staff inbox ask-draft (data-source=local) with internal 'Parts hold · Bracelet only' + Vienna reason + ETA, ask-text with expected copy, thread-assign=role:concierge; Claude regenerate flipped data-source=local→claude with text change and 0 errors; send → ask-sent 'by Vienna → portal thread + email', inbox-count-needs_r…_
+
+
+## Iteration 69
+
+_Vonage screen-pop + call log feature tested end-to-end as Vienna (manager) and Chyna (concierge), plus MM (supervisor) role-gate check. All six dev scenarios (two-jobs, known, unknown, missed, missed-unknown via /unknown→new client, elsewhere) exercised. Pop ringing→live transition, dot-tap→leg focus, card-click→client collapse-to-chip, note, intercom page, approval disposition with addon pending+confirm-via-portal, outbox 'Please confirm —' email, click-to-call directory + concurrent-call phone-link-error, unknown→attach, unknown→new-client-from-call, Escape dismisses ringing but missed chip still filed, elsewhere chip never triggers disposition, Chyna inbox has 'Missed … call back' items, …_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix 'Called back' on /calls so it (a) decrements nav-calls-missed / nav-clients-missed badge and calls-kpi-missed, and (b) initiates an outbound call (call-pop with data-direction=out) that logs a new row — per spec 'removes it from the queue and decrements the badge; the list gains a new Outbound r
+
+## Iteration 70
+
+_Comprehensive frontend testing of the Inbox slide-out job-card panel feature (RolliSuite iter 70). Signed in as Vienna, ran /app/tests/test_inbox_panel_iter70.py exercising sidebar order+badges, thread row dots, panel modes (job/request/client), quick actions (note/parts/summary/open-job), swap+back for other-jobs, completed job banner, warranty return banner + inspection details + return-original swap, requested job chips on /jobs pages, /requests table + row-click navigation (rq-05 creates new thread, rq-03 reuses cv-05), close/escape behaviour, no floating corner-lookup, and Vonage call-pop regression. 76/77 assertions PASS; the only miss is cosmetic (source rendered as CSS-uppercased 'WE…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- (Optional/cosmetic) Normalize inbox-panel-request-source to Title Case ('Web form' / 'Call' / 'Walk-in') by either removing the uppercase CSS or storing proper-cased source string, so the rendered text matches the spec.
