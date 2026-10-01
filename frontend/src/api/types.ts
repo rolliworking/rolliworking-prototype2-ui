@@ -354,9 +354,10 @@ export interface JobComponent {
   // E18 — physical part on the shop floor
   station?: RwStationKey; partStatus?: PartStatus; custodyTech?: string; history?: PartMove[];
   itemLabel?: string; // multi-item jobs: "1/3" · "2/3" · "3/3" as written on the Receive Watch labels
+  containerKey?: string; binOrigin?: string; // JV bin: inside the bin now · last bin this part rode in (out with team)
 }
 export type PartStatus = 'not_started' | 'in_progress' | 'waiting' | 'reunited' | 'fulfilled';
-export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo'; note?: string }
+export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo' | 'container'; note?: string }
 export interface TechCompletionRow { tech: string; months: Record<string, { total: number; byDept: Record<DeptCode, number> }>; total: number }
 export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]; generatedAt: string }
 
@@ -1162,7 +1163,8 @@ export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage
 // ---- E18 RW deep build — shop floor core ----------------------------------------------------------------
 export type RwLane = 'head' | 'band' | 'shared';
 export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'uncase' | 'mgr_safe_polish_in' | 'polish_room' | 'mgr_safe_polish_out' | 'movement_service' | 'parts_approval' | 'recase_test' | 'into_safe_head' | 'safe_await_band'
-  | 'band_pre_queue' | 'band_assign' | 'band_mgr_safe_in' | 'refinish' | 'band_mgr_safe_out' | 'band_qc' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished';
+  | 'band_pre_queue' | 'band_assign' | 'band_mgr_safe_in' | 'refinish' | 'band_mgr_safe_out' | 'band_qc' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished'
+  | 'vc_safe' | 'jv_bench'; // JV bin: Vienna's safe overnight · JV's bench by day
 // Lock = the item is physically in a manager's safe (custody-holding point), never an abstract gate
 export const isSafeStation = (k: RwStationKey): boolean => k.includes('safe');
 export type GateDirection = 'in' | 'out';
@@ -1170,7 +1172,7 @@ export type GateTrack = 'watch' | 'band';
 export interface GateScan { id: string; at: string; by: string; station: string; jobId: string; jobNumber: string; direction: GateDirection; track: GateTrack; parts: ComponentKey[]; bundled: boolean; assignedTo: string; from: RwStationKey; to: RwStationKey }
 export interface RwStation { key: RwStationKey; label: string; lane: RwLane; order: number }
 export type PartColorKey = 'head' | 'case' | 'band';
-export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string; clientId: string; estimateNumber?: string; itemLabel?: string; completed?: { by: string; undoToken: string; transitioned: boolean } }
+export interface FloorDot { jobId: string; jobNumber: string; key: ComponentKey; label: string; station: RwStationKey; partStatus: PartStatus; tech?: string; kind: JobKind; priority: JobPriority; watchLabel: string; clientId: string; estimateNumber?: string; itemLabel?: string; container?: string; completed?: { by: string; undoToken: string; transitioned: boolean } }
 export interface ShopFloor { stations: RwStation[]; dots: FloorDot[]; counts: Record<RwStationKey, number>; techs: string[] }
 export interface PartHistoryView { job: JobWithRefs; part: JobComponent; moves: PartMove[] }
 export interface ScanSession { tech?: User; rows: { at: string; jobNumber: string; jobId: string; watchLabel: string; part: string; outboxId?: string }[] }

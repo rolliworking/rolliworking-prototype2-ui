@@ -9,7 +9,7 @@ import { Table, Td, Th } from '@/components/ui/Table';
 import { WbpJobDots } from '@/components/shared/WbpDots';
 import { fmtMoney, fullName } from '@/lib/format';
 
-// MH daily · APPROVALS TO SEND — parts approvals priced (addendum ready) but not yet sent to the client. One-tap Send each → mail seam (Outbox). List refreshes live; the hitlist item clears at zero.
+// MH daily · APPROVALS TO SEND — parts approvals priced (addendum ready) but not yet sent to the client. One-tap Send each → mail seam (Sent). List refreshes live; the hitlist item clears at zero.
 export default function ApprovalsToSendPage() {
   const [rows, setRows] = useState<ApprovalToSend[]>([]); const [all, setAll] = useState(false); const [msg, setMsg] = useState<string | null>(null); const [busy, setBusy] = useState<string | null>(null);
   const load = () => api.getApprovalsToSend().then(setRows);

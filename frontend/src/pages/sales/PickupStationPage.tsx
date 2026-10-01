@@ -119,7 +119,7 @@ export default function PickupStationPage() {
       {step === 4 && done && (
         <Card accent="moss" title="Pickup complete" testId="pickup-done">
           <p className="text-[13px] text-ink">{done.number} · {fullName(done.client)} · <StatusPill status={done.status} testId="pickup-done-status" />{done.job && <> · job <Link to={`/jobs/${done.job.id}`} className="font-mono text-brand hover:underline">{done.job.number}</Link> closed, custody released</>}</p>
-          <p className="mt-1 text-xs text-ink-500">Code consumed · thank-you email queued to Outbox · audit stamped.</p>
+          <p className="mt-1 text-xs text-ink-500">Code consumed · thank-you email recorded in Sent · audit stamped.</p>
           <Button variant="primary" className="mt-3" data-testid="pickup-reset" onClick={reset}>Next customer</Button>
         </Card>
       )}

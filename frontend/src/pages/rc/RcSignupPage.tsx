@@ -5,7 +5,7 @@ import { RcButton, RcCard, RcError, RcInput, RcLabel } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
 import { TotpSetup } from '@/rc/RcTotpBits';
 
-// Account creation for a client already on file: email → one-time verification link (emailed, mock Outbox) → password → authenticator → backup codes → signed in.
+// Account creation for a client already on file: email → one-time verification link (emailed, mock Sent) → password → authenticator → backup codes → signed in.
 // Only the emailed link opens the password step — knowing an email is not enough to claim the account (D-357).
 export default function RcSignupPage() {
   const { client, refresh } = useRcSession(); const [sp] = useSearchParams(); const next = sp.get('next') && sp.get('next')!.startsWith('/rc/') ? sp.get('next')! : '/rc/home'; const token = sp.get('verify');
@@ -35,7 +35,7 @@ export default function RcSignupPage() {
     {step === 'check-email' && <RcCard className="mt-8" eyebrow="Step 2 of 4" title="Check your email to continue" testId="rc-signup-sent">
       <p className="text-[15px] leading-relaxed text-rc-ink" data-testid="rc-signup-sent-text">We sent a one-time link to <span className="font-medium">{sent}</span>. Open it to choose your password and set up your authenticator. The link works once.</p>
       <p className="mt-3 text-xs text-rc-muted">Nothing here continues without that link — typing an email alone can’t claim an account.</p>
-      <p className="mt-4 text-xs text-rc-muted">Prototype: emails aren’t really sent — staff can see the link in Intake ▸ Outbox.</p>
+      <p className="mt-4 text-xs text-rc-muted">Prototype: emails aren’t really sent — staff can see the link in Intake ▸ Sent.</p>
     </RcCard>}
     {step === 'verifying' && <RcCard className="mt-8" eyebrow="Verifying" title="Checking your link…" testId="rc-signup-verifying"><RcError text={err} />{err && <p className="mt-3 text-sm"><Link to="/rc/signup" className="underline decoration-rc-accent underline-offset-4">Request a new link</Link></p>}</RcCard>}
     {step === 'password' && verified && <RcCard className="mt-8" eyebrow="Step 3 of 4" title={`Email verified — welcome, ${verified.firstName}`} testId="rc-signup-card">

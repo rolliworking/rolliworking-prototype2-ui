@@ -24,7 +24,7 @@ export const FulfillMenu = ({ order: o, isOwner, editing, onSave, onRun, onModal
     { key: 'qbo-pull', label: 'Sync from QuickBooks', disabled: !!o.zeroBalance, hint: o.zeroBalance ? 'excluded — zero-balanced' : 'stub', onClick: () => onRun(() => api.qboSyncInvoice(o.id, 'pull'), 'Synced from QuickBooks (stub)') },
     { key: 'qbo-push', label: 'Push Edits to QuickBooks', disabled: !!o.zeroBalance, hint: o.zeroBalance ? 'excluded — zero-balanced' : 'stub', onClick: () => onRun(() => api.qboSyncInvoice(o.id, 'push'), 'Edits pushed to QuickBooks (stub)') },
     'sep',
-    { key: 'ship-info', label: 'Send Shipping Info Request', disabled: !live, onClick: () => onRun(() => api.requestShippingInfo(o.id), 'Shipping info request queued to Outbox') },
+    { key: 'ship-info', label: 'Send Shipping Info Request', disabled: !live, onClick: () => onRun(() => api.requestShippingInfo(o.id), 'Shipping info request recorded in Sent') },
     { key: 'pickup-email', label: 'Send Pickup Reminder Email', disabled: !live || o.channel !== 'pickup', onClick: () => onRun(() => api.sendSoReminder(o.id, 'pickup', 'email'), 'Pickup reminder email queued') },
     { key: 'pickup-sms', label: 'Send Pickup Reminder SMS', disabled: !live || o.channel !== 'pickup', onClick: () => onRun(() => api.sendSoReminder(o.id, 'pickup', 'sms'), 'Pickup reminder SMS queued') },
     { key: 'pay-email', label: 'Send Payment Reminder Email', disabled: !live || o.balanceDue <= 0, onClick: () => onRun(() => api.sendSoReminder(o.id, 'payment', 'email'), 'Payment reminder email queued') },

@@ -19,11 +19,13 @@ export interface DestConfig<N extends DestNode = DestNode> {
 const HIDDEN = new Set(['pre_approval', 'pre_queue', 'band_pre']);
 const INLINE_BAND = new Set(['band_safe_in', 'refinish', 'band_safe_out']);
 const SHARED_LABELS: Record<string, string> = { final: 'Final QC / Invoicing', testing: 'Awaiting Payment', finished: 'Awaiting Shipping' };
+// JV bin row: Assign (desk queue — nothing moves) → Vienna's safe (BIN-JV + tickets enter) → JV's bench (BIN-JV morning)
+export const BIN_ASSIGN_NODE: MapNode = { id: 'jv_bin_assign', keys: [], label: 'Assign to JV bin', sub: 'desk queue · nothing moves until the safe scan', row: 'bin', col: 2, assign: true };
 export const SHOP_FLOOR_CONFIG: DestConfig<MapNode> = {
-  rows: [{ key: 'wat', label: 'WAT', className: 'text-[10px] font-bold uppercase tracking-widest text-blue-300' }, { key: 'wat_ramp', label: 'polish leg', className: 'text-[9px] uppercase tracking-wide text-amber-300/80', ramp: true }, { key: 'bra', label: 'BRA', className: 'text-[10px] font-bold uppercase tracking-widest text-green-300' }],
-  nodes: NODES.filter((n) => !HIDDEN.has(n.id)).map((n) => (INLINE_BAND.has(n.id) ? { ...n, row: 'bra' as const } : n)),
+  rows: [{ key: 'wat', label: 'WAT', className: 'text-[10px] font-bold uppercase tracking-widest text-blue-300' }, { key: 'wat_ramp', label: 'polish leg', className: 'text-[9px] uppercase tracking-wide text-amber-300/80', ramp: true }, { key: 'bra', label: 'BRA', className: 'text-[10px] font-bold uppercase tracking-widest text-green-300' }, { key: 'bin', label: 'JV BIN', className: 'text-[10px] font-bold uppercase tracking-widest text-amber-300' }],
+  nodes: [...NODES.filter((n) => !HIDDEN.has(n.id)).map((n) => (INLINE_BAND.has(n.id) ? { ...n, row: 'bra' as const } : n)), BIN_ASSIGN_NODE],
   shared: SHARED_NODES.map((n) => ({ ...n, label: SHARED_LABELS[n.id] ?? n.label })), sharedCol: 13,
-  tracks: [['assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['assign_band', 'band_safe_in', 'refinish', 'band_safe_out', 'band_qc', 'safe_band']],
+  tracks: [['assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['assign_band', 'band_safe_in', 'refinish', 'band_safe_out', 'band_qc', 'safe_band'], ['jv_bin_assign', 'vc_safe', 'jv_bench']],
   ramps: [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }],
   merges: { from: ['safe_head', 'safe_band'], to: 'final' },
   columns: '64px repeat(11, minmax(0, 1fr)) 150px',

@@ -540,7 +540,7 @@ const DEPARTMENTS: { key: Department; name: string }[] = [
 const OPEN_ESTIMATE: Estimate['status'][] = ['draft', 'sent'];
 const ACTIVE_JOB: Job['status'][] = ['approved', 'in_service', 'testing'];
 
-// Q5 as AMENDED (MH 2026-09-29): SALES are dated by the FIRST INVOICE SEND (Outbox timestamp); re-sends / edits never re-date — an edit that changes the total adjusts the sale in the original month (we read the CURRENT total against the first-send date). Payment date drives A/R, the ship/pickup gate and cash reporting only. Zero-total / zero-balance orders have no invoice → never in Sales (they still count in Completions). COMPLETIONS = work, dated by completedAt. Lines up with QBO invoice date under invoice-first (VB4-03).
+// Q5 as AMENDED (MH 2026-09-29): SALES are dated by the FIRST INVOICE SEND (Sent timestamp); re-sends / edits never re-date — an edit that changes the total adjusts the sale in the original month (we read the CURRENT total against the first-send date). Payment date drives A/R, the ship/pickup gate and cash reporting only. Zero-total / zero-balance orders have no invoice → never in Sales (they still count in Completions). COMPLETIONS = work, dated by completedAt. Lines up with QBO invoice date under invoice-first (VB4-03).
 export const saleDateOf = (o: SalesOrder): string | undefined => (o.zeroBalance || o.total <= 0 || o.status === 'draft' || o.status === 'cancelled' ? undefined : o.invoiceSends[0]?.at ?? o.invoiceSentAt ?? o.orderDate /* STAND-IN for seeded orders without a recorded send */);
 const salesThisMonth = () => store.salesOrders.filter((o) => isThisMonth(saleDateOf(o))).map((o) => ({ amount: o.total, job: store.jobs.find((j) => j.id === o.jobId) }));
 async function getDashboardStatsMock(): Promise<DashboardStats> {
@@ -1215,7 +1215,7 @@ export async function sendEstimate(id: string, override?: { subject: string; bod
   e.status = 'sent';
   e.sentAt = new Date().toISOString();
   e.updatedAt = e.sentAt;
-  estStamp(e, `${again ? 'Sent again' : 'Sent'} · rev ${e.revision} · email queued to Outbox${override ? ` · ${override.source === 'personal' ? `${override.owner}'s template` : override.source === 'one_off' ? 'edited for this send' : 'shop template'}` : ''}`);
+  estStamp(e, `${again ? 'Sent again' : 'Sent'} · rev ${e.revision} · email recorded in Sent${override ? ` · ${override.source === 'personal' ? `${override.owner}'s template` : override.source === 'one_off' ? 'edited for this send' : 'shop template'}` : ''}`);
   return resolve({ estimate: withRefs(e), email });
 }
 
@@ -1946,13 +1946,13 @@ async function getTodayMock(userId?: string): Promise<TodayView> {
   threadsNeedingReplyForUser(me).forEach((c) => rows.push({ id: `thread-${c.id}`, source: 'thread', title: `Reply to ${c.client.firstName} ${c.client.lastName} · ${c.subject}`, detail: `${c.anchorLabel ?? 'General'} · waiting ${c.ageHours}h`, via: 'assigned thread', overdue: c.ageHours > 24, urgent: false, dueAt: c.lastInboundAt }));
   rows.sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.urgent) - Number(a.urgent) || (a.dueAt ?? '9').localeCompare(b.dueAt ?? '9'));
   const waitingOn = store.tasks.filter((t) => t.status === 'open' && t.division === sessionDiv && t.createdBy === me.shortName && !assigneeMatches(t.assignedTo, me));
-  autoPoSweepSync(); approvalsToSendSweepSync();
+  autoPoSweepSync(); approvalsToSendSweepSync(); runDaySweeps();
   const pinned = store.pinned.filter((p) => !p.dismissedAt && (p.global || p.division === sessionDiv) && assigneeMatches(p.assignedTo, me)).sort((a, b) => Number(b.priority === 'high') - Number(a.priority === 'high'));
   return resolve({ pinned, rows, waitingOn });
 }
 
 // ---- E5 Sales orders / fulfil / pickup / ship — PROMPT-PACK-invoicing-pickup-ship.md -----------
-// Hard stops: QBO stub only, email Outbox only, no real money, shipping via mock seam.
+// Hard stops: QBO stub only, email → Sent record only, no real money, shipping via mock seam.
 
 const fmtMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 const soTotals = (o: SalesOrder) => {
@@ -2244,7 +2244,7 @@ export const shippingProvider = {
 };
 
 export interface ConfirmShipmentInput { carrier: ShipCarrier; declaredValue: number; photos: PackagePhoto[]; label: MockShipment; bypassReason?: string }
-// Ship Station confirm: shipment record, line shipped_qty, SO shipped + tracking + ship_date, Outbox notification, custody closes
+// Ship Station confirm: shipment record, line shipped_qty, SO shipped + tracking + ship_date, Sent notification, custody closes
 export async function confirmShipment(id: string, input: ConfirmShipmentInput): Promise<SalesOrderWithRefs> {
   const o = getSO(id);
   if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not shippable in its current status');
@@ -2778,7 +2778,7 @@ export async function portalRequestMagicLink(email: string): Promise<{ link: Mag
   writeJson(KEYS.rcLinks, store.magicLinks.slice(0, 20));
   const path = `/rc/auth/${link.token}`;
   queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: 'RolliConnect sign-in', status: 'pending', subject: 'Your RolliConnect sign-in link', body: `Hello ${c.firstName},\n\nTap the link below to open RolliConnect. It expires in 15 minutes.\n\n${path}\n\nIf you didn’t ask for this, you can ignore it.\n\n— RolliSuite`, createdAt: new Date().toISOString(), createdBy: 'RolliConnect', station: 'RolliConnect' });
-  portalStamp(c.id, 'Magic link requested · email queued to Outbox (stub)');
+  portalStamp(c.id, 'Magic link requested · email recorded in Sent (stub)');
   return resolve({ link, path });
 }
 
@@ -2806,7 +2806,7 @@ export async function rcLookup(email: string): Promise<{ clientOnFile: boolean; 
   return resolve({ clientOnFile: !!c, hasAccount: !!a, totpEnabled: !!a?.totpEnabled, firstName: c?.firstName });
 }
 // Step 1 of signup — the email must already be on file (accounts are for existing clients; new clients come in through Requests)
-// Signup proves the client owns the email (D-357): email → one-time verification link (Outbox, mock, never really sent) → only that link opens password + authenticator
+// Signup proves the client owns the email (D-357): email → one-time verification link (Sent, mock, never really sent) → only that link opens password + authenticator
 interface RcInvite { token: string; clientId: string; email: string; createdAt: string; usedAt?: string; source: 'signup' | 'reset' }
 const RC_INVITES = 'rollisuite.rc.invites';
 const rcInvites = (): RcInvite[] => { try { return JSON.parse(localStorage.getItem(RC_INVITES) ?? '[]'); } catch { return []; } };
@@ -2863,7 +2863,7 @@ export async function rcVerifyTotp(email: string, code: string): Promise<Client>
 export async function rcGetAccount(clientId: string): Promise<RcAccount | null> { const a = rcAccounts().find((x) => x.clientId === clientId); return resolve(a ? rcPublic(a) : null); }
 export async function rcRegenerateBackupCodes(clientId: string): Promise<string[]> { const all = rcAccounts(); const a = all.find((x) => x.clientId === clientId); if (!a) throw new Error('No account'); a.backupCodes = Array.from({ length: 8 }, backupCode); a.usedBackupCodes = []; saveAccounts(all); portalStamp(clientId, 'Backup codes regenerated · old codes void'); return resolve([...a.backupCodes]); }
 export async function rcListAccounts(): Promise<(RcAccount & { clientName: string })[]> { return resolve(rcAccounts().map((a) => ({ ...rcPublic(a), clientName: fullNameOf(byId(fx.clients, a.clientId)) }))); }
-export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); issueRcInvite(byId(fx.clients, clientId), 'reset'); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset for ${fullNameOf(byId(fx.clients, clientId))} — fresh verification link emailed (Outbox)` }); return resolve(undefined); }
+export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); issueRcInvite(byId(fx.clients, clientId), 'reset'); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset for ${fullNameOf(byId(fx.clients, clientId))} — fresh verification link emailed (Sent)` }); return resolve(undefined); }
 
 // Per-document gating by type — token documents (report, inspection form) can stay public links; identity-bound pages always need the account
 export type RcDocType = 'estimate' | 'invoice' | 'watch' | 'messages' | 'report' | 'inspection_form';
@@ -3277,7 +3277,7 @@ export async function portalSendMessage(clientId: string, text: string, watchId?
   return resolve(m);
 }
 
-// Staff side: inbox of client threads; replies queue an Outbox email (nothing sends)
+// Staff side: inbox of client threads; replies record a Sent email (nothing sends)
 export async function getStaffInbox(): Promise<StaffInboxThread[]> {
   const byClient = new Map<string, Message[]>();
   store.messages.forEach((m) => byClient.set(m.clientId, [...(byClient.get(m.clientId) ?? []), m]));
@@ -3307,7 +3307,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
   const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, from: 'staff', by: a.by, text: text.trim(), at: email.createdAt, readByStaff: true, readByClient: false, emailId: email.id };
   store.messages.push(m);
   await markThreadRead(clientId);
-  appendAudit({ type: 'portal', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Replied to ${c.firstName} ${c.lastName} in RolliConnect · email queued to Outbox` });
+  appendAudit({ type: 'portal', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Replied to ${c.firstName} ${c.lastName} in RolliConnect · email recorded in Sent` });
   return resolve(m);
 }
 
@@ -3397,7 +3397,7 @@ export async function sendPurchaseOrder(id: string): Promise<PurchaseOrderWithRe
   if (poRedLines(p).length && !p.redAcknowledgedBy) throw new Error(`${poRedLines(p).length} line(s) are more than 10% above your average — acknowledge them before sending`);
   p.status = 'sent'; p.sentAt = new Date().toISOString(); const v = byId(rs.vendors, p.vendorId); const a = actor(); resolveSystemPin(`auto-po:${p.id}`, `sent by ${a.by}`);
   queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: v.email, toName: v.name, relatedRef: p.number, status: 'pending', subject: `Purchase order ${p.number}`, body: `${p.lines.map((l) => `• ${l.partNumber} ${l.description} × ${l.qty} @ ${fmtMoney(l.unitCost)}`).join('\n')}\n\nTotal ${fmtMoney(p.total)} · ${v.terms}${p.labelUrl ? `\n\nPrepaid return label attached (${p.labelService}${p.trackingNumber ? ` · ${p.trackingNumber}` : ''}).` : ''}\n\n— RolliSuite purchasing (STUB — not sent)`, createdAt: p.sentAt, createdBy: a.by, station: a.station });
-  rsStamp('purchasing', `${p.number} sent to ${v.name} (stub · Outbox)`); return resolve(poRefs(p));
+  rsStamp('purchasing', `${p.number} sent to ${v.name} (stub · Sent)`); return resolve(poRefs(p));
 }
 export async function cancelPurchaseOrder(id: string, reason: string): Promise<PurchaseOrderWithRefs> {
   const p = byId(rs.pos, id); if (!reason.trim()) throw new Error('A reason is required'); if (p.status === 'received' || p.status === 'cancelled') throw new Error('PO is already closed');
@@ -3504,7 +3504,7 @@ export async function getReport(key: 'funnel' | 'throughput' | 'aging' | 'pnl' |
   const paid = salesThisMonth(); const depts: DeptCode[] = ['W', 'B', 'P', 'PM']; const lineAmt = (l: { qty: number; unitPrice: number }) => l.qty * l.unitPrice;
   const alloc = (pick: (l: Job['lines'][number]) => boolean) => paid.reduce((t, p) => { if (!p.job) return t; const all = p.job.lines.reduce((s, l) => s + lineAmt(l), 0); if (!all) return t; return t + p.amount * (p.job.lines.filter(pick).reduce((s, l) => s + lineAmt(l), 0) / all); }, 0);
   const jobsPaid = (pick: (l: Job['lines'][number]) => boolean) => new Set(paid.filter((p) => p.job?.lines.some(pick)).map((p) => p.job!.id)).size;
-  return resolve({ key, title: 'Department sales (by invoice-sent date) — this month', columns: ['department', 'sales (invoiced)', 'orders invoiced'], note: 'Q5 (amended 2026-09-29): a sale is dated by the FIRST invoice send (Outbox timestamp); edits adjust the original month, re-sends never re-date. Each order is split across its job’s lines pro rata; labor (type service) → W/B/P/PM, parts & shipping → no_dept_product. Zero-total / zero-balance orders never appear (Completions only). Payment date is A/R + gate + cash only. Sum of all rows = dashboard "Sales this month" = QBO invoice-date view.', generatedAt: now,
+  return resolve({ key, title: 'Department sales (by invoice-sent date) — this month', columns: ['department', 'sales (invoiced)', 'orders invoiced'], note: 'Q5 (amended 2026-09-29): a sale is dated by the FIRST invoice send (Sent timestamp); edits adjust the original month, re-sends never re-date. Each order is split across its job’s lines pro rata; labor (type service) → W/B/P/PM, parts & shipping → no_dept_product. Zero-total / zero-balance orders never appear (Completions only). Payment date is A/R + gate + cash only. Sum of all rows = dashboard "Sales this month" = QBO invoice-date view.', generatedAt: now,
     rows: [...depts.map((d) => ({ label: d, values: { department: `${fx.DEPT_LABEL[d]} (${d})`, 'sales (invoiced)': alloc((l) => isLabor(l) && l.dept === d), 'orders invoiced': jobsPaid((l) => isLabor(l) && l.dept === d) } })),
       { label: 'no_dept_product', values: { department: 'no_dept_product (goods + shipping)', 'sales (invoiced)': alloc((l) => !isLabor(l)), 'orders invoiced': jobsPaid((l) => !isLabor(l)) } },
       { label: 'total', values: { department: 'Total = dashboard Sales this month', 'sales (invoiced)': paid.reduce((t, p) => t + p.amount, 0), 'orders invoiced': paid.length } }] });
@@ -3707,7 +3707,7 @@ export async function labelPhoto(input: { photoId: string; jobId: string; source
 }
 export const companionCanSeeMoney = canSeeMoney;
 
-// ---- E14 Comms hub — one thread-space per client; Outbox-only sends; reply-token routing (mocked) ----
+// ---- E14 Comms hub — one thread-space per client; Sent-record only (nothing leaves); reply-token routing (mocked) ----
 import type { ConvMessage, Conversation, ConversationAnchor, ConversationWithRefs, InboxView, MessageSource, RenderedTemplate, ThreadView } from './types';
 
 const cx = { conversations: fx.conversations.map((c): Conversation => ({ ...c })), messages: fx.convMessages.map((m): ConvMessage => ({ ...m })) };
@@ -3818,7 +3818,7 @@ export async function replyInThread(id: string, input: { text: string; subject?:
   queueOutbox(email);
   const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: input.text.trim(), at: email.createdAt, token, emailId: email.id, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
   await markConversationRead(id); if (c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; }
-  cxStamp(`Reply queued → Outbox · ${client.firstName} ${client.lastName} · ${token}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
+  cxStamp(`Reply queued → Sent · ${client.firstName} ${client.lastName} · ${token}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
 }
 export async function addThreadNote(id: string, text: string): Promise<ConvMessage> { const c = convOf(id); if (!text.trim()) throw new Error('Write the note first'); const a = actor(); const m = pushConv(c, { direction: 'internal', source: 'note', by: a.by, station: a.station, text: text.trim(), at: new Date().toISOString() }); cxStamp(`Internal note on thread · ${c.subject}`); return resolve(m); }
 // MOCK: a client reply arriving by email, routed back to its thread by the reply token of the last outbound message
@@ -4228,11 +4228,11 @@ const derivePlacement = (j: Job, c: JobComponent): { station: RwStationKey; stat
 const ensureParts = (j: Job): JobComponent[] => {
   const comps = ensureComponents(j);
   comps.forEach((c) => {
-    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.itemLabel = seed.item; c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: 'seeded position' }); } }
+    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.itemLabel = seed.item; c.containerKey = seed.bin; c.binOrigin = seed.binOrigin ?? seed.bin; c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: seed.bin ? 'seeded position · in JV bin' : 'seeded position' }); } }
   });
   return comps;
 };
-const dotOf = (j: Job, c: JobComponent): FloorDot => { const p = derivePlacement(j, c); const w = byId(store.watches, j.watchId); const pk = j.packageId ? store.packages.find((x) => x.id === j.packageId) : undefined; return { jobId: j.id, jobNumber: j.number, key: c.key, label: PART_LABEL[c.key], station: p.station, partStatus: p.status, tech: c.custodyTech ?? c.completedBy, kind: j.kind, priority: j.priority, watchLabel: `${w.brand} ${w.model}`, clientId: j.clientId, estimateNumber: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId)?.number : undefined, itemLabel: pk?.itemLabel }; };
+const dotOf = (j: Job, c: JobComponent): FloorDot => { const p = derivePlacement(j, c); const w = byId(store.watches, j.watchId); const pk = j.packageId ? store.packages.find((x) => x.id === j.packageId) : undefined; return { jobId: j.id, jobNumber: j.number, key: c.key, label: PART_LABEL[c.key], station: p.station, partStatus: p.status, tech: c.custodyTech ?? c.completedBy, kind: j.kind, priority: j.priority, watchLabel: `${w.brand} ${w.model}`, clientId: j.clientId, estimateNumber: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId)?.number : undefined, itemLabel: pk?.itemLabel, container: c.containerKey }; };
 const roomJobs = () => store.jobs.filter((j) => j.division === getSessionDivision() && j.status !== 'closed');
 export async function getShopFloor(filter?: { tech?: string; kind?: JobKind }): Promise<ShopFloorT> {
   const dots = roomJobs().flatMap((j) => ensureParts(j).map((c) => dotOf(j, c))).filter((d) => (!filter?.tech || d.tech === filter.tech) && (!filter?.kind || d.kind === filter.kind));
@@ -4244,6 +4244,8 @@ const statusForStation = (s: RwStationKey, prev: PartStatus): PartStatus => (s =
 const partOf = (jobId: string, key: ComponentKey) => { const j = getJobRow(jobId); const c = ensureParts(j).find((x) => x.key === key); if (!c) throw new Error(`${PART_LABEL[key]} is not a part of ${j.number}`); return { j, c }; };
 const recordMove = (j: Job, c: JobComponent, to: RwStationKey | undefined, status: PartStatus, via: PartMove['via'], note?: string, tech?: string) => {
   const a = actor(); const from = derivePlacement(j, c).station;
+  // a single-ticket scan overrides the bin: any non-container move takes the part out of the bin it was riding in
+  if (c.containerKey && via !== 'container') { c.binOrigin = c.containerKey; c.containerKey = undefined; note = `${note ? `${note} · ` : ''}left JV bin (ticket scan)`; }
   c.history!.push({ at: new Date().toISOString(), by: tech ?? a.by, from, to, status, via, note });
   if (to) c.station = to; c.partStatus = status; if (tech) c.custodyTech = tech;
   jobStamp(j, `${PART_LABEL[c.key]} → ${to ? stationOf(to).label : status} (${via})${note ? ` · ${note}` : ''}`);
@@ -4347,7 +4349,7 @@ export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: str
   return resolve(out);
 }
 // -- Client-update summary context: everything the AI is allowed to see, already translated where the mapping is deterministic. AI fills template fields; a human edits and pastes. Never sent.
-const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished' };
+const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished', vc_safe: 'secured overnight in the workshop safe', jv_bench: 'with the workshop supervisor, queued for the bracelet / polish team' };
 export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[] }
 export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext> {
   const mock = store.jobs.find((x) => x.id === jobId);
@@ -4368,11 +4370,11 @@ export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Prom
 }
 // -- Custody by person: who physically holds each watch head / case / bracelet right now (same data as the floor board, grouped by holder)
 const HOLDER_NAME: Record<string, string> = { MH: 'Mike (MH)', MM: 'MM' };
-export interface CustodyItem extends FloorDot { clientLastName: string; workflow: DeptCode[]; status: JobStatus; stationLabel: string; heldSince?: string; notes: string[] }
+export interface CustodyItem extends FloorDot { clientLastName: string; workflow: DeptCode[]; status: JobStatus; stationLabel: string; heldSince?: string; notes: string[]; containerInfo?: { key: string; label: string; holderLabel: string } }
 export interface CustodyByPerson { tech: string; name: string; items: CustodyItem[] }
 export async function getCustodyByPerson(): Promise<CustodyByPerson[]> {
   seedSwo(); const groups = new Map<string, CustodyItem[]>();
-  roomJobs().forEach((j) => { const c = byId(fx.clients, j.clientId); ensureParts(j).forEach((p) => { const holder = p.custodyTech; if (!holder) return; const d = dotOf(j, p); const last = p.history?.[p.history.length - 1]; (groups.get(holder) ?? groups.set(holder, []).get(holder)!).push({ ...d, clientLastName: c.lastName, workflow: j.workflow, status: j.status, stationLabel: stationOf(d.station).label, heldSince: last?.at, notes: j.notes.slice(-2).map((n) => n.text) }); }); });
+  roomJobs().forEach((j) => { const c = byId(fx.clients, j.clientId); ensureParts(j).forEach((p) => { const holder = p.custodyTech; if (!holder) return; const d = dotOf(j, p); const last = p.history?.[p.history.length - 1]; (groups.get(holder) ?? groups.set(holder, []).get(holder)!).push({ ...d, clientLastName: c.lastName, workflow: j.workflow, status: j.status, stationLabel: stationOf(d.station).label, heldSince: last?.at, notes: j.notes.slice(-2).map((n) => n.text), containerInfo: p.containerKey === BIN_KEY ? { key: BIN_KEY, label: 'JV bin', holderLabel: BIN_HOLDER_LABEL[binState.holder] } : undefined }); }); });
   return resolve([...groups.entries()].map(([tech, items]) => ({ tech, name: tech.startsWith('vendor:') ? `At vendor: ${rs.vendors.find((v) => v.id === tech.slice(7))?.name ?? tech.slice(7)}` : HOLDER_NAME[tech] ?? fx.users.find((u) => u.shortName === tech)?.displayName.split(' — ')[0] ?? tech, items: items.sort((a, b) => a.jobNumber.localeCompare(b.jobNumber)) })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)));
 }
 // ---- MH HITLIST — owner accountability: client asset $ on premises + every bypass use (visibility feed, not a gate) ----
@@ -4425,7 +4427,7 @@ export async function scanLabelAssign(label: string): Promise<ScanSession> {
   s.rows.unshift({ at: new Date().toISOString(), jobNumber: row.number, jobId: row.id, watchLabel: `${w.brand} ${w.model} · ${w.reference}`, part: PART_LABEL[target.key], outboxId: email?.id });
   return resolve(s);
 }
-export async function undoOutbox(id: string): Promise<void> { const i = store.outbox.findIndex((e) => e.id === id); if (i >= 0) { store.outbox.splice(i, 1); appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Outbox item ${id} withdrawn (undo)` }); } rw18.scanSession.rows.forEach((r) => { if (r.outboxId === id) r.outboxId = undefined; }); return resolve(undefined); }
+export async function undoOutbox(id: string): Promise<void> { const i = store.outbox.findIndex((e) => e.id === id); if (i >= 0) { store.outbox.splice(i, 1); appendAudit({ type: 'job', stationName: actor().station, userShortName: actor().user?.shortName, detail: `Sent item ${id} withdrawn (undo)` }); } rw18.scanSession.rows.forEach((r) => { if (r.outboxId === id) r.outboxId = undefined; }); return resolve(undefined); }
 export async function getQueuedOutbox(): Promise<OutboxEmail[]> { return resolve(store.outbox.filter((e) => e.status === 'pending').slice(0, 12)); }
 
 // -- Work queue
@@ -4904,7 +4906,7 @@ const expectedAt = (k: AuditLocationKey): AuditItem[] => auditableJobs().flatMap
 // Role-scoped audit: MH/owner = full shop grid (unchanged); WM Supervisor = only the WM room's safes, benches, stuck bin, testing, "MM Inspection" (= finished), pre-queue, refinish/polish. Band scope for Joseph later.
 const AUDIT_SCOPES: Record<Exclude<AuditScope, 'full'>, { keys: AuditLocationKey[]; relabel: Partial<Record<AuditLocationKey, string>> }> = {
   wm: { keys: ['into_safe_head', 'safe_await_band', 'safe_await_head', 'wm_bench_1', 'wm_bench_2', 'wm_bench_3', 'stuck_parts_bin', 'testing', 'finished', 'pre_queue', 'uncase', 'mgr_safe_polish_in', 'polish_room', 'mgr_safe_polish_out', 'movement_service', 'parts_approval', 'recase_test'], relabel: { finished: 'MM Inspection · finished, awaiting inspection', pre_queue: 'Pre-queue · in safe, awaiting bench pickup' } },
-  band: { keys: ['band_pre_queue', 'band_assign', 'band_mgr_safe_in', 'refinish', 'band_mgr_safe_out', 'band_qc', 'polish_room', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly'], relabel: { final_assembly: 'Band handoff · final assembly' } },
+  band: { keys: ['band_pre_queue', 'band_assign', 'band_mgr_safe_in', 'refinish', 'band_mgr_safe_out', 'band_qc', 'polish_room', 'into_safe_band', 'safe_await_head', 'stuck_parts_bin', 'final_assembly', 'jv_bench', 'vc_safe'], relabel: { final_assembly: 'Band handoff · final assembly', jv_bench: "JV's bench · JV bin by day", vc_safe: "Vienna's safe · JV bin overnight" } },
 };
 export const auditScopeFor = (u?: User | null): AuditScope => (!u ? 'full' : u.id === 'u-mm' ? 'wm' : u.id === 'u-jv' ? 'band' : 'full');
 export async function getAuditLocations(scope: AuditScope = 'full'): Promise<AuditLocationStatus[]> {
@@ -5091,7 +5093,7 @@ const inv = {
     H('ph-c1', 150, 'v-rsc', 'pt-c2', 4, 28, 'PO-25-0138'), H('ph-c2', 35, 'v-cousins', 'pt-c2', 2, 34, 'PO-26-0022'), H('ph-c3', 120, 'v-rsc', 'pt-c5', 2, 38, 'PO-25-0140'), H('ph-c4', 30, 'v-cousins', 'pt-c5', 1, 48, 'PO-26-0022'),
     H('ph-c5', 40, 'v-cousins', 'pt-c6', 2, 42, 'PO-26-0022'), H('ph-c6', 40, 'v-cousins', 'pt-c8', 3, 15, 'PO-26-0022'),
   ] as PurchaseHistoryRow[],
-  reorder: new Map<string, ReorderRule>([['pt-c1', { partId: 'pt-c1', min: 1, orderUpTo: 2 }], ['pt-c2', { partId: 'pt-c2', min: 2, orderUpTo: 4 }], ['pt-c3', { partId: 'pt-c3', min: 2, orderUpTo: 6 }], ['pt-c4', { partId: 'pt-c4', min: 1, orderUpTo: 2 }], ['pt-c5', { partId: 'pt-c5', min: 1, orderUpTo: 2 }], ['pt-c6', { partId: 'pt-c6', min: 1, orderUpTo: 2 }], ['pt-c7', { partId: 'pt-c7', min: 1, orderUpTo: 2 }], ['pt-c8', { partId: 'pt-c8', min: 2, orderUpTo: 4 }], ['pt-c9', { partId: 'pt-c9', min: 1, orderUpTo: 2 }], ['pt-01', { partId: 'pt-01', min: 3, orderUpTo: 8 }], ['pt-02', { partId: 'pt-02', min: 2, orderUpTo: 6 }], ['pt-03', { partId: 'pt-03', min: 4, orderUpTo: 12 }], ['pt-04', { partId: 'pt-04', min: 2, orderUpTo: 6 }], ['pt-05', { partId: 'pt-05', min: 3, orderUpTo: 6 }], ['pt-06', { partId: 'pt-06', min: 5, orderUpTo: 20 }], ['pt-07', { partId: 'pt-07', min: 1, orderUpTo: 2 }], ['pt-08', { partId: 'pt-08', min: 2, orderUpTo: 6 }], ['pt-09', { partId: 'pt-09', min: 1, orderUpTo: 3 }], ['pt-10', { partId: 'pt-10', min: 1, orderUpTo: 3 }], ['pt-11', { partId: 'pt-11', min: 2, orderUpTo: 4 }], ['pt-12', { partId: 'pt-12', min: 2, orderUpTo: 4 }], ['pt-13', { partId: 'pt-13', min: 1, orderUpTo: 2 }], ['pt-16', { partId: 'pt-16', min: 4, orderUpTo: 10 }], ['pt-17', { partId: 'pt-17', min: 2, orderUpTo: 4 }]]),
+  reorder: new Map<string, ReorderRule>([['pt-c1', { partId: 'pt-c1', min: 1, orderUpTo: 2 }], ['pt-c2', { partId: 'pt-c2', min: 2, orderUpTo: 4 }], ['pt-c3', { partId: 'pt-c3', min: 2, orderUpTo: 6 }], ['pt-c4', { partId: 'pt-c4', min: 1, orderUpTo: 2 }], ['pt-c5', { partId: 'pt-c5', min: 1, orderUpTo: 2 }], ['pt-c6', { partId: 'pt-c6', min: 1, orderUpTo: 2 }], ['pt-c7', { partId: 'pt-c7', min: 1, orderUpTo: 2 }], ['pt-c8', { partId: 'pt-c8', min: 2, orderUpTo: 4 }], ['pt-c9', { partId: 'pt-c9', min: 1, orderUpTo: 2 }], ['pt-11', { partId: 'pt-11', min: 6, orderUpTo: 20 }], ['pt-18', { partId: 'pt-18', min: 4, orderUpTo: 16 }], ['pt-07', { partId: 'pt-07', min: 2, orderUpTo: 6 }], ['pt-15', { partId: 'pt-15', min: 1, orderUpTo: 4 }], ['pt-13', { partId: 'pt-13', min: 1, orderUpTo: 2 }], ['pt-22', { partId: 'pt-22', min: 1, orderUpTo: 3 }], ['pt-16', { partId: 'pt-16', min: 2, orderUpTo: 4 }], ['pt-14', { partId: 'pt-14', min: 4, orderUpTo: 12 }], ['pt-01', { partId: 'pt-01', min: 3, orderUpTo: 8 }], ['pt-02', { partId: 'pt-02', min: 2, orderUpTo: 6 }], ['pt-03', { partId: 'pt-03', min: 4, orderUpTo: 12 }], ['pt-04', { partId: 'pt-04', min: 2, orderUpTo: 6 }], ['pt-05', { partId: 'pt-05', min: 3, orderUpTo: 6 }], ['pt-06', { partId: 'pt-06', min: 5, orderUpTo: 20 }], ['pt-07', { partId: 'pt-07', min: 1, orderUpTo: 2 }], ['pt-08', { partId: 'pt-08', min: 2, orderUpTo: 6 }], ['pt-09', { partId: 'pt-09', min: 1, orderUpTo: 3 }], ['pt-10', { partId: 'pt-10', min: 1, orderUpTo: 3 }], ['pt-11', { partId: 'pt-11', min: 2, orderUpTo: 4 }], ['pt-12', { partId: 'pt-12', min: 2, orderUpTo: 4 }], ['pt-13', { partId: 'pt-13', min: 1, orderUpTo: 2 }], ['pt-16', { partId: 'pt-16', min: 4, orderUpTo: 10 }], ['pt-17', { partId: 'pt-17', min: 2, orderUpTo: 4 }]]),
   // below-min rows date from when the part first dipped under min (seed: Tudor's lines have sat under the auto-PO threshold for 14 days)
   lowSince: new Map<string, string>([['pt-01', dAgo(14)], ['pt-03', dAgo(14)], ['pt-05', dAgo(16)]]),
   needs: [{ id: 'no-01', partId: 'pt-16', reason: 'pick_short', qty: 2, at: dAgo(1), jobNumber: 'E02016' }, { id: 'no-02', partId: 'pt-03', reason: 'out_of_stock', qty: 2, at: dAgo(0.5), requestId: 'pr-20', jobNumber: 'E02011' }] as { id: string; partId: string; reason: 'out_of_stock' | 'pick_short'; qty: number; at: string; requestId?: string; jobNumber?: string }[],
@@ -5311,7 +5313,7 @@ export async function draftDisputeReport(auditId: string): Promise<DisputeDraft>
 export async function sendDisputeReport(auditId: string, subject: string, body: string): Promise<BillAudit> {
   const a = managerOnly(); const b = byId(ba.audits, auditId); if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required');
   const emailId = `ob-${Date.now().toString(36)}`; queueOutbox({ id: emailId, to: 'billing@parcelpro.example', toName: `${b.vendor} billing`, relatedRef: b.number, status: 'pending', subject: subject.trim(), body: body.trim(), createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
-  b.disputeEmailId = emailId; b.disputeSentAt = new Date().toISOString(); b.events.push({ at: b.disputeSentAt, by: a.by, text: `Dispute report queued to Outbox · ${fmtMoney(baTotals(b.lines).disputed)}` }); baStamp(`${b.number} dispute report → Outbox`);
+  b.disputeEmailId = emailId; b.disputeSentAt = new Date().toISOString(); b.events.push({ at: b.disputeSentAt, by: a.by, text: `Dispute report recorded in Sent · ${fmtMoney(baTotals(b.lines).disputed)}` }); baStamp(`${b.number} dispute report → Sent`);
   return resolve(baRefs(b));
 }
 // Vendor credit arrives → recovered-to-date (prototype: one tap marks every disputed line recovered)
@@ -5560,7 +5562,7 @@ export async function searchRwHistory(query: string): Promise<RwHistoryHit[]> {
 }
 export const uniqComponents = (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));
 
-// ---- Sent emails for a job (read-only aggregation for the Supervisor Pad detail) — Outbox rows whose ref is the job, its estimate, its SO or one of its parts requests; parts-approval status comes from the PR ----
+// ---- Sent emails for a job (read-only aggregation for the Supervisor Pad detail) — Sent rows whose ref is the job, its estimate, its SO or one of its parts requests; parts-approval status comes from the PR ----
 export interface JobEmailRow { email: OutboxEmail; kind: 'parts_approval' | 'estimate' | 'invoice' | 'status' | 'other'; status: string; requestNumber?: string }
 export async function getJobEmails(jobId: string): Promise<JobEmailRow[]> {
   const j = byId(store.jobs, jobId); const est = j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined; const sos = store.salesOrders.filter((o) => o.jobId === j.id); const prs = store.partsRequests.filter((r) => r.jobId === j.id);
@@ -6521,3 +6523,145 @@ export const approvalsToSendSweepSync = () => {
   upsertSystemPin('approvals-to-send:MH', { title, subtitle, assignedTo: MH_ASSIGNEE, priority: 'normal', standing: true, link: '/parts/approvals' });
   upsertSystemPin('approvals-to-send:VC', { title, subtitle, assignedTo: { type: 'user', shortName: 'Vienna' }, priority: 'normal', link: '/parts/approvals' });
 };
+
+// ---- Inventory reports bridge (api/inventoryReports.ts): consumption adjustment + spending optimization read stock / history / POs here and write approved rules back
+const daySweeps: (() => void)[] = [];
+export const registerDaySweep = (fn: () => void) => { if (!daySweeps.includes(fn)) daySweeps.push(fn); };
+export const runDaySweeps = () => daySweeps.forEach((f) => { try { f(); } catch { /* report module not loaded */ } });
+export const invBridge = {
+  parts: () => store.parts, history: () => inv.history, reorder: () => inv.reorder, needs: () => inv.needs, pos: () => rs.pos, vendors: () => rs.vendors, movements: () => rs.movements, picks: () => rw18.picks, requests: () => store.partsRequests,
+  onHand: onHandOf, onOrder: onOrderOf, rule: getReorderRule, pricing: partPricingSync, actor, newId, stamp: (text: string) => rsStamp('inventory', text),
+  setRule: (partId: string, min: number, orderUpTo: number) => { inv.reorder.set(partId, { partId, min, orderUpTo }); },
+  audit: (detail: string) => { const a = actor(); appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); },
+  pin: upsertSystemPin, resolvePin: resolveSystemPin, sweepAutoPo: autoPoSweepSync,
+  seedStock: (partId: string, onHand: number) => { if (!rs.stock.some((x) => x.partId === partId)) rs.stock.push({ partId, locationId: 'loc-a1', onHand, reorderPoint: 0 }); },
+};
+
+// ---- JV BIN — a container in the custody model (2026-09-30, MH ruling). The bin HOLDS custody: tickets inside show custody JV and their location follows the bin.
+// Desk ASSIGN = a queue, no scan, nothing moves. A ticket ENTERS only by a scan at Vienna's safe (arm the safe → BIN-JV → tickets → Commit). Overnight: Vienna's safe (holder safe:VC). By day: JV's bench (holder person:JV).
+// Night = ONE bin scan at the safe + a count confirm ("9 assigned · 3 out with team · 6 should be in the bin"); the per-ticket list only opens on a mismatch. Morning = BIN-JV at JV's bench → every ticket inside lands at JV's bench, custody JV workshop; JV dispatches by scanning each ticket to Dre / Sam / Nico.
+export type BinHolder = 'person:JV' | 'safe:VC';
+export type BinEventKind = 'assign' | 'enter' | 'to_safe' | 'out_of_safe' | 'hand_to' | 'back_in' | 'missing';
+export interface BinEvent { id: string; at: string; by: string; station: string; kind: BinEventKind; detail: string; jobId?: string }
+export type BinRowState = 'in_bin' | 'out' | 'pending';
+export interface BinRow { jobId: string; jobNumber: string; estimateNumber?: string; clientLastName: string; watchLabel: string; key: ComponentKey; partLabel: string; state: BinRowState; holder: string; station: RwStationKey; stationLabel: string; inSafe: boolean; since?: string; note?: string; assignedAt?: string; assignedBy?: string; priority: JobPriority; dueAt?: string }
+export interface BinView { key: string; code: string; safeCode: string; label: string; owner: string; holder: BinHolder; holderLabel: string; holderSince: string; assigned: number; inBin: BinRow[]; out: BinRow[]; pending: BinRow[]; dueBack: BinRow[]; binDue: boolean; night: boolean; log: BinEvent[]; team: string[] }
+const BIN_KEY = 'jv_bin'; export const BIN_CODE = 'BIN-JV'; export const BIN_SAFE_CODE = 'SAFE-VC'; export const BIN_NIGHT_HOUR = 17;
+const BIN_HOLDER_LABEL: Record<BinHolder, string> = { 'person:JV': "JV workshop · at JV's bench", 'safe:VC': "Vienna's safe (VC)" };
+export const BIN_TEAM = ['Dre', 'Sam', 'Nico', 'MAM'];
+export const isBinCode = (s: string) => s.trim().toUpperCase() === BIN_CODE || s.trim().toUpperCase() === BIN_KEY.toUpperCase();
+export const isBinSafeCode = (s: string) => s.trim().toUpperCase() === BIN_SAFE_CODE;
+const todayAt = (h: number, m: number) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+const yesterdayAt = (h: number, m: number) => { const d = new Date(Date.now() - 864e5); d.setHours(h, m, 0, 0); return d.toISOString(); };
+interface BinState { holder: BinHolder; holderSince: string; assigned: { jobId: string; at: string; by: string }[]; log: BinEvent[] }
+const binState: BinState = {
+  holder: 'person:JV', holderSince: todayAt(8, 5),
+  assigned: ['j-b1', 'j-b2', 'j-b3', 'j-b4', 'j-b5', 'j-b6', 'j-b7', 'j-b8', 'j-b9'].map((jobId, i) => ({ jobId, at: daysAgoIso(i < 5 ? 2 : 1), by: 'Vienna' })),
+  log: [
+    { id: 'bev-01', at: daysAgoIso(2), by: 'Vienna', station: 'Front Desk 1', kind: 'assign', detail: '5 tickets assigned to JV bin from the desk (queue)' },
+    { id: 'bev-02', at: daysAgoIso(1), by: 'Vienna', station: 'Front Desk 1', kind: 'assign', detail: '4 tickets assigned to JV bin from the desk (queue)' },
+    { id: 'bev-03', at: yesterdayAt(17, 35), by: 'JV', station: 'Workshop pad (JV)', kind: 'enter', detail: "9 tickets entered JV bin at Vienna's safe" },
+    { id: 'bev-04', at: yesterdayAt(17, 41), by: 'JV', station: 'Workshop pad (JV)', kind: 'to_safe', detail: "JV bin → Vienna's safe · count confirmed 9 / 9" },
+    { id: 'bev-05', at: todayAt(8, 5), by: 'JV', station: 'Workshop pad (JV)', kind: 'out_of_safe', detail: "JV bin out of Vienna's safe → JV's bench · 9 tickets · custody JV workshop" },
+    { id: 'bev-06', at: todayAt(8, 22), by: 'JV', station: 'Workshop pad (JV)', kind: 'hand_to', detail: 'E02076 Case → Dre (Polish room)', jobId: 'j-b7' },
+    { id: 'bev-07', at: todayAt(8, 24), by: 'JV', station: 'Workshop pad (JV)', kind: 'hand_to', detail: 'E02077 Bracelet → Sam (band bench)', jobId: 'j-b8' },
+    { id: 'bev-08', at: todayAt(8, 31), by: 'JV', station: 'Workshop pad (JV)', kind: 'hand_to', detail: 'E02078 Bracelet → Nico (band bench)', jobId: 'j-b9' },
+  ],
+};
+const binEvent = (kind: BinEventKind, detail: string, jobId?: string) => { const a = actor(); binState.log.unshift({ id: newId('bev'), at: new Date().toISOString(), by: a.by, station: a.station, kind, detail, jobId }); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `JV bin · ${detail}` }); };
+// The ticket's part for bin purposes: the one riding in the bin, else the one that last did, else the band-room part (bracelet → case → whatever is left)
+const binPartOf = (j: Job): JobComponent | undefined => { const ps = ensureParts(j); return ps.find((c) => c.containerKey === BIN_KEY) ?? ps.find((c) => c.binOrigin === BIN_KEY) ?? ps.find((c) => c.key === 'band') ?? ps.find((c) => c.key === 'case') ?? ps[0]; };
+const binRow = (j: Job, c: JobComponent, state: BinRowState, assigned?: { at: string; by: string }): BinRow => {
+  const pl = derivePlacement(j, c); const w = byId(store.watches, j.watchId); const cl = byId(fx.clients, j.clientId); const last = c.history?.[c.history.length - 1];
+  const holder = state === 'in_bin' ? BIN_HOLDER_LABEL[binState.holder] : c.custodyTech ?? 'unassigned';
+  return { jobId: j.id, jobNumber: j.number, estimateNumber: j.estimateId ? store.estimates.find((e) => e.id === j.estimateId)?.number : undefined, clientLastName: cl.lastName, watchLabel: `${w.brand} ${w.model}`, key: c.key, partLabel: PART_LABEL[c.key], state, holder, station: pl.station, stationLabel: stationOf(pl.station).label, inSafe: pl.station.includes('safe'), since: last?.at, note: state === 'in_bin' ? undefined : last?.note, assignedAt: assigned?.at, assignedBy: assigned?.by, priority: j.priority, dueAt: j.dueAt };
+};
+const binAssignedOf = (jobId: string) => binState.assigned.find((a) => a.jobId === jobId);
+const binViewSync = (): BinView => {
+  const inBin: BinRow[] = []; const out: BinRow[] = []; const pending: BinRow[] = [];
+  // scans are truth: anything inside or lent out counts, desk-assigned or not
+  roomJobs().forEach((j) => ensureParts(j).forEach((c) => { if (c.containerKey === BIN_KEY) inBin.push(binRow(j, c, 'in_bin', binAssignedOf(j.id))); else if (c.binOrigin === BIN_KEY && c.partStatus !== 'fulfilled' && c.custodyTech && c.custodyTech !== 'JV') out.push(binRow(j, c, 'out', binAssignedOf(j.id))); }));
+  binState.assigned.forEach((a) => { const j = store.jobs.find((x) => x.id === a.jobId); if (!j || j.status === 'closed' || inBin.some((r) => r.jobId === j.id) || out.some((r) => r.jobId === j.id)) return; const c = binPartOf(j); if (c) pending.push(binRow(j, c, 'pending', a)); });
+  const byNum = (a: BinRow, b: BinRow) => a.jobNumber.localeCompare(b.jobNumber); inBin.sort(byNum); out.sort(byNum); pending.sort(byNum);
+  const assignedIds = new Set([...binState.assigned.map((a) => a.jobId), ...inBin.map((r) => r.jobId), ...out.map((r) => r.jobId)].filter((id) => store.jobs.find((j) => j.id === id)?.status !== 'closed'));
+  const night = new Date().getHours() >= BIN_NIGHT_HOUR; const binDue = binState.holder === 'person:JV';
+  const team = BIN_TEAM.filter((s) => { const u = fx.users.find((x) => x.shortName === s); return u && !u.disabled; });
+  return { key: BIN_KEY, code: BIN_CODE, safeCode: BIN_SAFE_CODE, label: 'JV bin', owner: 'JV', holder: binState.holder, holderLabel: BIN_HOLDER_LABEL[binState.holder], holderSince: binState.holderSince, assigned: assignedIds.size, inBin, out, pending, dueBack: out.filter((r) => !r.inSafe), binDue, night, log: binState.log.slice(0, 40), team };
+};
+export async function getBin(): Promise<BinView> { return resolve(binViewSync()); }
+export const binCountLine = (v: BinView) => `${v.assigned} assigned · ${v.out.length} out with team · ${v.inBin.length} should be in the bin`;
+// Desk assign — a queue. Nothing moves; the ticket enters by the safe scan.
+export async function assignToBin(jobIds: string[]): Promise<{ view: BinView; added: string[]; skipped: { jobNumber: string; why: string }[] }> {
+  const a = actor(); const added: string[] = []; const skipped: { jobNumber: string; why: string }[] = [];
+  jobIds.forEach((id) => { const j = getJobRow(id); if (j.status === 'closed') { skipped.push({ jobNumber: j.number, why: 'closed' }); return; } if (ensureParts(j).some((c) => c.containerKey === BIN_KEY)) { skipped.push({ jobNumber: j.number, why: 'already in the bin' }); return; } if (binAssignedOf(id)) { skipped.push({ jobNumber: j.number, why: 'already assigned' }); return; } binState.assigned.push({ jobId: id, at: new Date().toISOString(), by: a.by }); jobStamp(j, 'Assigned to JV bin (queue) — enters the bin by the scan at Vienna\'s safe'); added.push(j.number); });
+  if (added.length) binEvent('assign', `${added.length} ticket${added.length === 1 ? '' : 's'} assigned from the desk (queue) · ${added.join(', ')}`);
+  return resolve({ view: binViewSync(), added, skipped });
+}
+const binMoveAll = (to: RwStationKey, status: PartStatus, note: string) => { let n = 0; roomJobs().forEach((j) => ensureParts(j).forEach((c) => { if (c.containerKey === BIN_KEY) { recordMove(j, c, to, status, 'container', note, 'JV'); n += 1; } })); return n; };
+// Night — the bin into Vienna's safe. `present` (job ids) only arrives from the mismatch path: anything inside that is NOT listed is MISSING → leaves the bin, pinned to JV + the manager list.
+export async function binToSafe(opts: { present?: string[] } = {}): Promise<{ view: BinView; moved: number; missing: string[] }> {
+  if (binState.holder === 'safe:VC') throw new Error("The bin is already in Vienna's safe");
+  const missing: string[] = [];
+  if (opts.present) { const keep = new Set(opts.present); for (const j of roomJobs()) for (const c of ensureParts(j)) { if (c.containerKey === BIN_KEY && !keep.has(j.id)) { c.containerKey = undefined; c.binOrigin = BIN_KEY; c.history!.push({ at: new Date().toISOString(), by: actor().by, from: derivePlacement(j, c).station, to: derivePlacement(j, c).station, status: c.partStatus ?? 'in_progress', via: 'container', note: 'MISSING at night reconcile — not in JV bin' }); missing.push(j.number); jobStamp(j, `${PART_LABEL[c.key]} MISSING at JV bin night reconcile — last held by JV`); binEvent('missing', `${j.number} ${PART_LABEL[c.key]} MISSING at night reconcile`, j.id); await pinToHitList({ title: `JV bin reconcile: MISSING ${j.number} ${PART_LABEL[c.key]} — last held by JV`, assignedTo: { type: 'role', role: 'manager' }, jobId: j.id }); await pinToHitList({ title: `Find ${j.number} ${PART_LABEL[c.key]} — missing from JV bin at night reconcile`, assignedTo: { type: 'user', shortName: 'JV' }, jobId: j.id }); } } }
+  const moved = binMoveAll('vc_safe', 'waiting', "JV bin → Vienna's safe (night)"); binState.holder = 'safe:VC'; binState.holderSince = new Date().toISOString();
+  binEvent('to_safe', `JV bin → Vienna's safe · ${opts.present ? `checked ticket by ticket · ${moved} present · ${missing.length} MISSING` : `count confirmed ${moved} / ${moved}`}`);
+  return resolve({ view: binViewSync(), moved, missing });
+}
+// Morning — BIN-JV at JV's bench: every ticket inside lands at JV's bench, custody JV workshop (never back to last night's benches — the bin was in the safe)
+export async function binOutOfSafe(): Promise<{ view: BinView; moved: number }> {
+  if (binState.holder === 'person:JV') throw new Error("The bin is already out — at JV's bench");
+  const moved = binMoveAll('jv_bench', 'in_progress', "JV bin out of Vienna's safe → JV's bench · custody JV workshop"); binState.holder = 'person:JV'; binState.holderSince = new Date().toISOString();
+  binEvent('out_of_safe', `JV bin out of Vienna's safe → JV's bench · ${moved} ticket${moved === 1 ? '' : 's'} · custody JV workshop`);
+  return resolve({ view: binViewSync(), moved });
+}
+// Enter — only at the safe, bin present (holder safe:VC). Unassigned tickets may enter (scan is truth) and are flagged.
+export async function binEnter(jobId: string): Promise<BinRow> {
+  if (binState.holder !== 'safe:VC') throw new Error("Tickets enter the bin at Vienna's safe — scan BIN-JV at the safe first");
+  const j = getJobRow(jobId); if (j.status === 'closed') throw new Error(`${j.number} is closed`); const c = binPartOf(j); if (!c) throw new Error(`${j.number} has no part to bin`); if (c.containerKey === BIN_KEY) throw new Error(`${j.number} is already in the bin`);
+  if (c.custodyTech?.startsWith('vendor:')) throw new Error(`${j.number} ${PART_LABEL[c.key]} is out with a vendor`);
+  const queued = !!binAssignedOf(jobId); if (!queued) binState.assigned.push({ jobId, at: new Date().toISOString(), by: `${actor().by} (scan)` });
+  c.containerKey = BIN_KEY; c.binOrigin = BIN_KEY; recordMove(j, c, 'vc_safe', 'waiting', 'container', `entered JV bin at Vienna's safe${queued ? '' : ' · not on the desk queue'}`, 'JV');
+  binEvent('enter', `${j.number} ${PART_LABEL[c.key]} entered the bin at Vienna's safe${queued ? '' : ' · NOT on the desk queue'}`, j.id);
+  return resolve(binRow(j, c, 'in_bin', binAssignedOf(jobId)));
+}
+// Dispatch — JV hands one ticket out of the bin to a team member (bin must be out, at the bench)
+export async function binHandTo(jobId: string, tech: string): Promise<BinRow> {
+  if (binState.holder !== 'person:JV') throw new Error("Take the bin out of Vienna's safe first (scan BIN-JV at JV's bench)");
+  const j = getJobRow(jobId); const c = ensureParts(j).find((x) => x.containerKey === BIN_KEY); if (!c) throw new Error(`${j.number} is not in the bin`);
+  const u = fx.users.find((x) => x.shortName === tech); if (!u || u.disabled) throw new Error(`${tech} is not on the team`);
+  const to: RwStationKey = c.key === 'case' ? 'polish_room' : u.roles.includes('band_tech') ? 'band_assign' : 'refinish';
+  c.containerKey = undefined; c.binOrigin = BIN_KEY; recordMove(j, c, to, 'in_progress', 'container', `handed out of JV bin → ${tech}`, tech);
+  binEvent('hand_to', `${j.number} ${PART_LABEL[c.key]} → ${tech} (${stationOf(to).label})`, j.id);
+  return resolve(binRow(j, c, 'out', binAssignedOf(jobId)));
+}
+// Back in — a ticket that rode in the bin comes back from the team (bin at the bench). Fresh tickets still enter only at the safe.
+export async function binTakeBack(jobId: string): Promise<BinRow> {
+  if (binState.holder !== 'person:JV') throw new Error("The bin is in Vienna's safe — tickets enter there (BIN-JV at the safe, then the ticket)");
+  const j = getJobRow(jobId); const c = ensureParts(j).find((x) => x.binOrigin === BIN_KEY && x.containerKey !== BIN_KEY); if (!c) throw new Error(ensureParts(j).some((x) => x.containerKey === BIN_KEY) ? `${j.number} is already in the bin` : `${j.number} never rode in the bin — it enters at Vienna's safe`);
+  const from = c.custodyTech ?? 'team'; c.containerKey = BIN_KEY; recordMove(j, c, 'jv_bench', 'in_progress', 'container', `back into JV bin from ${from}`, 'JV');
+  binEvent('back_in', `${j.number} ${PART_LABEL[c.key]} back into the bin from ${from}`, j.id);
+  return resolve(binRow(j, c, 'in_bin', binAssignedOf(jobId)));
+}
+// Desk map rows for bin nodes (assign / Vienna's safe / JV's bench): the ticket's bin part, not the destination's lane rule
+export async function resolveBinLabel(label: string): Promise<BulkRow> {
+  const j = await findJobByLabel(label.trim().replace(/^BAND-/i, '').replace(/\|B$/i, '')); if (!j) throw new Error(`No job matches label ${label}`);
+  const row = getJobRow(j.id); const c = binPartOf(row); if (!c) throw new Error(`${j.number} has no part to bin`);
+  return resolve({ id: newId('bulk'), at: new Date().toISOString(), label: label.trim(), jobId: j.id, jobNumber: j.number, watchLabel: `${j.watch.brand} ${j.watch.model}`, key: c.key, clientName: `${j.client.firstName} ${j.client.lastName}` });
+}
+export type BinTarget = 'assign' | 'vc_safe' | 'jv_bench';
+// One Commit for the bin nodes on the Assign / Move map. `binScanned` = BIN-JV was in the session. Assign never moves custody; the safe and the bench need the bin scan first.
+export async function binCommit(rows: BulkRow[], target: BinTarget, binScanned: boolean): Promise<{ results: BulkResult[]; binNote?: string; view: BinView }> {
+  const results: BulkResult[] = []; let binNote: string | undefined; const seen = new Set<string>(); const uniq = rows.filter((r) => !seen.has(r.jobId) && seen.add(r.jobId));
+  if (target === 'assign') {
+    if (binScanned) binNote = "BIN-JV doesn't scan here — assigning is a queue; the bin itself scans at Vienna's safe";
+    const r = await assignToBin(uniq.map((x) => x.jobId)); uniq.forEach((row) => { const sk = r.skipped.find((s) => s.jobNumber === row.jobNumber); results.push(sk ? { row, ok: false, detail: sk.why } : { row, ok: true, detail: 'assigned to JV bin · queue · enters by the safe scan' }); });
+  } else if (!binScanned) { uniq.forEach((row) => results.push({ row, ok: false, detail: `scan ${BIN_CODE} first — tickets ${target === 'vc_safe' ? 'enter the bin only with the bin at the safe' : "rejoin the bin only with the bin at JV's bench"}` })); binNote = `${BIN_CODE} not scanned — nothing moved`; }
+  else if (target === 'vc_safe') {
+    if (binState.holder === 'person:JV') { const r = await binToSafe(); binNote = `JV bin → Vienna's safe · ${r.moved} inside · count confirmed`; } else binNote = "JV bin already in Vienna's safe";
+    for (const row of uniq) { try { await binEnter(row.jobId); results.push({ row, ok: true, detail: "entered JV bin at Vienna's safe · custody JV" }); } catch (e) { results.push({ row, ok: false, detail: e instanceof Error ? e.message : 'Failed' }); } }
+  } else {
+    if (binState.holder === 'safe:VC') { const r = await binOutOfSafe(); binNote = `JV bin out of Vienna's safe → JV's bench · ${r.moved} tickets · custody JV workshop`; } else binNote = "JV bin already at JV's bench";
+    for (const row of uniq) { try { await binTakeBack(row.jobId); results.push({ row, ok: true, detail: 'back into JV bin · custody JV workshop' }); } catch (e) { results.push({ row, ok: false, detail: e instanceof Error ? e.message : 'Failed' }); } }
+  }
+  return resolve({ results, binNote, view: binViewSync() });
+}

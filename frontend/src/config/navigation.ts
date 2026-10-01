@@ -58,7 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, tiers: ALL, built: true, blurb: 'Shop overview and daily priorities.' },
   { key: 'today', label: 'Hitlist', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your personal work queue — bookmarkable at /hitlist/{you}: inbox, pinned, derived rows, tasks. Supervisors get a team rollup.' },
   { key: 'requests', label: 'Requests', path: '/requests', icon: MessageSquarePlus, tiers: ALL, group: 'intake', built: true, blurb: 'Service requests queue — calls, emails, web forms and kiosk check-ins; kiosk matches to confirm.' },
-  { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, group: 'intake', built: true, blurb: 'Client messages from RolliConnect; replies queue to Outbox.' },
+  { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, group: 'intake', built: true, blurb: 'Client messages from RolliConnect; replies queue to Sent.' },
   { key: 'inbound', label: 'Shipping', path: '/shipping/inbound', icon: Truck, tiers: ALL, group: 'intake', built: true, blurb: 'Pre-arrival shipping: label requests, outstanding labels, in transit, delivered-unscanned. Track a package for a caller.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, group: 'intake', built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, group: 'intake', built: true, blurb: 'Quotes awaiting approval and approved work.' },

@@ -64,7 +64,7 @@ Covers everything built after the package was created: E18 RW deep build part 1 
 - **Division** — `rolliworks` (service center) or `rollishop` (boutique). A **station** (registered device) carries a division; the signed-in session inherits it; visibility is walled by division, not by tier.
 - **Tier** — `manager` or `concierge` access tier (what you may see/do). **Role** — job title(s): manager, inspector, watchmaker, concierge (who gets which derived work). Staff: MH (manager+inspector, both divisions), Walter (manager+inspector, rollishop), Vienna (concierge, rolliworks), MM (manager+watchmaker, rolliworks).
 - **Job** — a service ticket for one watch. **Estimate** — the quote before the job. **Sales order (SO)** — the invoice after. **Service request** — the "ask" before an estimate exists (call/email/web/walk-in/kiosk). **Package (SUB#)** — an intake parcel. **Hold** — a parking overlay on a job (parts or outsource), not a status. **Component** — head / band / case work unit inside a job (MH ruling 2026-09-26).
-- **Outbox** — where every client email lands as a pending row (nothing is sent). **Portal-first** — emails only notify; content renders in `/rc` behind a link.
+- **Sent** — where every client email lands as a pending row (nothing is sent). **Portal-first** — emails only notify; content renders in `/rc` behind a link.
 - **Amber / provisional** — a behaviour built as the simplest plausible version because MH has not ruled; listed in `03-OPEN-QUESTIONS.md`. **Locked** — ruled; build exactly.
 - **Audit** — one append-only row per write (`08-AUDIT-TAXONOMY.md`). **Stamp** — `{at, by, station}` on a record.
 

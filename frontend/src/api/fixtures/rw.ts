@@ -26,13 +26,26 @@ export const RW_STATIONS: RwStation[] = [
   { key: 'band_qc', label: 'QC inspect', lane: 'band', order: 6 },
   { key: 'into_safe_band', label: 'Into safe', lane: 'band', order: 7 },
   { key: 'safe_await_head', label: 'Safe (await head)', lane: 'band', order: 7 },
+  // JV bin — a container in the custody model: overnight in Vienna's safe, by day at JV's bench (both shared-lane so bracelets and cases ride together)
+  { key: 'vc_safe', label: "Vienna's safe (VC)", lane: 'shared', order: 1 },
+  { key: 'jv_bench', label: "JV's bench", lane: 'shared', order: 2 },
   { key: 'final_assembly', label: 'Final assembly', lane: 'shared', order: 13 },
   { key: 'testing', label: 'Testing', lane: 'shared', order: 14 },
   { key: 'finished', label: 'Finished', lane: 'shared', order: 15 },
 ];
 
 // Saved part positions (precedence 1). Parts not listed derive from job status + department.
-export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: RwStationKey; status: PartStatus; tech?: string; item?: string }>>> = {
+export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: RwStationKey; status: PartStatus; tech?: string; item?: string; bin?: string; binOrigin?: string }>>> = {
+  // JV bin seeds — 9 tickets assigned to the bin: 6 inside (bin at JV's bench this morning), 3 handed out to Dre / Sam / Nico
+  'j-b1': { band: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
+  'j-b2': { band: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
+  'j-b3': { case: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
+  'j-b4': { band: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
+  'j-b5': { case: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
+  'j-b6': { band: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
+  'j-b7': { case: { station: 'polish_room', status: 'in_progress', tech: 'Dre', binOrigin: 'jv_bin' } },
+  'j-b8': { band: { station: 'band_assign', status: 'in_progress', tech: 'Sam', binOrigin: 'jv_bin' } },
+  'j-b9': { band: { station: 'band_assign', status: 'in_progress', tech: 'Nico', binOrigin: 'jv_bin' } },
   // Job detail v2 demo seeds — multi-item job (1/3 · 2/3 · 3/3, head finished) and an outsourced head at James, delayed
   'j-mi1': { head: { station: 'safe_await_band', status: 'waiting', tech: 'Leo', item: '1/3' }, band: { station: 'band_assign', status: 'in_progress', tech: 'MAM', item: '2/3' }, case: { station: 'mgr_safe_polish_in', status: 'waiting', tech: 'Vienna', item: '3/3' } },
   'j-os1': { head: { station: 'wm_bench_3', status: 'in_progress', tech: 'Leo' } },

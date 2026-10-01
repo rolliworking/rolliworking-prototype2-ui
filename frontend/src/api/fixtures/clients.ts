@@ -39,6 +39,16 @@ const rows: Row[] = [
   ['c-35', 'Daniel', 'Okafor', 'daniel.okafor.mia@example.com', '(305) 555-0135', 'Miami', 'FL'],
   ['c-36', 'Helena', 'Marsh', 'helena.marsh@example.com', '(212) 555-0136', 'New York', 'NY'],
   ['c-37', 'Victor', 'Adeyemi', 'victor.adeyemi@example.com', '(917) 555-0137', 'Brooklyn', 'NY'],
+  // JV bin seeds (band / polish room tickets)
+  ['c-38', 'Oliver', 'Brandt', 'oliver.brandt@example.com', '(212) 555-0138', 'New York', 'NY'],
+  ['c-39', 'Amara', 'Osei', 'amara.osei@example.com', '(718) 555-0139', 'Queens', 'NY'],
+  ['c-40', 'Lucas', 'Ferreira', 'lucas.ferreira@example.com', '(201) 555-0140', 'Jersey City', 'NJ'],
+  ['c-41', 'Ingrid', 'Solberg', 'ingrid.solberg@example.com', '(203) 555-0141', 'Stamford', 'CT'],
+  ['c-42', 'Mateo', 'Quintana', 'mateo.quintana@example.com', '(917) 555-0142', 'Bronx', 'NY'],
+  ['c-43', 'Yuki', 'Tanaka', 'yuki.tanaka@example.com', '(646) 555-0143', 'New York', 'NY'],
+  ['c-44', 'Samuel', 'Okonkwo', 'samuel.okonkwo@example.com', '(914) 555-0144', 'White Plains', 'NY'],
+  ['c-45', 'Chloé', 'Martin', 'chloe.martin@example.com', '(212) 555-0145', 'New York', 'NY'],
+  ['c-46', 'Rafael', 'Mendes', 'rafael.mendes@example.com', '(516) 555-0146', 'Great Neck', 'NY'],
 ];
 
 const tradeIds = new Set(['c-11', 'c-25', 'c-31']);

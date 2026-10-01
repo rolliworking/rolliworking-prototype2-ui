@@ -203,7 +203,7 @@ export default function ReceivePackagePage() {
                 <Button variant="primary" className="w-full justify-center" data-testid="receive-process-button" onClick={process} disabled={busy || contents.length === 0}>
                   {busy ? 'Processing…' : 'Process & queue confirmation email'}
                 </Button>
-                <p className="mt-2 text-[11px] text-ink-400">Status → processed — awaiting work order. Email goes to the Outbox; nothing ever sends.</p>
+                <p className="mt-2 text-[11px] text-ink-400">Status → processed — awaiting work order. Email goes to the Sent; nothing ever sends.</p>
               </>
             )}
           </Card>

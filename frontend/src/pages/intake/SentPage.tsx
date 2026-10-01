@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtTime } from '@/lib/format';
 
-export default function OutboxPage() {
+export default function SentPage() {
   const { data } = useAsync(() => api.getOutbox());
   const [open, setOpen] = useState<OutboxEmail | null>(null);
 
@@ -17,16 +17,16 @@ export default function OutboxPage() {
   }, [data, open]);
 
   return (
-    <div data-testid="outbox-page">
-      <div className="mb-3 inline-flex items-center gap-2 rounded-sm bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900" data-testid="outbox-banner">
-        <MailX size={13} /> Outbox is a holding area — nothing is ever sent from this prototype.
+    <div data-testid="sent-page">
+      <div className="mb-3 inline-flex items-center gap-2 rounded-sm bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900" data-testid="sent-banner">
+        <MailX size={13} /> Sent is the record of what left RS — estimates, inspection reports, approval requests, invoices. Prototype: emails are recorded here, never actually delivered.
       </div>
       <div className="grid grid-cols-[380px_1fr] gap-4">
         <Card title="Pending emails" subtitle={`${data?.length ?? 0} queued`} bodyClassName="py-1" testId="outbox-list-card">
-          <ul className="-mx-4 divide-y divide-line/70" data-testid="outbox-list">
+          <ul className="-mx-4 divide-y divide-line/70" data-testid="sent-list">
             {(data ?? []).map((e) => (
               <li key={e.id}>
-                <button type="button" data-testid={`outbox-item-${e.id}`} onClick={() => setOpen(e)} className={clsx('flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors', open?.id === e.id ? 'bg-brand-50/70' : 'hover:bg-canvas/70')}>
+                <button type="button" data-testid={`sent-item-${e.id}`} onClick={() => setOpen(e)} className={clsx('flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors', open?.id === e.id ? 'bg-brand-50/70' : 'hover:bg-canvas/70')}>
                   <Mail size={14} className="mt-0.5 shrink-0 text-ink-400" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium text-ink">{e.subject}</span>
@@ -37,21 +37,21 @@ export default function OutboxPage() {
                 </button>
               </li>
             ))}
-            {data && data.length === 0 && <li className="px-4 py-8 text-center text-xs text-ink-400">Outbox is empty.</li>}
+            {data && data.length === 0 && <li className="px-4 py-8 text-center text-xs text-ink-400">Sent is empty.</li>}
           </ul>
         </Card>
 
         <Card title="Preview" testId="outbox-preview-card">
           {open ? (
-            <div data-testid="outbox-preview" className="animate-rise">
+            <div data-testid="sent-preview" className="animate-rise">
               <dl className="grid grid-cols-[80px_1fr] gap-y-1 text-xs">
                 <dt className="text-ink-400">To</dt><dd className="text-ink">{open.toName} &lt;{open.to}&gt;</dd>
                 <dt className="text-ink-400">Subject</dt><dd className="font-medium text-ink">{open.subject}</dd>
                 <dt className="text-ink-400">Regarding</dt><dd className="font-mono text-ink-700">{open.relatedRef}</dd>
                 <dt className="text-ink-400">Queued by</dt><dd className="text-ink-700">{open.createdBy} · {open.station} · {fmtDate(open.createdAt)} {fmtTime(open.createdAt)}</dd>
               </dl>
-              <pre className="mt-4 whitespace-pre-wrap rounded-md border border-line bg-canvas p-4 font-sans text-[13px] leading-5 text-ink-700" data-testid="outbox-body">{open.body}</pre>
-              {open.payLink && <Link data-testid="outbox-pay-button" to={open.payLink} className="mt-3 inline-flex h-10 items-center gap-2 rounded-md bg-[#0d2b1f] px-5 text-sm font-semibold text-white hover:opacity-90">Pay invoice → <span className="text-[10px] font-normal uppercase tracking-wide text-white/70">MOCK PAYMENT PAGE</span></Link>}
+              <pre className="mt-4 whitespace-pre-wrap rounded-md border border-line bg-canvas p-4 font-sans text-[13px] leading-5 text-ink-700" data-testid="sent-body">{open.body}</pre>
+              {open.payLink && <Link data-testid="sent-pay-button" to={open.payLink} className="mt-3 inline-flex h-10 items-center gap-2 rounded-md bg-[#0d2b1f] px-5 text-sm font-semibold text-white hover:opacity-90">Pay invoice → <span className="text-[10px] font-normal uppercase tracking-wide text-white/70">MOCK PAYMENT PAGE</span></Link>}
             </div>
           ) : (
             <p className="text-xs text-ink-400">Select an email to preview it.</p>

@@ -145,7 +145,7 @@ const EmailRow = ({ e }: { e: Client360['emails'][number] }) => {
 };
 
 export const EmailsSection = ({ emails, clientId }: { emails: Client360['emails']; clientId?: string }) => (
-  <Card title="Emails & conversations" subtitle={`${emails.length} queued or sent · newest first`} action={<span className="flex items-center gap-2 text-xs">{clientId && <Link data-testid="client360-threads-link" to={`/inbox?client=${clientId}`} className="font-medium text-brand hover:underline">Open thread-space →</Link>}<Link to="/intake/outbox" className="text-ink-400 hover:underline">Outbox</Link></span>} bodyClassName="p-0" testId="client360-emails">
+  <Card title="Emails & conversations" subtitle={`${emails.length} queued or sent · newest first`} action={<span className="flex items-center gap-2 text-xs">{clientId && <Link data-testid="client360-threads-link" to={`/inbox?client=${clientId}`} className="font-medium text-brand hover:underline">Open thread-space →</Link>}<Link to="/intake/sent" className="text-ink-400 hover:underline">Sent</Link></span>} bodyClassName="p-0" testId="client360-emails">
     <ul className="divide-y divide-line/60">
       {emails.map((e) => <EmailRow key={e.id} e={e} />)}
       {emails.length === 0 && <li className="px-3 py-4 text-center text-xs text-ink-400">No emails to this client yet.</li>}

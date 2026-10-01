@@ -1,0 +1,31 @@
+import asyncio, sys
+sys.path.insert(0, '/app/memory/tools')
+from smoke_wbp_msg import signin, nav
+from playwright.async_api import async_playwright
+async def main():
+    async with async_playwright() as p:
+        b = await p.chromium.launch(executable_path="/usr/bin/chromium", args=["--no-sandbox"]); ctx = await b.new_context(viewport={"width": 1600, "height": 1000}); await ctx.add_init_script("localStorage.setItem('rollisuite.api.mode','mock')"); page = await ctx.new_page()
+        errs = []; page.on("pageerror", lambda e: errs.append(str(e)))
+        await signin(page); await nav(page, "/hitlist")
+        print("consumption pin:", await page.locator("[data-testid^='pinned-pin'][data-key='consumption-report']").evaluate_all("els=>els.map(e=>e.dataset.priority+' '+e.querySelector('[data-testid^=pinned-link-]').textContent)"))
+        await nav(page, "/intake/sent"); print("sent page:", await page.locator("[data-testid='sent-page']").count(), "tab:", await page.locator("[data-testid='intake-tab-sent']").inner_text())
+        await nav(page, "/inventory/reports"); print("reports page:", await page.locator("[data-testid='inventory-reports-page']").count(), "next due:", await page.locator("[data-testid='next-due']").inner_text())
+        await page.locator("[data-testid='run-report']").click(); await page.wait_for_timeout(800)
+        rows = page.locator("[data-testid^='adjust-pt-']"); n = await rows.count(); print("suggested rows:", n)
+        print("sample:", await rows.evaluate_all("els=>els.slice(0,6).map(e=>e.dataset.testid.slice(7)+' | '+e.querySelector('[data-testid^=reason-]').textContent+' | '+e.children[5].textContent+' → '+e.children[6].querySelectorAll('input')[0]?.value+'/'+e.children[6].querySelectorAll('input')[1]?.value+' | so '+e.children[9].textContent)"))
+        raise_ = await rows.evaluate_all("els=>els.filter(e=>e.children[7].textContent.includes('+')).length"); print("raise rows:", raise_, "lower rows:", n - raise_)
+        await page.screenshot(path="/app/memory/tools/shots/invrep_adjust.png", clip={"x": 216, "y": 60, "width": 1384, "height": 700})
+        first = (await rows.first.get_attribute("data-testid")).replace("adjust-", "")
+        await page.locator(f"[data-testid='edit-upto-{first}']").fill("9"); await page.locator(f"[data-testid='approve-{first}']").click(); await page.wait_for_timeout(300); print("after edit-approve:", await page.locator(f"[data-testid='adjust-{first}']").get_attribute("data-status"), await page.locator(f"[data-testid='adjust-{first}'] td:nth-child(7)").inner_text())
+        second = (await rows.nth(1).get_attribute("data-testid")).replace("adjust-", ""); await page.locator(f"[data-testid='skip-{second}']").click(); await page.wait_for_timeout(200)
+        await page.locator("[data-testid='filter-vendor']").select_option(index=1); await page.wait_for_timeout(200); print("filtered rows:", await page.locator("[data-testid^='adjust-pt-']").count()); await page.locator("[data-testid='filter-vendor']").select_option(""); await page.wait_for_timeout(200)
+        await page.locator("[data-testid='approve-all']").click(); await page.wait_for_timeout(500); print("open after approve all:", await page.locator("[data-testid^='adjust-pt-'][data-status='open']").count())
+        await page.locator("[data-testid='invrep-tab-history']").click(); await page.wait_for_timeout(300); print("history rows:", await page.locator("[data-testid^='run-run-']").count(), (await page.locator("[data-testid^='run-run-']").first.inner_text()).replace("\n", " | ")[:120])
+        await page.locator("[data-testid='invrep-tab-optimize']").click(); await page.wait_for_timeout(500)
+        for sec in ["overstock", "dead", "overordered", "drift", "duplicate"]: print(f"  {sec}:", await page.locator(f"[data-testid^='{sec}-']").count())
+        print("totals:", await page.locator("[data-testid='opt-totals'] [data-testid^='opt-total-']").all_inner_texts())
+        await page.screenshot(path="/app/memory/tools/shots/invrep_opt.png", clip={"x": 216, "y": 60, "width": 1384, "height": 900})
+        await page.locator("[data-testid='invrep-tab-trend']").click(); await page.wait_for_timeout(300); print("snapshots:", await page.locator("[data-testid^='snapshot-']").count())
+        await nav(page, "/hitlist"); print("consumption pin after run:", await page.locator("[data-testid^='pinned-pin'][data-key='consumption-report']").count())
+        print("errors:", errs); await b.close()
+asyncio.run(main())

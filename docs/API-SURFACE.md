@@ -55,7 +55,7 @@ Legend: **STUB** = deliberately fake / throws · **sync** = not a Promise · `Wi
 | `duplicateEstimate` | `(id) => EstimateWithRefs` | new draft | audit |
 | `deleteEstimate` | `(id) => void` | | throws if converted or package-linked; audit |
 | `markEstimateSent` | `(id) => EstimateWithRefs` | sent, no sentAt | audit |
-| `sendEstimate` | `(id) => {estimate, email: OutboxEmail}` | sent + sentAt | Outbox email with line list |
+| `sendEstimate` | `(id) => {estimate, email: OutboxEmail}` | sent + sentAt | Sent email with line list |
 | `declineEstimate` | `(id, reason, via='staff') => EstimateWithRefs` | declined | |
 | `approveEstimate` | `(id, via='staff') => EstimateWithRefs` | approved (provisional) | |
 | `reopenEstimate` | `(id) => EstimateWithRefs` | draft | |
@@ -194,7 +194,7 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 ## 12. RolliConnect (portal)
 | export | signature | returns | notes |
 |---|---|---|---|
-| `portalRequestMagicLink` | `(email) => {link: MagicLink, path}` | | **STUB**: Outbox email + link returned for on-screen display; throws if email unknown |
+| `portalRequestMagicLink` | `(email) => {link: MagicLink, path}` | | **STUB**: Sent email + link returned for on-screen display; throws if email unknown |
 | `portalRedeemMagicLink` | `(token) => Client` | | sets `usedAt`, writes session; not single-use |
 | `portalGetSession` | `() => {session, client} \| null` | | |
 | `portalSignOut` | `() => void` | | |
@@ -213,7 +213,7 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 | `getStaffInbox` | `() => StaffInboxThread[]` | unread first | |
 | `getStaffInboxUnread` | `() => number` | | |
 | `markThreadRead` | `(clientId) => void` | | replayed |
-| `replyToClient` | `(clientId, text, watchId?, replayBy?) => Message` | | Outbox email + staff message; audit `portal`; replayed with original `by` |
+| `replyToClient` | `(clientId, text, watchId?, replayBy?) => Message` | | Sent email + staff message; audit `portal`; replayed with original `by` |
 | `PORTAL_STATUS` | `Record<PortalStatusKey, {label, blurb, active}>` | 14 rows | |
 | `replayRcEvents` sync | `() => number` | | runs at module load; audit muted |
 | `resetRcEvents` | `() => void` | | Setup → "Reset RolliConnect data" |
@@ -225,7 +225,7 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 | `fulfillSalesOrder` QBO | fake id + `queued` | QBO push job / webhook |
 | `recordPayment`, `portalPayBalance` | ledger rows only | processor |
 | `shippingProvider` | SVG label + random tracking | carrier API |
-| Outbox (`store.outbox`) | never sends | email provider |
+| Sent (`store.outbox`) | never sends | email provider |
 | labels / receipts | `printed` flags | print service |
 | `portalRequestMagicLink` | link shown on screen; no expiry | auth provider |
 | `partsAssistantReply` | scripted scorer | optional LLM behind same signature |
@@ -247,7 +247,7 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 | `getVendors` / `getVendor(id)` / `saveVendor(input)` / `setVendorActive(id, active)` | `Vendor` rows | save = create or update; audit `purchasing` |
 | `getPurchaseOrders` / `getPurchaseOrder(id)` | `PurchaseOrderWithRefs {vendor, location}` | |
 | `createPurchaseOrder({vendorId, locationId, lines: POLineInput[], memo?})` | draft PO `PO-26-nnnn` | vendor must be active; division = session |
-| `sendPurchaseOrder(id)` | sent | Outbox email to vendor (**STUB**) |
+| `sendPurchaseOrder(id)` | sent | Sent email to vendor (**STUB**) |
 | `receivePurchaseOrder(id, qtyByLine)` | partially_received / received | each qty → `StockMovement receipt` at PO location; `Part.stock` re-summed |
 | `cancelPurchaseOrder(id, reason)` | cancelled | reason required |
 | `getLocations` / `getStockRows` / `getLowStock` / `getStockMovements(partId?)` | `StockLocation[]` / `StockRow[]` / `StockMovement[]` | `StockRow.low = onHand ≤ reorderPoint` |
@@ -259,7 +259,7 @@ Types exported: `SOLineInput, SalesOrderInput, SalesOrderPatch, CreateShipmentIn
 | `getIntegrations()` | `IntegrationTile[]` | all stub / not connected |
 | `adminSaveUser(input)` / `adminDeactivateUser(id)` | `User` / void | manager only; guards self + last manager |
 | `getCatalogAdmin()` / `saveCatalogService(input)` / `retireCatalogService(id, retired=true)` | catalog rows with `retired` | retired rows removed from live `getServiceCatalog` |
-| `getTemplates()` / `saveTemplate(key, subject, body)` / `MERGE_FIELDS` | `MessageTemplate` | not yet used by Outbox writers |
+| `getTemplates()` / `saveTemplate(key, subject, body)` / `MERGE_FIELDS` | `MessageTemplate` | not yet used by Sent writers |
 | `EVIDENCE_SLOTS`, `PARTS_GRADES`, `EVIDENCE_REQUIRED`, `evidenceGaps(job)` sync | lookups | gaps only while `testing` |
 | `getEvidenceForJob(jobId)` / `getEvidenceForWatch(watchId)` / `getEvidenceForClient(clientId)` | `EvidenceItem[]` (+ jobNumber, serviceDate, watchLabel) | |
 | `captureEvidence(jobId, {slot, photo, labelScan, grades?, depthRating?, note?})` | `EvidenceItem` | label must match job #/ref/serial; depth `^\d+M/\d+ft$`; grading needs ≥1 grade; audit `evidence` + job stamp |
@@ -284,7 +284,7 @@ New audit types: `purchasing · inventory · setup · evidence · labels · acco
 | `getClientFolder(clientId)` / `getThread(id)` / `markConversationRead(id)` | folder / `ThreadView {conversation, messages, folder}` | |
 | `assignConversation(id, Assignee \| null)` / `snoozeConversation(id, untilIso)` / `wakeConversation(id)` / `closeConversation(id)` / `reopenConversation(id)` / `createConversation(clientId, subject, anchor?)` | `ConversationWithRefs` | snooze needs a future date |
 | `renderTemplate(conversationId, key)` | `RenderedTemplate {subject, body, missing[]}` | merge fields from client / anchor job / estimate / SO / package |
-| `replyInThread(id, {text, subject?, templateKey?, photos?})` | `ConvMessage` (out, token) | Outbox email with `[reply token …]`; marks inbound read; wakes snoozed |
+| `replyInThread(id, {text, subject?, templateKey?, photos?})` | `ConvMessage` (out, token) | Sent email with `[reply token …]`; marks inbound read; wakes snoozed |
 | `addThreadNote(id, text)` | `ConvMessage` (internal) | never sent |
 | `simulateInboundReply(id, text)` | `ConvMessage` (in, `matchedToken`) | **MOCK** email reply routed by last outbound token |
 | `threadNeedsReplyFor(anchor)` sync / `clientNeedsReplyCount(clientId)` sync / `threadsNeedingReplyForUser(user)` sync / `getCommsUnread()` | indicators | used by job cards, estimate rows, `/today` |
@@ -295,7 +295,7 @@ Hooks: `portalApproveEstimate`, `portalDeclineEstimate`, `portalSendMessage`, `p
 |---|---|---|
 | `REPORT_COMPONENTS`, `COMPONENT_GRADES` | lookups | 8 components · `good\|fair\|worn\|replace` |
 | `getInspectionReportsForJob(jobId)` | `InspectionReportDoc[]` newest version first | |
-| `issueInspectionReport(jobId, grades[], notes)` | `InspectionReportDoc` | photos required; supersedes; in_review → awaiting_customer_approval; Outbox `inspection_ready`; comms system message; job stamp |
+| `issueInspectionReport(jobId, grades[], notes)` | `InspectionReportDoc` | photos required; supersedes; in_review → awaiting_customer_approval; Sent `inspection_ready`; comms system message; job stamp |
 | `portalGetInspectionReport(token)` | `PortalInspectionReport {report, watch, client, job, estimate?, photos, newerToken?}` | public by token; `newerToken` when superseded |
 | `portalDecideInspectionReport(token, 'approve'\|'decline', reason?)` | `PortalInspectionReport` | as client: job approve / back_to_review(reason), estimate approve / decline; comms approval event; audit `portal` |
 Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; merge field `{{portal.link}}`; `PortalWatch.inspectionReportToken`; `NeedsYouKind.review_inspection`.
@@ -309,7 +309,7 @@ Template keys gained `inspection_ready`, `invoice_ready`, `evidence_available`; 
 | `getTestingQueue()` | `JobWithRefs[]` | status testing, session division, oldest first |
 | `findJobByLabel(scan)` | `JobWithRefs \| null` | job #, ref/serial, PDF417 payload head |
 | `getTimingTests({jobId?, watchId?})` | `TimingTest[]` newest first | |
-| `recordTimingTest(jobId, TimingInput {readings[6], liftAngle, powerReserve, verdict, reason?})` | `TimingTest` | testing only; reject needs reason → `qc_fail`; pass → Outbox "Testing complete" + job stamp |
+| `recordTimingTest(jobId, TimingInput {readings[6], liftAngle, powerReserve, verdict, reason?})` | `TimingTest` | testing only; reject needs reason → `qc_fail`; pass → Sent "Testing complete" + job stamp |
 
 ## 20. E13 — RGTime (audit `rgtime`, station "Phone (RGTime PWA)") + Kiosk (audit `kiosk`, station "Kiosk")
 | export | signature | notes |

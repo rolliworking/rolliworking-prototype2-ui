@@ -13,7 +13,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `clientRefSubject` **[post-E16]** **[post-refresh]** | sync | `= (subject: string, ref?: string) => (ref?.trim() ? `[REF: $` | mock | staff | audit, email → Outbox | components/estimates/EstimateModals.tsx |
+| `clientRefSubject` **[post-E16]** **[post-refresh]** | sync | `= (subject: string, ref?: string) => (ref?.trim() ? `[REF: $` | mock | staff | audit, email → Sent | components/estimates/EstimateModals.tsx |
 | `setClientRef` **[post-E16]** **[post-refresh]** | async | `(estimateId: string, ref: string): Promise<EstimateWithRefs>` | mock | staff | localStorage | pages/estimates/EstimateDetailPage.tsx |
 | `setJobClientRef` **[post-E16]** **[post-refresh]** | async | `(jobId: string, ref: string): Promise<void>` | mock | staff | audit, localStorage | pages/jobs/JobDetailPage.tsx |
 | `jobClientRef` **[post-E16]** **[post-refresh]** | sync | `= (j: Job &` | mock | staff | audit, localStorage | pages/jobs/JobDetailPage.tsx |
@@ -132,7 +132,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `findWatchBySerial` | async | `(reference: string, serial: string): Promise<WatchMatch \| null>` | mock | staff | label queue | pages/intake/ReceiveWatchPage.tsx |
 | `computeDiscrepancies` | sync | `(ctx: InspectionContext, input: ReceiveWatchInput): string[]` | mock | staff | audit | pages/intake/ReceiveWatchPage.tsx |
 | `receiveWatch` | async | `(packageId: string, input: ReceiveWatchInput): Promise<ReceiveWatchResult>` | mock | staff | audit | pages/intake/ReceiveWatchPage.tsx |
-| `getOutbox` | async | `(): Promise<OutboxEmail[]>` | mock | staff | audit, email → Outbox, label queue | pages/intake/OutboxPage.tsx |
+| `getOutbox` | async | `(): Promise<OutboxEmail[]>` | mock | staff | audit, email → Sent, label queue | pages/intake/OutboxPage.tsx |
 | `getLabelQueue` | async | `(): Promise<LabelJob[]>` | mock | staff | audit, label queue | pages/intake/LabelQueuePage.tsx, pages/rs/RsPages.tsx |
 | `setLabelPrinted` | async | `(id: string, printed: boolean): Promise<LabelJob>` | mock | staff | audit, label queue | components/intake/LabelBits.tsx, pages/intake/LabelQueuePage.tsx |
 
@@ -193,9 +193,9 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `isInternalTrade` **[post-E16]** | sync | `= (clientId: string) => !!byId(fx.clients, clientId).internal;` | mock | staff | none (read) | components/jobs/JobBits.tsx |
 | `TRADE_SEND_BACK` **[post-E16]** | sync | `:` | mock | staff | none (read) | components/jobs/JobBits.tsx |
 | `activeHold` | sync | `= (j: Job): JobHold \| undefined => j.holds.find((h) => !h.releasedAt);` | mock | staff | audit | components/jobs/JobBits.tsx, components/jobs/JobBoard.tsx, components/jobs/JobPanels.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwJobsPage.tsx, pages/rw/RwWmPage.tsx, pages/workshop/BenchPage.tsx, pages/workshop/SupervisorPage.tsx |
-| `legalJobActions` | sync | `(j: Job): JobAction[]` | mock | staff | audit, email → Outbox | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
+| `legalJobActions` | sync | `(j: Job): JobAction[]` | mock | staff | audit, email → Sent | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `canHold` | sync | `= (j: Job) => !activeHold(j) && j.simpleStatus === 'on_hand' && HOLDABLE.includes(j.status);` | mock | staff | audit | components/jobs/JobPanels.tsx |
-| `transitionJob` | async | `(id: string, actionKey: string, reason?: string): Promise<JobWithRefs>` | mock | staff | audit, email → Outbox, job status | components/dashboard/TradeReviewPanel.tsx, pages/intake/IntakeStepPages.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
+| `transitionJob` | async | `(id: string, actionKey: string, reason?: string): Promise<JobWithRefs>` | mock | staff | audit, email → Sent, job status | components/dashboard/TradeReviewPanel.tsx, pages/intake/IntakeStepPages.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
 | `completeComponent` | async | `(jobId: string, key: ComponentKey): Promise<JobWithRefs>` | mock | staff | audit, job status | components/jobs/ComponentBits.tsx |
 | `amendComponentAttribution` | async | `(jobId: string, key: ComponentKey, shortName: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/ComponentBits.tsx |
 | `getCompletionsReport` | async | `(): Promise<CompletionsReport>` | mock | staff | audit | — (internal / other client.ts functions only) |
@@ -203,7 +203,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `toggleAssignee` | async | `(id: string, shortName: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/JobPanels.tsx |
 | `JOB_KIND_CONFIG` | sync | `: Record<JobKind,` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx, components/jobs/InspectionPanel.tsx, components/jobs/JobBits.tsx, components/jobs/JobPanels.tsx, pages/jobs/JobCreatePage.tsx, pages/jobs/JobDetailPage.tsx |
 | `INSPECTION_QUESTIONS` | sync | `:` | mock | staff | none (read) | components/jobs/InspectionPanel.tsx |
-| `reviewGaps` | sync | `(j: Job): string[]` | mock | staff | audit, email → Outbox, job status | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
+| `reviewGaps` | sync | `(j: Job): string[]` | mock | staff | audit, email → Sent, job status | pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
 | `saveInspectionReport` | async | `(id: string, answers: Record<string, string>): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/InspectionPanel.tsx |
 | `ROLES` | sync | `: Role[] = ['concierge', 'manager', 'inspector', 'watchmaker', 'polisher', 'band_tech'];` | mock | staff | none (read) | components/jobs/JobPanels.tsx, pages/SetupRsPanels.tsx |
 | `roleHolders` | sync | `= (role: Role): User[] => fx.users.filter((u) => holdsRole(u, role));` | mock | staff | audit | components/jobs/JobBits.tsx, components/jobs/JobPanels.tsx |
@@ -342,7 +342,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
 | `getRequestsForClient` | async | `(clientId: string): Promise<ServiceRequest[]>` | mock | staff | none (read) | — (internal / other client.ts functions only) |
-| `getClient360` | async | `(clientId: string): Promise<Client360 \| null>` | mock | staff | email → Outbox | pages/clients/Client360Page.tsx |
+| `getClient360` | async | `(clientId: string): Promise<Client360 \| null>` | mock | staff | email → Sent | pages/clients/Client360Page.tsx |
 | `getClientDirectory` | async | `(): Promise<ClientDirectoryRow[]>` | mock | staff | audit | pages/clients/ClientsPage.tsx |
 
 ## E8 RolliConnect — client portal. Same store, client-scoped reads, a handful of client-initiated writes
@@ -473,7 +473,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `EVIDENCE_SLOTS` | sync | `:` | mock | staff | none (read) | components/companion/CompanionTabs.tsx, components/jobs/EvidencePanel.tsx, pages/rw/RwQcPage.tsx |
 | `PARTS_GRADES` | sync | `: PartsGrade[] = ['B', 'Ø/REPL', 'D/REPL'];` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx |
 | `EVIDENCE_REQUIRED` | sync | `: Record<JobKind, EvidenceSlot[]>` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwQcPage.tsx |
-| `evidenceGaps` | sync | `= (j: Job): EvidenceSlot[] => (j.status !== 'testing' ? [] : EVIDENCE_REQUIRED[j.kind].filter((s) => !rs.evidence.some((e) => e.jobId === j.id && e.slot === s)));` | mock | staff | audit, email → Outbox, job status | components/jobs/EvidencePanel.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwQcPage.tsx |
+| `evidenceGaps` | sync | `= (j: Job): EvidenceSlot[] => (j.status !== 'testing' ? [] : EVIDENCE_REQUIRED[j.kind].filter((s) => !rs.evidence.some((e) => e.jobId === j.id && e.slot === s)));` | mock | staff | audit, email → Sent, job status | components/jobs/EvidencePanel.tsx, pages/rw/RwEvidencePage.tsx, pages/rw/RwQcPage.tsx |
 | `getEvidenceForJob` | async | `(jobId: string): Promise<EvidenceItem[]>` | mock | staff | none (read) | components/companion/CompanionTabs.tsx, components/jobs/EvidencePanel.tsx |
 | `getEvidenceForWatch` | async | `(watchId: string): Promise<(EvidenceItem &` | mock | staff | none (read) | components/jobs/EvidencePanel.tsx |
 | `getEvidenceForClient` | async | `(clientId: string): Promise<(EvidenceItem &` | mock | staff | audit | components/jobs/EvidencePanel.tsx |
@@ -499,7 +499,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `labelPhoto` | async | `(input:` | mock | staff | audit | components/companion/CompanionTabs.tsx |
 | `companionCanSeeMoney` | sync | `= canSeeMoney;` | mock | staff | audit | — (internal / other client.ts functions only) |
 
-## E14 Comms hub — one thread-space per client; Outbox-only sends; reply-token routing (mocked)
+## E14 Comms hub — one thread-space per client; Sent-only sends; reply-token routing (mocked)
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
@@ -533,10 +533,10 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | `replyInThread` | async | `(id: string, input:` | mock | staff | audit, comms thread | pages/InboxPage.tsx |
 | `addThreadNote` | async | `(id: string, text: string): Promise<ConvMessage>` | mock | staff | audit, comms thread | pages/InboxPage.tsx |
 | `simulateInboundReply` | async | `(id: string, text: string): Promise<ConvMessage>` | mock | webhook | audit, comms thread | pages/InboxPage.tsx |
-| `threadNeedsReplyFor` | sync | `= (anchor: ConversationAnchor): ConversationWithRefs \| undefined =>` | mock | staff | email → Outbox | components/jobs/JobBits.tsx, pages/estimates/EstimatesListPage.tsx |
+| `threadNeedsReplyFor` | sync | `= (anchor: ConversationAnchor): ConversationWithRefs \| undefined =>` | mock | staff | email → Sent | components/jobs/JobBits.tsx, pages/estimates/EstimatesListPage.tsx |
 | `clientNeedsReplyCount` | sync | `= (clientId: string) => cx.conversations.filter((c) => c.clientId === clientId && convNeedsReply(c)).length;` | mock | staff | comms thread | — (internal / other client.ts functions only) |
 | `threadsNeedingReplyForUser` | sync | `= (me: User) =>` | mock | staff | audit | — (internal / other client.ts functions only) |
-| `getCommsUnread` | async | `(): Promise<number>` | mock | staff | email → Outbox | — (internal / other client.ts functions only) |
+| `getCommsUnread` | async | `(): Promise<number>` | mock | staff | email → Sent | — (internal / other client.ts functions only) |
 
 ## E15 Portal-first inspection report (MH 2026-09-25): emails notify, the portal renders
 
@@ -544,9 +544,9 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `REPORT_COMPONENTS` | const | `fixture re-export` | mock | staff | none (read) | components/jobs/InspectionReportPanel.tsx |
 | `COMPONENT_GRADES` | sync | `: ComponentGrade[] = ['good', 'fair', 'worn', 'replace'];` | mock | staff | none (read) | components/jobs/InspectionReportPanel.tsx |
-| `INSPECTION_SURVEY` **[post-E16]** | sync | `= ['How would you like us to reach you with updates?', 'Anything we should know about this watch?'];` | mock | staff | email → Outbox | pages/rc/RcReportPage.tsx |
-| `getInspectionDecisions` **[post-E16]** | async | `(filter:` | mock | staff | email → Outbox | components/jobs/JobDecisionRecords.tsx, pages/rc/RcWatchPage.tsx |
-| `portalAskAboutReport` **[post-E16]** | async | `(token: string, text: string): Promise<Message>` | mock | client-portal | email → Outbox | pages/rc/RcReportPage.tsx |
+| `INSPECTION_SURVEY` **[post-E16]** | sync | `= ['How would you like us to reach you with updates?', 'Anything we should know about this watch?'];` | mock | staff | email → Sent | pages/rc/RcReportPage.tsx |
+| `getInspectionDecisions` **[post-E16]** | async | `(filter:` | mock | staff | email → Sent | components/jobs/JobDecisionRecords.tsx, pages/rc/RcWatchPage.tsx |
+| `portalAskAboutReport` **[post-E16]** | async | `(token: string, text: string): Promise<Message>` | mock | client-portal | email → Sent | pages/rc/RcReportPage.tsx |
 | `getInspectionReportsForJob` | async | `(jobId: string): Promise<InspectionReportDoc[]>` | mock | staff | audit, comms thread, job status | components/jobs/InspectionReportPanel.tsx |
 | `issueInspectionReport` | async | `(jobId: string, grades:` | mock | staff | audit, comms thread, job status | components/jobs/InspectionReportPanel.tsx |
 | `portalGetInspectionReport` | async | `(token: string): Promise<PortalInspectionReport>` | mock | client-portal | job status | pages/rc/RcReportPage.tsx |
@@ -644,14 +644,14 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
 | `getHitlist` **[post-E16]** **[post-refresh]** | async | `(): Promise<Hitlist>` | mock | staff | audit | pages/rs/HitlistPage.tsx |
-| `getGateScans` **[post-E16]** **[post-refresh]** | async | `(jobId?: string): Promise<GateScan[]>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwFloorPage.tsx |
-| `POLISHERS` **[post-E16]** **[post-refresh]** | sync | `= ['Walter', 'JV', 'Leo'];` | mock | staff | audit, email → Outbox, job status | components/rw/FloorPanels.tsx, pages/rw/RwFloorPage.tsx |
-| `parseTechCode` **[post-E16]** | sync | `= (code: string): User \| undefined =>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
-| `getScanSession` **[post-E16]** | sync | `= (): ScanSession => rw18.scanSession;` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
-| `scanTech` **[post-E16]** | async | `(code: string): Promise<ScanSession>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
-| `scanLabelAssign` **[post-E16]** | async | `(label: string): Promise<ScanSession>` | mock | staff | audit, email → Outbox, job status | pages/rw/RwBulkAssignPage.tsx |
-| `undoOutbox` **[post-E16]** | async | `(id: string): Promise<void>` | mock | staff | audit, email → Outbox, comms thread | pages/rw/RwBulkAssignPage.tsx |
-| `getQueuedOutbox` **[post-E16]** | async | `(): Promise<OutboxEmail[]>` | mock | staff | email → Outbox, comms thread | pages/rw/RwBulkAssignPage.tsx |
+| `getGateScans` **[post-E16]** **[post-refresh]** | async | `(jobId?: string): Promise<GateScan[]>` | mock | staff | audit, email → Sent, job status | pages/rw/RwFloorPage.tsx |
+| `POLISHERS` **[post-E16]** **[post-refresh]** | sync | `= ['Walter', 'JV', 'Leo'];` | mock | staff | audit, email → Sent, job status | components/rw/FloorPanels.tsx, pages/rw/RwFloorPage.tsx |
+| `parseTechCode` **[post-E16]** | sync | `= (code: string): User \| undefined =>` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
+| `getScanSession` **[post-E16]** | sync | `= (): ScanSession => rw18.scanSession;` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
+| `scanTech` **[post-E16]** | async | `(code: string): Promise<ScanSession>` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
+| `scanLabelAssign` **[post-E16]** | async | `(label: string): Promise<ScanSession>` | mock | staff | audit, email → Sent, job status | pages/rw/RwBulkAssignPage.tsx |
+| `undoOutbox` **[post-E16]** | async | `(id: string): Promise<void>` | mock | staff | audit, email → Sent, comms thread | pages/rw/RwBulkAssignPage.tsx |
+| `getQueuedOutbox` **[post-E16]** | async | `(): Promise<OutboxEmail[]>` | mock | staff | email → Sent, comms thread | pages/rw/RwBulkAssignPage.tsx |
 | `getWorkQueue` **[post-E16]** | async | `(): Promise<WorkQueueRow[]>` | mock | staff | comms thread | pages/rw/RwWorkQueuePage.tsx |
 | `simulateClientReply` **[post-E16]** | async | `(jobId?: string): Promise<string>` | mock | webhook | comms thread | pages/rw/RwWorkQueuePage.tsx |
 | `clearClientReplied` **[post-E16]** | sync | `= (jobId: string) =>` | mock | staff | audit | — (internal / other client.ts functions only) |
@@ -706,7 +706,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
 | `openClientRequests` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => requestsOf(j).filter((r) => !r.check);` | mock | staff | audit | components/jobs/ClientRequests.tsx, components/rw/pad/PadJobs.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx |
-| `qcRequestGaps` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => (j.status === 'testing' ? openClientRequests(j) : []);` | mock | staff | audit, email → Outbox, job status | components/jobs/ClientRequests.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
+| `qcRequestGaps` **[post-E16]** | sync | `= (j: Job): ClientRequest[] => (j.status === 'testing' ? openClientRequests(j) : []);` | mock | staff | audit, email → Sent, job status | components/jobs/ClientRequests.tsx, pages/jobs/JobDetailPage.tsx, pages/rw/RwJobPage.tsx, pages/rw/RwQcPage.tsx |
 | `addClientRequest` **[post-E16]** | async | `(jobId: string, text: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/ClientRequests.tsx |
 | `removeClientRequest` **[post-E16]** | async | `(jobId: string, reqId: string): Promise<JobWithRefs>` | mock | staff | audit | components/jobs/ClientRequests.tsx |
 | `clientRequestAlert` **[post-E16]** | sync | `= (jobId: string): ClientRequestAlert \| null =>` | mock | staff | audit | pages/rw/RwBulkAssignPage.tsx, pages/rw/RwPadPage.tsx, pages/rw/RwStationScanPage.tsx, pages/rw/RwWmPage.tsx |
@@ -1014,14 +1014,14 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `searchRwHistory` **[post-E16]** **[post-refresh]** | async | `(query: string): Promise<RwHistoryHit[]>` | mock | staff | email → Outbox | pages/rw/RwHistoryPage.tsx |
-| `uniqComponents` **[post-E16]** **[post-refresh]** | sync | `= (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));` | mock | staff | email → Outbox | components/estimates/ComponentChain.tsx, components/intake/IntakeHistoryBits.tsx |
+| `searchRwHistory` **[post-E16]** **[post-refresh]** | async | `(query: string): Promise<RwHistoryHit[]>` | mock | staff | email → Sent | pages/rw/RwHistoryPage.tsx |
+| `uniqComponents` **[post-E16]** **[post-refresh]** | sync | `= (codes: DeptCode[]): string[] => uniq(codes.flatMap((d) => fx.DEPT_COMPONENTS[d]));` | mock | staff | email → Sent | components/estimates/ComponentChain.tsx, components/intake/IntakeHistoryBits.tsx |
 
-## Sent emails for a job (read-only aggregation for the Supervisor Pad detail) — Outbox rows whose ref is the job, its estimate, its SO or one of its parts requests; parts-approval status comes from the PR
+## Sent emails for a job (read-only aggregation for the Supervisor Pad detail) — Sent rows whose ref is the job, its estimate, its SO or one of its parts requests; parts-approval status comes from the PR
 
 | export | kind | signature | source | auth expected | side effects | callers |
 |---|---|---|---|---|---|---|
-| `getJobEmails` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<JobEmailRow[]>` | mock | staff | email → Outbox | components/rw/pad/PadJobs.tsx |
+| `getJobEmails` **[post-E16]** **[post-refresh]** | async | `(jobId: string): Promise<JobEmailRow[]>` | mock | staff | email → Sent | components/rw/pad/PadJobs.tsx |
 
 ## Shared job filter vocabulary — one list for the RS "All Jobs" view and the RW Reports section (modeled on the legacy RolliWorks Reports screen)
 
@@ -1109,7 +1109,7 @@ Read with `04-DATA-MODEL-VS-KEEPER.md` for the shapes and `08-AUDIT-TAXONOMY.md`
 |---|---|---|---|---|---|---|
 | `ZERO_REASON_LABEL` **[post-E16]** **[post-refresh]** | sync | `: Record<ZeroBalanceReason, string>` | mock | staff | none (read) | components/sales/FulfillMenu.tsx, pages/rs/HitlistPage.tsx, pages/sales/SalesOrderDetailPage.tsx |
 | `zeroBalanceNoSync` **[post-E16]** **[post-refresh]** | async | `(id: string, reason: ZeroBalanceReason, notes: string): Promise<SalesOrderWithRefs>` | mock | staff | audit | components/sales/FulfillMenu.tsx |
-| `zeroBalanceLog` **[post-E16]** **[post-refresh]** | sync | `= (): ZeroBalanceRow[] => store.salesOrders.filter((o) => o.zeroBalance).map((o) => (` | mock | staff | audit, email → Outbox, job status | — (internal / other client.ts functions only) |
+| `zeroBalanceLog` **[post-E16]** **[post-refresh]** | sync | `= (): ZeroBalanceRow[] => store.salesOrders.filter((o) => o.zeroBalance).map((o) => (` | mock | staff | audit, email → Sent, job status | — (internal / other client.ts functions only) |
 
 ## Sales order Fulfill menu actions (ported from the legacy SO screen)
 

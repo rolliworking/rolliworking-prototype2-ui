@@ -18,7 +18,7 @@ export const JobTimeline = ({ job: j }: { job: JobWithRefs }) => {
           <span className="font-medium">{ACTION_LABEL[t.action] ?? t.action}</span>
           {t.from && <><StatusPill status={t.from} /><ArrowRight size={10} className="text-ink-400" /></>}<StatusPill status={t.to} />
           {t.reason && <span className="text-ink-500">— {t.reason}</span>}
-          {t.emailQueued && <span className="inline-flex items-center gap-0.5 text-[10px] text-brand" title="Client email queued to Outbox"><Mail size={10} /> emailed</span>}
+          {t.emailQueued && <span className="inline-flex items-center gap-0.5 text-[10px] text-brand" title="Client email recorded in Sent"><Mail size={10} /> emailed</span>}
         </span>
       ),
     })),

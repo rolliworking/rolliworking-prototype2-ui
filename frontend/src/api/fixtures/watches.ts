@@ -39,4 +39,14 @@ export const watches: Watch[] = [
   { id: 'w-54', clientId: 'c-35', brand: 'Rolex', model: 'Explorer II', reference: '226570', serial: 'Q8L2M4N7', dial: 'Polar', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(2) },
   { id: 'w-55', clientId: 'c-36', brand: 'Rolex', model: 'Datejust 41', reference: '126334', serial: 'R7K3M9P2', dial: 'Wimbledon', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(11) },
   { id: 'w-56', clientId: 'c-37', brand: 'Rolex', model: 'Submariner 5513', reference: '5513', serial: '3862041', dial: 'Matte black', bracelet: 'Oyster 93150', status: 'in_service', receivedAt: daysAgo(24) },
+  // JV bin seeds
+  { id: 'w-57', clientId: 'c-38', brand: 'Rolex', model: 'Sea-Dweller', reference: '126600', serial: 'B4N7K2R9', dial: 'Black', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(6) },
+  { id: 'w-58', clientId: 'c-39', brand: 'Rolex', model: 'GMT-Master II', reference: '126710BLRO', serial: 'C8P3L6M1', dial: 'Black', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(5) },
+  { id: 'w-59', clientId: 'c-40', brand: 'Rolex', model: 'Yacht-Master 40', reference: '126622', serial: 'D2R9T4W7', dial: 'Rhodium', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(4) },
+  { id: 'w-60', clientId: 'c-41', brand: 'Tudor', model: 'Black Bay 58', reference: '79030N', serial: 'J3K8M2P5', dial: 'Black', bracelet: 'Rivet', status: 'in_service', receivedAt: daysAgo(7) },
+  { id: 'w-61', clientId: 'c-42', brand: 'Rolex', model: 'Explorer', reference: '124270', serial: 'F6L1N9Q3', dial: 'Black', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(3) },
+  { id: 'w-62', clientId: 'c-43', brand: 'Rolex', model: 'Datejust 36', reference: '126234', serial: 'G7M2P8R4', dial: 'Silver', bracelet: 'Jubilee', status: 'in_service', receivedAt: daysAgo(8) },
+  { id: 'w-63', clientId: 'c-44', brand: 'Rolex', model: 'Submariner Date', reference: '126613LB', serial: 'H1N6Q2S8', dial: 'Blue', bracelet: 'Oyster two-tone', status: 'in_service', receivedAt: daysAgo(5) },
+  { id: 'w-64', clientId: 'c-45', brand: 'Rolex', model: 'Oyster Perpetual 36', reference: '126000', serial: 'K4P9R3T6', dial: 'Turquoise', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(2) },
+  { id: 'w-65', clientId: 'c-46', brand: 'Rolex', model: 'Milgauss', reference: '116400GV', serial: 'L5Q2S7U1', dial: 'Z-blue', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(9) },
 ];

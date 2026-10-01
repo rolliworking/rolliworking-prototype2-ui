@@ -1,7 +1,7 @@
 import type { Message } from '../types';
 import { daysAgo } from './time';
 
-// RolliConnect message threads — one per client; staff replies also queue an Outbox email
+// RolliConnect message threads — one per client; staff replies also record a Sent email
 export const messages: Message[] = [
   // Robert Calloway — R1 final messages (history), R3 open thread, R4 new web request awaiting first reply
   { id: 'msg-r1a', clientId: 'c-30', watchId: 'w-40', from: 'staff', by: 'Vienna', text: 'Robert — the Submariner has cleared QC and is ready for collection. Your pickup code is in the invoice email.', at: daysAgo(351, 12), readByStaff: true, readByClient: true },

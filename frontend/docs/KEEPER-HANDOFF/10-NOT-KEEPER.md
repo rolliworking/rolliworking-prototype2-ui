@@ -27,7 +27,7 @@ Everything below exists in the prototype **only** to make behaviour visible. Eac
 | Scripted **parts assistant** (`partsAssistantReply`) and scripted **Companion** answers | parts chat, companion | real model over M3KE store with citations (`06` §6) |
 | "Print" that flips a status (labels, drop-off receipt) | labels, intake | ZPL print queue (`06` §4) |
 | Fabricated tracking numbers, labels, `QBO-STUB-…` ids, `pushed_stub / error_stub` states | ship station, accounting | carrier + QBO integrations (`06` §1–2) |
-| Outbox rows that never send; "mark sent" | `/intake/outbox` | notification service with delivery status |
+| Sent rows that never send; "mark sent" | `/intake/sent` | notification service with delivery status |
 | `ADMIN-MARKED` synthetic pickup/ship sessions | sales admin mark | keep the action, but as a real audited override with reason |
 | Manual Witschi entry standing in for the timing machine | `/rt` | import (Q49) — manual entry remains as fallback |
 | `no_camera` shortcut on bench sign-ins (RT/RW) | `/rt`, `/rw` | real policy per station (camera required or not) |
@@ -80,5 +80,5 @@ State machines and guards (`source/STATE-MACHINES.md`), field lists and validati
 | `localStorage` session state (`currentUserId`, stations registry, audit log cap 60, `rollisuite.api.token`, RG punches, RC accounts) | `client.ts KEYS`, `realClient.ts`, RG/RC blocks | server sessions + DB |
 | Seeded call logs, bypass events, asset values (`seedAssetValues`), zero-balance rows | `client.ts` | none |
 | Browser print dialog (`window.print()`) for SO print/PDF, appraisal, inspection form, RC estimate; **label "printing" = mock printer list + `setLabelPrinted`** | `LabelBits.tsx`, print views | printer agent / PDF service |
-| Mock TOTP `000000`, mocked RC verification link in the Outbox, mock pay page `/pay/:token` | RC block, `PayPage` | real TOTP + email + payment host |
+| Mock TOTP `000000`, mocked RC verification link in the Sent, mock pay page `/pay/:token` | RC block, `PayPage` | real TOTP + email + payment host |
 | Cloudflare / Vite dev-server 429s during testing | environment | n/a |

@@ -38,8 +38,8 @@ export default function IntakeLayout() {
             <p className="mt-0.5 text-xs text-ink-500">Four stages · packages move left to right · every action is stamped who / station / when</p>
           </div>
           <div className="flex items-center gap-1">
-            <NavLink to="/intake/outbox" data-testid="intake-tab-outbox" className={({ isActive }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink')}>
-              <Mail size={13} /> Outbox
+            <NavLink to="/intake/sent" data-testid="intake-tab-sent" className={({ isActive }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink')}>
+              <Mail size={13} /> Sent
             </NavLink>
             <NavLink to="/intake/trade" data-testid="intake-tab-trade" className={({ isActive }) => clsx('inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors', isActive ? 'bg-ink text-white' : 'text-ink-500 hover:bg-surface hover:text-ink')}>
               <Briefcase size={13} /> Trade scan-in

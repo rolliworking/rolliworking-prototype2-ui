@@ -80,7 +80,7 @@ export function IntegrationsPage() {
 }
 
 const HELP = [
-  { role: 'Concierge', items: ['Answer the phone: type any identifier in the top bar → Client 360', 'Intake: Arrival → Receive Package → Work Order; discrepancy packages land on your Today', 'Pickup Station: verify code or proxy + ID, take hand-back photos, log a bypass if unpaid', 'RolliConnect Inbox: reply; the email queues to Outbox'] },
+  { role: 'Concierge', items: ['Answer the phone: type any identifier in the top bar → Client 360', 'Intake: Arrival → Receive Package → Work Order; discrepancy packages land on your Today', 'Pickup Station: verify code or proxy + ID, take hand-back photos, log a bypass if unpaid', 'RolliConnect Inbox: reply; the email queues to Sent'] },
   { role: 'Inspector', items: ['Receive Watch: verify against the estimate, pick the workflow (routing authority), labels queue automatically', 'Review gate: photos for every kind, report for service jobs', 'QC evidence: four slots keyed to the watch label before QC pass'] },
   { role: 'Watchmaker', items: ['Bench: pull next, start service, send to QC', 'Parts: chat → attach → submit; approval learns aliases and parks a parts hold', 'Shop Time: minutes never move status'] },
   { role: 'Manager', items: ['Supervisor board: assign, approve parts, holds, QC queue', 'Sales: fulfil (QBO stub), push to pickup/ship, admin marks with a reason', 'Setup: stations, users & roles, catalog, templates', 'Reports & Accounting: CSV exports reconcile with the dashboard'] },

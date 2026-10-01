@@ -26,7 +26,7 @@ export default function PurchasingPage() {
   return (
     <div data-testid="purchasing-page" className="space-y-4">
       <PurchasingDeep vendors={data.vendors} locations={data.locations} onChange={() => run(async () => undefined, 'Updated')} />
-      <Head title="Purchasing" sub={<>Vendors · purchase orders · receive against PO — receiving increments inventory with an audited movement <Provisional note="PO send = Outbox stub; no vendor API. Cross-division inventory rules not ruled (MH)" /></>} action={<Button variant="primary" data-testid="po-new" onClick={() => setCreate(true)}>New purchase order</Button>} />
+      <Head title="Purchasing" sub={<>Vendors · purchase orders · receive against PO — receiving increments inventory with an audited movement <Provisional note="PO send = Sent stub; no vendor API. Cross-division inventory rules not ruled (MH)" /></>} action={<Button variant="primary" data-testid="po-new" onClick={() => setCreate(true)}>New purchase order</Button>} />
       <Flash error={error} msg={msg} />
       <div className="grid grid-cols-[1fr_380px] gap-4">
         <Card title="Purchase orders" subtitle={`${data.pos.length} · division-stamped`} bodyClassName="p-0" testId="po-list">
@@ -59,7 +59,7 @@ function PoModal({ po, locations, onClose, run }: { po: PurchaseOrderWithRefs; l
         <div className="text-xs font-semibold">Total {fmtMoneyCents(po.total)}</div>
         <div className="flex items-center gap-2">
           <PoDeepBar po={po} locations={locations} run={run} qty={qty} receivable={receivable} />
-          {po.status === 'draft' && <Button variant="primary" data-testid="po-send" onClick={() => run(() => api.sendPurchaseOrder(po.id), 'PO sent (stub → Outbox)')}>Send (stub)</Button>}
+          {po.status === 'draft' && <Button variant="primary" data-testid="po-send" onClick={() => run(() => api.sendPurchaseOrder(po.id), 'PO sent (stub → Sent)')}>Send (stub)</Button>}
           {receivable && <Button variant="primary" data-testid="po-receive" onClick={() => run(() => api.receivePurchaseOrder(po.id, qty, (document.getElementById('po-putaway') as HTMLSelectElement | null)?.value || undefined), 'Received — stock updated · short lines stay open')}>Receive lines</Button>}
           {po.status !== 'received' && po.status !== 'cancelled' && <><input data-testid="po-cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="cancel reason" className={`${field} w-40`} /><Button data-testid="po-cancel" onClick={() => run(async () => { await api.cancelPurchaseOrder(po.id, reason); onClose(); }, 'PO cancelled')}>Cancel PO</Button></>}
         </div>

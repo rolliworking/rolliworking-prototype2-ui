@@ -189,7 +189,7 @@ export default function EstimateDetailPage() {
         <RevisionHistory estimate={e} />
       </Card>
 
-      {modal === 'send' && <SendModal estimate={e} onClose={() => { setModal(null); setParams({}); }} onSent={() => { setModal(null); setParams({}); void load().then(() => say('Email queued to Outbox · status sent')); }} />}
+      {modal === 'send' && <SendModal estimate={e} onClose={() => { setModal(null); setParams({}); }} onSent={() => { setModal(null); setParams({}); void load().then(() => say('Email recorded in Sent · status sent')); }} />}
       {modal === 'decline' && <DeclineModal estimate={e} onClose={() => setModal(null)} onDone={() => { setModal(null); void load().then(() => say('Declined')); }} />}
       {modal === 'print' && <PrintPreview estimate={e} onClose={() => setModal(null)} />}
     </div>

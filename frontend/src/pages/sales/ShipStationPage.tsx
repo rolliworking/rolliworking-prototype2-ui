@@ -87,7 +87,7 @@ export default function ShipStationPage() {
           <Card title={`Tracking · ${order.number}`} subtitle="Ship-to, carrier, declared value → mock label" testId="ship-tracking-card">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1 text-xs text-ink-500">Ship-to address{(['name', 'street', 'city', 'state'] as (keyof Address)[]).map((k) => <input key={k} data-testid={`ship-addr-${k}`} value={addr[k]} onChange={(e) => setAddr({ ...addr, [k]: e.target.value })} placeholder={k} className={`${field} block w-full`} />)}
-                <Button size="sm" data-testid="ship-request-info" onClick={async () => { try { await api.requestShippingInfo(order.id); await refreshOrder(); setError(null); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } }}><Mail size={12} /> Request shipping info (Outbox)</Button>{order.shippingInfoRequestedAt && <span className="ml-2 text-[11px] text-moss-700">requested</span>}
+                <Button size="sm" data-testid="ship-request-info" onClick={async () => { try { await api.requestShippingInfo(order.id); await refreshOrder(); setError(null); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } }}><Mail size={12} /> Request shipping info (Sent)</Button>{order.shippingInfoRequestedAt && <span className="ml-2 text-[11px] text-moss-700">requested</span>}
               </div>
               <div className="space-y-2 text-xs text-ink-500">
                 <label className="block">Carrier<select data-testid="ship-carrier" value={carrier} onChange={(e) => setCarrier(e.target.value as ShipCarrier)} className={`${field} mt-1 block w-full uppercase`}>{api.SHIP_CARRIERS.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}</select></label>
@@ -116,7 +116,7 @@ export default function ShipStationPage() {
       {step === 3 && done && (
         <Card accent="moss" title="Shipped · notification queued" testId="ship-done">
           <p className="text-[13px] text-ink">{done.number} · {fullName(done.client)} · <StatusPill status={done.status} testId="ship-done-status" /> · tracking <span className="font-mono">{done.tracking}</span>{done.job && <> · job <Link to={`/jobs/${done.job.id}`} className="font-mono text-brand hover:underline">{done.job.number}</Link> closed, custody released</>}</p>
-          <p className="mt-1 text-xs text-ink-500">Shipping notification queued to Outbox · shipment record + line shipped_qty saved · audit stamped.</p>
+          <p className="mt-1 text-xs text-ink-500">Shipping notification recorded in Sent · shipment record + line shipped_qty saved · audit stamped.</p>
           <Button variant="primary" className="mt-3" data-testid="ship-reset" onClick={reset}>Next order (reset)</Button>
         </Card>
       )}

@@ -70,7 +70,7 @@ Stations: st-01 Front Desk 1 (pre-registered on first load), st-02 Front Desk 2,
 | awaiting_inspection | pk-06 (e-13 → w-10 **returning watch**), pk-07, pk-08 | scan estimate # to open stage 4 |
 | received | pk-09 (e-12, workflow B+P; labels lb-01/lb-02), pk-11 (SUB-26-0291, Naomi, → j-24) | |
 | discrepancy_hold | pk-10 (e-08, missing bracelet; flagged by Walter) | appears on `/today` for concierge + Walter (rolliworks session) |
-Outbox ob-01…ob-08 (six to naomi.castellanos@example.com). Labels lb-01 (pdf417), lb-02 (ref/serial), unprinted.
+Sent ob-01…ob-08 (six to naomi.castellanos@example.com). Labels lb-01 (pdf417), lb-02 (ref/serial), unprinted.
 
 ## Jobs (`jobs.ts`) — 25, every status × workflow × kind; **all `division: rolliworks`**
 | id | number | status | kind | workflow | owner | assignees | notable |
@@ -199,7 +199,7 @@ Messages: msg-01 (Harrison → staff, read), msg-02 (Vienna → Harrison, unread
 - POs: po-01 received · po-02 **sent** (receive it to test stock increments: 24-7030-0 ×2, 29-5220-0 ×2 into A1) · po-03 partially received (1 of 3) · po-04 draft (PM safe) · po-05 sent, rollishop. Next PO-26-0026.
 - Stock: 13 levels; low/zero rows: pt-02 (1/2), pt-03 (0/2), pt-05 (2/2), pt-07 (1/1), pt-09 (0/1) → 5 LOW flags. Movements 5 (receipt, issue, adjustment, receipt, count). Cycle count cc-01 posted (A1, 1 variance). Next CC-26-0004.
 - Templates: 6 keys. Evidence: j-08 (all 4, 100M/330ft, grade B), j-05 (hidden_serial + timing_sheet → gate blocks QC pass until pressure_test + parts_grading), j-16 (hidden_serial + pressure_test 50M/164ft; warranty set satisfied), j-25 (all 4, 2024 history for Naomi). Next ev-13.
-- Deliberately not covered: no rollishop stock movement; no `issue` movement created by code (only seed); no PO for a retired vendor; templates not yet consumed by Outbox writers; no evidence on a small_job.
+- Deliberately not covered: no rollishop stock movement; no `issue` movement created by code (only seed); no PO for a retired vendor; templates not yet consumed by Sent writers; no evidence on a small_job.
 
 ## E10 seeds (`fixtures/companion.ts`)
 - Model references: Daytona 116520 (2000–16) / 116500LN (2016–), Sub 16610 (1988–2010) / 126610LN (2010–), Datejust 16234, GMT 116710LN, OP41 124300, BB58 M79030B-0001. "crown for a daytona" → clarifying question; "2010 daytona" → 116520.
@@ -219,8 +219,8 @@ Messages: msg-01 (Harrison → staff, read), msg-02 (Vienna → Harrison, unread
 Not covered: rollishop threads; kiosk/email ingestion (fixtures only); a thread anchored to a request that gets quoted.
 
 ## E15 seeds
-- Eleanor c-02 · j-11 (awaiting customer approval) · rep-01 `IR-ELEANOR-V1` superseded → rep-02 `IR-ELEANOR-V2` issued (8 grades, notes reference the bezel photo and e-02 rev 2); Outbox `ob-rep-02` short notification with `/rc/report/IR-ELEANOR-V2`. Loop: open `/rc/report/IR-ELEANOR-V1` → forwards to V2 → Approve → j-11 approved, e-02 approved, comms cv-04 gains an approval event.
-- To exercise issuing: /jobs/j-13 or j-18 (in_review) → add a photo → Issue inspection report → Outbox + `/rc/report/<token>`.
+- Eleanor c-02 · j-11 (awaiting customer approval) · rep-01 `IR-ELEANOR-V1` superseded → rep-02 `IR-ELEANOR-V2` issued (8 grades, notes reference the bezel photo and e-02 rev 2); Sent `ob-rep-02` short notification with `/rc/report/IR-ELEANOR-V2`. Loop: open `/rc/report/IR-ELEANOR-V1` → forwards to V2 → Approve → j-11 approved, e-02 approved, comms cv-04 gains an approval event.
+- To exercise issuing: /jobs/j-13 or j-18 (in_review) → add a photo → Issue inspection report → Sent + `/rc/report/<token>`.
 
 ## E12 seeds
 - Tolerances: 3135 (Crit1 <25, Crit2 −1/+10, beat 0.8, amp 200–280, 44 h), 3235/3285 (<12, −2/+2, 0.6, 220–300, 70 h), 4130, MT5402, generic.

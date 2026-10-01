@@ -54,7 +54,7 @@ export const SendModal = ({ estimate: e, onClose, onSent }: { estimate: Estimate
         </div>
         {err && <p className="text-xs font-medium text-rose-700">{err}</p>}
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-ink-400">Queues to the Outbox — nothing ever sends. Status → sent, sent-at set.</span>
+          <span className="text-[11px] text-ink-400">Queues to the Sent — nothing ever sends. Status → sent, sent-at set.</span>
           <div className="flex gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" data-testid="send-confirm" disabled={busy} onClick={send}><Mail size={13} /> {busy ? 'Queuing…' : 'Queue email'}</Button></div>
         </div>
       </div>

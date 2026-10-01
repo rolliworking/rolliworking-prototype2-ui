@@ -69,7 +69,7 @@ import TeamHitlistPage from '@/pages/hitlist/TeamHitlistPage';
 import AppraisalPage from '@/pages/jobs/AppraisalPage';
 import ArrivalPage from '@/pages/intake/ArrivalPage';
 import LabelQueuePage from '@/pages/intake/LabelQueuePage';
-import OutboxPage from '@/pages/intake/OutboxPage';
+import SentPage from '@/pages/intake/SentPage';
 import ReceivePackageListPage from '@/pages/intake/ReceivePackageListPage';
 import ReceivePackagePage from '@/pages/intake/ReceivePackagePage';
 import ReceiveWatchListPage from '@/pages/intake/ReceiveWatchListPage';
@@ -104,6 +104,8 @@ import PurchasingPage from '@/pages/rs/PurchasingPage';
 import VendorsPage, { VendorDetailPage } from '@/pages/rs/VendorsPage';
 import SchedulePage from '@/pages/SchedulePage';
 import InventoryPage from '@/pages/rs/InventoryPage';
+import InventoryReportsPage from '@/pages/rs/InventoryReportsPage';
+import '@/api/inventoryReports';
 import CycleCountPage from '@/pages/rs/CycleCountPage';
 import { AccountingPage, HelpPage, IntegrationsPage, LabelsPage, ReportsPage } from '@/pages/rs/RsPages';
 import SignInPage from '@/pages/SignInPage';
@@ -261,7 +263,8 @@ export default function App() {
                 <Route path="inspect/new" element={<IntakeInspectionFormStep />} />
                 <Route path="inspect/:id" element={<IntakeInspectionFormStep />} />
                 <Route path="awaiting-approval" element={<IntakeAwaitingApprovalPage />} />
-                <Route path="outbox" element={<OutboxPage />} />
+                <Route path="sent" element={<SentPage />} />
+                <Route path="outbox" element={<Navigate to="/intake/sent" replace />} />
                 <Route path="labels" element={<LabelQueuePage />} />
                 <Route path="trade" element={<TradeScanInPage />} />
               </Route>
@@ -292,6 +295,7 @@ export default function App() {
               <Route path="/purchasing/vendors/:id" element={<VendorDetailPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/inventory/count" element={<CycleCountPage />} />
+              <Route path="/inventory/reports" element={<InventoryReportsPage />} />
               <Route path="/labels" element={<LabelsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/accounting" element={<AccountingPage />} />

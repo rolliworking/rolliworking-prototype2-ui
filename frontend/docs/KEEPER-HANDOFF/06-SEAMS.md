@@ -27,7 +27,7 @@ A **seam** is a place where the prototype fakes an outside system behind a `clie
 - **Real**: OAuth2 app; on fulfil → create QBO Invoice (customer upsert by email/phone, items mapped from catalog codes, tax), on payment → Payment applied; on cancel → void; idempotency keys; error queue with retry and a manager "re-sync" action; nightly reconciliation report.
 - **Keep**: registers, queue view, sync states (`queued | pushed | error`), audit `accounting`.
 
-## 3. Outbox → real email + SMS channel
+## 3. Sent → real email + SMS channel
 - **Prototype**: every client email is a pending `OutboxEmail` row; nothing sends; templates partly hard-coded (`⚠ DRIFT`, Q32); reply tokens are simulated.
 - **Real**: transactional email provider (Resend/SendGrid-class) with **templates rendered server-side** from `message_template` + merge values (`07-COMMS-AND-TEMPLATES.md`); **SMS** channel (Twilio-class) for short notifications (pickup code, ready, shipped) with per-client channel preference; **inbound**: reply-to address per conversation (`reply+RS-<token>@…`) and SMS webhook → `message` rows routed by token, unmatched → General thread + needs-reply; delivery status back onto the notification row; unsubscribe/compliance.
 - **Keep**: portal-first bodies, one notification row per event, thread `out` message with `emailId`.
@@ -61,7 +61,7 @@ A **seam** is a place where the prototype fakes an outside system behind a `clie
 | Client seam (staging API, `API_SOURCE`, fallback, banner/toast, switch-user token) | 11 §1 |
 | QuickBooks Online (invoice queue, zero-balance skip, payment gate + bypass log) | 11 §2 |
 | Parcel Pro / shipping adapter (`parcelpro.ts`, both label paths, simulate tracking, aging) | 11 §3 |
-| Outbox / email (queue, template list, personal templates) | 11 §4 |
+| Sent / email (queue, template list, personal templates) | 11 §4 |
 | Intercom + paging (`intercom.ts`, Daily.co TODO) | 11 §5 |
 | AI seam (`ai.ts` → `/api/ai/*`, suggest → verify → write) | 11 §6 |
 | M3KE (suggestions, aliases, learned resolutions, `m3keEvents`) | 11 §7 |

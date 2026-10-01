@@ -5,7 +5,7 @@
 | 1 | Client seam / staging API | a server-side session model (`/auth/sign-in` returns a token per device; the app keeps it in localStorage) — needs refresh/expiry, single-session invalidation, and the ~350 mock-only functions given real endpoints (`05-API-CONTRACT.md` "auth expected" column). |
 | 2 | QuickBooks Online | Intuit OAuth2 client id/secret + realm id (server-side), invoice/customer create-update with `SyncToken`, a webhook receiver for payments, and MH's decision on who owns the zero-balance exclusion list. |
 | 3 | Parcel Pro / shipping | `PARCELPRO_API_KEY` as a server secret, shop ship-from account, tracking webhook receiver (replaces "Simulate tracking event"), label PDF storage, MH decision: one adapter for inbound + outbound + vendor PO (intent: yes). |
-| 4 | Outbox / email | a sending provider (Resend/SES) with a verified shop domain, bounce/delivery webhooks onto the comms thread, and per-staffer "from" policy (shop vs personal signature). |
+| 4 | Sent / email | a sending provider (Resend/SES) with a verified shop domain, bounce/delivery webhooks onto the comms thread, and per-staffer "from" policy (shop vs personal signature). |
 | 5 | Intercom / paging | Daily.co (or equivalent) API key, one room per station pair + a broadcast room, device audio permissions on pads, MH decision on who may page all. |
 | 6 | AI (Claude) | production Anthropic key on the server (today: Emergent key), retention policy for uploaded sheet images, human-verify step kept mandatory. |
 | 7 | M3KE | nothing external — needs a durable append-only store for `m3ke.events` and the aliases table (today in memory). |

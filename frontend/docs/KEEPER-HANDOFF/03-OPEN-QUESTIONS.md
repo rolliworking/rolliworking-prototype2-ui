@@ -32,7 +32,7 @@ How to use: answer each line in the **Verdict** column (yes / no / other + one s
 | 29 | Cross-division stock visibility / transfers? | Inventory | one shared pool | define transfer movement + wall | |
 | 30 | Drop `Part.stock` for Σ `StockLevel.onHand`? | catalog | both kept in sync | yes → derive | |
 | 31 | Evidence retention; who may redo/delete a slot? | Service evidence card | append-only, multiple per slot | define retention + redo rule | |
-| 32 | Should Setup templates drive every Outbox writer? | Setup → Templates | some writers hard-code bodies (⚠ DRIFT) | yes → single renderer (recommended) | |
+| 32 | Should Setup templates drive every Sent writer? | Setup → Templates | some writers hard-code bodies (⚠ DRIFT) | yes → single renderer (recommended) | |
 | 33 | Auto-consume parts on approval / hold release? | Inventory movements | `consume` kind exists, never written | yes → write on hold release | |
 | 34 | Hide money for bench and concierge tiers? | `/rw`, companion price memory | hidden in `/rw` and companion for non-managers; concierge in RS sees money | yes → hide for concierge too; no → keep | |
 | 35 | Do price verifications expire automatically? | Companion price memory | stale flag only | yes → TTL; no → flag only | |

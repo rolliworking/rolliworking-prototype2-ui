@@ -4,7 +4,7 @@ import type { FloorDot, RwStationKey } from '@/api/client';
 import { PART_COLOR } from '@/components/rw/RwBits';
 
 // Station map = two tracks (WATCH / BRACELET) with a manager-gated branch-and-return Polish leg under each. Lock = the part is in a manager's safe.
-export type MapRow = 'wat' | 'wat_ramp' | 'bra' | 'bra_ramp';
+export type MapRow = 'wat' | 'wat_ramp' | 'bra' | 'bra_ramp' | 'bin';
 export interface MapNode { id: string; keys: RwStationKey[]; label: string; row: MapRow; col: number; lock?: boolean; owner?: string; assign?: boolean; sub?: string; free?: boolean }
 export const NODES: MapNode[] = [
   { id: 'pre_approval', keys: ['pre_approval'], label: 'Pre-approval', row: 'wat', col: 2 },
@@ -25,16 +25,19 @@ export const NODES: MapNode[] = [
   { id: 'band_safe_out', keys: ['band_mgr_safe_out'], label: 'Manager safe', row: 'bra_ramp', col: 8, lock: true, owner: 'JV', sub: 'waiting · scan OUT back to band tech' },
   { id: 'band_qc', keys: ['band_qc'], label: 'QC inspect', row: 'bra', col: 9 },
   { id: 'safe_band', keys: ['into_safe_band', 'safe_await_head'], label: 'Manager safe', row: 'bra', col: 12, lock: true, owner: 'JV', sub: 'bracelet waits here for the head' },
+  // JV bin — the container's two homes: Vienna's safe overnight, JV's bench by day (BIN-JV scan moves everything inside)
+  { id: 'vc_safe', keys: ['vc_safe'], label: "Vienna's safe (VC)", row: 'bin', col: 3, lock: true, sub: 'JV bin overnight · BIN-JV scan · tickets enter here' },
+  { id: 'jv_bench', keys: ['jv_bench'], label: "JV's bench", row: 'bin', col: 4, sub: 'JV bin by day · custody JV workshop' },
 ];
-const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4 };
-const TRACK_LINES: string[][] = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band']];
+const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4, bin: 5 };
+const TRACK_LINES: string[][] = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band'], ['vc_safe', 'jv_bench']];
 const RAMPS: { from: string; leg: string[]; to: string }[] = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }, { from: 'assign_band', leg: ['band_safe_in', 'refinish', 'band_safe_out'], to: 'band_qc' }];
 
 // Badge code by room / custodian: W · <watchmaker> (head lane), P · <refinisher> (polish leg), B · <band tech> (band lane), FA / T / ✓ for the shared column
-export const roomCode = (d: FloorDot): string => { const s = d.station; const who = d.tech ? ` · ${d.tech}` : ''; if (s === 'final_assembly') return `FA${who}`; if (s === 'testing') return `T${who}`; if (s === 'finished') return `✓${who}`; if (s === 'polish_room' || s === 'refinish' || s.includes('polish')) return `P${who}`; if (s.startsWith('band') || s === 'into_safe_band' || s === 'safe_await_head') return `B${who}`; return `W${who}`; };
+export const roomCode = (d: FloorDot): string => { const s = d.station; const who = d.tech ? ` · ${d.tech}` : ''; if (s === 'final_assembly') return `FA${who}`; if (s === 'testing') return `T${who}`; if (s === 'finished') return `✓${who}`; if (s === 'jv_bench' || s === 'vc_safe') return `B${who}${d.container ? ' · bin' : ''}`; if (s === 'polish_room' || s === 'refinish' || s.includes('polish')) return `P${who}`; if (s.startsWith('band') || s === 'into_safe_band' || s === 'safe_await_head') return `B${who}`; return `W${who}`; };
 const Dot = ({ d, onOpen, focus }: { d: FloorDot; onOpen: () => void; focus?: Set<string> }) => {
   const hit = focus?.has(d.jobId); const dim = focus && !hit;
-  return <button draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', `${d.jobId}|${d.key}`)} onClick={onOpen} data-testid={`floor-dot-${d.jobId}-${d.key}`} data-focus={hit ? 'true' : undefined} title={`${d.jobNumber} · ${d.label} · ${d.watchLabel}${d.tech ? ` · ${d.tech}` : ' · UNASSIGNED'}${d.itemLabel ? ` · ${d.itemLabel}` : ''}`} className={`inline-flex items-center gap-1 rounded-full border bg-[#0f131a] px-1.5 py-0.5 text-[10px] text-slate-200 hover:-translate-y-px ${dim ? 'opacity-20' : ''} ${hit ? 'ring-2 ring-accent' : ''} ${d.priority === 'urgent' ? 'border-rose-400' : d.priority === 'high' ? 'border-orange-400/70' : 'border-white/15'}`}>
+  return <button draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', `${d.jobId}|${d.key}`)} onClick={onOpen} data-testid={`floor-dot-${d.jobId}-${d.key}`} data-focus={hit ? 'true' : undefined} data-container={d.container} title={`${d.jobNumber} · ${d.label} · ${d.watchLabel}${d.tech ? ` · ${d.tech}` : ' · UNASSIGNED'}${d.itemLabel ? ` · ${d.itemLabel}` : ''}${d.container ? ' · in JV bin' : ''}`} className={`inline-flex items-center gap-1 rounded-full border bg-[#0f131a] px-1.5 py-0.5 text-[10px] text-slate-200 hover:-translate-y-px ${dim ? 'opacity-20' : ''} ${hit ? 'ring-2 ring-accent' : ''} ${d.priority === 'urgent' ? 'border-rose-400' : d.priority === 'high' ? 'border-orange-400/70' : 'border-white/15'}`}>
     <span style={{ background: PART_COLOR[d.key] }} className="h-3 w-3 rounded-full" /><span className="font-mono">{hit ? d.estimateNumber ?? d.jobNumber : d.jobNumber.slice(-4)}</span>{hit ? <span className="rounded bg-amber-400/20 px-1 font-semibold text-amber-200">{roomCode(d)}{d.itemLabel ? ` · ${d.itemLabel}` : ''}</span> : d.tech ? <span className="text-slate-500">{d.tech}</span> : <span className="text-amber-300">?</span>}
   </button>;
 };
@@ -70,13 +73,14 @@ export const StationMap = ({ dots, onDrop, onOpen, onSelect, selectedId, focus }
   const dropTo = (n: MapNode) => (e: React.DragEvent) => onDrop(targetKey(n, dots), e);
   return <div data-testid="station-map" ref={host} className="relative rounded-md border border-white/10 bg-[#141920] p-3">
     <svg data-testid="station-map-lines" className="pointer-events-none absolute inset-0 z-0" width={size.w} height={size.h}>{paths.map((p, i) => <path key={i} d={p.d} fill="none" stroke={p.kind === 'ramp' ? '#f59e0b' : p.kind === 'merge' ? '#94a3b8' : '#64748b'} strokeWidth={p.kind === 'ramp' ? 2 : 1.5} strokeDasharray={p.kind === 'ramp' ? undefined : '5 5'} opacity={p.kind === 'ramp' ? 0.9 : 0.7} />)}</svg>
-    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(4, auto)' }}>
+    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(5, auto)' }}>
       <div style={{ gridColumn: 1, gridRow: 1 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-blue-300" data-testid="track-label-wat">WAT</div>
       <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       <div style={{ gridColumn: 1, gridRow: 3 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-green-300" data-testid="track-label-bra">BRA</div>
       <div style={{ gridColumn: 1, gridRow: 4 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
+      <div style={{ gridColumn: 1, gridRow: 5 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-amber-300" data-testid="track-label-bin">JV BIN</div>
       {NODES.map((n) => <Node key={n.id} n={n} dots={at(n.keys)} onDrop={dropTo(n)} onOpen={onOpen} onSelect={onSelect} selected={selectedId === n.id} focus={focus} />)}
-      <div style={{ gridColumn: 13, gridRow: '1 / span 4' }} className="grid grid-rows-3 gap-2">
+      <div style={{ gridColumn: 13, gridRow: '1 / span 5' }} className="grid grid-rows-3 gap-2">
         {([['final', 'final_assembly', 'Final assembly'], ['testing', 'testing', 'Testing'], ['finished', 'finished', 'Finished']] as [string, RwStationKey, string][]).map(([id, k, label]) => <Node key={id} n={{ id, keys: [k], label, row: 'wat', col: 13, free: true }} dots={at([k])} onDrop={(e) => onDrop(k, e)} onOpen={onOpen} onSelect={onSelect} selected={selectedId === id} focus={focus} />)}
       </div>
     </div>
