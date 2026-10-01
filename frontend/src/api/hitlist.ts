@@ -1,4 +1,4 @@
-import { directReports, hitlistBridge as b } from './client';
+import { directReports, hitlistBridge as b, logShare } from './client';
 import { daysAgo } from './fixtures/time';
 import { roleKind, ROLE_HOME } from '@/config/roles';
 import type { Assignee, PackagePhoto, PinnedItem, Role, TodayRow, User } from './types';
@@ -48,6 +48,10 @@ const inbox: InboxItem[] = [
   { id: 'ib-10', to: { type: 'user', shortName: 'Vienna' }, from: 'Leo', text: 'Pre-existing scratch across the case back at 4 o’clock — photographed BEFORE I opened it. Logging so it isn’t pinned on the bench later.', photo: img('rs-caseback-scratch'), jobId: 'j-16', createdAt: daysAgo(0, 7.4), station: 'Watchmaker Room Kiosk', readBy: ['Vienna'], seenAt: daysAgo(0, 7.3) },
   { id: 'ib-11', to: { type: 'user', shortName: 'Leo' }, from: 'Vienna', text: 'Re: Pre-existing scratch — noted and logged on the job, you’re covered. Carry on.', jobId: 'j-16', replyToId: 'ib-10', createdAt: daysAgo(0, 7.1), station: 'Front Desk 1', readBy: [] },
   { id: 'ib-12', to: { type: 'station', stationId: 'st-01' }, from: 'JV', text: 'Calloway is picking up E02040 at 3 — the bracelet is in the finished tray, not the safe.', jobId: 'j-16', createdAt: daysAgo(0, 9.6), station: 'Band Room', readBy: [] },
+  // One general Inbox (2026-10-01): "Share with staff" — MH forwards Calloway's client message (quoted + thread link) to JV; the link only resolves for MH / VC / CM
+  { id: 'ib-13', to: { type: 'user', shortName: 'JV' }, from: 'MH', text: 'Client message — Robert Calloway · yesterday 1:00 PM:\n“Appreciated. Please keep the original inspection report handy — I would like to compare the before/after crown notes.”\nThread: /inbox?thread=cv-ib4 (opens for MH · VC · CM)\nJV — can you pull the E01871 crown notes before Leo opens it?', jobId: 'j-wr1', createdAt: daysAgo(0, 7.9), station: 'Front Desk 1', readBy: ['JV'], seenAt: daysAgo(0, 7.6) },
+  { id: 'ib-14', to: { type: 'user', shortName: 'Nico' }, from: 'JV', text: 'Bin is at my bench — pull the Milgauss (02078) ticket first, it is due tomorrow.', jobId: 'j-b9', createdAt: daysAgo(0, 8.4), station: 'Band Room', readBy: ['Nico'], seenAt: daysAgo(0, 8.3), doneBy: 'Nico', doneAt: daysAgo(0, 8.0) },
+  { id: 'ib-15', to: { type: 'user', shortName: 'MH' }, from: 'Chyna', text: 'Pemberton asked which strap we fitted at pickup — I tagged the thread Update work order; can you check the E02019 pickup notes?', jobId: 'j-09', createdAt: daysAgo(0, 6.9), station: 'Front Desk 2', readBy: [] },
 ];
 const jobRef = (jobId?: string) => { const j = jobId ? b.jobs().find((x) => x.id === jobId) : undefined; if (!j) return {}; const w = b.watches().find((x) => x.id === j.watchId); const c = b.clients().find((x) => x.id === j.clientId); return { jobNumber: j.number, jobLabel: `${c ? `${c.firstName} ${c.lastName}` : ''}${w ? ` · ${w.brand} ${w.model}` : ''}` }; };
 // Role-tagged items are a CLAIMABLE QUEUE, not fan-out: every holder sees it until one claims it, then it is theirs alone
@@ -91,6 +95,8 @@ export const stationTargets = () => b.stations().filter((s) => s.id !== b.statio
 export interface FlagInput { id?: string; to: Assignee; text?: string; photo?: PackagePhoto; jobId?: string; from?: string; kind?: 'flag' | 'message'; replyToId?: string }
 // Same-tab signal for the message bubble (unread badge + 3-second banner) — fires on every new inbox row
 export const MESSAGE_EVENT = 'rollisuite:message';
+// Fired after a thread-side change made from outside the Inbox page (e.g. a share logged from the bubble) so an open thread re-reads
+export const INBOX_REFRESH_EVENT = 'rollisuite:inbox-refresh';
 const announce = (item: InboxItem) => { try { window.dispatchEvent(new CustomEvent(MESSAGE_EVENT, { detail: item })); } catch { /* non-browser */ } };
 // raw rows for system syncs (Concierge alerts) — idempotent ids like ib-swo-<swo>-<kind>
 export const inboxRowsFor = () => inbox;
@@ -108,6 +114,23 @@ export async function flagToHitlist(input: FlagInput): Promise<{ inbox: InboxIte
 }
 // Send = one-shot directed message (person / #role / station). Lands as an inbox row + hitlist pin. No thread.
 export const sendMessage = (input: Omit<FlagInput, 'kind'>) => flagToHitlist({ ...input, kind: 'message' });
+// "Share with staff" (one general Inbox, 2026-10-01): a client message travels to staff as a one-shot message — QUOTED (name · date · text · photos) + the thread link
+// (resolves only for MH / VC / CM; everyone else just sees the quote). Logged on the thread ("Shared with JV by MH").
+export const quoteClientMessage = (m: { by: string; at: string; text: string; photos?: PackagePhoto[] }, conversationId: string) => `Client message — ${m.by} · ${new Date(m.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}:\n“${m.text.trim()}”${m.photos?.length ? `\n[${m.photos.length} photo${m.photos.length === 1 ? '' : 's'} attached]` : ''}\nThread: /inbox?thread=${conversationId} (opens for MH · VC · CM)`;
+export async function shareClientMessage(input: { conversationId: string; messageId: string; to: Assignee[]; note?: string; quote: string; photo?: PackagePhoto; jobId?: string }): Promise<InboxItem[]> {
+  if (!input.to.length) throw new Error('Pick at least one recipient');
+  const text = `${input.quote}${input.note?.trim() ? `\n${input.note.trim()}` : ''}`;
+  const out: InboxItem[] = []; for (const to of input.to) out.push((await sendMessage({ to, text, photo: input.photo, jobId: input.jobId })).inbox);
+  await logShare(input.conversationId, input.messageId, input.to.map((t) => b.label(t).split(' →')[0]));
+  try { window.dispatchEvent(new CustomEvent(INBOX_REFRESH_EVENT, { detail: { conversationId: input.conversationId } })); } catch { /* non-browser */ }
+  return out;
+}
+// Super-admin folders (MH only, Internal tree): one folder per staff name — everything they sent, received, claimed or completed
+export const staffFolders = (): { name: string; count: number }[] => { const first = ['MH', 'Vienna', 'Chyna']; return Array.from(new Set(b.users().filter((u) => !u.disabled).map((u) => u.shortName))).sort((x, y) => (first.includes(x) ? first.indexOf(x) : 99) - (first.includes(y) ? first.indexOf(y) : 99) || x.localeCompare(y)).map((name) => ({ name, count: allMessagesSync(name).length })); };
+// Super-admin list (MH only): every staff one-shot message, newest first, with status + job + photo — read-only
+export interface AllMessageRow extends InboxItem { status: MessageStatus; toLabel: string; jobNumber?: string; jobLabel?: string }
+export const allMessagesSync = (staff?: string): AllMessageRow[] => inbox.filter((m) => !staff || m.from === staff || (m.to.type === 'user' && m.to.shortName === staff) || m.claimedBy === staff || m.doneBy === staff).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).map((m) => ({ ...m, status: messageStatus(m), toLabel: m.to.type === 'role' ? `#${m.to.role}${m.claimedBy ? ` → ${m.claimedBy}` : ''}` : b.label(m.to).split(' →')[0], ...jobRef(m.jobId) }));
+export const messageStaffNames = (): string[] => Array.from(new Set(inbox.flatMap((m) => [m.from, m.to.type === 'user' ? m.to.shortName : '', m.claimedBy ?? '']).filter((s) => s && s !== 'Vonage' && s !== 'system'))).sort();
 // Reply to an inbox message — lands in the ORIGINAL SENDER's inbox + hitlist (their bench iPad), never back at the shared kiosk it was sent from
 export async function replyToInbox(inboxId: string, text: string, fromOverride?: string): Promise<InboxItem> {
   const orig = inbox.find((x) => x.id === inboxId); if (!orig) throw new Error('Message not found'); if (!text.trim()) throw new Error('Type a reply');

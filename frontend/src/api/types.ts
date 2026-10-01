@@ -1109,18 +1109,24 @@ export interface PhotoLabel extends Stamp { id: string; photoId: string; jobId: 
 // ---- E14 Comms hub -----------------------------------------------------------------------------------
 export type ConversationStatus = 'open' | 'snoozed' | 'closed';
 export interface ConversationAnchor { kind: 'request' | 'estimate' | 'job'; id: string }
+// One general Inbox (MH 2026-10-01): threads are UNOWNED — tags (people + "Update work order") instead of assignment; pin to top; lanes Quoted / Answered; status 'closed' = Archived.
+export type ConvTag = 'vienna' | 'mike' | 'chyna' | 'update_wo';
+export type ConvLane = 'quoted' | 'answered';
 export interface Conversation {
   id: string; clientId: string; subject: string; anchor?: ConversationAnchor; status: ConversationStatus; assignedTo?: Assignee; division: Division;
   createdAt: string; lastAt: string; lastInboundAt?: string; lastOutboundAt?: string; snoozedUntil?: string; snoozedBy?: string; closedAt?: string; closedBy?: string; tokenSeq: number;
+  tags?: ConvTag[]; pinned?: boolean; lane?: ConvLane;
 }
 export type MessageSource = 'portal' | 'email' | 'kiosk' | 'approval' | 'photo' | 'parts' | 'pickup' | 'staff' | 'note' | 'system';
 export interface ConvMessage {
   id: string; conversationId: string; clientId: string; direction: 'in' | 'out' | 'internal'; source: MessageSource; by: string; station?: string; text: string; at: string;
   token?: string; matchedToken?: string; readByStaff: boolean; photos?: PackagePhoto[]; emailId?: string; templateKey?: TemplateKey; cleared?: { by: string; at: string };
   component?: ComponentKey; ask?: AskDraft; // portal "Ask about this" — tagged to the dot; the pre-drafted client update rides with the message
-  event?: { kind: 'estimate_approved' | 'estimate_declined' | 'parts_approved' | 'parts_rejected' | 'pickup_window' | 'photo_submitted'; refId: string; label: string };
+  event?: { kind: 'estimate_approved' | 'estimate_declined' | 'parts_approved' | 'parts_rejected' | 'pickup_window' | 'photo_submitted' | 'shared'; refId: string; label: string };
 }
 export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
+// New list model: who = person tag filter (ALL · MIKE · VIENNA · CHYNA); lane = Quoted / Answered sections under All; archived out of the way
+export interface InboxFilter { who?: Exclude<ConvTag, 'update_wo'>; lane?: ConvLane | 'archived' | 'snoozed' }
 export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; unreplied: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string; linkedEstimate?: { id: string; number: string; status: string } }
 export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
 export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[]; source: 'shop' | 'personal'; owner?: string }

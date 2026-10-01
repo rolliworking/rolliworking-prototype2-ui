@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { ToastHost, toast } from '@/components/ui/Toast';
 import { desktopAllowed, padAllowed, roleKind, rwAllowed, ROLE_HOME, ROLE_LABEL, type RoleKind } from '@/config/roles';
@@ -156,6 +156,8 @@ function RwManagerOnly({ label, children }: { label: string; children: JSX.Eleme
 const InspectionRedirect = () => { const { id } = useParams(); const { search } = useLocation(); return <Navigate to={`/intake/inspect/${id}${search}`} replace />; };
 const InspectionNewRedirect = () => { const { search } = useLocation(); return <Navigate to={`/intake/inspect/new${search}`} replace />; };
 const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`/rw/testing/test/${jobId}`} replace />; };
+// Super-admin staff-message folders live inside the Inbox's Internal tree (one tree, Outlook layout); /messages/all?staff=<Short> is the URL those folders resolve to
+const MessagesAllRedirect = () => { const [p] = useSearchParams(); return <Navigate to={`/inbox?section=staff&staff=${encodeURIComponent(p.get('staff') ?? 'all')}${p.get('msg') ? `&msg=${p.get('msg')}` : ''}`} replace />; };
 
 export default function App() {
   return (
@@ -272,6 +274,7 @@ export default function App() {
                 <Route path="trade" element={<TradeScanInPage />} />
               </Route>
               <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/messages/all" element={<MessagesAllRedirect />} />
               <Route path="/requests" element={<RequestsPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />

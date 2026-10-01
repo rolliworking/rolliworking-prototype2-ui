@@ -9,17 +9,23 @@ import { isPadDevice } from '@/config/device';
 import { SentList } from './MessageComposer';
 import { MessageDirectory, type ComposeTarget } from './MessageDirectory';
 import { MessageInbox } from './MessageInbox';
+import type { ShareDetail } from './ShareCompose';
 
 type Tab = 'send' | 'inbox' | 'sent';
 const TABS: { key: Tab; label: string }[] = [{ key: 'send', label: 'SEND' }, { key: 'inbox', label: 'INBOX' }, { key: 'sent', label: 'SENT' }];
+// Other screens open the bubble's composer: Inbox → "Share with staff" (quoted client message, pick recipients) or "Reply" on a staff message
+export const BUBBLE_COMPOSE_EVENT = 'rollisuite:bubble-compose';
+export interface BubbleComposeDetail { replyTo?: InboxRow; share?: ShareDetail }
 
 // Floating message bubble on every desktop / pad screen (kiosks never mount a shell). Tap → slide-up panel (380 px desktop · full sheet on pads): SEND · INBOX · SENT.
 // One-shot, directed messages — no threads; a reply is a new message back. New row for me → 3-second top banner.
 export const MessageBubble = ({ variant = 'rs' }: { variant?: 'rs' | 'rw' }) => {
   const { user, station } = useAuth();
-  const [open, setOpen] = useState(false); const [tab, setTab] = useState<Tab>('send'); const [tick, setTick] = useState(0); const [reply, setReply] = useState<ComposeTarget | null>(null);
+  const [open, setOpen] = useState(false); const [tab, setTab] = useState<Tab>('send'); const [tick, setTick] = useState(0); const [reply, setReply] = useState<ComposeTarget | null>(null); const [share, setShare] = useState<ShareDetail | null>(null);
   const [unread, setUnread] = useState(0); const [banner, setBanner] = useState<InboxRow | null>(null); const [ok, setOk] = useState<string | null>(null);
   const dark = variant === 'rw'; const pad = dark || isPadDevice(station);
+  const startReply = (r: InboxRow) => { setShare(null); setReply({ to: { type: 'user', shortName: r.from }, label: r.from, sub: 'reply — a new message back, no thread', jobId: r.jobId, replyToId: r.id, replyText: r.text ?? 'Photo' }); setTab('send'); };
+  useEffect(() => { const h = (e: Event) => { const d = (e as CustomEvent<BubbleComposeDetail>).detail; if (d.replyTo) startReply(d.replyTo); else if (d.share) { setReply(null); setShare(d.share); } setTab('send'); setOpen(true); }; window.addEventListener(BUBBLE_COMPOSE_EVENT, h); return () => window.removeEventListener(BUBBLE_COMPOSE_EVENT, h); }, []);
   useEffect(() => {
     if (!user) return;
     let prev = hl.unreadCount(user.id); setUnread(prev);
@@ -32,7 +38,6 @@ export const MessageBubble = ({ variant = 'rs' }: { variant?: 'rs' | 'rw' }) => 
   useEffect(() => { if (!ok) return; const t = window.setTimeout(() => setOk(null), 2500); return () => window.clearTimeout(t); }, [ok]);
   if (!user) return null;
   const bump = () => setTick((t) => t + 1);
-  const startReply = (r: InboxRow) => { setReply({ to: { type: 'user', shortName: r.from }, label: r.from, sub: 'reply — a new message back, no thread', jobId: r.jobId, replyToId: r.id, replyText: r.text ?? 'Photo' }); setTab('send'); };
   const shell = dark ? 'border-white/10 bg-[#1f2630] text-slate-100' : 'border-line bg-surface text-ink'; const muted = dark ? 'text-slate-400' : 'text-ink-400';
   const bottom = variant === 'rw' ? 'calc(64px + 12px + env(safe-area-inset-bottom))' : '16px';
   return <>
@@ -43,11 +48,11 @@ export const MessageBubble = ({ variant = 'rs' }: { variant?: 'rs' | 'rw' }) => 
     {open && createPortal(<div data-testid="msg-panel" data-pad={pad} className={clsx('fixed z-[85] flex flex-col border shadow-2xl', shell, pad ? 'inset-0 animate-sheet-up' : 'right-4 w-[380px] max-h-[72vh] rounded-xl animate-sheet-up')} style={pad ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : { bottom: 'calc(16px + 56px)' }}>
       <div className={`flex items-center gap-2 border-b px-3 ${dark ? 'border-white/10' : 'border-line'} ${pad ? 'min-h-[56px]' : 'h-11'}`}>
         <MessageCircle size={16} className={dark ? 'text-accent' : 'text-ink-500'} /><span className="text-sm font-semibold">Messages</span>
-        <div data-testid="msg-tabs" className={`ml-2 flex rounded-md border text-[11px] font-semibold tracking-wide ${dark ? 'border-white/15' : 'border-line'}`}>{TABS.map((t) => <button key={t.key} type="button" data-testid={`msg-tab-${t.key}`} aria-selected={tab === t.key} onClick={() => { setTab(t.key); if (t.key !== 'send') setReply(null); }} className={clsx('relative px-3', pad ? 'min-h-[40px]' : 'h-7', tab === t.key ? (dark ? 'bg-accent text-[#161b22]' : 'bg-ink text-white') : muted)}>{t.label}{t.key === 'inbox' && unread > 0 && <span data-testid="msg-tab-inbox-unread" className="ml-1 rounded-full bg-rose-600 px-1.5 text-[10px] text-white">{unread}</span>}</button>)}</div>
+        <div data-testid="msg-tabs" className={`ml-2 flex rounded-md border text-[11px] font-semibold tracking-wide ${dark ? 'border-white/15' : 'border-line'}`}>{TABS.map((t) => <button key={t.key} type="button" data-testid={`msg-tab-${t.key}`} aria-selected={tab === t.key} onClick={() => { setTab(t.key); if (t.key !== 'send') { setReply(null); setShare(null); } }} className={clsx('relative px-3', pad ? 'min-h-[40px]' : 'h-7', tab === t.key ? (dark ? 'bg-accent text-[#161b22]' : 'bg-ink text-white') : muted)}>{t.label}{t.key === 'inbox' && unread > 0 && <span data-testid="msg-tab-inbox-unread" className="ml-1 rounded-full bg-rose-600 px-1.5 text-[10px] text-white">{unread}</span>}</button>)}</div>
         <button type="button" data-testid="msg-panel-close" onClick={() => setOpen(false)} aria-label="Close" className={`ml-auto grid place-items-center rounded-md ${muted} hover:opacity-80 ${pad ? 'h-11 w-11' : 'h-7 w-7'}`}><X size={16} /></button>
       </div>
       <div className={clsx('min-h-0 flex-1 overflow-y-auto px-3 py-3', pad && 'mx-auto w-full max-w-3xl')}>
-        {tab === 'send' && <MessageDirectory dark={dark} pad={pad} initial={reply} onSent={(l) => { setReply(null); setOk(l); bump(); }} />}
+        {tab === 'send' && <MessageDirectory dark={dark} pad={pad} initial={reply} share={share} onSent={(l) => { setReply(null); setShare(null); setOk(l); bump(); }} />}
         {tab === 'inbox' && <MessageInbox me={user} dark={dark} pad={pad} tick={tick} onChange={bump} onReply={startReply} jobBase={dark ? '/rw/jobs' : '/jobs'} />}
         {tab === 'sent' && <SentList dark={dark} tick={tick} testId="msg-sent" />}
       </div>

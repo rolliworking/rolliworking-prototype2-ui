@@ -3721,7 +3721,7 @@ export async function labelPhoto(input: { photoId: string; jobId: string; source
 export const companionCanSeeMoney = canSeeMoney;
 
 // ---- E14 Comms hub — one thread-space per client; Sent-record only (nothing leaves); reply-token routing (mocked) ----
-import type { ConvMessage, Conversation, ConversationAnchor, ConversationWithRefs, InboxView, MessageSource, RenderedTemplate, ThreadView } from './types';
+import type { ConvLane, ConvMessage, ConvTag, Conversation, ConversationAnchor, ConversationWithRefs, InboxFilter, InboxView, MessageSource, RenderedTemplate, ThreadView } from './types';
 
 const cx = { conversations: fx.conversations.map((c): Conversation => ({ ...c })), messages: fx.convMessages.map((m): ConvMessage => ({ ...m })) };
 const cxStamp = (detail: string) => { const a = actor(); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); };
@@ -3781,6 +3781,36 @@ export async function clearMessage(conversationId: string, messageId: string): P
   return getThread(conversationId);
 }
 export async function markConversationRead(id: string): Promise<void> { cx.messages.filter((m) => m.conversationId === id && m.direction === 'in').forEach((m) => { m.readByStaff = true; }); return resolve(undefined); }
+// ---- ONE GENERAL INBOX (MH 2026-10-01): All · tag-don't-assign · pin · lanes · archive ----
+export const CONV_TAGS: { key: ConvTag; label: string; short: string; dot: string; kind: 'person' | 'status' }[] = [
+  { key: 'vienna', label: 'Vienna', short: 'VC', dot: 'bg-teal-500', kind: 'person' }, { key: 'mike', label: 'Mike', short: 'MH', dot: 'bg-indigo-500', kind: 'person' }, { key: 'chyna', label: 'Chyna', short: 'CM', dot: 'bg-pink-500', kind: 'person' },
+  { key: 'update_wo', label: 'Update work order', short: 'WO', dot: 'bg-amber-500', kind: 'status' },
+];
+export const tagOfUser = (u?: User | null): Exclude<ConvTag, 'update_wo'> | undefined => (u?.shortName === 'Vienna' ? 'vienna' : u?.shortName === 'MH' ? 'mike' : u?.shortName === 'Chyna' ? 'chyna' : undefined);
+const sortThreads = (rows: ConversationWithRefs[]) => rows.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Number(b.needsReply) - Number(a.needsReply) || b.lastAt.localeCompare(a.lastAt));
+// Every client thread lands in All, unowned. who = person tag filter (their action items). lane = Quoted / Answered / Archived / Snoozed.
+export async function getInboxThreads(filter: InboxFilter = {}): Promise<ConversationWithRefs[]> {
+  wakeSnoozed(); const div = getSessionDivision(); let rows = cx.conversations.filter((c) => c.division === div).map(convRefs);
+  if (filter.lane === 'archived') return resolve(rows.filter((r) => r.status === 'closed').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '')));
+  rows = rows.filter((r) => r.status !== 'closed');
+  if (filter.lane === 'snoozed') rows = rows.filter((r) => r.status === 'snoozed'); else if (filter.lane) rows = rows.filter((r) => r.lane === filter.lane);
+  if (filter.who) rows = rows.filter((r) => r.tags?.includes(filter.who!));
+  return resolve(sortThreads(rows));
+}
+export async function getInboxThreadCounts(): Promise<{ all: number; needsReply: number; quoted: number; answered: number; archived: number; snoozed: number; byTag: Record<ConvTag, number> }> {
+  wakeSnoozed(); const div = getSessionDivision(); const rows = cx.conversations.filter((c) => c.division === div).map(convRefs); const live = rows.filter((r) => r.status !== 'closed');
+  const byTag = { vienna: 0, mike: 0, chyna: 0, update_wo: 0 } as Record<ConvTag, number>; live.forEach((r) => r.tags?.forEach((t) => { byTag[t] += 1; }));
+  return resolve({ all: live.length, needsReply: live.filter((r) => r.needsReply).length, quoted: live.filter((r) => r.lane === 'quoted').length, answered: live.filter((r) => r.lane === 'answered').length, archived: rows.length - live.length, snoozed: live.filter((r) => r.status === 'snoozed').length, byTag });
+}
+export async function tagConversation(id: string, tag: ConvTag, on = true): Promise<ConversationWithRefs> { const c = convOf(id); const cur = new Set(c.tags ?? []); if (on) cur.add(tag); else cur.delete(tag); c.tags = cur.size ? [...cur] : undefined; const t = CONV_TAGS.find((x) => x.key === tag)!; cxStamp(`${on ? 'Tagged' : 'Untagged'} ${t.label} · ${c.subject}`); return resolve(convRefs(c)); }
+export async function pinConversation(id: string, on = true): Promise<ConversationWithRefs> { const c = convOf(id); c.pinned = on || undefined; cxStamp(`${on ? 'Pinned' : 'Unpinned'} · ${c.subject}`); return resolve(convRefs(c)); }
+export async function moveConversation(id: string, lane: ConvLane | null): Promise<ConversationWithRefs> { const c = convOf(id); c.lane = lane ?? undefined; cxStamp(`Moved to ${lane ?? 'All'} · ${c.subject}`); return resolve(convRefs(c)); }
+// Archive = one click; tags clear; a new client message on an archived thread un-archives it into All (pushConv)
+export async function archiveConversation(id: string): Promise<ConversationWithRefs> { const c = convOf(id); const a = actor(); c.status = 'closed'; c.closedAt = new Date().toISOString(); c.closedBy = a.by; c.tags = undefined; c.pinned = undefined; c.snoozedUntil = undefined; cxStamp(`Archived · ${c.subject}`); return resolve(convRefs(c)); }
+export const unarchiveConversation = (id: string) => reopenConversation(id);
+export const tagsForRequestSync = (requestId: string): ConvTag[] => conversationForRequestSync(requestId)?.tags ?? [];
+// "Share with staff" is logged on the thread — the quote itself travels as a staff one-shot message (hitlist.shareClientMessage)
+export async function logShare(conversationId: string, messageId: string, toLabels: string[]): Promise<ConvMessage> { const c = convOf(conversationId); const a = actor(); const m = pushConv(c, { direction: 'internal', source: 'system', by: a.by, station: a.station, text: `Shared with ${toLabels.join(', ')} by ${a.by}`, at: new Date().toISOString(), event: { kind: 'shared', refId: messageId, label: `Shared with ${toLabels.join(', ')}` } }); cxStamp(`Client message shared with ${toLabels.join(', ')} · ${c.subject}`); return resolve(m); }
 // ---- Inbox job-card slide-out + sidebar badges (MH 2026-10-01) ----
 export const inboxUnreadCountSync = () => { const open = new Set(cx.conversations.filter((c) => c.status !== 'closed' && c.division === getSessionDivision()).map((c) => c.id)); return cx.messages.filter((m) => m.direction === 'in' && !m.readByStaff && open.has(m.conversationId)).length; };
 export const openRequestsNoEstimateCountSync = () => store.requests.filter((r) => r.status !== 'closed' && !r.estimateId && (r.division ?? 'rolliworks') === getSessionDivision()).length;
@@ -3851,12 +3881,14 @@ const renderWith = (key: TemplateKey, ctx: { clientId: string; anchor?: Conversa
 export async function renderTemplate(conversationId: string, key: TemplateKey, shopDefault = false): Promise<RenderedTemplate> { return resolve(renderWith(key, convOf(conversationId), shopDefault)); }
 export async function renderTemplateForEstimate(estimateId: string, shopDefault = false): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...(() => { const r = renderWith('estimate_sent', ctx, shopDefault); return { ...r, subject: clientRefSubject(r.subject, e.clientRef) }; })(), vals: mergeValues(ctx) }); }
 export async function mergeValuesForConversation(conversationId: string): Promise<Record<string, string>> { return resolve(mergeValues(convOf(conversationId))); }
+// The client sees the replier's NAME on every message — "— Vienna, Rolliworks" (appended unless the reply already signs off)
+const signed = (text: string, by: string, div: Division) => { const t = text.trim(); const sig = `— ${by}, ${div === 'rollishop' ? 'Rollishop' : 'Rolliworks'}`; return /—\s*[A-Z][a-z]+,\s*Rolli(works|shop)\s*$/.test(t) || t.endsWith(sig) ? t : `${t}\n\n${sig}`; };
 export async function replyInThread(id: string, input: { text: string; subject?: string; templateKey?: TemplateKey; photos?: PackagePhoto[] }): Promise<ConvMessage> {
   const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId);
   const token = `RT-${c.id.replace(/[^a-z0-9]/gi, '').toUpperCase()}-${++c.tokenSeq}`;
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: anchorRef(c.anchor).label ?? c.subject, status: 'pending', subject: input.subject?.trim() || `Re: ${c.subject}`, body: `${input.text.trim()}\n\n[reply token ${token}]${input.photos?.length ? `\n[${input.photos.length} photo${input.photos.length === 1 ? '' : 's'} attached]` : ''}`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
   queueOutbox(email);
-  const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: input.text.trim(), at: email.createdAt, token, emailId: email.id, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
+  const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: signed(input.text, a.by, c.division), at: email.createdAt, token, emailId: email.id, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
   await markConversationRead(id); if (c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; }
   cxStamp(`Reply queued → Sent · ${client.firstName} ${client.lastName} · ${token}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
 }

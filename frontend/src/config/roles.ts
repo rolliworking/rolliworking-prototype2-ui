@@ -24,3 +24,7 @@ export const canSupervise = (u: Pick<User, 'roles' | 'accessTier'>) => u.accessT
 // Team colour families (MM's merged view): W = watchmakers, B·P = band / polish. Never colour alone — always paired with the chip text.
 export const teamFamily = (u: Pick<User, 'roles'>): 'W' | 'B·P' | null => (u.roles.includes('watchmaker') ? 'W' : u.roles.some((r) => BAND_ROLES.includes(r)) ? 'B·P' : null);
 export const FAMILY_TONE: Record<'W' | 'B·P', string> = { W: 'bg-sky-100 text-sky-900 ring-sky-300', 'B·P': 'bg-orange-100 text-orange-900 ring-orange-300' };
+
+// One general Inbox (MH 2026-10-01): only MH · VC · CM message clients; everyone else never sees client threads (they get the quote via "Share with staff")
+export const CLIENT_COMMS_SHORTNAMES = ['MH', 'Vienna', 'Chyna'];
+export const canClientComms = (u?: User | null) => !!u && (CLIENT_COMMS_SHORTNAMES.includes(u.shortName) || u.id === 'u-michael');

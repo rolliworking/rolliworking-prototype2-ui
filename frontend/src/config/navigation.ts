@@ -57,8 +57,8 @@ const MGR: AccessTier[] = ['manager'];
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, tiers: ALL, built: true, blurb: 'Shop overview and daily priorities.' },
   // MH 2026-10-01: Inbox + Requests are their own top-level buttons directly below Dashboard (badges: unread · open requests without an estimate)
-  { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, built: true, blurb: 'Client messages from RolliConnect / email / kiosk; job-card slide-out; replies queue to Sent.' },
-  { key: 'requests', label: 'Requests', path: '/requests', icon: MessageSquarePlus, tiers: ALL, built: true, blurb: 'RQ submissions before an estimate exists — client, dots, source, age, assigned; row click opens the thread + submission.' },
+  { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, built: true, blurb: 'One general inbox: every client thread lands in All, unowned — tag, don’t assign; pin; Quoted / Answered; one-click archive. Internal tree (staff messages) and Calls alongside.' },
+  { key: 'requests', label: 'Requests', path: '/requests', icon: MessageSquarePlus, tiers: ALL, built: true, blurb: 'RQ submissions before an estimate exists — an unowned pool: client, dots, source, age, optional tags (right-click); row click opens the thread + submission.' },
   { key: 'today', label: 'Hitlist', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your personal work queue — bookmarkable at /hitlist/{you}: inbox, pinned, derived rows, tasks. Supervisors get a team rollup.' },
   { key: 'inbound', label: 'Shipping', path: '/shipping/inbound', icon: Truck, tiers: ALL, group: 'intake', built: true, blurb: 'Pre-arrival shipping: label requests, outstanding labels, in transit, delivered-unscanned. Track a package for a caller.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, group: 'intake', built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },

@@ -6,6 +6,7 @@ import * as hl from '@/api/hitlist';
 import type { Assignee, JobWithRefs, Presence, User } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { useDictation } from './MessageComposer';
+import { ShareCompose, type ShareDetail } from './ShareCompose';
 
 export interface ComposeTarget { to: Assignee; label: string; sub?: string; jobId?: string; replyToId?: string; replyText?: string }
 const PRESENCE: Record<Presence, string> = { away: 'bg-ink-300', with_client: 'bg-amber-500', at_bench: 'bg-emerald-500' };
@@ -14,11 +15,13 @@ const PRESENCE_DARK: Record<Presence, string> = { away: 'bg-slate-500', with_cli
 export const Avatar = ({ u, size, dark }: { u: User; size: number; dark?: boolean }) => <span aria-hidden style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }} className={clsx('grid shrink-0 place-items-center rounded-full font-mono font-semibold', dark ? 'bg-white/10 text-white' : 'bg-ink text-white')}>{hl.staffInitials(u)}</span>;
 
 // SEND — directory of people (initials + name + derived status dot), claimable roles, stations. Tap a tile → compose.
-export const MessageDirectory = ({ dark, pad, initial, onSent }: { dark?: boolean; pad: boolean; initial?: ComposeTarget | null; onSent: (label: string) => void }) => {
+export const MessageDirectory = ({ dark, pad, initial, share, onSent }: { dark?: boolean; pad: boolean; initial?: ComposeTarget | null; share?: ShareDetail | null; onSent: (label: string) => void }) => {
   const { station, user } = useAuth(); const div = station?.division ?? 'rolliworks';
-  const [target, setTarget] = useState<ComposeTarget | null>(initial ?? null);
+  const [target, setTarget] = useState<ComposeTarget | null>(initial ?? null); const [sharing, setSharing] = useState<ShareDetail | null>(share ?? null);
   useEffect(() => { setTarget(initial ?? null); }, [initial]);
+  useEffect(() => { setSharing(share ?? null); }, [share]);
   if (!user) return null;
+  if (sharing) return <ShareCompose share={sharing} dark={dark} pad={pad} onBack={() => setSharing(null)} onSent={(l) => { setSharing(null); onSent(l); }} />;
   if (target) return <Compose target={target} dark={dark} pad={pad} onBack={() => setTarget(null)} onSent={(l) => { setTarget(null); onSent(l); }} />;
   const people = api.getDivisionStaff(div).filter((u) => u.id !== user.id); const roles = api.getDivisionRoles(div); const stations = hl.stationTargets();
   const muted = dark ? 'text-slate-400' : 'text-ink-400'; const dotMap = dark ? PRESENCE_DARK : PRESENCE;
