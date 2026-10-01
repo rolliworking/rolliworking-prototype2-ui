@@ -94,13 +94,13 @@ export async function setDisposition(callId: string, disposition: CallDispositio
   }
   if (c.jobId && disposition !== 'approval_given') b.jobStamp(c.jobId, `Call (${c.direction === 'in' ? 'inbound' : 'outbound'}) · ${dispositionLabel(disposition)} · ${a.by}`);
   if (c.clientId && disposition !== 'approval_given') b.threadEvent(c.clientId, c.jobId, a.by, `Call · ${dispositionLabel(disposition)}${c.durationSec ? ` · ${Math.round(c.durationSec / 60)} min` : ''}`);
-  b.audit(`Call disposition · ${nameOf(c.clientId) ?? c.number} · ${dispositionLabel(disposition)}`); return resolve(c);
+  b.audit(`Call disposition · ${nameOf(c.clientId) ?? c.number} · ${dispositionLabel(disposition)}`); emit(null); return resolve(c);
 }
 // Unmatched caller → attach to an existing client (the card re-renders as matched)
 export const attachCallToClient = (callId: string, clientId: string): CallEvent => {
   const c = callOf(callId); const client = clientOf(clientId); if (!client) throw new Error('No such client'); c.clientId = clientId; const s = live.get(callId); if (s) { s.clientId = clientId; emit(s); }
   b.threadEvent(clientId, undefined, b.actor().by, `${c.direction === 'in' ? 'Inbound' : 'Outbound'} call from ${c.number} attached to this client`); b.audit(`Call attached · ${b.fullNameOf(client)} · ${c.number}`);
-  const ib = inboxRowsFor().find((r) => r.id === `ib-call-${callId}`); if (ib) ib.text = missedText(c); return c;
+  const ib = inboxRowsFor().find((r) => r.id === `ib-call-${callId}`); if (ib) ib.text = missedText(c); emit(null); return c;
 };
 
 // ---- Missed calls → front-desk role queue (claimable inbox item), cleared by an outbound call or a note ----
@@ -125,18 +125,18 @@ export async function logCall(input: { clientId: string; direction: 'in' | 'out'
   b.calls().unshift(row); b.threadEvent(c.id, input.jobId, a.by, `${input.direction === 'in' ? 'Inbound' : 'Outbound'} call (logged manually)${input.note ? ` · ${input.note.trim()}` : ''}`);
   if (input.jobId) b.jobStamp(input.jobId, `Call logged (manual, ${input.direction}) by ${a.by}${input.note ? ` · ${input.note.trim()}` : ''}`);
   if (input.direction === 'out') clearMissedFor(c.id, c.phone, 'called_back', a.by);
-  return resolve(row);
+  emit(null); return resolve(row);
 }
 // Notes append (who/when stamped) — never overwrite. A note on a missed call clears its inbox item.
-export async function addCallNote(id: string, text: string): Promise<CallEvent> { const c = callOf(id); if (!text.trim()) throw new Error('Write a note first'); const a = b.actor(); c.notes.push({ at: new Date().toISOString(), by: a.by, text: text.trim() }); if (c.clientId) b.threadEvent(c.clientId, c.jobId, a.by, `Call note · ${text.trim()}`); if (c.jobId) b.jobStamp(c.jobId, `Call note by ${a.by} · ${text.trim()}`); if (isMissed(c) && !c.resolvedAt) { c.resolvedAt = new Date().toISOString(); c.resolvedBy = a.by; c.resolution = 'handled'; closeMissedInbox(c, a.by); } return resolve(c); }
-export async function linkCallToJob(id: string, jobId?: string): Promise<CallEvent> { const c = callOf(id); c.jobId = jobId; if (jobId) b.jobStamp(jobId, `Call ${c.direction === 'in' ? 'from' : 'to'} client linked to this job by ${b.actor().by}`); return resolve(c); }
+export async function addCallNote(id: string, text: string): Promise<CallEvent> { const c = callOf(id); if (!text.trim()) throw new Error('Write a note first'); const a = b.actor(); c.notes.push({ at: new Date().toISOString(), by: a.by, text: text.trim() }); if (c.clientId) b.threadEvent(c.clientId, c.jobId, a.by, `Call note · ${text.trim()}`); if (c.jobId) b.jobStamp(c.jobId, `Call note by ${a.by} · ${text.trim()}`); if (isMissed(c) && !c.resolvedAt) { c.resolvedAt = new Date().toISOString(); c.resolvedBy = a.by; c.resolution = 'handled'; closeMissedInbox(c, a.by); } emit(null); return resolve(c); }
+export async function linkCallToJob(id: string, jobId?: string): Promise<CallEvent> { const c = callOf(id); c.jobId = jobId; if (jobId) b.jobStamp(jobId, `Call ${c.direction === 'in' ? 'from' : 'to'} client linked to this job by ${b.actor().by}`); emit(null); return resolve(c); }
 export async function getMissedCalls(): Promise<MissedCallRow[]> { ensureSeed(); return resolve(b.calls().filter((c) => isMissed(c) && !c.resolvedAt).sort((x, y) => y.at.localeCompare(x.at)).map((call) => { const client = clientOf(call.clientId); return { call, client, badge: client ? b.rating(client.id).badge : undefined }; })); }
 export async function resolveMissedCall(id: string, resolution: 'called_back' | 'handled', note?: string): Promise<CallEvent> {
   const c = callOf(id); const a = b.actor(); if (c.resolvedAt) throw new Error('Already cleared'); c.resolvedAt = new Date().toISOString(); c.resolvedBy = a.by; c.resolution = resolution;
   if (note?.trim()) c.notes.push({ at: c.resolvedAt, by: a.by, text: note.trim() });
   if (resolution === 'called_back') b.calls().unshift({ id: b.newId('call'), at: c.resolvedAt, direction: 'out', number: c.number, clientId: c.clientId, answeredBy: a.by, station: a.station, outcome: 'answered', jobId: c.jobId, disposition: 'status_inquiry', notes: note?.trim() ? [{ at: c.resolvedAt, by: a.by, text: note.trim() }] : [], afterHours: b.isAfterHours(c.resolvedAt) });
   if (c.clientId) b.threadEvent(c.clientId, c.jobId, a.by, `${resolution === 'called_back' ? 'Called back' : 'Handled'} missed call from ${clock(c.at)}${note ? ` · ${note.trim()}` : ''}`);
-  closeMissedInbox(c, a.by); return resolve(c);
+  closeMissedInbox(c, a.by); emit(null); return resolve(c);
 }
 
 // ---- Pop view: everything the card shows, derived live ----
@@ -170,7 +170,7 @@ export const scenarioNumber = (s: Scenario): string => {
   const hit = cands.find((x) => x.rows.length === 1 && Object.values(x.rows[0].legs).every((d) => d.state !== 'blocked') && Object.values(x.rows[0].legs).some((d) => d.state === 'ok')); return hit?.c.phone ?? '(646) 555-0105';
 };
 
-// ---- Seed: 15 calls across 6 clients (c-30 ×5 · c-05 ×2 · c-10 ×2 · c-36 ×2 · c-38 ×2 · c-02 ×1) + 1 unknown. Open missed calls carry their inbox item. ----
+// ---- Seed: 15 calls across 6 clients (c-30 ×5 · c-05 ×2 · c-10 ×3 · c-36 ×2 · c-38 ×2 · c-02 ×1) + 1 unknown. Open missed calls carry their inbox item. ----
 let seeded = false;
 const newestJob = (clientId: string) => b.jobs().filter((j) => j.clientId === clientId).sort((x, y) => y.createdAt.localeCompare(x.createdAt))[0]?.id;
 const seedCall = (id: string, clientId: string | undefined, daysBack: number, hour: number, direction: 'in' | 'out', outcome: CallEvent['outcome'], by: string | undefined, disposition?: CallDisposition, note?: string, dur?: number, noJob?: boolean): CallEvent => {
@@ -195,6 +195,7 @@ const ensureSeed = () => {
     seedCall('call-s13', 'c-38', 7, 11, 'in', 'answered', 'Chyna', 'estimate_discussed', undefined, 260),
     seedCall('call-s14', 'c-38', 1.2, 18, 'in', 'missed', undefined, 'missed', undefined, undefined, true),
     seedCall('call-s15', 'c-02', 8, 13, 'out', 'answered', 'Vienna', 'status_inquiry', 'Eleanor asked for photos of the dial before polish — sent via portal.', 180),
+    seedCall('call-s16', 'c-10', 0.3, 11, 'out', 'answered', 'Vienna', 'pickup_scheduled', 'Naomi will collect the Datejust Saturday morning.', 140),
   );
   b.calls().filter((c) => isMissed(c) && !c.resolvedAt).forEach(missedInboxItem);
 };
