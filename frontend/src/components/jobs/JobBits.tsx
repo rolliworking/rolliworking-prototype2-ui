@@ -5,7 +5,7 @@ import { ComponentWaitChips } from '@/components/jobs/ComponentWaitChips';
 import { Link, NavLink } from 'react-router-dom';
 import * as api from '@/api/client';
 import { ComponentChips } from '@/components/jobs/ComponentBits';
-import type { Client, HoldType, Job, JobKind, JobPriority, JobWithRefs, Role } from '@/api/client';
+import type { Client, ComponentKey, HoldType, Job, JobKind, JobPriority, JobWithRefs, Role } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -90,8 +90,8 @@ export const HoldBadge = ({ job, compact }: { job: JobWithRefs; compact?: boolea
   const h = api.activeHold(job);
   if (!h) return null;
   return (
-    <span data-testid={`hold-badge-${job.id}`} className="inline-flex items-center gap-1 rounded-sm bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-inset ring-rose-200" title={h.reason}>
-      <PauseCircle size={11} /> {h.type === 'parts' ? 'Parts hold' : 'Outsource hold'}{!compact && <span className="font-normal opacity-80">· parked from {h.priorStatus.replace(/_/g, ' ')}</span>}
+    <span data-testid={`hold-badge-${job.id}`} data-component={h.component} className="inline-flex items-center gap-1 rounded-sm bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-inset ring-rose-200" title={h.reason}>
+      <PauseCircle size={11} /> {h.type === 'parts' ? 'Parts hold' : 'Outsource hold'}{h.component && <span className="font-normal">· {api.PART_LABELS[h.component]} only</span>}{!compact && <span className="font-normal opacity-80">· parked from {h.priorStatus.replace(/_/g, ' ')}</span>}
     </span>
   );
 };
@@ -152,21 +152,22 @@ export const ReasonModal = ({ title, hint, confirmLabel, danger, testId, onClose
   );
 };
 
-export const HoldModal = ({ onClose, onConfirm }: { onClose: () => void; onConfirm: (type: HoldType, reason: string) => Promise<void> }) => {
+export const HoldModal = ({ onClose, onConfirm, components }: { onClose: () => void; onConfirm: (type: HoldType, reason: string, component?: ComponentKey) => Promise<void>; components?: { key: ComponentKey; label: string }[] }) => {
   const [type, setType] = useState<HoldType>('parts');
   return (
     <Modal onClose={onClose} testId="hold-modal" width="w-[460px]">
-      <HoldForm type={type} setType={setType} onClose={onClose} onConfirm={onConfirm} />
+      <HoldForm type={type} setType={setType} onClose={onClose} onConfirm={onConfirm} components={components} />
     </Modal>
   );
 };
 
-const HoldForm = ({ type, setType, onClose, onConfirm }: { type: HoldType; setType: (t: HoldType) => void; onClose: () => void; onConfirm: (type: HoldType, reason: string) => Promise<void> }) => {
+const HoldForm = ({ type, setType, onClose, onConfirm, components }: { type: HoldType; setType: (t: HoldType) => void; onClose: () => void; onConfirm: (type: HoldType, reason: string, component?: ComponentKey) => Promise<void>; components?: { key: ComponentKey; label: string }[] }) => {
   const [reason, setReason] = useState('');
+  const [component, setComponent] = useState<ComponentKey | undefined>(undefined);
   const [err, setErr] = useState<string | null>(null);
   const go = async () => {
     if (!reason.trim()) return setErr('A hold reason is required');
-    try { await onConfirm(type, reason); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
+    try { await onConfirm(type, reason, component); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
   };
   return (
     <div className="p-5">
@@ -177,6 +178,14 @@ const HoldForm = ({ type, setType, onClose, onConfirm }: { type: HoldType; setTy
           <button key={t} type="button" data-testid={`hold-type-${t}`} onClick={() => setType(t)} className={clsx('h-8 rounded-sm border px-3 text-xs font-medium', type === t ? 'border-ink bg-ink text-white' : 'border-line text-ink-500 hover:border-ink-300')}>{t === 'parts' ? 'Parts hold' : 'Outsource hold'}</button>
         ))}
       </div>
+      {components && components.length > 1 && <div className="mt-3">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Scope</div>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <button type="button" data-testid="hold-scope-job" onClick={() => setComponent(undefined)} className={clsx('h-7 rounded-sm border px-2.5 text-xs font-medium', !component ? 'border-ink bg-ink text-white' : 'border-line text-ink-500 hover:border-ink-300')}>Whole job</button>
+          {components.map((c) => <button key={c.key} type="button" data-testid={`hold-scope-${c.key}`} onClick={() => setComponent(c.key)} className={clsx('h-7 rounded-sm border px-2.5 text-xs font-medium', component === c.key ? 'border-ink bg-ink text-white' : 'border-line text-ink-500 hover:border-ink-300')}>{c.label} only</button>)}
+        </div>
+        <p className="mt-1 text-[11px] text-ink-500">{component ? `Only the ${components.find((c) => c.key === component)?.label.toLowerCase()} is blocked — the other legs keep moving and stay green.` : 'Every leg of the job is blocked (the default).'}</p>
+      </div>}
       <textarea data-testid="hold-reason" autoFocus rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={type === 'parts' ? 'What part, from where, ETA (required)' : 'Which vendor, what work, due back (required)'} className="mt-3 w-full rounded-sm border border-line bg-canvas px-2.5 py-1.5 text-[13px] focus:border-ink focus:outline-none" />
       {err && <p data-testid="hold-error" className="mt-1 text-xs font-medium text-rose-700">{err}</p>}
       <div className="mt-3 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" data-testid="hold-confirm" onClick={go}><PauseCircle size={13} /> Place hold</Button></div>

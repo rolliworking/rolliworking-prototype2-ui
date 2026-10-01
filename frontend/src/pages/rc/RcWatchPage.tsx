@@ -6,6 +6,8 @@ import type { PortalDocument } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { RcSplitStrip } from '@/rc/RcSplitStrip';
+import { RcDots, RcDotsLegend } from '@/rc/RcDots';
+import { RcProcessFlow } from '@/rc/RcProcessFlow';
 import { RcDecisionRecord } from '@/rc/RcDecisionRecord';
 import { useRcSession } from '@/rc/RcSession';
 import { RcPhotoSections } from '@/rc/RcPhotoSections';
@@ -55,6 +57,7 @@ export default function RcWatchPage() {
         <p className="mt-1 text-sm text-rc-muted">Ref. {w.reference} · Serial ending …{w.serial.slice(-4)} · {w.dial} dial · {w.bracelet}</p>
         <div className="mt-4"><StatusWord status={pw.status} size="lg" testId="rc-watch-status" /></div>
         <p className="mt-2 max-w-[560px] text-[15px] leading-relaxed text-rc-muted">{pw.status.blurb}{pw.eta && pw.status.active ? ` We expect it ready around ${rcDate(pw.eta)}.` : ''}</p>
+        {pw.dots && <div className="mt-4 space-y-3"><RcDots row={pw.dots} size="lg" testId="rc-watch-dots" /><RcDotsLegend testId="rc-dots-legend" /></div>}
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           {pw.openEstimate && <Link to={`/rc/estimates/${pw.openEstimate.id}`} data-testid="rc-watch-estimate-link" className="rounded-full border border-rc-line bg-rc-paper px-4 py-1.5 hover:border-rc-accent/60">Estimate {pw.openEstimate.number} <ArrowRight size={12} className="inline" /></Link>}
           {pw.invoice && <Link to={`/rc/invoices/${pw.invoice.id}`} data-testid="rc-watch-invoice-link" className="rounded-full border border-rc-line bg-rc-paper px-4 py-1.5 hover:border-rc-accent/60">Invoice {pw.invoice.number} <ArrowRight size={12} className="inline" /></Link>}
@@ -62,7 +65,7 @@ export default function RcWatchPage() {
         </div>
       </div>
 
-      {pw.split && <RcSplitStrip split={pw.split} testId="rc-watch-split" />}
+      {pw.flow && pw.flow.length > 0 ? <RcProcessFlow flow={pw.flow} testId="rc-watch-flow" /> : pw.split && <RcSplitStrip split={pw.split} testId="rc-watch-split" />}
       {decisions.map((d) => <RcDecisionRecord key={d.id} d={d} compact />)}
       {pw.jobIds.map((jid) => <RcPhotoSections key={jid} clientId={client!.id} jobId={jid} />)}
       <RcCard eyebrow="Documents" title={`${papers.length} item${papers.length === 1 ? '' : 's'}`} testId="rc-watch-documents">

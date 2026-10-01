@@ -1,13 +1,14 @@
-import { ArrowRight, ClipboardCheck, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, Wrench, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { NeedsYouKind, PortalWatch } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
+import { RcDots, RcDotsLegend } from '@/rc/RcDots';
 import { useRcSession } from '@/rc/RcSession';
 import { RcRequestCards } from '@/rc/RcRequestCards';
 
-const NY_ICON: Record<NeedsYouKind, LucideIcon> = { approve_estimate: FileCheck2, pay_balance: CreditCard, confirm_pickup: PackageCheck, shipping_info: MapPin, staff_reply: MessageCircle, review_inspection: ClipboardCheck };
+const NY_ICON: Record<NeedsYouKind, LucideIcon> = { approve_estimate: FileCheck2, approve_parts: Wrench, pay_balance: CreditCard, confirm_pickup: PackageCheck, shipping_info: MapPin, staff_reply: MessageCircle, review_inspection: ClipboardCheck };
 
 const WatchRow = ({ pw }: { pw: PortalWatch }) => {
   const { watch: w, status } = pw;
@@ -18,6 +19,7 @@ const WatchRow = ({ pw }: { pw: PortalWatch }) => {
         <div>
           <h3 className="font-serif text-2xl font-medium tracking-tight">{w.brand} {w.model}</h3>
           <div className="mt-0.5 text-sm text-rc-muted">Ref. {w.reference} · {w.dial} dial · {w.bracelet}</div>
+          {pw.dots && <div className="mt-2"><RcDots row={pw.dots} testId={`rc-dots-${w.id}`} /></div>}
         </div>
         <StatusWord status={status} testId={`rc-watch-status-${w.id}`} />
         {pw.inspectionReportToken && <span data-testid={`rc-watch-report-${w.id}`} onClick={(e) => { e.preventDefault(); window.location.assign(`/rc/report/${pw.inspectionReportToken}`); }} className="rounded-full border border-rc-accent/50 px-3 py-1 text-xs text-rc-accent hover:bg-rc-accent/10">Inspection report ready →</span>}
@@ -76,7 +78,7 @@ export default function RcHomePage() {
       <RcRequestCards cards={cards} />
 
       <section className="space-y-4" data-testid="rc-watches">
-        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Your watches on file</div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Your watches on file</div>{data.watches.some((w) => w.dots) && <RcDotsLegend testId="rc-dots-legend-home" />}</div>
         {active.map((pw) => <WatchRow key={pw.watch.id} pw={pw} />)}
         {rest.length > 0 && active.length > 0 && <div className="pt-4 text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Back with you</div>}
         {rest.map((pw) => <WatchRow key={pw.watch.id} pw={pw} />)}

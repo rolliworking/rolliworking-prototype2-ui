@@ -18,7 +18,7 @@ export const ComponentChips = ({ job, testId }: { job: JobWithRefs; testId?: str
 // Inline "my component is done" buttons for the bench row
 export const ComponentDoneButtons = ({ job, run }: { job: JobWithRefs; run: Run }) => {
   if (!api.canCompleteComponent(job)) return null;
-  const out = job.components.filter((c) => !c.completedAt);
+  const out = job.components.filter((c) => !c.completedAt && api.canCompleteComponent(job, c.key));
   return <span className="inline-flex items-center gap-1">{out.map((c) => <button key={c.key} type="button" data-testid={`component-done-${job.id}-${c.key}`} onClick={() => void run(() => api.completeComponent(job.id, c.key), `${c.label} marked complete${out.length === 1 ? ' — all components in → testing' : ''}`)} className="inline-flex items-center gap-0.5 rounded-sm border border-moss-100 bg-surface px-1.5 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-50"><Check size={9} /> {c.label} done</button>)}</span>;
 };
 
@@ -38,7 +38,7 @@ export const ComponentsPanel = ({ job, run }: { job: JobWithRefs; run: Run }) =>
       {c.completedAt ? <span data-testid={`component-done-by-${c.key}`} className="text-ink-500">done by <span className="font-mono font-semibold text-ink">{c.completedBy}</span> · {fmtDate(c.completedAt)} {fmtTime(c.completedAt)} · {c.completedStation}{c.amendedFrom && <span className="ml-1 text-amber-800">(amended from {c.amendedFrom} by {c.amendedBy})</span>}</span> : <span className="text-ink-400">still out</span>}
       {c.rework.length > 0 && <span data-testid={`component-rework-${c.key}`} className="rounded-sm bg-rose-50 px-1.5 text-[10px] text-rose-700" title={c.rework.map((r) => `${fmtDate(r.at)} · ${r.reason}`).join('\n')}>rework ×{c.rework.length}</span>}
       <span className="ml-auto flex items-center gap-2">
-        {!c.completedAt && api.canCompleteComponent(job) && <Button size="sm" variant="primary" data-testid={`component-complete-${c.key}`} onClick={() => void run(() => api.completeComponent(job.id, c.key), `${c.label} marked complete`)}><Check size={11} /> Mark complete</Button>}
+        {!c.completedAt && api.canCompleteComponent(job, c.key) && <Button size="sm" variant="primary" data-testid={`component-complete-${c.key}`} onClick={() => void run(() => api.completeComponent(job.id, c.key), `${c.label} marked complete`)}><Check size={11} /> Mark complete</Button>}
         {c.completedAt && user?.accessTier === 'manager' && <Amend job={job} c={c} run={run} />}
       </span>
     </li>)}</ul>

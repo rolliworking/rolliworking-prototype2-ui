@@ -277,6 +277,7 @@ export interface JobHold {
   releasedAt?: string;
   releasedBy?: string;
   releaseNote?: string;
+  component?: ComponentKey; // scoped hold: only this leg is blocked (undefined = whole job, the default)
 }
 
 export interface JobNote extends Stamp {
@@ -748,6 +749,7 @@ export interface PartsRequest {
   id: string;
   number: string;
   jobId: string;
+  component?: ComponentKey; // which leg the parts are for (blocker lands on that leg; undefined = first component, the historical default)
   status: PartsRequestStatus;
   partId?: string;
   qty: number;
@@ -970,6 +972,7 @@ export interface Message {
   id: string;
   clientId: string;
   watchId?: string;
+  jobId?: string; component?: ComponentKey; // portal "Ask about this" — tagged to the job + the dot that was tapped
   from: 'client' | 'staff';
   by: string;
   text: string;
@@ -982,7 +985,7 @@ export interface Message {
 export type PortalStatusKey = 'on_file' | 'expecting' | 'awaiting_approval' | 'inspecting' | 'queued' | 'on_bench' | 'awaiting_part' | 'with_specialist' | 'final_checks' | 'finishing' | 'ready_pickup' | 'preparing_ship' | 'on_its_way' | 'back_with_you';
 export interface PortalStatus { key: PortalStatusKey; label: string; blurb: string; active: boolean }
 
-export type NeedsYouKind = 'approve_estimate' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply' | 'review_inspection';
+export type NeedsYouKind = 'approve_estimate' | 'approve_parts' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply' | 'review_inspection';
 export interface NeedsYouItem { id: string; kind: NeedsYouKind; title: string; detail: string; path: string; at: string; watchId?: string }
 
 export interface PortalDocument { id: string; kind: 'photo' | 'estimate' | 'invoice' | 'receipt' | 'label'; title: string; at: string; dataUrl?: string; path?: string; legacy?: boolean }
@@ -996,6 +999,8 @@ export interface PortalSplit { tracks: PortalSplitTrack[]; mergeLabel: string }
 export interface PortalWatch {
   watch: Watch;
   split?: PortalSplit;
+  dots?: PortalDotRow; // W·B·P in client language (no internal detail, no rating)
+  flow?: PortalFlowLine[]; // client-safe process line per component · Received · In queue · In progress · Quality check · Ready
   jobIds: string[];
   status: PortalStatus;
   job?: Job;
@@ -1008,6 +1013,18 @@ export interface PortalWatch {
 }
 
 export interface PortalRequest { request: ServiceRequest; statusLabel: string; canClose: boolean; watch?: Watch; duplicateOf?: ServiceRequest }
+
+// ---- Portal dots + reply loop (MH 2026-09-30) ----
+// Client mapping: empty = not part of this service · moving = in progress, on track · stuck = any internal blocker (hold, approval wait, parts, vendor delay, part away) · done = ready
+export type PortalDotState = 'none' | 'moving' | 'stuck' | 'done';
+export type PortalDotAction = { kind: 'ask' } | { kind: 'approve'; path: string; label: string };
+export interface PortalDot { leg: 'W' | 'B' | 'P'; label: string; state: PortalDotState; text: string; action?: PortalDotAction }
+export interface PortalDotRow { jobId: string; jobNumber: string; watchId: string; dots: PortalDot[] }
+export type PortalStopKey = 'received' | 'queue' | 'progress' | 'qc' | 'ready';
+export interface PortalFlowLine { key: ComponentKey; label: string; stops: { key: PortalStopKey; label: string; state: 'done' | 'current' | 'todo' }[]; stuck: boolean; done: boolean; projected?: string }
+export interface PortalPartsView { request: PartsRequest; job: Job; watch: Watch; lines: { description: string; qty: number; price: number }[]; total: number; decided?: { decision: 'approve' | 'decline'; at: string } }
+// Staff side of a portal ask: the client-update draft generated on arrival (rule-based), regenerable with Claude, edited by a person, sent once
+export interface AskDraft { jobId: string; jobNumber: string; component: ComponentKey; componentLabel: string; internal: string; text: string; fields: { job_status: string; per_component_status_line: string | null; target_date: string; variant: string }; source: 'local' | 'claude'; generatedAt: string; sentAt?: string; sentBy?: string }
 export interface PortalHome { client: Client; needsYou: NeedsYouItem[]; watches: PortalWatch[]; requests: PortalRequest[]; unreadMessages: number }
 
 export interface StaffInboxThread { client: Client; messages: Message[]; unread: number; lastAt: string; watch?: Watch }
@@ -1096,6 +1113,7 @@ export type MessageSource = 'portal' | 'email' | 'kiosk' | 'approval' | 'photo' 
 export interface ConvMessage {
   id: string; conversationId: string; clientId: string; direction: 'in' | 'out' | 'internal'; source: MessageSource; by: string; station?: string; text: string; at: string;
   token?: string; matchedToken?: string; readByStaff: boolean; photos?: PackagePhoto[]; emailId?: string; templateKey?: TemplateKey; cleared?: { by: string; at: string };
+  component?: ComponentKey; ask?: AskDraft; // portal "Ask about this" — tagged to the dot; the pre-drafted client update rides with the message
   event?: { kind: 'estimate_approved' | 'estimate_declined' | 'parts_approved' | 'parts_rejected' | 'pickup_window' | 'photo_submitted'; refId: string; label: string };
 }
 export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';

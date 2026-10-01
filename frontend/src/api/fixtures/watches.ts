@@ -49,4 +49,6 @@ export const watches: Watch[] = [
   { id: 'w-63', clientId: 'c-44', brand: 'Rolex', model: 'Submariner Date', reference: '126613LB', serial: 'H1N6Q2S8', dial: 'Blue', bracelet: 'Oyster two-tone', status: 'in_service', receivedAt: daysAgo(5) },
   { id: 'w-64', clientId: 'c-45', brand: 'Rolex', model: 'Oyster Perpetual 36', reference: '126000', serial: 'K4P9R3T6', dial: 'Turquoise', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(2) },
   { id: 'w-65', clientId: 'c-46', brand: 'Rolex', model: 'Milgauss', reference: '116400GV', serial: 'L5Q2S7U1', dial: 'Z-blue', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(9) },
+  // Portal dots seed — Eleanor Vance's second watch
+  { id: 'w-66', clientId: 'c-02', brand: 'Rolex', model: 'Submariner Date', reference: '126610LN', serial: 'N7R3T9V2', dial: 'Black', bracelet: 'Oyster', status: 'awaiting_parts', receivedAt: daysAgo(8) },
 ];

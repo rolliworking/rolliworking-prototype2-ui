@@ -1,4 +1,4 @@
-import type { DeptCode, Department, Division, EstimateLine, HoldType, Job, JobKind, JobPriority, JobStatus, JobTransition, Role, ShopTimeEntry } from '../types';
+import type { DeptCode, Department, Division, EstimateLine, HoldType, ComponentKey, Job, JobKind, JobPriority, JobStatus, JobTransition, Role, ShopTimeEntry } from '../types';
 import { estimates } from './estimates';
 import { seedPhoto } from './intake';
 import { daysAgo, daysFromNow } from './time';
@@ -49,7 +49,7 @@ interface Seed {
   createdDaysAgo: number;
   dueInDays?: number;
   lines?: EstimateLine[];
-  hold?: { type: HoldType; reason: string; daysAgo: number; released?: boolean };
+  hold?: { type: HoldType; reason: string; daysAgo: number; released?: boolean; component?: ComponentKey };
   qcFail?: string;
   notes?: string[];
   conditionNotes?: string;
@@ -93,7 +93,7 @@ const build = (s: Seed): Job => {
     createdAt: daysAgo(s.createdDaysAgo, 9),
     createdBy: 'Vienna',
     timeline,
-    holds: s.hold ? [{ id: `jh-${++seq}`, type: s.hold.type, reason: s.hold.reason, priorStatus: s.status, placedAt: daysAgo(s.hold.daysAgo, 14), placedBy: by, station: 'Bench 1', ...(s.hold.released ? { releasedAt: daysAgo(Math.max(0, s.hold.daysAgo - 3), 9), releasedBy: by, releaseNote: 'Parts arrived' } : {}) }] : [],
+    holds: s.hold ? [{ id: `jh-${++seq}`, type: s.hold.type, reason: s.hold.reason, priorStatus: s.status, placedAt: daysAgo(s.hold.daysAgo, 14), placedBy: by, station: 'Bench 1', component: s.hold.component, ...(s.hold.released ? { releasedAt: daysAgo(Math.max(0, s.hold.daysAgo - 3), 9), releasedBy: by, releaseNote: 'Parts arrived' } : {}) }] : [],
     notes: (s.notes ?? []).map((text, i) => ({ id: `jn-${++seq}`, text, at: daysAgo(Math.max(0, s.createdDaysAgo - i - 1), 16), by, station: 'Bench 1' })),
     photos: JOB_FLOW.indexOf(s.status) >= 2 ? [{ ...seedPhoto(`Inspection ${s.number} front`), id: `jp-${++seq}`, at: daysAgo(Math.max(0, s.createdDaysAgo - 1), 11), by: 'Walter', station: 'Front Desk 1' }] : [],
     inspection: kind === 'service' && JOB_FLOW.indexOf(s.status) >= 2 ? { answers: { case: 'light scratches', crystal: 'clear', bracelet: 'tight', movement: 'running', water: 'not tested' }, at: daysAgo(Math.max(0, s.createdDaysAgo - 1), 11), by: 'Walter', station: 'Front Desk 1' } : undefined,
@@ -159,6 +159,8 @@ export const jobs: Job[] = [
   build({ id: 'j-b7', number: 'E02076', clientId: 'c-44', watchId: 'w-63', workflow: ['P'], status: 'in_service', kind: 'small_job', owner: 'manager', assignees: ['JV', 'Dre'], createdDaysAgo: 5, dueInDays: 5, lines: [line('Two-tone case refinish — gold bezel polished', 480, 'P')] }),
   build({ id: 'j-b8', number: 'E02077', clientId: 'c-45', watchId: 'w-64', workflow: ['B'], status: 'in_service', kind: 'small_job', owner: 'manager', assignees: ['JV', 'Sam'], createdDaysAgo: 2, dueInDays: 8, lines: [line('Oyster bracelet re-pin + clasp adjust', 260, 'B')] }),
   build({ id: 'j-b9', number: 'E02078', clientId: 'c-46', watchId: 'w-65', workflow: ['B'], status: 'in_service', kind: 'small_job', owner: 'manager', assignees: ['JV', 'Nico'], createdDaysAgo: 9, dueInDays: 1, priority: 'high', lines: [line('Oyster bracelet refinish + stretch repair', 460, 'B')] }),
+  // Portal dots seed (2026-09-30): Eleanor Vance's Submariner — W in progress (green) · B parts hold scoped to the bracelet (red) · P refinish finished (blue)
+  build({ id: 'j-pd1', number: 'E02079', clientId: 'c-02', watchId: 'w-66', workflow: ['W', 'B', 'P'], status: 'in_service', owner: 'manager', assignees: ['Leo', 'Sam', 'Dre'], createdDaysAgo: 8, dueInDays: 6, hold: { type: 'parts', reason: 'Waiting on Oyster clasp spring + 2 links (ref 97200) from RSC — ETA Oct 8', daysAgo: 4, component: 'band' }, notes: ['Clasp spring fatigued — parts approval priced, going to the client; RSC backorder expected.'], lines: [line('Complete movement service — cal. 3235', 1450, 'W'), line('Oyster bracelet stretch repair + clasp spring', 380, 'B'), line('Case & bezel refinish — brushed / polished', 395, 'P')] }),
 ];
 
 export const shopTime: ShopTimeEntry[] = [

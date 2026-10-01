@@ -57,6 +57,7 @@ import RcHomePage from '@/pages/rc/RcHomePage';
 import RcEstimatePage from '@/pages/rc/RcEstimatePage';
 import RcInvoicePage from '@/pages/rc/RcInvoicePage';
 import RcWatchPage from '@/pages/rc/RcWatchPage';
+import RcPartsPage from '@/pages/rc/RcPartsPage';
 import RcReportPage from '@/pages/rc/RcReportPage';
 import RcMessagesPage from '@/pages/rc/RcMessagesPage';
 import RcNotFound from '@/pages/rc/RcNotFound';
@@ -220,6 +221,7 @@ export default function App() {
             <Route path="estimates/:id" element={<RcEstimatePage />} />
             <Route path="invoices/:id" element={<RcInvoicePage />} />
             <Route path="watches/:id" element={<RcWatchPage />} />
+            <Route path="parts/:id" element={<RcPartsPage />} />
             <Route path="report/:token" element={<RcReportPage />} />
             <Route path="inspection/:token" element={<RcInspectionFormPage />} />
             <Route path="messages" element={<RcMessagesPage />} />

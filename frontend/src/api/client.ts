@@ -1,6 +1,7 @@
 // The ONLY data-access module in the app. Screens call these functions and nothing else.
 // Today they resolve from local fixtures; later this file alone is repointed at the real API.
 import * as fx from './fixtures';
+import { fillSummaryTemplate, localSummaryFields } from './ai';
 import type {
   ComponentKey,
   CompletionsReport,
@@ -1303,7 +1304,9 @@ export const ensureComponents = (j: Job): JobComponent[] => {
 export const componentsDone = (j: Job) => ensureComponents(j).filter((c) => c.completedAt).length;
 export const componentsOutstanding = (j: Job): JobComponent[] => ensureComponents(j).filter((c) => !c.completedAt);
 export const awaitingComponents = (j: Job) => j.status === 'in_service' && !activeHold(j) && componentsDone(j) > 0 && componentsOutstanding(j).length > 0;
-export const canCompleteComponent = (j: Job) => j.status === 'in_service' && !activeHold(j);
+// A hold blocks a leg when it is whole-job (no component) or scoped to that leg; asking without a key = "is anything completable here?"
+export const holdBlocks = (j: Job, key?: ComponentKey): JobHold | undefined => { const h = activeHold(j); return h && (!h.component || h.component === key) ? h : undefined; };
+export const canCompleteComponent = (j: Job, key?: ComponentKey) => j.status === 'in_service' && !holdBlocks(j, key);
 
 const JOB_ACTIONS: Record<JobStatus, JobAction[]> = {
   intake: [{ key: 'start_review', label: 'Start review', to: 'in_review', tone: 'primary' }],
@@ -1456,7 +1459,7 @@ const tradeAccept = (j: Job) => {
 
 const humanizeStatus = (s: string) => s.replace(/_/g, ' ');
 export async function completeComponent(jobId: string, key: ComponentKey): Promise<JobWithRefs> {
-  const j = getJobRow(jobId); if (!canCompleteComponent(j)) throw new Error(activeHold(j) ? 'Job is on hold — release it first' : 'Components complete only while the job is in service');
+  const j = getJobRow(jobId); if (!canCompleteComponent(j, key)) throw new Error(holdBlocks(j, key) ? `${holdBlocks(j, key)!.component ? `${PART_LABEL[key]} is` : 'Job is'} on hold — release it first` : 'Components complete only while the job is in service');
   const c = ensureComponents(j).find((x) => x.key === key); if (!c) throw new Error('No such component on this job'); if (c.completedAt) throw new Error(`${c.label} is already complete (${c.completedBy})`);
   const a = actor(); c.completedAt = new Date().toISOString(); c.completedBy = a.by; c.completedStation = a.station;
   const out = componentsOutstanding(j);
@@ -1544,16 +1547,17 @@ export async function setJobOwner(id: string, role: Role | null): Promise<JobWit
   return resolve(jobRefs(j));
 }
 
-export async function placeHold(id: string, type: HoldType, reason: string): Promise<JobWithRefs> {
+export async function placeHold(id: string, type: HoldType, reason: string, component?: ComponentKey): Promise<JobWithRefs> {
   const j = getJobRow(id);
   if (!reason.trim()) throw new Error('A hold reason is required');
   if (activeHold(j)) throw new Error('Job already has an active hold');
   if (!canHold(j)) throw new Error('Holds apply to on-hand jobs that are approved, in service or in testing');
+  if (component && !ensureComponents(j).some((c) => c.key === component)) throw new Error(`${PART_LABEL[component]} is not a component of this job`);
   const a = actor();
-  j.holds.unshift({ id: newId('jh'), type, reason: reason.trim(), priorStatus: j.status, placedAt: new Date().toISOString(), placedBy: a.by, station: a.station });
+  j.holds.unshift({ id: newId('jh'), type, reason: reason.trim(), priorStatus: j.status, placedAt: new Date().toISOString(), placedBy: a.by, station: a.station, component });
   const w = store.watches.find((x) => x.id === j.watchId);
   if (w && type === 'parts') w.status = 'awaiting_parts';
-  jobStamp(j, `${type === 'parts' ? 'Parts' : 'Outsource'} hold placed · ${reason.trim()} · parked from ${humanizeStatus(j.status)}`);
+  jobStamp(j, `${type === 'parts' ? 'Parts' : 'Outsource'} hold placed${component ? ` · ${PART_LABEL[component]} only` : ''} · ${reason.trim()} · parked from ${humanizeStatus(j.status)}`);
   return resolve(jobRefs(j));
 }
 
@@ -3056,7 +3060,7 @@ const portalWatchFor = (clientId: string, w: Watch): PortalWatch => {
   const invoice = sos.find((o) => o.status !== 'cancelled' && o.status !== 'draft' && (o.jobId === job?.id || !job));
   const status = portalStatusFor(w, job && job.status !== 'closed' ? job : invoice && (invoice.status === 'shipped' || invoice.status === 'picked_up') ? job : undefined, openEstimate, invoice && (invoice.jobId === job?.id) ? invoice : undefined);
   const issued = rp.reports.find((r) => r.watchId === w.id && r.clientId === clientId && r.status === 'issued');
-  return { watch: w, jobIds: jobs.map((j) => j.id), split: job ? portalSplitFor(job) : undefined, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
+  return { watch: w, jobIds: jobs.map((j) => j.id), split: job ? portalSplitFor(job) : undefined, dots: job && job.status !== 'closed' ? portalDotsSync(job) : undefined, flow: job && job.status !== 'closed' ? portalFlowSync(job) : undefined, status, job: job && job.status !== 'closed' ? job : undefined, openEstimate, invoice, eta: job?.dueAt && job.status !== 'closed' ? job.dueAt : undefined, history: portalHistory(jobs, ests, sos), documents: portalDocs(jobs, ests, sos), inspectionReportToken: issued?.token };
 };
 
 // Split-flow strip in client language: one track per component; done tracks read "complete — ready and waiting"; collapses when the tracks merge
@@ -3083,6 +3087,11 @@ const needsYouFor = (clientId: string, watches: PortalWatch[]): NeedsYouItem[] =
   store.estimates.filter((e) => e.clientId === clientId && e.status === 'sent').forEach((e) => {
     const w = e.watchId ? store.watches.find((x) => x.id === e.watchId) : undefined;
     items.push({ id: `ny-est-${e.id}`, kind: 'approve_estimate', title: `Approve or decline estimate ${e.number}`, detail: `${w ? `${w.brand} ${w.model} · ` : ''}${fmtMoney(e.total)} · valid until ${new Date(e.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, path: `/rc/estimates/${e.id}`, at: e.sentAt ?? e.updatedAt, watchId: e.watchId });
+  });
+  // Parts approvals — a money decision: one tap on a page with the lines and the price (the same page the email link opens)
+  store.partsRequests.filter((r) => r.status === 'awaiting_client').forEach((r) => {
+    const j = store.jobs.find((x) => x.id === r.jobId); if (!j || j.clientId !== clientId) return; const w = store.watches.find((x) => x.id === j.watchId); const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0);
+    items.push({ id: `ny-parts-${r.id}`, kind: 'approve_parts', title: `Approve the parts for your ${w?.model ?? 'watch'}`, detail: `${(r.items ?? []).length} part${(r.items ?? []).length === 1 ? '' : 's'} · ${fmtMoney(total)} · the work pauses until you decide`, path: `/rc/parts/${r.id}`, at: r.sentForApprovalAt ?? r.requestedAt, watchId: j.watchId });
   });
   store.salesOrders.filter((o) => o.clientId === clientId && o.status !== 'draft' && o.status !== 'cancelled').forEach((o) => {
     const pw = watches.find((x) => x.invoice?.id === o.id);
@@ -3266,14 +3275,18 @@ export async function portalGetMessages(clientId: string): Promise<Message[]> {
   return resolve(store.messages.filter((m) => m.clientId === clientId).sort((a, b) => a.at.localeCompare(b.at)));
 }
 
-export async function portalSendMessage(clientId: string, text: string, watchId?: string): Promise<Message> {
+export async function portalSendMessage(clientId: string, text: string, watchId?: string, opts: { jobId?: string; component?: ComponentKey } = {}): Promise<Message> {
   if (!text.trim()) throw new Error('Write something first');
   recordRcEvent({ t: 'msg', clientId, text, watchId });
   const c = byId(fx.clients, clientId);
-  const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, from: 'client', by: `${c.firstName} ${c.lastName}`, text: text.trim(), at: new Date().toISOString(), readByStaff: false, readByClient: true };
+  const askJob = opts.jobId ? store.jobs.find((j) => j.id === opts.jobId && j.clientId === clientId) : undefined;
+  const m: Message = { id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId, watchId, jobId: askJob?.id, component: askJob ? opts.component : undefined, from: 'client', by: `${c.firstName} ${c.lastName}`, text: text.trim(), at: new Date().toISOString(), readByStaff: false, readByClient: true };
   store.messages.push(m);
-  { const job = watchId ? store.jobs.find((j) => j.watchId === watchId && j.status !== 'closed') : undefined; threadEvent(clientId, job ? { kind: 'job', id: job.id } : undefined, 'portal', `${c.firstName} ${c.lastName}`, text.trim()); }
-  portalStamp(clientId, `Message sent to the team${watchId ? ` about ${store.watches.find((w) => w.id === watchId)?.model ?? 'a watch'}` : ''}`);
+  { const job = askJob ?? (watchId ? store.jobs.find((j) => j.watchId === watchId && j.status !== 'closed') : undefined);
+    const cm = threadEvent(clientId, job ? { kind: 'job', id: job.id } : undefined, 'portal', `${c.firstName} ${c.lastName}`, text.trim());
+    // "Ask about this" from a red dot: tag the component, drop it in the front-desk queue (claimable) and pre-draft the client update — never auto-sent
+    if (askJob && opts.component) portalAskArrived(cm, askJob, opts.component); }
+  portalStamp(clientId, `Message sent to the team${watchId ? ` about ${store.watches.find((w) => w.id === watchId)?.model ?? 'a watch'}` : ''}${askJob && opts.component ? ` · asked about the ${PART_LABEL[opts.component].toLowerCase()}` : ''}`);
   return resolve(m);
 }
 
@@ -4228,7 +4241,7 @@ const derivePlacement = (j: Job, c: JobComponent): { station: RwStationKey; stat
 const ensureParts = (j: Job): JobComponent[] => {
   const comps = ensureComponents(j);
   comps.forEach((c) => {
-    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.itemLabel = seed.item; c.containerKey = seed.bin; c.binOrigin = seed.binOrigin ?? seed.bin; c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: seed.bin ? 'seeded position · in JV bin' : 'seeded position' }); } }
+    if (!c.history) { c.history = []; const seed = fx.partSeeds[j.id]?.[c.key]; if (seed) { c.station = seed.station; c.partStatus = seed.status; c.custodyTech = seed.tech; c.itemLabel = seed.item; c.containerKey = seed.bin; c.binOrigin = seed.binOrigin ?? seed.bin; if (seed.done && !c.completedAt) { c.completedAt = daysAgoIso(1); c.completedBy = seed.tech ?? 'Walter'; c.completedStation = stationOf(seed.station).label; } c.history.push({ at: j.createdAt, by: seed.tech ?? 'System', to: seed.station, status: seed.status, via: 'system', note: seed.bin ? 'seeded position · in JV bin' : 'seeded position' }); } }
   });
   return comps;
 };
@@ -4350,7 +4363,7 @@ export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: str
 }
 // -- Client-update summary context: everything the AI is allowed to see, already translated where the mapping is deterministic. AI fills template fields; a human edits and pastes. Never sent.
 const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished', vc_safe: 'secured overnight in the workshop safe', jv_bench: 'with the workshop supervisor, queued for the bracelet / polish team' };
-export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[] }
+export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[]; focus?: { component: string; question: string } }
 export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext> {
   const mock = store.jobs.find((x) => x.id === jobId);
   if (!mock) {
@@ -4362,12 +4375,15 @@ export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Prom
     const plain = live.status.replace(/_/g, ' ');
     return resolve({ jobNumber: live.number, clientFirstName: live.client?.firstName ?? 'there', watch: live.watch ? `${live.watch.brand} ${live.watch.model}` : 'your watch', status: live.status, intakeStage: undefined, dueAt: live.dueAt, daysOpen, components: [{ part: 'Watch', plainLocation: plain, partStatus: 'in_progress' as PartStatus, daysAtStep: daysOpen, slowFlag: daysOpen > 21 }], openItems: open, notes: (live.notes ?? []).slice(0, 3).map((n) => (typeof n === 'string' ? n : n.text)) });
   }
-  const j = mock; const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const now = Date.now(); const days = (iso?: string) => (iso ? Math.max(0, Math.round((now - new Date(iso).getTime()) / 86_400_000)) : 0);
-  const components = ensureParts(j).map((p) => { const pl = derivePlacement(j, p); const last = p.history?.[p.history.length - 1]; const d = days(last?.at ?? j.createdAt); return { part: PART_LABEL[p.key], plainLocation: p.completedAt ? 'finished' : PLAIN_LOCATION[pl.station] ?? 'in progress', partStatus: pl.status, daysAtStep: d, slowFlag: d > 5 && pl.status !== 'fulfilled' }; });
-  const open: string[] = []; if (j.status === 'awaiting_customer_approval') open.push('awaiting client approval of the estimate'); if (j.status === 'in_review' || j.status === 'intake') open.push('estimate still being prepared'); if (j.holds.some((h) => !h.releasedAt)) open.push(`on hold: ${j.holds.filter((h) => !h.releasedAt).map((h) => h.type.replace(/_/g, ' ')).join(', ')}`);
-  const pr = (store.partsRequests ?? []).filter((r) => r.jobId === j.id); if (pr.some((r) => r.status === 'on_order')) open.push('a part is on order'); else if (pr.some((r) => r.status === 'approved' || r.status === 'pending' || r.status === 'pending_review')) open.push('a part request is being reviewed'); if (j.status === 'ready_to_ship') open.push('finished, ready for pickup / return shipping');
-  return resolve({ jobNumber: j.number, clientFirstName: c.firstName, watch: `${w.brand} ${w.model}`, status: j.status, intakeStage: j.packageId ? store.packages.find((p) => p.id === j.packageId)?.status : undefined, dueAt: j.dueAt, daysOpen: days(j.createdAt), components, openItems: open, notes: j.notes.slice(-3).map((n) => n.text) });
+  return resolve(summaryCtxSync(mock));
 }
+const summaryCtxSync = (j: Job): JobSummaryContext => {
+  const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const now = Date.now(); const days = (iso?: string) => (iso ? Math.max(0, Math.round((now - new Date(iso).getTime()) / 86_400_000)) : 0);
+  const components = ensureParts(j).map((p) => { const pl = derivePlacement(j, p); const last = p.history?.[p.history.length - 1]; const d = days(last?.at ?? j.createdAt); return { part: PART_LABEL[p.key], plainLocation: p.completedAt ? 'finished' : PLAIN_LOCATION[pl.station] ?? 'in progress', partStatus: pl.status, daysAtStep: d, slowFlag: d > 5 && pl.status !== 'fulfilled' }; });
+  const open: string[] = []; if (j.status === 'awaiting_customer_approval') open.push('awaiting client approval of the estimate'); if (j.status === 'in_review' || j.status === 'intake') open.push('estimate still being prepared'); if (j.holds.some((h) => !h.releasedAt)) open.push(`on hold: ${j.holds.filter((h) => !h.releasedAt).map((h) => `${h.type.replace(/_/g, ' ')}${h.component ? ` (${PART_LABEL[h.component].toLowerCase()} only)` : ''}`).join(', ')}`);
+  const pr = (store.partsRequests ?? []).filter((r) => r.jobId === j.id); if (pr.some((r) => r.status === 'on_order')) open.push('a part is on order'); else if (pr.some((r) => r.status === 'approved' || r.status === 'pending' || r.status === 'pending_review')) open.push('a part request is being reviewed'); if (j.status === 'ready_to_ship') open.push('finished, ready for pickup / return shipping');
+  return { jobNumber: j.number, clientFirstName: c.firstName, watch: `${w.brand} ${w.model}`, status: j.status, intakeStage: j.packageId ? store.packages.find((p) => p.id === j.packageId)?.status : undefined, dueAt: j.dueAt, daysOpen: days(j.createdAt), components, openItems: open, notes: j.notes.slice(-3).map((n) => n.text) };
+};
 // -- Custody by person: who physically holds each watch head / case / bracelet right now (same data as the floor board, grouped by holder)
 const HOLDER_NAME: Record<string, string> = { MH: 'Mike (MH)', MM: 'MM' };
 export interface CustodyItem extends FloorDot { clientLastName: string; workflow: DeptCode[]; status: JobStatus; stationLabel: string; heldSince?: string; notes: string[]; containerInfo?: { key: string; label: string; holderLabel: string } }
@@ -4415,7 +4431,7 @@ export async function scanLabelAssign(label: string): Promise<ScanSession> {
   const s = rw18.scanSession; if (!s.tech) throw new Error('Scan a TECH code first');
   const bandOnly = /\|B$|^BAND-/i.test(label.trim()); const clean = label.trim().replace(/^BAND-/i, '');
   const j = await findJobByLabel(clean); if (!j) throw new Error(`No job matches label ${label}`);
-  const row = getJobRow(j.id); if (activeHold(row)) throw new Error(`${row.number} is on hold — release it first`);
+  const row = getJobRow(j.id); { const h = holdBlocks(row, bandOnly ? 'band' : 'head'); if (h) throw new Error(`${row.number}${h.component ? ` ${PART_LABEL[h.component]}` : ''} is on hold — release it first`); }
   if (bandOnly && !row.workflow.includes('B')) { row.workflow.push('B'); row.components = undefined; ensureParts(row); jobStamp(row, 'Band-only label — bracelet component created, band department tagged'); }
   const comps = ensureParts(row); const isWm = s.tech.roles.includes('watchmaker'); const target = bandOnly ? comps.find((c) => c.key === 'band')! : comps.find((c) => isWm ? c.key === 'head' : c.key !== 'head') ?? comps[0];
   if (!row.assignees.includes(s.tech.shortName)) row.assignees.push(s.tech.shortName);
@@ -4614,18 +4630,22 @@ async function sendApprovalInternal(requestId: string): Promise<PartsRequestWith
   const a = actor(); const r = byId(store.partsRequests, requestId); if (r.status !== 'pending_review') throw new Error('Not in review');
   const bad = (r.items ?? []).filter((i) => i.price === undefined || !(i.price >= 0)); if (bad.length) throw new Error(`Price required on every line — missing: ${bad.map((b) => b.description).join(', ')}`);
   const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0);
-  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/parts/${r.id}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
   queueOutbox(email); r.emailId = email.id; r.status = 'awaiting_client'; r.sentForApprovalAt = email.createdAt; r.sentBy = a.by;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'parts', a.by, `Parts approval sent · ${r.number} · ${(r.items ?? []).length} line(s) · $${total.toFixed(2)}`);
   partsStamp(r, `sent for client approval · $${total.toFixed(2)} · email queued`); jobStamp(j, `${r.number} sent for client approval`); approvalsToSendSweepSync();
   return resolve(prRefs(r));
 }
 export async function simulateClientPartsDecision(requestId: string, decision: 'approve' | 'decline'): Promise<PartsRequestWithRefs> {
-  const r = byId(store.partsRequests, requestId); if (r.status !== 'awaiting_client') throw new Error('Not awaiting the client'); const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId);
-  r.status = decision === 'approve' ? 'approved' : 'declined'; r.clientDecidedAt = new Date().toISOString(); r.decidedBy = `${c.firstName} (client)`; r.decidedAt = r.clientDecidedAt;
-  threadEvent(j.clientId, { kind: 'job', id: j.id }, 'approval', c.firstName, `${decision === 'approve' ? 'Approved' : 'Declined'} parts ${r.number} (simulated client reply)`, { kind: decision === 'approve' ? 'parts_approved' : 'parts_rejected', refId: r.id, label: decision === 'approve' ? 'parts approved' : 'parts declined' });
-  partsStamp(r, `client ${decision}d (simulated)`); return resolve(prRefs(r));
+  const r = byId(store.partsRequests, requestId); clientPartsDecision(r, decision, 'simulated'); return resolve(prRefs(r));
 }
+// One ledger for the client's parts decision — the portal page (/rc/parts/:id, same page the email link opens) and the simulate button
+const clientPartsDecision = (r: PartsRequest, decision: 'approve' | 'decline', via: 'portal' | 'simulated') => {
+  if (r.status !== 'awaiting_client') throw new Error('Not awaiting the client'); const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId);
+  r.status = decision === 'approve' ? 'approved' : 'declined'; r.clientDecidedAt = new Date().toISOString(); r.decidedBy = `${c.firstName} (client)`; r.decidedAt = r.clientDecidedAt;
+  threadEvent(j.clientId, { kind: 'job', id: j.id }, 'approval', c.firstName, `${decision === 'approve' ? 'Approved' : 'Declined'} parts ${r.number}${via === 'portal' ? ' in RolliConnect' : ' (simulated client reply)'}`, { kind: decision === 'approve' ? 'parts_approved' : 'parts_rejected', refId: r.id, label: decision === 'approve' ? 'parts approved' : 'parts declined' });
+  partsStamp(r, `client ${decision}d${via === 'portal' ? ' (portal)' : ' (simulated)'}`); jobStamp(j, `${r.number} ${decision}d by the client${via === 'portal' ? ' in RolliConnect' : ' (simulated)'}`);
+};
 export async function padAllocate(requestId: string): Promise<PartsRequestWithRefs> {
   const a = managerOnly(); const r = byId(store.partsRequests, requestId); if (r.status !== 'approved' || r.allocatedAt) throw new Error('Only client-approved, unallocated requests allocate');
   const lines = (r.items ?? []).filter((i) => i.partId); if (!lines.length) throw new Error('No catalog part on this request — resolve part numbers first');
@@ -6340,7 +6360,8 @@ const stationStage = (k: RwStationKey): FlowStageKey => (k === 'pre_approval' ? 
 // Which custody stages are consistent with a job status — anything else is a real status/custody mismatch (shown, never hidden)
 const CUSTODY_OK: Record<FlowStageKey, FlowStageKey[]> = { intake: ['intake', 'queue'], queue: ['intake', 'queue'], progress: ['queue', 'progress', 'qc'], qc: ['qc'], finished: ['finished'], v_route: [], v_vendor: [], v_return: [], v_received: [], v_inspect: [] };
 const COMP_CODE: Record<ComponentKey, 'H' | 'B' | 'C'> = { head: 'H', band: 'B', case: 'C' };
-const flowLine = (j: Job, c: JobComponent, swo: Swo | undefined, hold: JobHold | undefined, pr: PartsRequest | undefined): FlowLine => {
+const flowLine = (j: Job, c: JobComponent, swo: Swo | undefined, jobHold: JobHold | undefined, pr: PartsRequest | undefined): FlowLine => {
+  const hold = jobHold && (!jobHold.component || jobHold.component === c.key) ? jobHold : undefined; // scoped hold reds only its own leg
   const pl = derivePlacement(j, c); const saved = !!c.station; const vendorHeld = !!c.custodyTech?.startsWith('vendor:');
   const vendor = swo ? byId(rs.vendors, swo.vendorId) : vendorHeld ? rs.vendors.find((v) => v.id === c.custodyTech!.slice(7)) : undefined;
   const statusStage = STATUS_STAGE[j.status]; const done = !!c.completedAt;
@@ -6358,7 +6379,7 @@ const flowLine = (j: Job, c: JobComponent, swo: Swo | undefined, hold: JobHold |
   const idx = keys.indexOf(cur);
   const blockers: Partial<Record<FlowStageKey, FlowBlocker>> = {};
   if (j.status === 'awaiting_customer_approval') blockers.intake = { text: 'awaiting client approval', tone: 'red' };
-  if (hold) blockers[cur] = { text: `${hold.type === 'parts' ? 'Parts' : 'Outsource'} hold · ${hold.reason}`, tone: 'red' };
+  if (hold) blockers[cur] = { text: `${hold.type === 'parts' ? 'Parts' : 'Outsource'} hold${hold.component ? ` · ${PART_LABEL[hold.component]} only` : ''} · ${hold.reason}`, tone: 'red' };
   if (pr) blockers[cur] = { text: `awaiting client approval · ${pr.number}${pr.items?.[0]?.description ? ` · ${pr.items[0].description}` : ''}`, tone: 'red' };
   // sent parts not back: unticked at receiving = still away = a blocker on this component; back but unverified = check the box
   const missingParts = (swo?.sentParts ?? []).filter((p) => p.returned === false); const unverified = swo && lineBack(swo) && (swo.sentParts ?? []).some((p) => p.returned === undefined);
@@ -6383,7 +6404,7 @@ export const jobFlowSync = (j: Job): JobFlow => {
   const comps = store.jobs.some((x) => x.id === j.id) ? ensureParts(j) : j.components?.length ? j.components : ensureComponents({ ...j, components: undefined });
   const hold = activeHold(j); const pr = store.partsRequests.find((r) => r.jobId === j.id && r.status === 'awaiting_client');
   const legs = swos.filter((w) => !w.synth && w.jobId === j.id && w.stage !== 'fulfilled');
-  const lines = comps.map((c, i) => flowLine(j, c, legs.find((w) => w.components.includes(c.key)), hold, i === 0 ? pr : undefined));
+  const lines = comps.map((c, i) => flowLine(j, c, legs.find((w) => w.components.includes(c.key)), hold, pr && (pr.component ? pr.component === c.key : i === 0) ? pr : undefined));
   return { lines, done: lines.filter((l) => l.finished).length, total: lines.length, split: lines.length > 1, statusStage: STATUS_STAGE[j.status] };
 };
 export async function getJobFlow(jobId: string): Promise<JobFlow> { return resolve(jobFlowSync(getJobRow(jobId))); }
@@ -6664,4 +6685,91 @@ export async function binCommit(rows: BulkRow[], target: BinTarget, binScanned: 
     for (const row of uniq) { try { await binTakeBack(row.jobId); results.push({ row, ok: true, detail: 'back into JV bin · custody JV workshop' }); } catch (e) { results.push({ row, ok: false, detail: e instanceof Error ? e.message : 'Failed' }); } }
   }
   return resolve({ results, binNote, view: binViewSync() });
+}
+
+// ---- CLIENT PORTAL — W·B·P dots + reply loop (MH 2026-09-30). Same WbpDots positions, client mapping only: empty = not part of this service · green = moving · red = not moving (ANY internal blocker — no vendor names, no hold reasons) · blue = done.
+// Red tap: "awaiting YOUR approval" opens the approval itself; anything else = "Ask about this" → portal message tagged job + component → RS Inbox, front-desk queue (claimable), client-update draft already generated. Rating a/b/c never reaches the portal.
+import type { AskDraft, PortalDot, PortalDotAction, PortalDotRow, PortalDotState, PortalFlowLine, PortalPartsView, PortalStopKey } from './types';
+const PORTAL_LEG_LABEL: Record<WbpLeg, string> = { W: 'Watch', B: 'Bracelet', P: 'Case' };
+const PORTAL_DOT_TEXT: Record<PortalDotState, string> = { none: 'Not part of this service', moving: 'Moving — in progress, on track', stuck: 'Not moving — something is holding this part up. Tap to ask us.', done: 'Done — ready for pickup' };
+const isApprovalBlock = (t?: string) => !!t && t.startsWith('awaiting client approval');
+const portalApproveAction = (j: Job): Extract<PortalDotAction, { kind: 'approve' }> | undefined => {
+  if (j.status === 'awaiting_customer_approval') { const e = j.estimateId ? store.estimates.find((x) => x.id === j.estimateId) : undefined; if (e && e.status === 'sent') return { kind: 'approve', path: `/rc/estimates/${e.id}`, label: 'Review the estimate' }; }
+  const pr = store.partsRequests.find((r) => r.jobId === j.id && r.status === 'awaiting_client'); if (pr) return { kind: 'approve', path: `/rc/parts/${pr.id}`, label: 'Approve the parts' };
+  return undefined;
+};
+export const portalDotsSync = (j: Job): PortalDotRow => {
+  const flow = jobFlowSync(j); const approve = portalApproveAction(j);
+  const dots: PortalDot[] = WBP_LEGS.map((l) => {
+    const lines = flow.lines.filter((x) => WBP_OF[x.key] === l.key); if (!lines.length) return { leg: l.key, label: PORTAL_LEG_LABEL[l.key], state: 'none' as const, text: PORTAL_DOT_TEXT.none };
+    const reds = lines.flatMap((x) => x.stages.filter((s) => s.blocker?.tone === 'red')); const state: PortalDotState = reds.length ? 'stuck' : lines.every((x) => x.finished) ? 'done' : 'moving';
+    const approval = state === 'stuck' && approve && reds.some((s) => isApprovalBlock(s.blocker?.text));
+    return { leg: l.key, label: PORTAL_LEG_LABEL[l.key], state, text: approval ? `Waiting on you — ${approve.label.toLowerCase()}` : PORTAL_DOT_TEXT[state], action: state === 'stuck' ? (approval ? approve : { kind: 'ask' as const }) : undefined };
+  });
+  return { jobId: j.id, jobNumber: j.number, watchId: j.watchId, dots };
+};
+// Client-safe process line: five stops, vendor legs fold into "In progress", custody never shown
+const PORTAL_STOPS: { key: PortalStopKey; label: string }[] = [{ key: 'received', label: 'Received' }, { key: 'queue', label: 'In queue' }, { key: 'progress', label: 'In progress' }, { key: 'qc', label: 'Quality check' }, { key: 'ready', label: 'Ready' }];
+const PORTAL_STOP_OF: Record<FlowStageKey, PortalStopKey> = { intake: 'received', queue: 'queue', progress: 'progress', v_route: 'progress', v_vendor: 'progress', v_return: 'progress', v_received: 'progress', v_inspect: 'progress', qc: 'qc', finished: 'ready' };
+const PORTAL_LINE_LABEL: Record<ComponentKey, string> = { head: 'Watch head', band: 'Bracelet', case: 'Case' };
+export const portalFlowSync = (j: Job): PortalFlowLine[] => jobFlowSync(j).lines.map((l) => {
+  const cur = l.stages.find((s) => s.state === 'current'); const idx = l.finished ? PORTAL_STOPS.length - 1 : PORTAL_STOPS.findIndex((s) => s.key === PORTAL_STOP_OF[cur?.key ?? 'intake']);
+  return { key: l.key, label: `${PORTAL_LINE_LABEL[l.key]}${l.itemLabel ? ` ${l.itemLabel}` : ''}`, stops: PORTAL_STOPS.map((s, i) => ({ ...s, state: i < idx ? 'done' as const : i === idx ? 'current' as const : 'todo' as const })), stuck: l.stages.some((s) => s.blocker?.tone === 'red'), done: l.finished, projected: j.dueAt };
+});
+export async function portalGetDots(clientId: string, jobId: string): Promise<PortalDotRow> { const j = requireOwner(clientId, store.jobs.find((x) => x.id === jobId), 'job'); return resolve(portalDotsSync(j)); }
+// Parts approval page — the money decision lives on a page with the lines and the price (same page the approval email links to)
+export async function portalGetPartsRequest(clientId: string, id: string): Promise<PortalPartsView> {
+  const r = store.partsRequests.find((x) => x.id === id); const j = r ? store.jobs.find((x) => x.id === r.jobId) : undefined;
+  if (!r || !j || j.clientId !== clientId) throw new Error('That parts approval isn’t on your account');
+  const w = byId(store.watches, j.watchId); const lines = (r.items ?? []).map((i) => ({ description: i.description, qty: i.qty, price: (i.price ?? 0) * i.qty }));
+  const decided = r.clientDecidedAt && r.status !== 'awaiting_client' ? { decision: r.status === 'declined' ? 'decline' as const : 'approve' as const, at: r.clientDecidedAt } : undefined;
+  return resolve({ request: { ...r }, job: j, watch: w, lines, total: lines.reduce((t, l) => t + l.price, 0), decided });
+}
+export async function portalDecideParts(clientId: string, id: string, decision: 'approve' | 'decline'): Promise<PortalPartsView> {
+  const r = store.partsRequests.find((x) => x.id === id); const j = r ? store.jobs.find((x) => x.id === r.jobId) : undefined;
+  if (!r || !j || j.clientId !== clientId) throw new Error('That parts approval isn’t on your account');
+  clientPartsDecision(r, decision, 'portal'); portalStamp(clientId, `${decision === 'approve' ? 'Approved' : 'Declined'} parts ${r.number} for ${j.number}`);
+  return portalGetPartsRequest(clientId, id);
+}
+// -- The ask arrives with its draft: internal reason (staff only) + the client-safe update in the fixed template. Rule-based at arrival; Regenerate with Claude on demand; a person edits and sends.
+const PORTAL_PART_WORD: Record<ComponentKey, string> = { head: 'watch', band: 'bracelet', case: 'case' };
+const askStateWord = (l: FlowLine): string => { const b = l.stages.find((s) => s.blocker?.tone === 'red')?.blocker?.text ?? ''; return l.finished ? 'finished' : isApprovalBlock(b) ? 'waiting on your approval' : /parts hold|not returned|on order/i.test(b) ? 'waiting on a part we have ordered' : /outsource|delayed|at risk/i.test(b) ? 'with a specialist for part of the work' : b ? 'paused between steps' : 'in progress'; };
+const askInternalReason = (j: Job, c: ComponentKey): string => {
+  const line = jobFlowSync(j).lines.find((l) => l.key === c); if (!line) return 'component not on this job';
+  const blocker = line.stages.find((s) => s.blocker)?.blocker; const cur = line.stages.find((s) => s.state === 'current'); const part = ensureParts(j).find((p) => p.key === c); const last = part?.history?.[part.history.length - 1];
+  const days = last ? Math.round((Date.now() - new Date(last.at).getTime()) / 864e5) : undefined;
+  return [blocker ? blocker.text : `${cur?.label ?? 'In progress'}${cur?.vendor ? ` · ${cur.vendor}` : ''} · no blocker on record`, `custody ${line.custody.holder} · ${line.custody.where}`, days !== undefined ? `${days}d at this step` : null, j.dueAt ? `due ${new Date(j.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : null].filter(Boolean).join(' · ');
+};
+const askClientFields = (j: Job, c: ComponentKey, ctx: JobSummaryContext): AskDraft['fields'] => {
+  const base = localSummaryFields(ctx); const lines = jobFlowSync(j).lines; const line = lines.find((l) => l.key === c); const blocker = line?.stages.find((s) => s.blocker?.tone === 'red')?.blocker?.text ?? '';
+  const parts = [line ? `The ${PORTAL_PART_WORD[c]} is ${askStateWord(line)}` : '', ...lines.filter((l) => l.key !== c).map((l) => `the ${PORTAL_PART_WORD[l.key]} is ${askStateWord(l)}`)].filter(Boolean);
+  const variant = blocker ? (isApprovalBlock(blocker) ? 'approval' : /parts hold|not returned|on order/i.test(blocker) ? 'parts' : 'hold') : base.variant;
+  const job_status = variant === 'parts' ? 'waiting on a part we have ordered' : variant === 'approval' ? 'awaiting your approval' : variant === 'hold' ? 'in progress, with one part of the work paused' : base.job_status;
+  return { job_status, per_component_status_line: parts.length ? `${parts.join('; ')}.` : null, target_date: base.target_date, variant };
+};
+const portalAskArrived = (cm: ConvMessage, j: Job, component: ComponentKey) => {
+  const conv = convOf(cm.conversationId); if (!conv.assignedTo) conv.assignedTo = { type: 'role', role: 'concierge' }; // front-desk queue — claimable from the thread
+  const ctx = summaryCtxSync(j); ctx.focus = { component: PART_LABEL[component], question: cm.text }; const fields = askClientFields(j, component, ctx);
+  cm.component = component; cm.ask = { jobId: j.id, jobNumber: j.number, component, componentLabel: PART_LABEL[component], internal: askInternalReason(j, component), text: fillSummaryTemplate(ctx, fields), fields, source: 'local', generatedAt: new Date().toISOString() };
+  jobStamp(j, `Client asked about the ${PART_LABEL[component].toLowerCase()} from the portal — update pre-drafted, waiting for a person to review and send`);
+  appendAudit({ type: 'comms', stationName: 'RolliConnect', detail: `${j.number} · portal ask · ${PART_LABEL[component]} · client-update draft generated (rule-based) → front-desk queue` });
+};
+export async function askContext(conversationId: string, messageId: string): Promise<JobSummaryContext> {
+  const m = cx.messages.find((x) => x.id === messageId && x.conversationId === conversationId); if (!m?.ask) throw new Error('No portal ask on this message');
+  const ctx = summaryCtxSync(getJobRow(m.ask.jobId)); ctx.focus = { component: m.ask.componentLabel, question: m.text }; return resolve(ctx);
+}
+export async function updateAskDraft(conversationId: string, messageId: string, patch: { text: string; fields?: AskDraft['fields']; source?: AskDraft['source'] }): Promise<AskDraft> {
+  const m = cx.messages.find((x) => x.id === messageId && x.conversationId === conversationId); if (!m?.ask) throw new Error('No portal ask on this message');
+  m.ask = { ...m.ask, text: patch.text, fields: patch.fields ?? m.ask.fields, source: patch.source ?? m.ask.source, generatedAt: patch.source ? new Date().toISOString() : m.ask.generatedAt }; return resolve({ ...m.ask });
+}
+// Send = one tap from the inbox item: portal thread + email notification (mail seam) + job timeline; the inbound item clears because the reply is now the last outbound
+export async function sendAskReply(conversationId: string, messageId: string, text: string): Promise<ConvMessage> {
+  const m = cx.messages.find((x) => x.id === messageId && x.conversationId === conversationId); if (!m?.ask) throw new Error('No portal ask on this message'); if (m.ask.sentAt) throw new Error('This update was already sent'); if (!text.trim()) throw new Error('Write the update first');
+  const j = getJobRow(m.ask.jobId); const w = byId(store.watches, j.watchId); const a = actor();
+  const out = await replyInThread(conversationId, { text, subject: `Update on your ${w.brand} ${w.model} — ${m.ask.componentLabel.toLowerCase()}` });
+  store.messages.push({ id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId: m.clientId, watchId: j.watchId, jobId: j.id, component: m.ask.component, from: 'staff', by: a.by, text: text.trim(), at: out.at, readByStaff: true, readByClient: false, emailId: out.emailId });
+  m.ask = { ...m.ask, text: text.trim(), sentAt: out.at, sentBy: a.by }; out.component = m.ask.component;
+  jobStamp(j, `Client update sent · ${m.ask.componentLabel.toLowerCase()} · portal thread + email · ${a.by}`);
+  j.notes.unshift({ id: newId('jn'), text: `Client update sent (portal thread + email) · ${m.ask.componentLabel.toLowerCase()} · "${text.trim().split('\n')[0].slice(0, 90)}…"`, at: out.at, by: a.by, station: a.station });
+  return resolve(out);
 }

@@ -2,11 +2,15 @@ import { Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import type { ComponentKey } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
 import { RcButton, RcCard, RcError } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+// Red-dot "Ask about this" arrives pre-addressed: ?job=&component=W|B|P → the question is drafted for the client, tagged to the job + component on the staff side
+const LEG_KEY: Record<string, ComponentKey> = { W: 'head', B: 'band', P: 'case' };
+const LEG_WORD: Record<ComponentKey, string> = { head: 'Watch', band: 'Bracelet', case: 'Case' };
 
 export default function RcMessagesPage() {
   const { client } = useRcSession();
@@ -15,9 +19,10 @@ export default function RcMessagesPage() {
   const { data: home } = useAsync(() => api.portalGetHome(client!.id), []);
   const req = requestId ? home?.requests.find((r) => r.request.id === requestId)?.request : undefined;
   const watchId = params.get('watch') ?? req?.watchId ?? undefined;
+  const askJobId = params.get('job') ?? undefined; const askComponent = params.get('component') ? LEG_KEY[params.get('component')!.toUpperCase()] : undefined;
   const { data: msgs, reload } = useAsync(() => api.portalGetMessages(client!.id), []);
   const { data: watches } = useAsync(() => api.getWatchesForClient(client!.id), []);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => (askComponent ? `${LEG_WORD[askComponent]} — why isn't this moving?` : ''));
   const [err, setErr] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [msgs]);
@@ -27,7 +32,7 @@ export default function RcMessagesPage() {
     e.preventDefault();
     setErr(null);
     const body = req && !text.startsWith(`Re ${req.number}`) ? `Re ${req.number}: ${text}` : text;
-    try { await api.portalSendMessage(client!.id, body, watchId); setText(''); reload(); } catch (ex) { setErr(ex instanceof Error ? ex.message : 'Something went wrong'); }
+    try { await api.portalSendMessage(client!.id, body, watchId, { jobId: askJobId, component: askComponent }); setText(''); reload(); } catch (ex) { setErr(ex instanceof Error ? ex.message : 'Something went wrong'); }
   };
 
   return (
@@ -42,7 +47,7 @@ export default function RcMessagesPage() {
             <li key={m.id} data-testid={`rc-message-${m.id}`} className={`flex ${m.from === 'client' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${m.from === 'client' ? 'rounded-br-sm bg-rc-ink text-rc-cream' : 'rounded-bl-sm bg-rc-accentSoft text-rc-ink'}`}>
                 <p className="text-[15px] leading-relaxed">{m.text}</p>
-                <div className={`mt-1 text-[11px] ${m.from === 'client' ? 'text-rc-cream/60' : 'text-rc-muted'}`}>{m.from === 'client' ? 'You' : `${m.by} · RolliSuite`} · {when(m.at)}{m.watchId && watches ? ` · re ${watches.find((w) => w.id === m.watchId)?.model ?? ''}` : ''}</div>
+                <div className={`mt-1 text-[11px] ${m.from === 'client' ? 'text-rc-cream/60' : 'text-rc-muted'}`}>{m.from === 'client' ? 'You' : `${m.by} · RolliSuite`} · {when(m.at)}{m.watchId && watches ? ` · re ${watches.find((w) => w.id === m.watchId)?.model ?? ''}` : ''}{m.component ? <span data-testid={`rc-message-component-${m.id}`}> · {LEG_WORD[m.component].toLowerCase()}</span> : null}</div>
               </div>
             </li>
           ))}
@@ -50,7 +55,7 @@ export default function RcMessagesPage() {
         </ol>
         <div ref={endRef} />
         <form onSubmit={send} className="mt-6 border-t border-rc-line pt-4">
-          {(watch || req) && <div className="mb-2 text-xs text-rc-muted" data-testid="rc-message-context">About {req ? `request ${req.number}` : ''}{req && watch ? ' · ' : ''}{watch ? `your ${watch.brand} ${watch.model}` : ''}</div>}
+          {(watch || req || askComponent) && <div className="mb-2 text-xs text-rc-muted" data-testid="rc-message-context">About {req ? `request ${req.number}` : ''}{req && watch ? ' · ' : ''}{askComponent ? `the ${LEG_WORD[askComponent].toLowerCase()} on ` : ''}{watch ? `your ${watch.brand} ${watch.model}` : ''}{askComponent && <span data-testid="rc-message-ask-note"> · a person on our team will see exactly which part you mean</span>}</div>}
           <div className="flex gap-2">
             <textarea data-testid="rc-message-input" value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Write to our team…" className="flex-1 resize-none rounded-md border border-rc-line bg-white px-3 py-2 text-[15px] focus:border-rc-accent focus:outline-none focus:ring-2 focus:ring-rc-accent/20" />
             <RcButton type="submit" data-testid="rc-message-send" disabled={!text.trim()}><Send size={15} /> Send</RcButton>
