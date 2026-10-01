@@ -19,6 +19,17 @@ export const conversations: Conversation[] = [
   { id: 'cv-r3', clientId: 'c-30', subject: 'Datejust 41 service — crystal question', anchor: { kind: 'job', id: 'j-r3' }, status: 'open', assignedTo: { type: 'user', shortName: 'MH' }, division: 'rolliworks', createdAt: daysAgo(6, 18), lastAt: daysAgo(5, 10), lastInboundAt: daysAgo(6, 18), lastOutboundAt: daysAgo(5, 10), tokenSeq: 1 },
   { id: 'cv-r1', clientId: 'c-30', subject: 'Submariner Date — ready for collection', anchor: { kind: 'job', id: 'j-r1' }, status: 'closed', assignedTo: { type: 'user', shortName: 'Vienna' }, division: 'rolliworks', createdAt: daysAgo(351, 12), lastAt: daysAgo(349, 15), lastInboundAt: daysAgo(349, 15), lastOutboundAt: daysAgo(351, 12), tokenSeq: 1, closedAt: daysAgo(349, 16) },
   { id: 'cv-05', clientId: 'c-10', subject: 'Web request — Datejust bracelet', anchor: { kind: 'request', id: 'rq-03' }, status: 'open', division: 'rolliworks', createdAt: daysAgo(3, 9), lastAt: daysAgo(3, 9), lastInboundAt: daysAgo(3, 9), tokenSeq: 0 },
+  // ---- Inbox job-card seeds (2026-10-01) — every anchor case visible at once ----
+  // 1 · Rebecca Halloran — ONE active job (W green · B red · P blue) — thread on the job
+  { id: 'cv-ib1', clientId: 'c-24', subject: 'GMT-Master — bracelet parts timing', anchor: { kind: 'job', id: 'j-ib1' }, status: 'open', assignedTo: { type: 'user', shortName: 'Vienna' }, division: 'rolliworks', createdAt: daysAgo(1, 9), lastAt: hoursAgo(3), lastInboundAt: hoursAgo(3), lastOutboundAt: daysAgo(1, 9), tokenSeq: 1 },
+  // 2 · Victoria Rosenthal — TWO active jobs (E02033 + warranty E02026) — thread on E02033; the other shows beneath in the panel
+  { id: 'cv-ib2', clientId: 'c-18', subject: 'Daytona service — ready this week?', anchor: { kind: 'job', id: 'j-32' }, status: 'open', division: 'rolliworks', createdAt: hoursAgo(7), lastAt: hoursAgo(7), lastInboundAt: hoursAgo(7), tokenSeq: 0 },
+  // 3 · Oliver Pemberton — active E02030 + COMPLETED E02019 (picked up) — thread on the completed one
+  { id: 'cv-ib3', clientId: 'c-15', subject: 'E02019 — which strap did you fit at pickup?', anchor: { kind: 'job', id: 'j-09' }, status: 'open', assignedTo: { type: 'role', role: 'concierge' }, division: 'rolliworks', createdAt: hoursAgo(26), lastAt: hoursAgo(26), lastInboundAt: hoursAgo(26), tokenSeq: 0 },
+  // 4 · Robert Calloway — RETURN / warranty job E02081 (returned from E01871) — thread on the return job
+  { id: 'cv-ib4', clientId: 'c-30', subject: 'Submariner is back — crown will not screw down', anchor: { kind: 'job', id: 'j-wr1' }, status: 'open', assignedTo: { type: 'user', shortName: 'MH' }, division: 'rolliworks', createdAt: daysAgo(2, 10), lastAt: hoursAgo(20), lastInboundAt: hoursAgo(20), lastOutboundAt: daysAgo(2, 11), tokenSeq: 1 },
+  // 5 · Priya Raghunathan — NO anchor (general question) — panel falls back to the Client 360 summary
+  { id: 'cv-ib5', clientId: 'c-04', subject: 'Insurance appraisal letter for my collection', status: 'open', division: 'rolliworks', createdAt: hoursAgo(30), lastAt: hoursAgo(30), lastInboundAt: hoursAgo(30), tokenSeq: 0 },
 ];
 
 export const convMessages: ConvMessage[] = [
@@ -41,4 +52,12 @@ export const convMessages: ConvMessage[] = [
   msg('cm-12', 'cv-04', 'c-02', 'in', 'approval', 'Eleanor Vance', 'Approved estimate E01042 rev 1 in RolliConnect', daysAgo(2, 15), { readByStaff: true, event: { kind: 'estimate_approved', refId: 'e-02', label: 'Approval · E01042' } }),
   msg('cm-13', 'cv-04', 'c-02', 'out', 'staff', 'Walter', 'Thank you Eleanor — the bezel scratch you photographed needs a P line we had missed, so we revised the estimate (rev 2, $2,850) and re-sent it for your approval.', daysAgo(1, 12), { token: 'RT-CV04-2', station: 'Front Desk 1' }),
   msg('cm-14', 'cv-05', 'c-10', 'in', 'portal', 'Naomi Castellanos', 'Web request RQ-26-0043: my Datejust bracelet has stretch and one pin keeps backing out — can this be fixed without a new bracelet?', daysAgo(3, 9), { readByStaff: false }),
+  // Inbox job-card seeds
+  msg('cm-ib1a', 'cv-ib1', 'c-24', 'out', 'staff', 'Vienna', 'Hello Rebecca — the movement service is under way and the case refinish is done. The bracelet is waiting on two Jubilee links and a clasp spring from RSC (ETA Oct 6); everything else keeps moving.', daysAgo(1, 9), { token: 'RT-CVIB1-1', station: 'Front Desk 1' }),
+  msg('cm-ib1b', 'cv-ib1', 'c-24', 'in', 'email', 'Rebecca Halloran', 'Thanks. If the links slip past the 6th, could you release the watch on the old bracelet and fit the links when they land? I travel on the 10th.', hoursAgo(3), { matchedToken: 'RT-CVIB1-1', readByStaff: false }),
+  msg('cm-ib2', 'cv-ib2', 'c-18', 'in', 'portal', 'Victoria Rosenthal', 'Hi — is the Daytona (E02033) still on track for this week? And is the other one (E02026) back from testing yet?', hoursAgo(7), { readByStaff: false }),
+  msg('cm-ib3', 'cv-ib3', 'c-15', 'in', 'email', 'Oliver Pemberton', 'Quick one on the watch I collected — which strap did you fit at pickup? The box had a second one and I want to keep the original with the papers.', hoursAgo(26), { readByStaff: false }),
+  msg('cm-ib4a', 'cv-ib4', 'c-30', 'out', 'staff', 'MH', 'Robert — we have the Submariner back (E02081, linked to last year’s service E01871). Crown tube is being checked under warranty; no charge expected. I will confirm after the bench look.', daysAgo(2, 11), { token: 'RT-CVIB4-1', station: 'Front Desk 1' }),
+  msg('cm-ib4b', 'cv-ib4', 'c-30', 'in', 'email', 'Robert Calloway', 'Appreciated. Please keep the original inspection report handy — I would like to compare the before/after crown notes.', hoursAgo(20), { matchedToken: 'RT-CVIB4-1', readByStaff: false }),
+  msg('cm-ib5', 'cv-ib5', 'c-04', 'in', 'portal', 'Priya Raghunathan', 'Could you prepare an insurance appraisal letter for the three pieces you have serviced for me over the years? My broker needs it by month end.', hoursAgo(30), { readByStaff: false }),
 ];

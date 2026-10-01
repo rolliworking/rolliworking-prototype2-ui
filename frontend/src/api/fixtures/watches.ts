@@ -51,4 +51,6 @@ export const watches: Watch[] = [
   { id: 'w-65', clientId: 'c-46', brand: 'Rolex', model: 'Milgauss', reference: '116400GV', serial: 'L5Q2S7U1', dial: 'Z-blue', bracelet: 'Oyster', status: 'in_service', receivedAt: daysAgo(9) },
   // Portal dots seed — Eleanor Vance's second watch
   { id: 'w-66', clientId: 'c-02', brand: 'Rolex', model: 'Submariner Date', reference: '126610LN', serial: 'N7R3T9V2', dial: 'Black', bracelet: 'Oyster', status: 'awaiting_parts', receivedAt: daysAgo(8) },
+  // Inbox job-card seed — Rebecca Halloran's GMT (one active job, W·B·P mixed)
+  { id: 'w-67', clientId: 'c-24', brand: 'Rolex', model: 'GMT-Master II', reference: '126710BLRO', serial: 'P8K2M4R7', dial: 'Black', bracelet: 'Jubilee', status: 'awaiting_parts', receivedAt: daysAgo(6) },
 ];

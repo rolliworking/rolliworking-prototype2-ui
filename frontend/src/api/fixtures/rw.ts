@@ -38,6 +38,8 @@ export const RW_STATIONS: RwStation[] = [
 export const partSeeds: Record<string, Partial<Record<ComponentKey, { station: RwStationKey; status: PartStatus; tech?: string; item?: string; bin?: string; binOrigin?: string; done?: boolean }>>> = {
   // Portal dots seed — Eleanor's Submariner: head on the bench · bracelet at the band bench under a scoped parts hold · case refinished, waiting in the safe for the head
   'j-pd1': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'Leo' }, band: { station: 'band_assign', status: 'in_progress', tech: 'Sam' }, case: { station: 'safe_await_head', status: 'waiting', tech: 'Vienna', done: true } },
+  // Inbox job-card seed — Rebecca Halloran's GMT: head on the bench (green) · bracelet under a scoped parts hold (red) · case refinished, waiting in the safe (blue)
+  'j-ib1': { head: { station: 'wm_bench_1', status: 'in_progress', tech: 'Leo' }, band: { station: 'band_assign', status: 'in_progress', tech: 'Sam' }, case: { station: 'safe_await_head', status: 'waiting', tech: 'Vienna', done: true } },
   // JV bin seeds — 9 tickets assigned to the bin: 6 inside (bin at JV's bench this morning), 3 handed out to Dre / Sam / Nico
   'j-b1': { band: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },
   'j-b2': { band: { station: 'jv_bench', status: 'in_progress', tech: 'JV', bin: 'jv_bin' } },

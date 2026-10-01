@@ -3781,6 +3781,33 @@ export async function clearMessage(conversationId: string, messageId: string): P
   return getThread(conversationId);
 }
 export async function markConversationRead(id: string): Promise<void> { cx.messages.filter((m) => m.conversationId === id && m.direction === 'in').forEach((m) => { m.readByStaff = true; }); return resolve(undefined); }
+// ---- Inbox job-card slide-out + sidebar badges (MH 2026-10-01) ----
+export const inboxUnreadCountSync = () => { const open = new Set(cx.conversations.filter((c) => c.status !== 'closed' && c.division === getSessionDivision()).map((c) => c.id)); return cx.messages.filter((m) => m.direction === 'in' && !m.readByStaff && open.has(m.conversationId)).length; };
+export const openRequestsNoEstimateCountSync = () => store.requests.filter((r) => r.status !== 'closed' && !r.estimateId && (r.division ?? 'rolliworks') === getSessionDivision()).length;
+export const requestByIdSync = (id: string): ServiceRequest | undefined => store.requests.find((r) => r.id === id);
+// Legs the client described: explicit on the request, else derived from the kiosk services ticked
+const KIOSK_LEG: Record<KioskDetails['services'][number], DeptCode> = { mov_service: 'W', case_work: 'P', band_repair: 'B', band_polish: 'P', recut_bezel: 'P' };
+export const requestLegsSync = (r: ServiceRequest): DeptCode[] => r.legs ?? (r.kiosk ? Array.from(new Set(r.kiosk.services.map((s) => KIOSK_LEG[s]))) : []);
+// Instant range — only when a quote key exists (kiosk services ticked or legs captured); shop-typical bands, never a promise
+const INSTANT_RANGE: Record<DeptCode, [number, number]> = { W: [950, 1650], B: [260, 520], P: [320, 540], PM: [950, 1650] };
+export const requestInstantRangeSync = (r: ServiceRequest): { low: number; high: number; legs: DeptCode[] } | undefined => { const legs = requestLegsSync(r); if (!legs.length) return undefined; return { low: legs.reduce((t, l) => t + INSTANT_RANGE[l][0], 0), high: legs.reduce((t, l) => t + INSTANT_RANGE[l][1], 0), legs }; };
+// A request row click opens its thread — create the thread on first open, seeded with what the client wrote
+export async function ensureRequestThread(requestId: string): Promise<Conversation> {
+  const r = store.requests.find((x) => x.id === requestId); if (!r) throw new Error('No such request');
+  const existing = cx.conversations.find((c) => c.anchor?.kind === 'request' && c.anchor.id === r.id); if (existing) return resolve(existing);
+  const c = ensureConversation(r.clientId, `${r.source === 'kiosk' ? 'Kiosk check-in' : r.source === 'web' ? 'Web request' : 'Request'} — ${r.summary.slice(0, 48)}${r.summary.length > 48 ? '…' : ''}`, { kind: 'request', id: r.id }, r.division);
+  c.createdAt = r.createdAt; c.lastAt = r.createdAt; c.lastInboundAt = r.createdAt; const cl = byId(fx.clients, r.clientId);
+  cx.messages.push({ id: newId('cm'), conversationId: c.id, clientId: r.clientId, direction: 'in', source: r.source === 'kiosk' ? 'kiosk' : r.source === 'email' ? 'email' : 'portal', by: fullNameOf(cl), text: `${r.number}: ${r.summary}`, at: r.createdAt, readByStaff: false, photos: r.photos });
+  return resolve(c);
+}
+export const conversationForRequestSync = (requestId: string): Conversation | undefined => cx.conversations.find((c) => c.anchor?.kind === 'request' && c.anchor.id === requestId);
+// Completed job → when it left (sales order picked up / shipped); return job → its original
+export const jobPickupSync = (jobId: string): { at: string; how: 'picked_up' | 'shipped'; soNumber: string } | undefined => { const o = store.salesOrders.find((x) => x.jobId === jobId && (x.status === 'picked_up' || x.status === 'shipped')); return o ? { at: o.pickedUpAt ?? o.shipDate ?? o.fulfilledAt ?? o.orderDate, how: o.status as 'picked_up' | 'shipped', soNumber: o.number } : undefined; };
+export const jobReturnInfoSync = (job: Job): { original: Job; pickup?: { at: string; how: 'picked_up' | 'shipped'; soNumber: string }; reason?: string } | undefined => { if (!job.returnOfJobId) return undefined; const o = store.jobs.find((j) => j.id === job.returnOfJobId); return o ? { original: o, pickup: jobPickupSync(o.id), reason: job.returnReason } : undefined; };
+export const jobsReturnedFromSync = (jobId: string): Job[] => store.jobs.filter((j) => j.returnOfJobId === jobId);
+export const jobByIdSync = (id: string): Job | undefined => store.jobs.find((j) => j.id === id);
+export const jobForEstimateSync = (estimateId: string): Job | undefined => store.jobs.find((j) => j.estimateId === estimateId);
+export const watchByIdSync = (id?: string): Watch | undefined => (id ? store.watches.find((w) => w.id === id) : undefined);
 export async function assignConversation(id: string, assignee: Assignee | null): Promise<ConversationWithRefs> { const c = convOf(id); c.assignedTo = assignee ?? undefined; cxStamp(`Thread ${c.subject} → ${assignee ? assigneeLabel(assignee) : 'unassigned'}`); return resolve(convRefs(c)); }
 export async function snoozeConversation(id: string, untilIso: string): Promise<ConversationWithRefs> { const c = convOf(id); if (!untilIso || new Date(untilIso).getTime() <= Date.now()) throw new Error('Pick a future date'); c.status = 'snoozed'; c.snoozedUntil = untilIso; c.snoozedBy = actor().by; cxStamp(`Thread snoozed until ${untilIso.slice(0, 10)} · ${c.subject}`); return resolve(convRefs(c)); }
 export async function wakeConversation(id: string): Promise<ConversationWithRefs> { const c = convOf(id); c.status = 'open'; c.snoozedUntil = undefined; cxStamp(`Thread woken · ${c.subject}`); return resolve(convRefs(c)); }

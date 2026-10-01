@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, History } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
+import * as api from '@/api/client';
 import * as calls from '@/api/calls';
 import { LOOKUP_OPEN_EVENT } from '@/components/layout/CornerLookup';
 import { NAV_GROUPS, navForUser, type NavGroup, type NavItem } from '@/config/navigation';
@@ -16,6 +17,11 @@ const MissedBadge = ({ testId = 'nav-calls-missed', className = 'ml-auto' }: { t
   useEffect(() => calls.subscribeCalls(() => setN(calls.openMissedCountSync())), []);
   return n > 0 ? <span data-testid={testId} title={`${n} missed call${n === 1 ? '' : 's'} waiting`} className={clsx('rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-4 text-white', className)}>{n}</span> : null;
 };
+
+// Live counts on the top-level Inbox (unread client messages) and Requests (open, no estimate yet) buttons — polled, cheap sync reads
+const useCount = (fn: () => number) => { const [n, setN] = useState(fn); const { pathname } = useLocation(); useEffect(() => { setN(fn()); const t = window.setInterval(() => setN(fn()), 4000); return () => window.clearInterval(t); }, [fn, pathname]); return n; };
+const CountBadge = ({ fn, testId, tone }: { fn: () => number; testId: string; tone: 'brand' | 'amber' }) => { const n = useCount(fn); return n > 0 ? <span data-testid={testId} className={clsx('ml-auto rounded-full px-1.5 text-[10px] font-bold leading-4', tone === 'brand' ? 'bg-brand text-white' : 'bg-amber-400 text-ink')}>{n}</span> : null; };
+const ITEM_BADGE: Record<string, () => JSX.Element> = { inbox: () => <CountBadge fn={api.inboxUnreadCountSync} testId="nav-inbox-badge" tone="brand" />, requests: () => <CountBadge fn={api.openRequestsNoEstimateCountSync} testId="nav-requests-badge" tone="amber" /> };
 
 // Expandable group: header is a page when the group has a path (Intake, Clients) or a plain folder (RW); children indent underneath.
 const Group = ({ g, items, pathname }: { g: NavGroup; items: NavItem[]; pathname: string }) => {
@@ -44,7 +50,7 @@ export const Sidebar = () => {
             const item = row; const Icon = item.icon;
             return <li key={item.key} className={clsx(item.pinned && 'mb-2')}>
               <NavLink to={item.path} end={item.path === '/'} data-testid={`nav-${item.key}`} className={({ isActive }) => clsx(rowCls(isActive && !item.pinned), item.pinned && 'bg-moss/20 text-white ring-1 ring-inset ring-moss/60 hover:bg-moss/30', isActive && !item.pinned && 'before:absolute before:inset-y-1.5 before:left-0 before:w-[2px] before:rounded-r before:bg-white', isActive && item.pinned && 'bg-moss/40')}>
-                <Icon size={15} strokeWidth={1.9} className={clsx('shrink-0', item.pinned ? 'text-moss-100' : 'text-[#93a1b4] group-hover:text-white')} /><span className="truncate">{item.label}</span>{item.pinned && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-moss-100" aria-hidden />}
+                <Icon size={15} strokeWidth={1.9} className={clsx('shrink-0', item.pinned ? 'text-moss-100' : 'text-[#93a1b4] group-hover:text-white')} /><span className="truncate">{item.label}</span>{ITEM_BADGE[item.key]?.()}{item.pinned && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-moss-100" aria-hidden />}
               </NavLink>
             </li>;
           })}

@@ -54,6 +54,7 @@ interface Seed {
   notes?: string[];
   conditionNotes?: string;
   division?: Division;
+  returnOf?: { jobId: string; reason: string };
 }
 
 const build = (s: Seed): Job => {
@@ -96,6 +97,8 @@ const build = (s: Seed): Job => {
     holds: s.hold ? [{ id: `jh-${++seq}`, type: s.hold.type, reason: s.hold.reason, priorStatus: s.status, placedAt: daysAgo(s.hold.daysAgo, 14), placedBy: by, station: 'Bench 1', component: s.hold.component, ...(s.hold.released ? { releasedAt: daysAgo(Math.max(0, s.hold.daysAgo - 3), 9), releasedBy: by, releaseNote: 'Parts arrived' } : {}) }] : [],
     notes: (s.notes ?? []).map((text, i) => ({ id: `jn-${++seq}`, text, at: daysAgo(Math.max(0, s.createdDaysAgo - i - 1), 16), by, station: 'Bench 1' })),
     photos: JOB_FLOW.indexOf(s.status) >= 2 ? [{ ...seedPhoto(`Inspection ${s.number} front`), id: `jp-${++seq}`, at: daysAgo(Math.max(0, s.createdDaysAgo - 1), 11), by: 'Walter', station: 'Front Desk 1' }] : [],
+    returnOfJobId: s.returnOf?.jobId,
+    returnReason: s.returnOf?.reason,
     inspection: kind === 'service' && JOB_FLOW.indexOf(s.status) >= 2 ? { answers: { case: 'light scratches', crystal: 'clear', bracelet: 'tight', movement: 'running', water: 'not tested' }, at: daysAgo(Math.max(0, s.createdDaysAgo - 1), 11), by: 'Walter', station: 'Front Desk 1' } : undefined,
   };
 };
@@ -160,6 +163,10 @@ export const jobs: Job[] = [
   build({ id: 'j-b8', number: 'E02077', clientId: 'c-45', watchId: 'w-64', workflow: ['B'], status: 'in_service', kind: 'small_job', owner: 'manager', assignees: ['JV', 'Sam'], createdDaysAgo: 2, dueInDays: 8, lines: [line('Oyster bracelet re-pin + clasp adjust', 260, 'B')] }),
   build({ id: 'j-b9', number: 'E02078', clientId: 'c-46', watchId: 'w-65', workflow: ['B'], status: 'in_service', kind: 'small_job', owner: 'manager', assignees: ['JV', 'Nico'], createdDaysAgo: 9, dueInDays: 1, priority: 'high', lines: [line('Oyster bracelet refinish + stretch repair', 460, 'B')] }),
   // Portal dots seed (2026-09-30): Eleanor Vance's Submariner — W in progress (green) · B parts hold scoped to the bracelet (red) · P refinish finished (blue)
+  // Inbox job-card seeds (2026-10-01): Rebecca Halloran's GMT — ONE active job, W green · B red (scoped parts hold) · P blue
+  build({ id: 'j-ib1', number: 'E02080', clientId: 'c-24', watchId: 'w-67', workflow: ['W', 'B', 'P'], status: 'in_service', owner: 'manager', assignees: ['Leo', 'Sam', 'Dre'], createdDaysAgo: 6, dueInDays: 9, hold: { type: 'parts', reason: 'Jubilee clasp — 2 links + spring bar set on order from RSC (ETA Oct 6)', daysAgo: 2, component: 'band' }, notes: ['Bracelet links stretched past spec — parts priced and approved by the client on the portal.'], lines: [line('Complete movement service — cal. 3285', 1550, 'W'), line('Jubilee bracelet — 2 links + clasp spring', 420, 'B'), line('Case & bezel refinish — brushed / polished', 395, 'P')] }),
+  // Calloway's Submariner came BACK after pickup (E01871, collected a year ago) — warranty return linked to the original job
+  build({ id: 'j-wr1', number: 'E02081', clientId: 'c-30', watchId: 'w-40', workflow: ['W'], status: 'in_review', kind: 'warranty', priority: 'high', owner: 'manager', assignees: ['Leo'], createdDaysAgo: 2, dueInDays: 5, returnOf: { jobId: 'j-r1', reason: 'Crown no longer screws down since pickup — returned under the 2-year service warranty' }, notes: ['Returned 2 days ago at the front desk — crown tube thread checked at intake, likely tube replacement under warranty.'], lines: [line('Warranty — crown + tube replacement', 0, 'W')] }),
   build({ id: 'j-pd1', number: 'E02079', clientId: 'c-02', watchId: 'w-66', workflow: ['W', 'B', 'P'], status: 'in_service', owner: 'manager', assignees: ['Leo', 'Sam', 'Dre'], createdDaysAgo: 8, dueInDays: 6, hold: { type: 'parts', reason: 'Waiting on Oyster clasp spring + 2 links (ref 97200) from RSC — ETA Oct 8', daysAgo: 4, component: 'band' }, notes: ['Clasp spring fatigued — parts approval priced, going to the client; RSC backorder expected.'], lines: [line('Complete movement service — cal. 3235', 1450, 'W'), line('Oyster bracelet stretch repair + clasp spring', 380, 'B'), line('Case & bezel refinish — brushed / polished', 395, 'P')] }),
 ];
 

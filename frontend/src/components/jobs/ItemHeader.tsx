@@ -48,6 +48,8 @@ export const ItemHeader = ({ job: j, so, reload }: { job: JobWithRefs; so: Sales
           <OwnerBadge owner={j.owner} testId="job-owner" />
           <TailPill stage={api.tailStage(j)} testId="job-tail" />
           <ClientRequestBadge n={api.openClientRequests(j).length} testId="job-client-requests-badge" />
+          {api.jobReturnInfoSync(j) && <Link to={`/jobs/${j.returnOfJobId}`} data-testid="job-returned-from" title={j.returnReason} className="inline-flex items-center rounded-sm border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-900 hover:underline">returned from {api.jobReturnInfoSync(j)!.original.number}{api.jobReturnInfoSync(j)!.pickup ? ` · picked up ${fmtDate(api.jobReturnInfoSync(j)!.pickup!.at)}` : ''}</Link>}
+          {api.jobsReturnedFromSync(j.id).map((r) => <Link key={r.id} to={`/jobs/${r.id}`} data-testid={`job-returned-to-${r.id}`} className="inline-flex items-center rounded-sm border border-rose-200 bg-rose-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-rose-800 hover:underline">returned → {r.number}</Link>)}
           <AtRiskTag jobId={j.id} />
           {j.wireWarnings?.length ? <span data-testid="job-wire-warning" title={j.wireWarnings.join(' · ')} className="rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">unmapped live status · {j.wireWarnings.length}</span> : null}
           <ClientRefPill value={api.jobClientRef(j)} sample={`Your watch is ready for pickup — ${j.watch.brand} ${j.watch.model} (${j.number})`} onSave={async (v) => { await api.setJobClientRef(j.id, v); await reload(); }} testId="job-client-ref" />

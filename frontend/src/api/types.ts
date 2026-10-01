@@ -335,6 +335,8 @@ export interface Job {
   components?: JobComponent[];
   clientRequests?: ClientRequest[];
   inboundDeclaredValue?: number;
+  returnOfJobId?: string; // warranty / return job: the watch came back after pickup — linked to the original job ("returned from E0xxxx")
+  returnReason?: string;
 }
 
 // Client request notes — what the client asked for; surfaced on pad/wm cards, popped on every label scan, enforced at QC
@@ -831,6 +833,8 @@ export interface ServiceRequest {
   duplicateOfId?: string;
   division?: Division;
   kiosk?: KioskDetails;
+  legs?: DeptCode[]; // what the client ticked / described — W · B · P, when captured
+  photos?: PackagePhoto[]; // what the client attached (web form / portal)
 }
 
 export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request' | 'shipment' | 'swo';
