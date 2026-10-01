@@ -3836,6 +3836,23 @@ export const jobPickupSync = (jobId: string): { at: string; how: 'picked_up' | '
 export const jobReturnInfoSync = (job: Job): { original: Job; pickup?: { at: string; how: 'picked_up' | 'shipped'; soNumber: string }; reason?: string } | undefined => { if (!job.returnOfJobId) return undefined; const o = store.jobs.find((j) => j.id === job.returnOfJobId); return o ? { original: o, pickup: jobPickupSync(o.id), reason: job.returnReason } : undefined; };
 export const jobsReturnedFromSync = (jobId: string): Job[] => store.jobs.filter((j) => j.returnOfJobId === jobId);
 export const jobByIdSync = (id: string): Job | undefined => store.jobs.find((j) => j.id === id);
+// DOTS ONLY WHILE IN POSSESSION (MH 2026-10-01): a job carries W·B·P dots only while the piece is physically with us — in-house, at a vendor, or in transit back. Picked up / shipped / closed → no dots anywhere.
+export const jobInPossessionSync = (j: Job): boolean => j.status !== 'closed' && !jobPickupSync(j.id);
+// Inbox panel sections: ACTIVE = open requests without an estimate + jobs in possession (newest first) · FULFILLED = jobs that left (picked up / shipped) or closed · CLOSED = expired / declined estimates + closed requests
+export type PanelActive = { kind: 'job'; at: string; job: Job } | { kind: 'request'; at: string; request: ServiceRequest };
+export interface PanelFulfilled { job: Job; at: string; pickup?: { at: string; how: 'picked_up' | 'shipped'; soNumber: string } }
+export interface PanelClosed { kind: 'estimate' | 'request'; id: string; number: string; watchLabel: string; reason: string; at: string }
+export const clientPanelSync = (clientId: string): { active: PanelActive[]; fulfilled: PanelFulfilled[]; closed: PanelClosed[] } => {
+  const wl = (watchId?: string) => { const w = watchByIdSync(watchId); return w ? `${w.brand} ${w.model}`.trim() : ''; };
+  const jobs = store.jobs.filter((j) => j.clientId === clientId); const reqs = store.requests.filter((r) => r.clientId === clientId);
+  const active: PanelActive[] = [...jobs.filter(jobInPossessionSync).map((job) => ({ kind: 'job' as const, at: job.createdAt, job })), ...reqs.filter((r) => (r.status === 'new' || r.status === 'quoted') && !r.estimateId).map((request) => ({ kind: 'request' as const, at: request.createdAt, request }))].sort((a, b) => b.at.localeCompare(a.at));
+  const fulfilled: PanelFulfilled[] = jobs.filter((j) => !jobInPossessionSync(j)).map((job) => { const pickup = jobPickupSync(job.id); return { job, pickup, at: pickup?.at ?? job.finishedAt ?? job.createdAt }; }).sort((a, b) => b.at.localeCompare(a.at));
+  const closed: PanelClosed[] = [
+    ...store.estimates.filter((e) => e.clientId === clientId && (e.status === 'expired' || e.status === 'declined')).map((e) => ({ kind: 'estimate' as const, id: e.id, number: e.number, watchLabel: wl(e.watchId), reason: e.status === 'expired' ? 'Estimate expired — never approved' : `Declined${e.declineReason ? ` — ${e.declineReason}` : ''}`, at: e.status === 'expired' ? e.validUntil : e.declinedAt ?? e.updatedAt })),
+    ...reqs.filter((r) => r.status === 'closed' || r.status === 'closed_by_client').map((r) => ({ kind: 'request' as const, id: r.id, number: r.number, watchLabel: wl(r.watchId), reason: r.closedNote ?? (r.closeReason ? REQUEST_CLOSE_REASONS.find((x) => x.key === r.closeReason)?.label ?? r.closeReason : r.closedBy === 'client' ? 'Closed by the client' : 'Closed'), at: r.closedAt ?? r.createdAt })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  return { active, fulfilled, closed };
+};
 export const jobForEstimateSync = (estimateId: string): Job | undefined => store.jobs.find((j) => j.estimateId === estimateId);
 export const watchByIdSync = (id?: string): Watch | undefined => (id ? store.watches.find((w) => w.id === id) : undefined);
 export async function assignConversation(id: string, assignee: Assignee | null): Promise<ConversationWithRefs> { const c = convOf(id); c.assignedTo = assignee ?? undefined; cxStamp(`Thread ${c.subject} → ${assignee ? assigneeLabel(assignee) : 'unassigned'}`); return resolve(convRefs(c)); }
@@ -6502,9 +6519,9 @@ export const wbpRowSync = (j: Job): WbpRow => {
   }
   return { jobId: j.id, jobNumber: j.number, status: j.status, clientId: j.clientId, watchLabel: w ? `${w.brand} ${w.model}`.trim() : '', legs };
 };
-export const wbpForJobSync = (jobId: string): WbpRow | null => { const j = store.jobs.find((x) => x.id === jobId); return j ? wbpRowSync(j) : null; };
-// Every open job of a client; the job in hand (when given) comes first so the outlined row leads
-export const wbpForClientSync = (clientId: string, firstJobId?: string): WbpRow[] => store.jobs.filter((j) => j.clientId === clientId && j.status !== 'closed').sort((a, b) => Number(b.id === firstJobId) - Number(a.id === firstJobId) || a.number.localeCompare(b.number)).map(wbpRowSync);
+export const wbpForJobSync = (jobId: string): WbpRow | null => { const j = store.jobs.find((x) => x.id === jobId); return j && jobInPossessionSync(j) ? wbpRowSync(j) : null; };
+// Every job of a client still in our possession (dots rule); the job in hand (when given) comes first so the outlined row leads
+export const wbpForClientSync = (clientId: string, firstJobId?: string): WbpRow[] => store.jobs.filter((j) => j.clientId === clientId && jobInPossessionSync(j)).sort((a, b) => Number(b.id === firstJobId) - Number(a.id === firstJobId) || a.number.localeCompare(b.number)).map(wbpRowSync);
 export async function getWbpForClient(clientId: string, firstJobId?: string): Promise<WbpRow[]> { return resolve(wbpForClientSync(clientId, firstJobId)); }
 
 // ---- Staff presence for the message directory — DERIVED, never toggled: clocked out → away · on a call or signed in at a Front Desk → with client · else at bench ----

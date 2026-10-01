@@ -4,41 +4,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs, LabelJob, PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { JobCallsLine } from '@/components/clients/CallLedger';
-import { AuthCapturePanel } from '@/components/inspection/GuidedAuthCapture';
-import { OpinionCard } from '@/components/inspection/OpinionCard';
-import { LabelPrintDialog } from '@/components/intake/LabelBits';
-import { PackageCustodyCard } from '@/components/intake/TwoScanBits';
-import { AddOnsPanel } from '@/components/jobs/AddOnsPanel';
-import { AppraisalsPanel } from '@/components/jobs/AppraisalsPanel';
-import { BenchTestsPanel } from '@/components/jobs/BenchTestsPanel';
-import { ClientRequestsPanel } from '@/components/jobs/ClientRequests';
-import { CollapsedCard } from '@/components/jobs/CollapsedCard';
-import { EvidencePanel } from '@/components/jobs/EvidencePanel';
-import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
-import { InspectionReportPanel } from '@/components/jobs/InspectionReportPanel';
 import { ItemHeader } from '@/components/jobs/ItemHeader';
-import { HoldModal, Provisional, ReasonModal, TradePathStrip, TradeSendBackModal } from '@/components/jobs/JobBits';
-import { JobDecisionRecords } from '@/components/jobs/JobDecisionRecords';
-import { MessagesPanel } from '@/components/jobs/JobMessages';
-import { AssignmentPanel, DetailsPanel, HoldPanel, JobTasksPanel, LinesTable, OwnerPanel, PhotosPanel, ShopTimePanel } from '@/components/jobs/JobPanels';
-import { JobSummaryDraft } from '@/components/jobs/JobSummaryDraft';
-import { JobTimeline } from '@/components/jobs/JobTimeline';
-import { OutsourceInfo } from '@/components/jobs/OutsourceInfo';
-import { ProcessFlow } from '@/components/jobs/ProcessFlow';
+import { Provisional } from '@/components/jobs/JobBits';
+import { JobDetailContent, JobModals, type JobModalState, type JobRun } from '@/components/jobs/JobDetailContent';
 import { ConciergeBackBar } from '@/components/jobs/SendToVendor';
-import { TimingCard } from '@/components/jobs/TimingCard';
-import { PartsRequestModal, PartsRequestPill } from '@/components/parts/PartsChat';
-import { PinModal } from '@/components/today/PinBits';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { useShowMoney } from '@/components/MoneyContext';
-import { fmtMoneyCents, fullName } from '@/lib/format';
 
-type ModalState = { kind: 'reason'; action: JobAction } | { kind: 'hold' } | { kind: 'release' } | { kind: 'pin' } | { kind: 'trade_back' } | null;
-type Run = (fn: () => Promise<unknown>, msg: string) => Promise<void>;
-
-const ActionsBar = ({ j, so, run, setModal, setError, setLabels, setOpenPr }: { j: JobWithRefs; so: SalesOrderWithRefs | null; run: Run; setModal: (m: ModalState) => void; setError: (e: string) => void; setLabels: (l: LabelJob[]) => void; setOpenPr: (p: PartsRequestWithRefs) => void }) => {
+const ActionsBar = ({ j, so, run, setModal, setError, setLabels, setOpenPr }: { j: JobWithRefs; so: SalesOrderWithRefs | null; run: JobRun; setModal: (m: JobModalState) => void; setError: (e: string) => void; setLabels: (l: LabelJob[]) => void; setOpenPr: (p: PartsRequestWithRefs) => void }) => {
   const navigate = useNavigate(); const { user } = useAuth();
   const actions = api.legalJobActions(j); const gaps = api.reviewGaps(j); const crGaps = api.qcRequestGaps(j);
   const blocked = (a: JobAction) => (a.key === 'qc_pass' && crGaps.length ? `QC blocked — client request not checked off: “${crGaps[0].text}”` : gaps.join(' · '));
@@ -63,29 +36,11 @@ const ActionsBar = ({ j, so, run, setModal, setError, setLabels, setOpenPr }: { 
   );
 };
 
-// "More" — everything that is not about where the piece is: folded by default, Photos + Parts requests carry a count on the header (MH order)
-const MoreSection = ({ j, run, prs, setOpenPr }: { j: JobWithRefs; run: Run; prs: PartsRequestWithRefs[]; setOpenPr: (p: PartsRequestWithRefs) => void }) => (
-  <div data-testid="job-more" className="space-y-2">
-    <div className="flex items-center gap-2 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><span>More</span><span className="h-px flex-1 bg-line" /></div>
-    <CollapsedCard title="Photos" count={j.photos.length} testId="more-photos"><PhotosPanel job={j} run={run} /></CollapsedCard>
-    <CollapsedCard title="Parts requests" count={prs.length} subtitle="lookup → attach → supervisor approval" testId="more-parts">
-      <ul className="-mx-4 -my-4 divide-y divide-line/70">{prs.map((r) => <li key={r.id}><button type="button" data-testid={`job-pr-${r.id}`} onClick={() => setOpenPr(r)} className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-canvas"><span className="font-mono font-medium">{r.number}</span><span className="font-mono text-ink">{r.part?.partNumber ?? '—'}</span><span className="truncate text-ink-700">{r.part?.name ?? r.items?.[0]?.description ?? 'no part attached'}</span><span className="ml-auto text-ink-400">{r.requestedBy}</span><PartsRequestPill status={r.status} /></button></li>)}{prs.length === 0 && <li className="px-4 py-3 text-xs text-ink-400">No parts requests — open one from the actions bar.</li>}</ul>
-    </CollapsedCard>
-    <CollapsedCard title="Messages" subtitle="internal thread · @mention routes to a hit list or the bench" testId="more-messages"><MessagesPanel job={j} onChanged={() => void run(async () => (await api.getJob(j.id))!, '')} /></CollapsedCard>
-    <CollapsedCard title="Bench tests" subtitle="before / after timing · pressure · Chronoscope" testId="more-bench-tests"><BenchTestsPanel jobId={j.id} /></CollapsedCard>
-    <CollapsedCard title="Timing" subtitle="RolliTime runs on this watch" testId="more-timing"><TimingCard jobId={j.id} watchId={j.watchId} status={j.status} bare /></CollapsedCard>
-    <CollapsedCard title="Service evidence" subtitle="four QC slots keyed to watch and job" testId="more-evidence"><EvidencePanel job={j} run={run} /></CollapsedCard>
-    <CollapsedCard title="Shop time" subtitle="time rows never move job status" testId="more-shop-time"><ShopTimePanel job={j} /></CollapsedCard>
-    <CollapsedCard title="Appraisals" subtitle="draft → confirm value → finalize & sign → PDF" testId="more-appraisals"><AppraisalsPanel job={j} /></CollapsedCard>
-    <CollapsedCard title="Authentication photos" subtitle="guided 11-step capture" testId="more-auth-photos"><AuthCapturePanel jobId={j.id} /></CollapsedCard>
-  </div>
-);
-
 export default function JobDetailPage() {
   const { id = '' } = useParams();
   const money = useShowMoney();
   const [job, setJob] = useState<JobWithRefs | null | undefined>(undefined);
-  const [modal, setModal] = useState<ModalState>(null);
+  const [modal, setModal] = useState<JobModalState>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [so, setSo] = useState<SalesOrderWithRefs | null>(null);
@@ -97,7 +52,7 @@ export default function JobDetailPage() {
   useEffect(() => { void load(); }, [load]);
 
   const say = (msg: string) => { setFlash(msg); setError(null); window.setTimeout(() => setFlash(null), 3000); };
-  const run: Run = async (fn, msg) => { try { await fn(); await load(); if (msg) say(msg); } catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); } };
+  const run: JobRun = async (fn, msg) => { try { await fn(); await load(); if (msg) say(msg); } catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); } };
 
   if (job === undefined) return null;
   if (!job) return <div className="text-ink-500">Job not found. <Link to="/jobs" className="underline">Back to Jobs</Link></div>;
@@ -115,47 +70,9 @@ export default function JobDetailPage() {
 
       {flash && <div data-testid="job-flash" className="rounded-sm bg-moss-50 px-3 py-1.5 text-xs font-medium text-moss-700 animate-rise">{flash}</div>}
       {error && <div data-testid="job-error" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700">{error}</div>}
-      {j.kind === 'trade' && <TradePathStrip job={j} />}
-      <JobDecisionRecords jobId={j.id} />
-      <JobCallsLine job={j} />
-      <ReviewGate job={j} />
-      {api.activeHold(j) && <div data-testid="held-banner" className="rounded-sm bg-rose-50 px-3 py-1.5 text-xs text-rose-900">This job is parked on hold — status actions return when the hold is released.</div>}
-      {api.legalJobActions(j).length === 0 && !api.activeHold(j) && j.status === 'closed' && <div data-testid="closed-banner" className="rounded-sm bg-slate-100 px-3 py-1.5 text-xs text-slate-600">Closed — end of the line. Invoice / pickup is the next session.</div>}
 
-      <div className="grid grid-cols-[1fr_380px] gap-4">
-        <div className="space-y-4">
-          <Card title="Process flow" subtitle="Where each component is in the process · filled dot = here now · red ring = blocker · custody at the end comes from the custody record, never from status" testId="job-flow-card"><ProcessFlow job={j} /></Card>
-          <Card title="Client requests" subtitle="What the client asked for · badge on bench cards · pops on every label scan · mandatory checklist at QC" testId="job-client-requests-card" className="border-l-[3px] border-amber-400 bg-amber-50/40"><ClientRequestsPanel job={j} run={run} /></Card>
-          <Card title="Add-ons since estimate" subtitle="Approved after the estimate went out · client-approved parts requests + estimate-revision lines (derived) · manual rows flagged + audited" testId="job-addons-card"><AddOnsPanel job={j} run={run} /></Card>
-          <CollapsedCard title="Original estimate" subtitle={j.estimate ? `${j.estimate.number} · ${j.lines.length} line${j.lines.length === 1 ? '' : 's'}${money ? ` · ${fmtMoneyCents(j.total)}` : ''}` : `${j.lines.length} line${j.lines.length === 1 ? '' : 's'} · job opened without an estimate`} action={j.estimate ? <Link to={`/estimates/${j.estimate.id}`} data-testid="original-estimate-link" className="text-xs text-brand hover:underline">Open {j.estimate.number} →</Link> : undefined} testId="job-original-estimate"><div className="-m-4"><LinesTable job={j} /></div></CollapsedCard>
-          <CollapsedCard title="Inspection report" subtitle={j.inspection ? `completed ${j.inspection.by}` : api.JOB_KIND_CONFIG[j.kind].inspectionReport ? 'not yet completed' : 'skipped for this kind · photos still required'} testId="job-inspection-report">
-            <div className="space-y-4">
-              <InspectionPanel key={`${j.id}-${j.status}`} job={j} run={run} />
-              <div className="border-t border-line pt-3"><div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">Report to client · portal-first</div><InspectionReportPanel job={j} run={run} /></div>
-            </div>
-          </CollapsedCard>
-          <OpinionCard jobId={j.id} onChange={() => void load()} />
-          <Card title="Outsource / concierge" subtitle="Information only — vendor, stage, expected date, health, point person, tracking · moves happen on the Concierge board" testId="job-vendor-card"><OutsourceInfo jobId={j.id} /></Card>
-          <MoreSection j={j} run={run} prs={prs} setOpenPr={setOpenPr} />
-        </div>
-        <div className="space-y-4">
-          <Card title="Status timeline" subtitle="Every transition — who, when, station · linked tasks below" testId="job-timeline-card"><JobTimeline job={j} /><div className="mt-3"><JobTasksPanel job={j} tick={j.timeline.length + j.notes.length} /></div></Card>
-          <Card title="Owner" subtitle="Accountable shepherd — role-based" testId="job-owner-card"><OwnerPanel job={j} run={run} /></Card>
-          <Card title="Assignees" subtitle="Working techs" testId="job-assignment-card"><AssignmentPanel job={j} run={run} /></Card>
-          <Card title="Holds" testId="job-holds-card"><HoldPanel job={j} onPlace={() => setModal({ kind: 'hold' })} onRelease={() => setModal({ kind: 'release' })} /></Card>
-          <Card title="Client update · summary draft" subtitle="For phone / email replies — AI fills a fixed template from this job's live data; you review and paste" testId="job-summary-card"><JobSummaryDraft jobId={j.id} job={j} /></Card>
-          <Card title="Details" testId="job-details-card"><DetailsPanel job={j} run={run} /></Card>
-          {j.packageId && <PackageCustodyCard packageId={j.packageId} />}
-        </div>
-      </div>
-
-      {modal?.kind === 'trade_back' && <TradeSendBackModal testId="trade-send-back-modal" onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, 'trade_send_back', r); setModal(null); await load(); say('Sent back to the bench'); }} />}
-      {labels && <LabelPrintDialog labels={labels} title={`${j.number} · ${api.isBandOnlyJob(j, j.watch) ? 'band-only label (PDF417 = job #)' : 'job labels'}`} onClose={() => { setLabels(null); void load(); }} onPrinted={() => say(`${labels.length} label${labels.length === 1 ? '' : 's'} printed`)} />}
-      {modal?.kind === 'reason' && <ReasonModal testId={`reason-modal-${modal.action.key}`} title={modal.action.label.replace('…', '')} hint={modal.action.key === 'qc_fail' ? 'Fail moves the job back to service and queues a client email with this reason.' : 'A reason is required; it lands on the timeline.'} confirmLabel={modal.action.label.replace('…', '')} danger={modal.action.tone === 'danger'} onClose={() => setModal(null)} onConfirm={async (r) => { await api.transitionJob(j.id, modal.action.key, r); setModal(null); await load(); say(`${modal.action.label.replace('…', '')}${modal.action.notifies ? ' · client email queued' : ''}`); }} />}
-      {openPr && <PartsRequestModal request={openPr} onClose={() => { setOpenPr(null); void load(); }} onChange={setOpenPr} />}
-      {modal?.kind === 'pin' && <PinModal defaultTitle={`${j.number} · ${fullName(j.client)} · ${j.watch.model}`} jobId={j.id} onClose={() => setModal(null)} onPinned={() => { setModal(null); say('Pinned to their hit list'); }} />}
-      {modal?.kind === 'hold' && <HoldModal components={j.components.map((c) => ({ key: c.key, label: c.label }))} onClose={() => setModal(null)} onConfirm={async (t, r, comp) => { await api.placeHold(j.id, t, r, comp); setModal(null); await load(); say(`${t === 'parts' ? 'Parts' : 'Outsource'} hold placed${comp ? ` · ${api.PART_LABELS[comp]} only` : ''}`); }} />}
-      {modal?.kind === 'release' && <ReasonModal testId="release-modal" title="Release hold" hint={`Returns the job to ${api.activeHold(j)?.priorStatus.replace(/_/g, ' ')}.`} confirmLabel="Release" optional onClose={() => setModal(null)} onConfirm={async (r) => { await api.releaseHold(j.id, r); setModal(null); await load(); say('Hold released'); }} />}
+      <JobDetailContent j={j} run={run} load={() => void load()} prs={prs} setOpenPr={setOpenPr} setModal={setModal} money={money} />
+      <JobModals j={j} modal={modal} setModal={setModal} labels={labels} setLabels={setLabels} openPr={openPr} setOpenPr={setOpenPr} load={load} say={say} />
     </div>
   );
 }

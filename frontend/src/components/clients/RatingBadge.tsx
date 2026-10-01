@@ -6,18 +6,27 @@ import type { ClientRating, ClientReviews, Star as StarScore } from '@/api/clien
 import { Modal } from '@/components/ui/Modal';
 import { fmtDate, fmtTime } from '@/lib/format';
 
-// STAFF-ONLY. Compact 5/3/2 badge: Attitude / Communication (staff-set) / completed jobs (derived). Never render inside /rc or view-as-client.
+// STAFF-ONLY. Compact a/b/c badge: a = temperament · b = responsiveness (staff-set) · c = items with us (lifetime). Hover → small legend tooltip so new staff read it right. Never render inside /rc or view-as-client.
 export const RatingBadge = ({ clientId, editable, size = 'sm', testId }: { clientId: string; editable?: boolean; size?: 'sm' | 'md'; testId?: string }) => {
   const [r, setR] = useState<ClientRating>(() => api.clientRatingSync(clientId)); const [open, setOpen] = useState(false);
   useEffect(() => { setR(api.clientRatingSync(clientId)); }, [clientId]);
   const unrated = r.attitude === undefined && r.communication === undefined;
   const cls = `inline-flex items-center gap-1 rounded-sm border font-mono font-semibold tabular-nums ${size === 'md' ? 'px-2 py-0.5 text-sm' : 'px-1.5 py-0.5 text-[11px]'} ${unrated ? 'border-line bg-canvas text-ink-400' : (r.attitude ?? 5) <= 2 || (r.communication ?? 5) <= 2 ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-line bg-surface text-ink'}`;
   const inner = <><Star size={size === 'md' ? 12 : 10} className={unrated ? 'text-ink-300' : 'text-amber-500'} />{r.badge}</>;
-  return <>
-    {editable ? <button data-testid={testId ?? `rating-badge-${clientId}`} title={r.tooltip} onClick={() => setOpen(true)} className={`${cls} hover:border-ink-300`}>{inner}</button> : <span data-testid={testId ?? `rating-badge-${clientId}`} title={r.tooltip} className={cls}>{inner}</span>}
+  const id = testId ?? `rating-badge-${clientId}`;
+  return <span className="group relative inline-flex">
+    {editable ? <button data-testid={id} aria-describedby={`${id}-tip`} onClick={() => setOpen(true)} className={`${cls} hover:border-ink-300`}>{inner}</button> : <span data-testid={id} aria-describedby={`${id}-tip`} className={cls}>{inner}</span>}
+    <RatingTip id={`${id}-tip`} r={r} fresh={r.badge === 'New'} />
     {open && createPortal(<RatingEditor rating={r} onClose={() => setOpen(false)} onSaved={(n) => { setR(n); }} />, document.body)}
-  </>;
+  </span>;
 };
+
+// a / b / c legend — appears on hover / focus beside the badge
+const RatingTip = ({ id, r, fresh }: { id: string; r: ClientRating; fresh: boolean }) => <span id={id} role="tooltip" data-testid={id} className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-[240px] rounded-md bg-ink px-2 py-1.5 text-left text-[10px] font-normal leading-snug text-white shadow-pop group-hover:block group-focus-within:block">
+  <span className="block font-mono font-semibold text-white/90">a / b / c</span>
+  <span className="block"><b>a</b> temperament · {r.attitude ?? 'unrated'}</span><span className="block"><b>b</b> responsiveness · {r.communication ?? 'unrated'}</span><span className="block"><b>c</b> items with us · {r.items} lifetime ({r.completed} completed)</span>
+  {fresh && <span className="mt-0.5 block text-white/60">New — not yet rated, nothing sent to us yet</span>}
+</span>;
 
 const StarRow = ({ label, value, onPick, testId }: { label: string; value?: StarScore; onPick: (v: StarScore) => void; testId: string }) => (
   <div className="flex items-center gap-3"><span className="w-32 text-[13px] font-medium text-ink">{label}</span><div className="flex gap-1">{([1, 2, 3, 4, 5] as StarScore[]).map((v) => <button key={v} data-testid={`${testId}-${v}`} onClick={() => onPick(v)} aria-pressed={value === v} className="rounded p-1 hover:bg-canvas"><Star size={22} className={value !== undefined && v <= value ? 'fill-amber-400 text-amber-500' : 'text-ink-300'} /></button>)}</div><span className="w-8 font-mono text-sm text-ink-500">{value ?? '–'}</span></div>

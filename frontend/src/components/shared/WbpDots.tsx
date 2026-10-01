@@ -17,16 +17,23 @@ export const WbpDots = ({ row, outlined, dark, number, size = 'sm', testId, onLe
   </span>;
 };
 
-// Every open job of the client under the name — the job in hand (currentJobId) leads and is outlined
+// A client with nothing in our possession shows the three empty rings ONCE (never a greyed row per past job)
+export const WbpEmptyRings = ({ dark, testId }: { dark?: boolean; testId?: string }) => <span data-testid={testId ?? 'wbp-empty'} data-empty title="Nothing in our possession right now" className="inline-flex items-center gap-1.5 rounded-sm px-1 py-0.5 align-middle">
+  {api.WBP_LEGS.map((l) => <span key={l.key} className="inline-flex items-center gap-0.5"><span className={clsx('font-mono text-[9px] font-semibold leading-none', dark ? 'text-slate-500' : 'text-ink-300')}>{l.key}</span><span aria-hidden className={clsx('inline-block h-2.5 w-2.5 rounded-full', (dark ? DOT_DARK : DOT).none)} /></span>)}
+</span>;
+
+// Every job of the client still in our possession, under the name — the job in hand (currentJobId) leads and is outlined. Nothing with us → three empty rings once.
 export const WbpClientRows = ({ clientId, currentJobId, compact, dark, max, testId }: { clientId: string; currentJobId?: string; compact?: boolean; dark?: boolean; max?: number; testId?: string }) => {
-  const rows = api.wbpForClientSync(clientId, currentJobId); if (!rows.length) return null;
+  const rows = api.wbpForClientSync(clientId, currentJobId); const id = testId ?? `wbp-client-${clientId}`;
+  if (!rows.length) return <WbpEmptyRings dark={dark} testId={`${id}-empty`} />;
   const shown = rows.slice(0, max ?? (compact ? 3 : 6));
-  return <span data-testid={testId ?? `wbp-client-${clientId}`} data-count={rows.length} className={clsx('inline-flex flex-wrap items-center', compact ? 'gap-1' : 'gap-2')}>
+  return <span data-testid={id} data-count={rows.length} className={clsx('inline-flex flex-wrap items-center', compact ? 'gap-1' : 'gap-2')}>
     {shown.map((r) => <WbpDots key={r.jobId} row={r} outlined={r.jobId === currentJobId} number={rows.length > 1} dark={dark} />)}
-    {rows.length > shown.length && <span data-testid={`${testId ?? `wbp-client-${clientId}`}-more`} className={clsx('text-[10px]', dark ? 'text-slate-400' : 'text-ink-400')}>+{rows.length - shown.length}</span>}
+    {rows.length > shown.length && <span data-testid={`${id}-more`} className={clsx('text-[10px]', dark ? 'text-slate-400' : 'text-ink-400')}>+{rows.length - shown.length}</span>}
   </span>;
 };
 
+// Dots for one job — null once the piece has left us (picked up / shipped / closed): no greyed row, nothing
 export const WbpJobDots = ({ jobId, dark, testId }: { jobId: string; dark?: boolean; testId?: string }) => { const row = api.wbpForJobSync(jobId); return row ? <WbpDots row={row} dark={dark} testId={testId} /> : null; };
 
 export const WbpLegend = ({ dark }: { dark?: boolean }) => <span data-testid="wbp-legend" className={clsx('inline-flex items-center gap-2 text-[10px]', dark ? 'text-slate-400' : 'text-ink-400')}>

@@ -11,7 +11,7 @@ import { pageAll } from '@/api/intercom';
 import * as tel from '@/api/telephony';
 import { useAuth } from '@/auth/AuthContext';
 import { RatingBadge } from '@/components/clients/RatingBadge';
-import { WbpDots } from '@/components/shared/WbpDots';
+import { WbpDots, WbpEmptyRings } from '@/components/shared/WbpDots';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { estDigits, fullName } from '@/lib/format';
@@ -98,7 +98,7 @@ const PopCard = ({ call, view, onCollapse }: { call: LiveCall; view: PopView; on
           <span className="text-white/40">·</span>{matched ? <span data-testid="call-pop-rating" title={view.rating?.tooltip} className={clsx('rounded-sm px-2 py-0.5 font-mono text-[16px] font-bold leading-none', view.rating?.badge === 'New' ? 'bg-white/15 text-white' : 'bg-white text-ink')}>{view.rating?.badge}</span> : <span data-testid="call-pop-rating" className="rounded-sm bg-white/15 px-2 py-0.5 font-mono text-[16px] font-bold leading-none">New</span>}
         </div>
         {matched && <div data-testid="call-pop-wbp" data-count={view.rows.length} className="mt-3 space-y-1.5">
-          {view.rows.length === 0 && <div className="text-xs text-white/50">No active jobs — {view.rating?.items ?? 0} in history</div>}
+          {view.rows.length === 0 && <div className="flex items-center gap-3"><WbpEmptyRings dark testId="call-pop-wbp-empty" /><span className="text-xs text-white/50">Nothing with us right now — {view.rating?.items ?? 0} in history</span></div>}
           {view.rows.slice(0, 4).map((r) => <div key={r.jobId} className="flex items-center gap-3"><WbpDots row={r} dark number size="xl" testId={`call-pop-wbp-${r.jobId}`} onLeg={(leg, row) => openLeg(leg, row)} /><span className="truncate text-xs text-white/55">{r.watchLabel}</span></div>)}
           {view.rows.length > 4 && <div className="text-[11px] text-white/50">+{view.rows.length - 4} more active</div>}
         </div>}

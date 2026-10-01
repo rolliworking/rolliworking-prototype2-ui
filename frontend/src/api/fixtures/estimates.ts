@@ -151,6 +151,10 @@ export const estimates: Estimate[] = [
   build({ id: 'e-19', number: 'E01020', clientId: 'c-22', status: 'expired', createdDaysAgo: 48, sentDaysAgo: 47, validUntil: daysAgo(18),
     clientNotes: 'Wants the bracelet refinished before a wedding in the spring.',
     lines: [line('Case & bracelet refinish — Jubilee', 325, 'P', { catalogId: 'svc-17' }), line('Ultrasonic clean', 60, 'P', { catalogId: 'svc-19' })] }),
+  // Harrison Whitfield — expired quote on the same Submariner (Inbox panel CLOSED section seed): 1 active job · 1 fulfilled · 1 expired estimate
+  build({ id: 'e-hw1', number: 'E01033', clientId: 'c-01', watchId: 'w-01', status: 'expired', createdDaysAgo: 120, sentDaysAgo: 119, validUntil: daysAgo(89),
+    clientNotes: 'Thinking about a full polish before the holidays — not urgent.',
+    lines: [line('Case & bracelet refinish — Oyster', 340, 'P', { catalogId: 'svc-17' }), line('Crystal polish-up', 45, 'P')] }),
   // Drafts
   build({ id: 'e-17', number: 'E01057', clientId: 'c-20', watchId: 'w-19', status: 'draft', createdDaysAgo: 1,
     clientNotes: 'Date changes at 11pm; wants the Jubilee tightened too.',
