@@ -45,7 +45,7 @@ export const SentThreadList = ({ rows, threadId, onOpen }: { rows: InboxSentRow[
     {rows.map((s) => <li key={s.message.id}><button type="button" data-testid={`sent-row-${s.message.id}`} onClick={() => onOpen(s.conversation.id)} className={clsx('w-full rounded-md border bg-surface p-2 text-left text-xs hover:bg-canvas/60', threadId === s.conversation.id ? 'border-ink' : 'border-line')}>
       <div className="flex items-center justify-between gap-2"><span className="truncate font-medium text-ink">To {s.conversation.client.firstName} {s.conversation.client.lastName}</span><span className="shrink-0 text-[10px] text-ink-400">{fmtDate(s.message.at)} {fmtTime(s.message.at)}</span></div>
       <div className="truncate text-ink-700">{s.conversation.subject}</div>
-      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-400"><span className={`rounded px-1 ${SOURCE_TONE[s.message.source]}`}>{s.message.source}</span><span>· {s.message.by}</span>{s.message.emailId && <Link to="/intake/sent" onClick={(e) => e.stopPropagation()} className="text-brand hover:underline">Outbox</Link>}<span className="ml-auto truncate">{s.message.text.slice(0, 70)}</span></div>
+      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-400"><span className={`rounded px-1 ${SOURCE_TONE[s.message.source]}`}>{s.message.source}</span><span>· {s.message.by}</span>{s.message.emailId && <Link to="/intake/sent" onClick={(e) => e.stopPropagation()} className="text-brand hover:underline">Sent</Link>}<span className="ml-auto truncate">{s.message.text.slice(0, 70)}</span></div>
     </button></li>)}
     {!rows.length && <li className="px-2 py-6 text-center text-xs text-ink-400">Nothing sent yet</li>}
   </ul>
