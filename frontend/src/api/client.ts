@@ -1219,7 +1219,7 @@ export async function sendEstimate(id: string, override?: { subject: string; bod
     to: c.email, toName: `${c.firstName} ${c.lastName}`,
     relatedRef: `${e.number} rev ${e.revision}`, status: 'pending',
     subject: override?.subject ?? `${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`,
-    body: override?.body ?? `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. One tap opens it in your RolliConnect portal — review, approve, and request a prepaid shipping label right there. No attachment needed.\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}${portalDeepLink(c.id, `/rc/estimates/${e.id}`)}\n\n— The RolliSuite team`,
+    body: override?.body ?? `Hello ${c.firstName},\n\n${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} (revision ${e.revision})${w ? ` for the ${w.brand} ${w.model}` : ''} is ready. One tap opens it in your RolliConnect portal — review, approve, and request a prepaid shipping label right there. No attachment needed.\n\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}${clientLinkPath(issueClientLink('estimate', e.id, c.id))}\n\nThis link opens this estimate only (${LINK_EXPIRY.estimate}). Sign in to RolliConnect to see everything in one place.\n\n— The RolliSuite team`,
     createdAt: new Date().toISOString(), createdBy: a.by, station: a.station,
   };
   queueOutbox(email);
@@ -2283,7 +2283,7 @@ export async function confirmShipment(id: string, input: ConfirmShipmentInput): 
 export const PICKUP_FRAMES = 6;
 export const PICKUP_FRAME_WINDOW_MS = 60_000;
 export const PICKUP_EVIDENCE_TIMEOUT_MS = 90_000;
-export const REVERSE_QR_TTL_MS = 10 * 60_000;
+export const REVERSE_QR_TTL_MS = 2 * 60_000; // ruling 2026-10-01: pickup confirm link = 2 minutes
 export const PICKUP_RETENTION = { framesDays: 90, idPhotoDays: 30, policy: 'Frames kept 90 days · proxy ID photo 30 days · summary rows permanent' };
 export const MOCK_OCR_MAY_PASS = true; // PROTOTYPE ONLY — Keeper sets false: a placeholder photo must never release a watch
 export const PICKUP_VERIFY_LABEL: Record<PickupVerifyMethod, string> = { qr_scan: 'QR scanned', code: 'Code typed', proxy: 'Proxy + ID', reverse_qr: 'Reverse QR (client phone)' };
@@ -2997,91 +2997,136 @@ export async function portalRequestMagicLink(email: string): Promise<{ link: Mag
 // Magic links retired (2026-09-28): emailed links now point at the login wall, which sends the client on to the document after password + TOTP
 export const portalDeepLink = (_clientId: string, next: string): string => `/rc?next=${encodeURIComponent(next)}`;
 
-// ---- RolliConnect accounts — email + password + TOTP (fixed demo code 000000) + backup codes · per-document gating by type · per-photo lock -------------
-export interface RcAccount { clientId: string; email: string; password: string; totpSecret: string; totpEnabled: boolean; backupCodes: string[]; usedBackupCodes: string[]; createdAt: string; lastLoginAt?: string }
-export const RC_DEMO_TOTP = '000000';
-const RC_KEYS = { accounts: 'rollisuite.rc.accounts', docAccess: 'rollisuite.rc.docAccess', photoUnlocked: 'rollisuite.rc.photoUnlocked' };
-const b32 = (n: number) => Array.from({ length: n }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'[Math.floor(Math.random() * 32)]).join('');
-const backupCode = () => `${Math.random().toString(36).slice(2, 6)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
-const rcAccounts = (): RcAccount[] => {
-  let a = readJson<RcAccount[]>(RC_KEYS.accounts, []);
-  if (!a.length) { const c = fx.clients.find((x) => x.email === 'eleanor.vance@example.com')!; a = [{ clientId: c.id, email: c.email, password: 'Rolli2026!', totpSecret: 'JBSWY3DPEHPK3PXP', totpEnabled: true, backupCodes: ['K7Q2-M9X4', 'P3RT-8NW2', 'H6VD-Q1LZ', 'B2ZC-7KMP', 'X9FN-3RTD', 'W4JH-M6QS', 'T8LB-2VNC', 'D5PK-9HXR'], usedBackupCodes: ['K7Q2-M9X4'], createdAt: daysAgoIso(12) }]; writeJson(RC_KEYS.accounts, a); }
-  return a;
-};
+// ---- RolliConnect accounts — PASSWORDLESS (MH ruling 2026-10-01): email one-time code / magic link · Touch ID once enrolled · fresh step-up for sensitive actions ----
+// Password + TOTP + backup codes (D-357, 2026-09-28) are RETIRED: clients never hold a password. Same email = same person — the first verified code creates the account and attaches it to the client on file.
+export interface RcAccount { clientId: string; email: string; createdAt: string; lastLoginAt?: string; signIns: number; touchIdEnrolledAt?: string }
+export interface RcChallenge { id: string; clientId: string; email: string; otp: string; linkToken: string; purpose: 'signin' | 'stepup'; action?: string; next?: string; createdAt: string; expiresAt: string; attempts: number; usedAt?: string; via?: 'code' | 'link' }
+export interface RcStepUpGrant { clientId: string; action: string; at: string; expiresAt: string; via: 'code' | 'touch_id'; usedAt?: string }
+export const RC_OTP_TTL_MS = 10 * 60_000; export const RC_OTP_MAX_ATTEMPTS = 5; export const RC_RESEND_COOLDOWN_MS = 60_000; export const RC_REQUESTS_PER_15M = 3; export const RC_STEPUP_TTL_MS = 5 * 60_000;
+const RC_KEYS = { accounts: 'rollisuite.rc.accounts.v2', challenges: 'rollisuite.rc.challenges', stepups: 'rollisuite.rc.stepups', docAccess: 'rollisuite.rc.docAccess', photoUnlocked: 'rollisuite.rc.photoUnlocked', links: 'rollisuite.rc.links' };
+const rcAccounts = (): RcAccount[] => { let a = readJson<RcAccount[]>(RC_KEYS.accounts, []); if (!a.length) { const c = fx.clients.find((x) => x.email === 'eleanor.vance@example.com')!; a = [{ clientId: c.id, email: c.email, createdAt: daysAgoIso(41), lastLoginAt: daysAgoIso(3), signIns: 9 }]; writeJson(RC_KEYS.accounts, a); } return a; };
 const daysAgoIso = (d: number) => new Date(Date.now() - d * 864e5).toISOString();
 const saveAccounts = (a: RcAccount[]) => writeJson(RC_KEYS.accounts, a);
-const rcAccountByEmail = (email: string) => rcAccounts().find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
-const rcPublic = (a: RcAccount) => ({ ...a, password: undefined as unknown as string, totpSecret: a.totpEnabled ? '' : a.totpSecret });
-export async function rcLookup(email: string): Promise<{ clientOnFile: boolean; hasAccount: boolean; totpEnabled: boolean; firstName?: string }> {
-  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase()); const a = rcAccountByEmail(email);
-  return resolve({ clientOnFile: !!c, hasAccount: !!a, totpEnabled: !!a?.totpEnabled, firstName: c?.firstName });
+const rcChallenges = () => readJson<RcChallenge[]>(RC_KEYS.challenges, []);
+const saveChallenges = (v: RcChallenge[]) => writeJson(RC_KEYS.challenges, v.filter((c) => new Date(c.expiresAt).getTime() > Date.now() - 86_400_000).slice(-200));
+const rcStepUps = () => readJson<RcStepUpGrant[]>(RC_KEYS.stepups, []);
+const saveStepUps = (v: RcStepUpGrant[]) => writeJson(RC_KEYS.stepups, v.slice(-100));
+const rcNormEmail = (e: string) => e.trim().toLowerCase();
+const maskEmail = (e: string) => { const [u, d] = e.split('@'); return `${u.slice(0, 2)}…@${d}`; };
+const clientByEmail = (email: string) => fx.clients.find((x) => rcNormEmail(x.email) === rcNormEmail(email));
+const rcAccountByEmail = (email: string) => rcAccounts().find((a) => rcNormEmail(a.email) === rcNormEmail(email));
+export const clientIdByEmailSync = (email: string): string | undefined => clientByEmail(email)?.id;
+export async function rcLookup(email: string): Promise<{ clientOnFile: boolean; hasAccount: boolean; firstName?: string; touchIdEnrolled: boolean }> {
+  const c = clientByEmail(email); const a = rcAccountByEmail(email);
+  return resolve({ clientOnFile: !!c, hasAccount: !!a, firstName: c?.firstName, touchIdEnrolled: !!a?.touchIdEnrolledAt });
 }
-// Step 1 of signup — the email must already be on file (accounts are for existing clients; new clients come in through Requests)
-// Signup proves the client owns the email (D-357): email → one-time verification link (Sent, mock, never really sent) → only that link opens password + authenticator
-interface RcInvite { token: string; clientId: string; email: string; createdAt: string; usedAt?: string; source: 'signup' | 'reset' }
-const RC_INVITES = 'rollisuite.rc.invites';
-const rcInvites = (): RcInvite[] => { try { return JSON.parse(localStorage.getItem(RC_INVITES) ?? '[]'); } catch { return []; } };
-const saveInvites = (v: RcInvite[]) => localStorage.setItem(RC_INVITES, JSON.stringify(v));
-const issueRcInvite = (c: Client, source: RcInvite['source']): RcInvite => {
-  const inv: RcInvite = { token: `rcv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, clientId: c.id, email: c.email, createdAt: new Date().toISOString(), source };
-  saveInvites([...rcInvites().filter((x) => x.clientId !== c.id || x.usedAt), inv]);
-  const link = `${window.location.origin}/rc/signup?verify=${inv.token}`;
-  queueOutbox({ id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `RolliConnect · ${c.id}`, status: 'pending', subject: source === 'reset' ? 'Your RolliConnect account was reset — set it up again' : 'Verify your email to finish creating your RolliConnect account', body: `Hello ${c.firstName},\n\n${source === 'reset' ? 'A member of our team reset your RolliConnect account. ' : ''}To ${source === 'reset' ? 'set it up again' : 'finish creating your account'}, open this one-time link and choose a password and authenticator:\n\n${link}\n\nIf you didn’t request this, ignore this email — nothing changes without the link.\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: 'RolliConnect', station: 'Portal' });
-  portalStamp(c.id, source === 'reset' ? 'RolliConnect reset — fresh verification link emailed' : 'RolliConnect signup requested — verification link emailed');
-  return inv;
+// One request = one challenge carrying BOTH a 6-digit code and a single-use magic link (separate secrets); 10 min; 5 attempts; 60 s resend cooldown; 3 per 15 min
+export async function rcRequestCode(email: string, opts: { next?: string; purpose?: 'signin' | 'stepup'; action?: string } = {}): Promise<{ challengeId: string; maskedEmail: string; expiresAt: string; purpose: 'signin' | 'stepup' }> {
+  const c = clientByEmail(email); if (!c) throw new Error('We don’t have that email on file. Use the address the workshop contacts you at, or message us — accounts are created for clients on file.');
+  const purpose = opts.purpose ?? 'signin'; const all = rcChallenges(); const now = Date.now(); const mine = all.filter((x) => x.clientId === c.id && x.purpose === purpose);
+  const last = mine[mine.length - 1]; if (last && now - new Date(last.createdAt).getTime() < RC_RESEND_COOLDOWN_MS) throw new Error(`We just sent one — wait ${Math.ceil((RC_RESEND_COOLDOWN_MS - (now - new Date(last.createdAt).getTime())) / 1000)} s before asking again`);
+  if (mine.filter((x) => now - new Date(x.createdAt).getTime() < 15 * 60_000).length >= RC_REQUESTS_PER_15M) throw new Error('Too many codes requested — try again in a few minutes, or use the link in the last email');
+  const ch: RcChallenge = { id: `rcc-${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, clientId: c.id, email: c.email, otp: String(Math.floor(100000 + Math.random() * 900000)), linkToken: `rcm-${now.toString(36)}${Math.random().toString(36).slice(2, 12)}`, purpose, action: opts.action, next: opts.next, createdAt: new Date(now).toISOString(), expiresAt: new Date(now + RC_OTP_TTL_MS).toISOString(), attempts: 0 };
+  saveChallenges([...all, ch]);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const magic = `${origin}/rc/auth/${ch.linkToken}${opts.next ? `?next=${encodeURIComponent(opts.next)}` : ''}`;
+  const body = purpose === 'stepup'
+    ? `Hello ${c.firstName},\n\nYour confirmation code is ${ch.otp}. Enter it to confirm: ${opts.action?.replace(/:.*$/, '').replace(/-/g, ' ')}.\n\nIt works once and expires in 10 minutes. If you didn’t ask for this, ignore this email — nothing happens without the code.`
+    : `Hello ${c.firstName},\n\nYour RolliConnect sign-in code is ${ch.otp}.\n\nOr tap this link to sign in on this device: ${magic}\n\nBoth work once and expire in 10 minutes. We never ask for a password — if an email asks you for one, it isn’t us.`;
+  queueOutbox({ id: `ob-${now.toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: fullNameOf(c), relatedRef: purpose === 'stepup' ? `RolliConnect · confirm ${opts.action ?? ''}` : 'RolliConnect sign-in', status: 'pending', subject: purpose === 'stepup' ? `Your confirmation code: ${ch.otp}` : `Your RolliConnect sign-in code: ${ch.otp}`, body, createdAt: ch.createdAt, createdBy: 'RolliConnect', station: 'portal' });
+  portalStamp(c.id, purpose === 'stepup' ? `Step-up code emailed · ${opts.action}` : `Sign-in code + link emailed (${maskEmail(c.email)})`);
+  return resolve({ challengeId: ch.id, maskedEmail: maskEmail(c.email), expiresAt: ch.expiresAt, purpose });
+}
+const rcOpenSession = (clientId: string, how: string) => {
+  const all = rcAccounts(); let a = all.find((x) => x.clientId === clientId); const c = byId(fx.clients, clientId); const now = new Date().toISOString(); let created = false;
+  if (!a) { a = { clientId, email: c.email, createdAt: now, signIns: 0 }; all.push(a); created = true; }
+  a.lastLoginAt = now; a.signIns += 1; saveAccounts(all);
+  const sess: PortalSession = { clientId, email: c.email, token: `acct-${newId('rc')}`, issuedAt: now }; writeJson(KEYS.portalSession, sess);
+  portalStamp(clientId, `${created ? 'RolliConnect account created · ' : ''}Signed in · ${how}`);
+  return { client: c, created };
 };
-export async function rcRequestSignup(email: string): Promise<{ sent: true; maskedEmail: string }> {
-  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
-  if (!c) throw new Error('We don’t have that email on file. Use the address we contact you at, or message the workshop.');
-  if (rcAccountByEmail(email)) throw new Error('An account already exists for this email — sign in instead.');
-  issueRcInvite(c, 'signup'); const [u, d] = c.email.split('@'); return resolve({ sent: true, maskedEmail: `${u.slice(0, 2)}…@${d}` });
+const consumeChallenge = (ch: RcChallenge | undefined, via: 'code' | 'link', code?: string) => {
+  if (!ch) throw new Error(via === 'link' ? 'This link has expired — sign in to see your watch.' : 'That code didn’t match. Check the newest email and try again.');
+  const all = rcChallenges(); const row = all.find((x) => x.id === ch.id)!;
+  if (row.usedAt) throw new Error(via === 'link' ? 'This link was already used — request a new one.' : 'That code was already used — request a new one.');
+  if (new Date(row.expiresAt).getTime() < Date.now()) throw new Error(via === 'link' ? 'This link has expired — sign in to see your watch.' : 'That code expired — request a new one.');
+  if (via === 'code') { if (row.attempts >= RC_OTP_MAX_ATTEMPTS) throw new Error('Too many wrong tries — request a new code.'); if (row.otp !== (code ?? '').replace(/\D/g, '')) { row.attempts += 1; saveChallenges(all); portalStamp(row.clientId, `Code didn’t match (${row.attempts}/${RC_OTP_MAX_ATTEMPTS})`); throw new Error(row.attempts >= RC_OTP_MAX_ATTEMPTS ? 'Too many wrong tries — request a new code.' : 'That code didn’t match. Check the newest email and try again.'); } }
+  row.usedAt = new Date().toISOString(); row.via = via; saveChallenges(all); return row;
+};
+const grantStepUp = (clientId: string, action: string, via: RcStepUpGrant['via']) => { const now = Date.now(); saveStepUps([...rcStepUps().filter((g) => !(g.clientId === clientId && g.action === action)), { clientId, action, at: new Date(now).toISOString(), expiresAt: new Date(now + RC_STEPUP_TTL_MS).toISOString(), via }]); portalStamp(clientId, `Verified for ${action} · ${via === 'touch_id' ? 'Touch ID' : 'emailed code'}`); };
+export interface RcVerifyResult { purpose: 'signin' | 'stepup'; client: Client; created?: boolean; next?: string; action?: string }
+export async function rcVerifyCode(challengeId: string, code: string): Promise<RcVerifyResult> {
+  const ch = consumeChallenge(rcChallenges().find((x) => x.id === challengeId), 'code', code);
+  if (ch.purpose === 'stepup') { grantStepUp(ch.clientId, ch.action!, 'code'); return resolve({ purpose: 'stepup', client: byId(fx.clients, ch.clientId), action: ch.action }); }
+  const s = rcOpenSession(ch.clientId, 'emailed code'); return resolve({ purpose: 'signin', client: s.client, created: s.created, next: ch.next });
 }
-export async function rcVerifyInvite(token: string): Promise<{ email: string; firstName: string }> { const inv = rcInvites().find((x) => x.token === token); if (!inv || inv.usedAt) throw new Error('This link has expired or was already used. Request a new one from the signup page.'); const c = byId(fx.clients, inv.clientId); return resolve({ email: c.email, firstName: c.firstName }); }
-export async function rcSignup(email: string, password: string, token: string): Promise<{ account: RcAccount; otpauth: string }> {
-  const inv = rcInvites().find((x) => x.token === token); if (!inv || inv.usedAt || inv.email.toLowerCase() !== email.trim().toLowerCase()) throw new Error('Open the verification link from your email to continue — the password step only works from that link.');
-  const c = fx.clients.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
-  if (!c) throw new Error('We don’t have that email on file. Use the address we contact you at, or message the workshop.');
-  if (rcAccountByEmail(email)) throw new Error('An account already exists for this email — sign in instead.');
-  saveInvites(rcInvites().map((x) => (x.token === token ? { ...x, usedAt: new Date().toISOString() } : x)));
-  if (password.length < 8) throw new Error('Password needs at least 8 characters');
-  const a: RcAccount = { clientId: c.id, email: c.email, password, totpSecret: b32(16), totpEnabled: false, backupCodes: [], usedBackupCodes: [], createdAt: new Date().toISOString() };
-  saveAccounts([...rcAccounts(), a]); portalStamp(c.id, 'RolliConnect account created — awaiting authenticator setup');
-  return resolve({ account: rcPublic(a), otpauth: `otpauth://totp/RolliConnect:${encodeURIComponent(c.email)}?secret=${a.totpSecret}&issuer=RolliConnect` });
+export async function rcVerifyMagicLink(linkToken: string): Promise<RcVerifyResult> {
+  const ch = consumeChallenge(rcChallenges().find((x) => x.linkToken === linkToken), 'link');
+  if (ch.purpose === 'stepup') { grantStepUp(ch.clientId, ch.action!, 'code'); return resolve({ purpose: 'stepup', client: byId(fx.clients, ch.clientId), action: ch.action }); }
+  const s = rcOpenSession(ch.clientId, 'magic link'); return resolve({ purpose: 'signin', client: s.client, created: s.created, next: ch.next });
 }
-// Step 2 — first code from the authenticator turns TOTP on and issues 8 single-use backup codes
-export async function rcConfirmTotp(email: string, code: string): Promise<{ backupCodes: string[] }> {
-  const all = rcAccounts(); const a = all.find((x) => x.email.toLowerCase() === email.trim().toLowerCase()); if (!a) throw new Error('No account for that email');
-  if (code.replace(/\s/g, '') !== RC_DEMO_TOTP) throw new Error('That code didn’t match — check your authenticator and try again');
-  a.totpEnabled = true; a.backupCodes = Array.from({ length: 8 }, backupCode); a.usedBackupCodes = []; saveAccounts(all); portalStamp(a.clientId, 'Authenticator enabled · 8 backup codes issued');
-  return resolve({ backupCodes: [...a.backupCodes] });
+// Touch ID — the browser ceremony lives in api/webauthn.ts (platform authenticator, userVerification required); the account only records enrolment
+export async function rcSignInWithTouchId(email: string): Promise<Client> { const a = rcAccountByEmail(email); if (!a?.touchIdEnrolledAt) throw new Error('Touch ID isn’t set up for this account on this device'); return resolve(rcOpenSession(a.clientId, 'Touch ID').client); }
+export async function rcMarkTouchIdEnrolled(clientId: string, on: boolean): Promise<RcAccount> { const all = rcAccounts(); const a = all.find((x) => x.clientId === clientId); if (!a) throw new Error('No account'); a.touchIdEnrolledAt = on ? new Date().toISOString() : undefined; saveAccounts(all); portalStamp(clientId, on ? 'Touch ID enrolled on this device' : 'Touch ID removed'); return resolve(a); }
+export async function rcStepUpWithTouchId(clientId: string, action: string): Promise<void> { const a = rcAccounts().find((x) => x.clientId === clientId); if (!a?.touchIdEnrolledAt) throw new Error('Touch ID isn’t set up'); grantStepUp(clientId, action, 'touch_id'); return resolve(undefined); }
+export async function rcStepUpStatus(clientId: string, action: string): Promise<{ fresh: boolean; via?: RcStepUpGrant['via']; expiresAt?: string }> { const g = rcStepUps().find((x) => x.clientId === clientId && x.action === action && !x.usedAt && new Date(x.expiresAt).getTime() > Date.now()); return resolve({ fresh: !!g, via: g?.via, expiresAt: g?.expiresAt }); }
+// Enforced where the money action is committed: a fresh (≤5 min), unused grant bound to THIS action, consumed on success. Replays of recorded events skip it.
+const requireStepUp = (clientId: string, action: string) => {
+  if (replaying) return;
+  const all = rcStepUps(); const g = all.find((x) => x.clientId === clientId && x.action === action && !x.usedAt && new Date(x.expiresAt).getTime() > Date.now());
+  if (!g) throw new Error('Confirm it’s you first — this needs a fresh emailed code or Touch ID.');
+  g.usedAt = new Date().toISOString(); saveStepUps(all);
+};
+// Dev build only: the staff "Sent" page shows the real email; this shortcut fills the code so flows stay testable headless
+export async function rcDevPeekCode(challengeId: string): Promise<{ otp: string; magicPath: string }> { if (!import.meta.env.DEV) throw new Error('Not available'); const ch = rcChallenges().find((x) => x.id === challengeId); if (!ch) throw new Error('No challenge'); return resolve({ otp: ch.otp, magicPath: `/rc/auth/${ch.linkToken}${ch.next ? `?next=${encodeURIComponent(ch.next)}` : ''}` }); }
+export async function rcGetAccount(clientId: string): Promise<RcAccount | null> { return resolve(rcAccounts().find((x) => x.clientId === clientId) ?? null); }
+export async function rcListAccounts(): Promise<(RcAccount & { clientName: string })[]> { return resolve(rcAccounts().map((a) => ({ ...a, clientName: fullNameOf(byId(fx.clients, a.clientId)) }))); }
+export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); saveStepUps(rcStepUps().filter((g) => g.clientId !== clientId)); const s = portalSessionSync(); if (s?.clientId === clientId) localStorage.removeItem(KEYS.portalSession); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset · ${fullNameOf(byId(fx.clients, clientId))} · next sign-in code recreates it` }); portalStamp(clientId, `RolliConnect account reset by ${a.by}`); return resolve(undefined); }
+
+// ---- LINK tier (MH ruling 2026-10-01): a signed, scoped, expiring token opens ONE object for ONE purpose without sign-in. Every send is logged; revoke = "this link has expired — sign in to see your watch." ----
+export type ClientLinkType = 'estimate' | 'parts' | 'invoice' | 'report' | 'pickup' | 'track';
+export interface ClientLink { token: string; type: ClientLinkType; objectId: string; clientId: string; email: string; issuedAt: string; expiresAt?: string; revokedAt?: string; revokedBy?: string; sends: { at: string; by: string; channel: 'email' | 'sms' }[]; opens: number; lastOpenedAt?: string }
+export const LINK_EXPIRY: Record<ClientLinkType, string> = { estimate: 'until decided · re-sent on nudge', parts: 'until decided · re-sent on nudge', invoice: 'life of the invoice', report: '90 days · re-sendable', pickup: '2 minutes · single use', track: 'delivery + 30 days' };
+export const LINK_EXPIRED_COPY = 'This link has expired — sign in to see your watch.';
+const clientLinks = () => readJson<ClientLink[]>(RC_KEYS.links, []);
+const saveClientLinks = (v: ClientLink[]) => writeJson(RC_KEYS.links, v);
+export const clientLinkPath = (l: ClientLink) => (l.type === 'estimate' ? `/rc/estimates/${l.objectId}?t=${l.token}` : l.type === 'parts' ? `/rc/parts/${l.objectId}?t=${l.token}` : l.type === 'invoice' ? `/rc/invoices/${l.objectId}?t=${l.token}` : `/rc/${l.type}/${l.token}`);
+// Issue (or re-send) the one active link for an object — the Sent page gets a row per send
+const issueClientLink = (type: ClientLinkType, objectId: string, clientId: string, channel: 'email' | 'sms' = 'email'): ClientLink => {
+  const a = actor(); const now = new Date().toISOString(); const all = clientLinks(); const c = byId(fx.clients, clientId);
+  let l = all.find((x) => x.type === type && x.objectId === objectId && !x.revokedAt && (!x.expiresAt || new Date(x.expiresAt).getTime() > Date.now()));
+  if (!l) { l = { token: `lnk-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`, type, objectId, clientId, email: c.email, issuedAt: now, sends: [], opens: 0 }; all.push(l); }
+  l.sends.push({ at: now, by: a.by, channel }); saveClientLinks(all); return l;
+};
+export async function getClientLinks(objectId: string): Promise<ClientLink[]> { return resolve(clientLinks().filter((l) => l.objectId === objectId)); }
+export async function sendClientLink(type: ClientLinkType, objectId: string): Promise<ClientLink> {
+  const l = type === 'estimate' ? issueClientLink(type, objectId, byId(store.estimates, objectId).clientId) : type === 'parts' ? issueClientLink(type, objectId, getJobRow(byId(store.partsRequests, objectId).jobId).clientId) : issueClientLink(type, objectId, getSO(objectId).clientId);
+  const c = byId(fx.clients, l.clientId); const a = actor(); const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  queueOutbox({ id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: c.email, toName: fullNameOf(c), relatedRef: `${type} link · ${objectId}`, status: 'pending', subject: `Your ${type === 'parts' ? 'parts approval' : type} link`, body: `Hello ${c.firstName},\n\nHere is your link again — it opens this ${type === 'parts' ? 'parts approval' : type} only:\n\n${origin}${clientLinkPath(l)}\n\nExpiry: ${LINK_EXPIRY[type]}. Sign in to RolliConnect to see everything in one place.`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
+  return resolve(l);
 }
-export async function rcSignIn(email: string, password: string): Promise<{ step: 'totp' | 'totp_setup'; otpauth?: string }> {
-  const a = rcAccountByEmail(email);
-  if (!a || a.password !== password) { if (a) portalStamp(a.clientId, 'RolliConnect sign-in failed · wrong password'); throw new Error('Email or password didn’t match'); }
-  if (!a.totpEnabled) return resolve({ step: 'totp_setup', otpauth: `otpauth://totp/RolliConnect:${encodeURIComponent(a.email)}?secret=${a.totpSecret}&issuer=RolliConnect` });
-  return resolve({ step: 'totp' });
+export async function revokeClientLink(token: string): Promise<ClientLink> { managerOnly(); const all = clientLinks(); const l = all.find((x) => x.token === token); if (!l) throw new Error('No such link'); const a = actor(); l.revokedAt = new Date().toISOString(); l.revokedBy = a.by; saveClientLinks(all); portalStamp(l.clientId, `${l.type} link revoked by ${a.by}`); return resolve(l); }
+// Public resolve — counts the open; a dead link always says the same thing and points at sign-in
+export async function resolveClientLink(token: string): Promise<ClientLink> {
+  const all = clientLinks(); const l = all.find((x) => x.token === token); if (!l || l.revokedAt || (l.expiresAt && new Date(l.expiresAt).getTime() < Date.now())) throw new Error(LINK_EXPIRED_COPY);
+  // "until decided": the link keeps showing the decided page for 15 min after the tap (confirmation), then retires
+  const recent = (iso?: string) => !!iso && Date.now() - new Date(iso).getTime() < 15 * 60_000;
+  if (l.type === 'estimate') { const e = store.estimates.find((x) => x.id === l.objectId); if (!e || !(['sent', 'draft'].includes(e.status) || recent(e.approvedAt) || recent(e.declinedAt))) throw new Error(LINK_EXPIRED_COPY); }
+  if (l.type === 'parts') { const r = store.partsRequests.find((x) => x.id === l.objectId); if (!r || !(r.status === 'awaiting_client' || recent(r.clientDecidedAt))) throw new Error(LINK_EXPIRED_COPY); }
+  l.opens += 1; l.lastOpenedAt = new Date().toISOString(); saveClientLinks(all); return resolve({ ...l });
 }
-const rcOpenSession = (a: RcAccount, how: string) => { const s: PortalSession = { clientId: a.clientId, email: a.email, token: `acct-${newId('rc')}`, issuedAt: new Date().toISOString() }; writeJson(KEYS.portalSession, s); a.lastLoginAt = s.issuedAt; portalStamp(a.clientId, `Signed in to RolliConnect · password + ${how}`); };
-// Step 3 — 6-digit code (demo 000000) or an unused backup code
-export async function rcVerifyTotp(email: string, code: string): Promise<Client> {
-  const all = rcAccounts(); const a = all.find((x) => x.email.toLowerCase() === email.trim().toLowerCase()); if (!a || !a.totpEnabled) throw new Error('Finish authenticator setup first');
-  const c = code.trim().toUpperCase().replace(/\s/g, '');
-  if (c === RC_DEMO_TOTP) rcOpenSession(a, 'authenticator');
-  else if (a.backupCodes.includes(c) && !a.usedBackupCodes.includes(c)) { a.usedBackupCodes.push(c); rcOpenSession(a, `backup code (${a.backupCodes.length - a.usedBackupCodes.length} left)`); }
-  else { portalStamp(a.clientId, 'RolliConnect sign-in failed · bad authenticator / backup code'); throw new Error(a.usedBackupCodes.includes(c) ? 'That backup code was already used' : 'That code didn’t match'); }
-  saveAccounts(all); return resolve(byId(fx.clients, a.clientId));
-}
-export async function rcGetAccount(clientId: string): Promise<RcAccount | null> { const a = rcAccounts().find((x) => x.clientId === clientId); return resolve(a ? rcPublic(a) : null); }
-export async function rcRegenerateBackupCodes(clientId: string): Promise<string[]> { const all = rcAccounts(); const a = all.find((x) => x.clientId === clientId); if (!a) throw new Error('No account'); a.backupCodes = Array.from({ length: 8 }, backupCode); a.usedBackupCodes = []; saveAccounts(all); portalStamp(clientId, 'Backup codes regenerated · old codes void'); return resolve([...a.backupCodes]); }
-export async function rcListAccounts(): Promise<(RcAccount & { clientName: string })[]> { return resolve(rcAccounts().map((a) => ({ ...rcPublic(a), clientName: fullNameOf(byId(fx.clients, a.clientId)) }))); }
-export async function rcResetAccount(clientId: string): Promise<void> { managerOnly(); saveAccounts(rcAccounts().filter((a) => a.clientId !== clientId)); issueRcInvite(byId(fx.clients, clientId), 'reset'); const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, detail: `RolliConnect account reset for ${fullNameOf(byId(fx.clients, clientId))} — fresh verification link emailed (Sent)` }); return resolve(undefined); }
+export async function portalGetEstimateByLink(token: string): Promise<{ estimate: EstimateWithRefs; link: ClientLink }> { const l = await resolveClientLink(token); if (l.type !== 'estimate') throw new Error(LINK_EXPIRED_COPY); return resolve({ estimate: await portalGetEstimate(l.clientId, l.objectId), link: l }); }
+export async function portalGetPartsByLink(token: string): Promise<{ parts: PortalPartsView; link: ClientLink }> { const l = await resolveClientLink(token); if (l.type !== 'parts') throw new Error(LINK_EXPIRED_COPY); return resolve({ parts: await portalGetPartsRequest(l.clientId, l.objectId), link: l }); }
+// Step-up from a LINK (no session): the code goes to the email the link was sent to
+export async function rcRequestStepUp(clientId: string, action: string): Promise<{ challengeId: string; maskedEmail: string; expiresAt: string }> { const c = byId(fx.clients, clientId); return rcRequestCode(c.email, { purpose: 'stepup', action }); }
+export const STEP_UP_ACTION = { approveEstimate: (id: string) => `approve-estimate:${id}`, approveParts: (id: string) => `approve-parts:${id}`, payBalance: (id: string) => `pay-balance:${id}` };
 
 // Per-document gating by type — token documents (report, inspection form) can stay public links; identity-bound pages always need the account
 export type RcDocType = 'estimate' | 'invoice' | 'watch' | 'messages' | 'report' | 'inspection_form';
 export type RcDocAccess = 'public' | 'login';
 export const RC_DOC_META: Record<RcDocType, { label: string; blurb: string; lockable: boolean }> = {
-  estimate: { label: 'Estimates · approve / decline', blurb: 'Identity-bound (approval is a signature) — always behind the account', lockable: false },
-  invoice: { label: 'Invoices · pay balance', blurb: 'Identity-bound (payment) — always behind the account', lockable: false },
+  estimate: { label: 'Estimates · approve / decline', blurb: 'LINK tier: the emailed link opens this one estimate; Approve re-verifies with a fresh emailed code or Touch ID. Also inside the signed-in portal.', lockable: false },
+  invoice: { label: 'Invoices · pay balance', blurb: 'LINK tier via /pay/:token (life of the invoice, one invoice only); the portal copy is behind sign-in.', lockable: false },
   watch: { label: 'Watch pages · photos & timeline', blurb: 'Photos are private unless a staff member unlocks them — always behind the account', lockable: false },
   messages: { label: 'Messages', blurb: 'Two-way thread — always behind the account', lockable: false },
   report: { label: 'Inspection report (tokened link)', blurb: 'Public: the emailed link opens read-only · Login: the link hits the wall first', lockable: true },
@@ -3412,8 +3457,9 @@ export async function portalRequestRequote(clientId: string, estimateId: string)
 }
 
 export async function portalApproveEstimate(clientId: string, id: string): Promise<EstimateWithRefs> {
-  { const e0 = store.estimates.find((x) => x.id === id); if (e0) engage(e0, 'approved'); }
   requireOwner(clientId, store.estimates.find((e) => e.id === id), 'estimate');
+  requireStepUp(clientId, STEP_UP_ACTION.approveEstimate(id)); // money action — fresh code / Touch ID, even from a link
+  { const e0 = store.estimates.find((x) => x.id === id); if (e0) engage(e0, 'approved'); }
   recordRcEvent({ t: 'approve', clientId, id });
   const r = await asClient(clientId, () => approveEstimate(id, 'portal'));
   // The linked job (if it is waiting on the customer) moves forward too — staff see it in the Approved lane instantly
@@ -3442,6 +3488,7 @@ export async function portalGetInvoice(clientId: string, id: string): Promise<Sa
 export async function portalPayBalance(clientId: string, id: string): Promise<SalesOrderWithRefs> {
   const o = requireOwner(clientId, store.salesOrders.find((x) => x.id === id), 'invoice');
   if (o.balanceDue <= 0) throw new Error('This invoice is already paid');
+  requireStepUp(clientId, STEP_UP_ACTION.payBalance(id));
   recordRcEvent({ t: 'pay', clientId, id });
   const amount = o.balanceDue;
   const r = await asClient(clientId, () => recordPayment(id, amount, 'card', 'Paid online via RolliConnect (stub)'));
@@ -4157,7 +4204,7 @@ export async function issueInspectionReport(jobId: string, grades: { component: 
   if (j.status === 'in_review' && legalJobActions(j).some((x) => x.key === 'request_approval')) pushTransition(j, 'request_approval', 'awaiting_customer_approval', `Inspection report v${r.version} issued — portal link sent`, true);
   const t = renderTemplateFor('inspection_ready', { clientId: j.clientId, anchor: { kind: 'job', id: j.id } });
   const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: j.number, status: 'pending', subject: t.subject, body: t.body, createdAt: r.issuedAt, createdBy: a.by, station: a.station };
-  email.body = `${email.body}\n\n▶ Open your inspection report: ${typeof window !== 'undefined' ? window.location.origin : ''}${portalDeepLink(j.clientId, `/rc/report/${r.token}`)}`;
+  email.body = `${email.body}\n\n▶ Open your inspection report: ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/report/${r.token}`;
   queueOutbox(email); r.emailId = email.id;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'system', a.by, `Inspection report v${r.version} issued — notification queued with portal link /rc/report/${r.token}`);
   jobStamp(j, `Inspection report v${r.version} issued to client (portal-first)`);
@@ -4445,6 +4492,29 @@ export async function submitKioskCheckIn(input: KioskSubmission): Promise<KioskR
   pushConv(c, { direction: 'in', source: 'kiosk', by: `${firstName} ${lastName}`, station: KIOSK_STATION, text: `${kioskSummary(details, input.brand)} · ${r.number}${matched ? ` · possible existing client (${matchedOn.join(' + ')})` : ' · new client created'}`, at });
   kioskAudit(`${r.number} · ${firstName} ${lastName} · ${fx.RG_DIVISION_LABEL[input.brand]} · ${details.services.length} service(s)${matched ? ` · possible match ${client.firstName} ${client.lastName} on ${matchedOn.join(' + ')}` : ' · new client'}`);
   return resolve({ request: { ...r }, client, possibleExisting: !!matched });
+}
+// ---- rolliworks.com structured service submission (SUB- · source = web). PROTOTYPE: the public form is emulated at /rwcom; KEEPER: the real site posts here. ----
+export interface WebRequestInput { brand: Division; legs: string[]; legDepts: DeptCode[]; model?: string; ref?: string; serialMasked?: string; bracelet?: string; condition: string[]; notes?: string; photos: PackagePhoto[]; firstName: string; lastName: string; email: string; phone?: string; handover: 'drop_off' | 'ship'; typical?: string; claimCode?: string }
+export interface WebRequestResult { request: ServiceRequest; client: Client; possibleExisting: boolean; ackEmail: OutboxEmail }
+export async function submitWebRequest(input: WebRequestInput): Promise<WebRequestResult> {
+  const firstName = input.firstName.trim(), lastName = input.lastName.trim(), email = normEmail(input.email);
+  if (!firstName || !lastName) throw new Error('Please enter your first and last name');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Please enter a valid email address');
+  if (!input.legs.length) throw new Error('Pick at least one service');
+  const matched = fx.clients.find((c) => normEmail(c.email) === email) ?? (input.phone && normPhone(input.phone).length >= 10 ? fx.clients.find((c) => normPhone(c.phone) === normPhone(input.phone!)) : undefined);
+  const client = matched ?? newKioskClient({ firstName, lastName, email, phone: input.phone?.trim() ?? '' });
+  const at = new Date().toISOString();
+  const summary = `Web request (${fx.RG_DIVISION_LABEL[input.brand]}) · ${input.legs.join(', ')}${input.model ? ` · ${input.model}` : ''}${input.ref ? ` · ref ${input.ref}` : ''}${input.bracelet ? ` · ${input.bracelet}` : ''}${input.condition.length ? ` · ${input.condition.join(', ')}` : ''}${input.notes ? ` · “${input.notes.trim()}”` : ''} · ${input.handover === 'ship' ? 'will ship' : 'will drop off'}${input.typical ? ` · ${input.typical}` : ''}${input.claimCode ? ` · claim ${input.claimCode}` : ''}`;
+  const photos = input.photos.map((p) => ({ ...p, stage: 0, origin: 'web' as const, controlled: false }));
+  const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'web', status: 'new', summary, createdAt: at, createdBy: 'rolliworks.com', station: 'rolliworks.com', division: input.brand, legs: input.legDepts, photos };
+  store.requests.unshift(r);
+  const conv = ensureConversation(client.id, 'General', undefined, input.brand);
+  pushConv(conv, { direction: 'in', source: 'web', by: `${firstName} ${lastName}`, station: 'rolliworks.com', text: `${summary} · ${r.number}${matched ? ' · existing client matched on email/phone' : ' · new client'}${photos.length ? ` · ${photos.length} photo(s) attached (stage 0, uncontrolled)` : ''}`, at });
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const ackEmail: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: email, toName: `${firstName} ${lastName}`, relatedRef: r.number, status: 'pending', subject: `We received your request — ${r.number}`, body: `Hello ${firstName},\n\nThank you — your request ${r.number} is with our team. A person reads every one; expect an estimate or a question within one business day.\n\nWhat you told us: ${input.legs.join(', ')}${input.ref ? ` on a ${input.model ?? ''} (ref ${input.ref})` : ''}.${input.typical ? `\n${input.typical} — a range, not a quote.` : ''}\n\n▶ Follow it in RolliConnect (your first link — a code we email you is the key, no password): ${origin}/rc?email=${encodeURIComponent(email)}&mode=create\n\n— RolliWorks`, createdAt: at, createdBy: 'rolliworks.com', station: 'rolliworks.com' };
+  queueOutbox(ackEmail);
+  appendAudit({ type: 'kiosk', stationName: 'rolliworks.com', detail: `${r.number} · web request · ${firstName} ${lastName} · ${input.legs.join(', ')}${matched ? ' · existing client' : ' · new client'}` });
+  return resolve({ request: { ...r }, client, possibleExisting: !!matched, ackEmail });
 }
 const requestRow = (r: ServiceRequest): RequestRow => ({ ...r, client: byId(fx.clients, r.clientId), watch: r.watchId ? store.watches.find((w) => w.id === r.watchId) : undefined });
 export async function getRequestsQueue(): Promise<RequestRow[]> {
@@ -4913,7 +4983,7 @@ async function sendApprovalInternal(requestId: string): Promise<PartsRequestWith
   const a = actor(); const r = byId(store.partsRequests, requestId); if (r.status !== 'pending_review') throw new Error('Not in review');
   const bad = (r.items ?? []).filter((i) => i.price === undefined || !(i.price >= 0)); if (bad.length) throw new Error(`Price required on every line — missing: ${bad.map((b) => b.description).join(', ')}`);
   const j = getJobRow(r.jobId); const c = byId(fx.clients, j.clientId); const w = byId(store.watches, j.watchId); const total = (r.items ?? []).reduce((t, i) => t + (i.price ?? 0) * i.qty, 0);
-  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}/rc/parts/${r.id}\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: `${j.number} · ${r.number}`, status: 'pending', subject: `Parts approval needed — ${w.brand} ${w.model} (${j.number})`, body: `Hello ${c.firstName},\n\nDuring service of your ${w.brand} ${w.model} (${w.reference}) our watchmaker found the following parts are needed:\n\n${(r.items ?? []).map((i) => `• ${i.description}${i.partNumber ? ` (${i.partNumber})` : ''} ×${i.qty} — $${(i.price ?? 0).toFixed(2)}`).join('\n')}\n\nTotal parts: $${total.toFixed(2)}\n\nPlease approve or decline in RolliConnect:\n▶ ${typeof window !== 'undefined' ? window.location.origin : ''}${clientLinkPath(issueClientLink('parts', r.id, j.clientId))}\n\nThis link opens this parts approval only (${LINK_EXPIRY.parts}). Sign in to RolliConnect to see everything in one place.\n\n— The RolliSuite team`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
   queueOutbox(email); r.emailId = email.id; r.status = 'awaiting_client'; r.sentForApprovalAt = email.createdAt; r.sentBy = a.by;
   threadEvent(j.clientId, { kind: 'job', id: j.id }, 'parts', a.by, `Parts approval sent · ${r.number} · ${(r.items ?? []).length} line(s) · $${total.toFixed(2)}`);
   partsStamp(r, `sent for client approval · $${total.toFixed(2)} · email queued`); jobStamp(j, `${r.number} sent for client approval`); approvalsToSendSweepSync();
@@ -6985,6 +7055,7 @@ export async function portalGetPartsRequest(clientId: string, id: string): Promi
 export async function portalDecideParts(clientId: string, id: string, decision: 'approve' | 'decline'): Promise<PortalPartsView> {
   const r = store.partsRequests.find((x) => x.id === id); const j = r ? store.jobs.find((x) => x.id === r.jobId) : undefined;
   if (!r || !j || j.clientId !== clientId) throw new Error('That parts approval isn’t on your account');
+  if (decision === 'approve') requireStepUp(clientId, STEP_UP_ACTION.approveParts(id));
   clientPartsDecision(r, decision, 'portal'); portalStamp(clientId, `${decision === 'approve' ? 'Approved' : 'Declined'} parts ${r.number} for ${j.number}`);
   return portalGetPartsRequest(clientId, id);
 }

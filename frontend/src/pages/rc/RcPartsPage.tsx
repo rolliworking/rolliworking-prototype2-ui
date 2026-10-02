@@ -1,22 +1,27 @@
 import { ArrowLeft, Check } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import type { ClientLink } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
+import { LinkExpired, LinkFooter, StepUpModal } from '@/rc/RcAuthBits';
 import { RcButton, RcCard, RcError, rcDate, rcMoney } from '@/rc/RcBits';
 import { useRcSession } from '@/rc/RcSession';
 
 // Parts approval — a money decision: the lines and the price on one page, one tap to approve. Same ledger as the email flow; the email link opens this page.
 export default function RcPartsPage() {
-  const { id = '' } = useParams(); const { client } = useRcSession();
-  const { data, loading, reload } = useAsync(() => api.portalGetPartsRequest(client!.id, id), [id]);
+  const { id = '' } = useParams(); const [sp] = useSearchParams(); const token = sp.get('t'); const { client } = useRcSession();
+  const [link, setLink] = useState<ClientLink | null>(null); const [linkErr, setLinkErr] = useState<string | null>(null); const [stepUp, setStepUp] = useState(false);
+  const { data, loading, reload } = useAsync(async () => { if (token && !client) { const r = await api.portalGetPartsByLink(token).catch((x) => { setLinkErr(x.message); return null; }); if (!r) return null; setLink(r.link); return r.parts; } return api.portalGetPartsRequest(client!.id, id); }, [id, token, client?.id]);
+  const clientId = client?.id ?? link?.clientId ?? '';
   const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   if (loading) return null;
+  if (linkErr) return <LinkExpired message={linkErr} />;
   if (!data) return <p className="text-rc-muted" data-testid="rc-parts-missing">We couldn’t find that parts approval on your account.</p>;
-  const decide = async (d: 'approve' | 'decline') => { setBusy(true); setErr(null); try { await api.portalDecideParts(client!.id, id, d); reload(); } catch (e) { setErr(e instanceof Error ? e.message : 'Something went wrong'); } finally { setBusy(false); } };
+  const decide = async (d: 'approve' | 'decline') => { setBusy(true); setErr(null); try { await api.portalDecideParts(clientId, id, d); reload(); } catch (e) { setErr(e instanceof Error ? e.message : 'Something went wrong'); } finally { setBusy(false); } };
   const open = data.request.status === 'awaiting_client';
   return <div className="space-y-6" data-testid="rc-parts-page" data-status={data.request.status}>
-    <Link to={`/rc/watches/${data.watch.id}`} className="inline-flex items-center gap-1 text-sm text-rc-muted hover:text-rc-ink" data-testid="rc-parts-back"><ArrowLeft size={14} /> {data.watch.brand} {data.watch.model}</Link>
+    {client && <Link to={`/rc/watches/${data.watch.id}`} className="inline-flex items-center gap-1 text-sm text-rc-muted hover:text-rc-ink" data-testid="rc-parts-back"><ArrowLeft size={14} /> {data.watch.brand} {data.watch.model}</Link>}
     <div>
       <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-rc-muted">Parts approval · {data.request.number}</div>
       <h1 className="mt-1 font-serif text-4xl font-light tracking-tight sm:text-5xl">{open ? 'A few parts need your go-ahead' : data.decided?.decision === 'approve' ? 'Approved — thank you' : 'Declined'}</h1>
@@ -28,10 +33,12 @@ export default function RcPartsPage() {
       {data.request.note && <p className="mt-3 text-sm text-rc-muted">{data.request.note}</p>}
     </RcCard>
     {open && <div className="flex flex-wrap gap-3">
-      <RcButton data-testid="rc-parts-approve" disabled={busy} onClick={() => void decide('approve')}><Check size={16} /> Approve these parts · {rcMoney(data.total)}</RcButton>
+      <RcButton data-testid="rc-parts-approve" disabled={busy} onClick={() => setStepUp(true)}><Check size={16} /> Approve these parts · {rcMoney(data.total)}</RcButton>
       <RcButton tone="danger" data-testid="rc-parts-decline" disabled={busy} onClick={() => void decide('decline')}>Decline</RcButton>
     </div>}
     {!open && <p data-testid="rc-parts-decided" className="text-sm text-rc-muted">{data.decided?.decision === 'approve' ? 'We’ll order the parts and carry on. You can follow the dots on your watch page.' : 'We’ll pause this part of the work and reach out to talk through the options.'} <Link to="/rc/messages" className="underline decoration-rc-accent/60 underline-offset-4">Message us</Link> any time.</p>}
     <RcError text={err} />
+    {link && !client && <LinkFooter link={link} what={`parts approval ${data.request.number}`} />}
+    {stepUp && <StepUpModal clientId={clientId} action={api.STEP_UP_ACTION.approveParts(id)} title={`Approve parts · ${rcMoney(data.total)}`} what="You’re approving these parts and their price." onClose={() => setStepUp(false)} onVerified={() => { setStepUp(false); void decide('approve'); }} />}
   </div>;
 }

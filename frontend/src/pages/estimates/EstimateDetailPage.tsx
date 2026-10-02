@@ -17,6 +17,7 @@ import { PrintPreview } from '@/components/estimates/PrintPreview';
 import { ClientRefPill } from '@/components/intake/ClientRefBits';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ClientLinksCard } from '@/components/rc/ClientLinksCard';
 import { fmtDate, fmtTime, fullName } from '@/lib/format';
 
 interface Form { lines: EstimateLine[]; items: EstimateItem[]; watch: Watch | null; validUntil: string; clientNotes: string; messageNotes: string; internalNotes: string; billing: Address; shipping: Address; mirror: boolean }
@@ -184,6 +185,8 @@ export default function EstimateDetailPage() {
       <Card title="Details" testId="detail-meta-card">
         <EstimateMeta validUntil={form.validUntil} clientNotes={form.clientNotes} messageNotes={form.messageNotes} internalNotes={form.internalNotes} readOnly={!editing} onChange={(p) => change(p)} />
       </Card>
+
+      {!editing && e.status !== 'draft' && <ClientLinksCard type="estimate" objectId={e.id} />}
 
       <Card title="Revisions" subtitle="Prior versions are never overwritten" testId="detail-revisions-card">
         <RevisionHistory estimate={e} />

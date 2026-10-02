@@ -25,7 +25,7 @@ import { PhoneCall,
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound } from 'lucide-react';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound, Globe } from 'lucide-react';
 import { OWNER_USER_ID, accessOverrideSync, type AccessTier, type User } from '@/api/client';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
@@ -87,6 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'wm-kiosk', label: 'WM Photo Kiosk', path: '/wm-kiosk', icon: Camera, tiers: ALL, built: true, blurb: 'Watchmaker-room shared photo station — required 4-step set + ad-hoc photos with @-mentions.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
+  { key: 'rwcom', label: 'rw.com', path: '/rwcom', icon: Globe, tiers: MGR, built: true, blurb: 'Emulator of the public rolliworks.com flows — identify · check · request — with a phone/desktop frame. NOT-KEEPER: in KEEPER this is the public site, not an RS screen.' },
   { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },
   { key: 'access', label: 'Access control', path: '/setup/access', icon: KeyRound, tiers: ['manager'], ownerOnly: true, built: true, blurb: 'Owner-only: per-user × per-screen toggles with role defaults, override diff and a change log.' },
   { key: 'integrations', label: 'Integrations', path: '/integrations', icon: Plug, tiers: MGR, built: true, blurb: 'QuickBooks, email, SMS and shipping carriers.' },

@@ -93,3 +93,11 @@ State machines and guards (`source/STATE-MACHINES.md`), field lists and validati
 | `sendSms` Vonage MOCK receipt + Outbox row | `api/telephony.ts` | Vonage Messages API behind the same seam |
 | `pickupEvidenceSweep()` runs when a station reads the queue / session (90 s rule) | `client.ts` | scheduled job server-side; Hitlist pin via the same key `pickup-evidence:<so>` |
 | Frames / ID photo stored as data URLs on the SO with `retention` dates (not enforced) | `types.ts PickupSession.retention` | object storage with lifecycle rules (frames 90 d, proxy ID 30 d, summary rows permanent) |
+
+## Added 2026-10-01 (Client portal — passwordless + LINK tier)
+| prototype scaffolding | where | replacement |
+|---|---|---|
+| OTP / magic-link challenges stored in localStorage with the **plain code** (`rollisuite.rc.challenges`); "Prototype: fill the code" dev button | `client.ts` RolliConnect accounts, `rc/RcAuthBits.tsx DevFillCode` | Supabase Auth `signInWithOtp` (hashed secrets server-side, real email); no dev button in production builds |
+| Link tokens are random ids (`lnk-…`), not signed; expiry enforced only for revoke / decided state | `client.ts ClientLink` | signed, scoped tokens with per-type `expiresAt`, verified server-side |
+| Touch ID: local challenge, credential id per device, no signature verification | `api/webauthn.ts` | server-issued challenge + assertion verification (py-webauthn), action-bound step-up grant |
+| Step-up grants in localStorage (`rollisuite.rc.stepups`) | `client.ts requireStepUp` | server-side grant bound to `{session, action, nonce}`, consumed atomically |

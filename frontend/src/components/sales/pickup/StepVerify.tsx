@@ -100,7 +100,7 @@ export const StepVerify = ({ ctx, refresh, onNext, onBack, onStopped, fail }: Pr
                 {method === 'reverse_qr' && (
                   <div className="grid grid-cols-[1fr_320px] gap-3 text-xs">
                     <div>
-                      <p className="text-ink-500">The station shows a QR; the client scans it with their own phone and taps <b>Yes</b>. Single-use, bound to this order and this station, expires in 10 minutes.</p>
+                      <p className="text-ink-500">The station shows a QR; the client scans it with their own phone and taps <b>Yes</b>. Single-use, bound to this order and this station, expires in 2 minutes.</p>
                       {rqOpen ? (
                         <div className="mt-2 flex items-start gap-3">
                           <div data-testid="pickup-reverse-qr" className="rounded-sm bg-white p-2 ring-1 ring-line"><QRCodeSVG value={rqUrl} size={148} level="M" /></div>

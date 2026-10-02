@@ -1,4 +1,5 @@
 import { ArrowRight, ClipboardCheck, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, Wrench, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { NeedsYouKind, PortalWatch } from '@/api/client';
@@ -36,6 +37,14 @@ const WatchRow = ({ pw }: { pw: PortalWatch }) => {
   );
 };
 
+// First sign-in note (MH ruling 2026-10-01): the account is the house, the emailed links are doorways — both keep working
+const FirstRunNote = ({ clientId }: { clientId: string }) => {
+  const key = `rollisuite.rc.firstRun.${clientId}`;
+  const [show, setShow] = useState(() => !localStorage.getItem(key));
+  if (!show) return null;
+  return <div data-testid="rc-first-run-note" className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-md border border-dashed border-rc-accent/50 bg-rc-accentSoft px-4 py-3 text-sm text-rc-ink"><span>Links we email you still work; here you can see everything in one place.</span><button type="button" data-testid="rc-first-run-dismiss" onClick={() => { localStorage.setItem(key, new Date().toISOString()); setShow(false); }} className="text-xs text-rc-muted underline underline-offset-2">Got it</button></div>;
+};
+
 export default function RcHomePage() {
   const { client } = useRcSession();
   const { data } = useAsync(() => api.portalGetHome(client!.id), [client!.id]);
@@ -48,6 +57,7 @@ export default function RcHomePage() {
     <div className="space-y-10" data-testid="rc-home-page">
       <div>
         <h1 className="font-serif text-4xl font-light tracking-tight sm:text-5xl">Hello, {data.client.firstName}.</h1>
+        <FirstRunNote clientId={data.client.id} />
         <p className="mt-2 text-[15px] text-rc-muted" data-testid="rc-home-summary">{(() => { const n = cards.filter((c) => c.state === 'in_progress').length; const w = cards.filter((c) => c.state === 'received' || c.state === 'decision').length; return `${n ? `${n} watch${n === 1 ? '' : 'es'} in the workshop right now` : 'Nothing in the workshop right now'}${w ? ` · ${w} request${w === 1 ? '' : 's'} waiting on us` : ''}.`; })()}</p>
       </div>
 

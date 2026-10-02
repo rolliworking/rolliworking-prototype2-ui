@@ -493,6 +493,9 @@ export interface PackagePhoto {
   clientVisible?: boolean;
   photoType?: PhotoType;
   note?: string;
+  stage?: number; // 0 = pre-inspection (client-captured on rolliworks.com) · 1+ = shop stages
+  origin?: 'web' | 'kiosk' | 'portal' | 'shop';
+  controlled?: boolean; // false = client's own phone/webcam, no controlled lighting
 }
 
 export interface Package {
@@ -1160,7 +1163,7 @@ export interface Conversation {
   createdAt: string; lastAt: string; lastInboundAt?: string; lastOutboundAt?: string; snoozedUntil?: string; snoozedBy?: string; closedAt?: string; closedBy?: string; tokenSeq: number;
   tags?: ConvTag[]; pinned?: boolean; lane?: ConvLane;
 }
-export type MessageSource = 'portal' | 'email' | 'kiosk' | 'approval' | 'photo' | 'parts' | 'pickup' | 'staff' | 'note' | 'system';
+export type MessageSource = 'portal' | 'email' | 'kiosk' | 'web' | 'approval' | 'photo' | 'parts' | 'pickup' | 'staff' | 'note' | 'system';
 export interface ConvMessage {
   id: string; conversationId: string; clientId: string; direction: 'in' | 'out' | 'internal'; source: MessageSource; by: string; station?: string; text: string; at: string;
   token?: string; matchedToken?: string; readByStaff: boolean; photos?: PackagePhoto[]; emailId?: string; templateKey?: TemplateKey; cleared?: { by: string; at: string };

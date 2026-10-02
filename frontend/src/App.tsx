@@ -25,6 +25,7 @@ import CallsPage from '@/pages/rs/CallsPage';
 import PartsPage from '@/pages/rs/PartsPage';
 import ApprovalsToSendPage from '@/pages/rs/ApprovalsToSendPage';
 import HitlistPage from '@/pages/rs/HitlistPage';
+import RwcomPage from '@/pages/RwcomPage';
 import RwBulkAssignPage from '@/pages/rw/RwBulkAssignPage';
 import RwWorkQueuePage from '@/pages/rw/RwWorkQueuePage';
 import RwWmPage from '@/pages/rw/RwWmPage';
@@ -63,6 +64,7 @@ import RcReportPage from '@/pages/rc/RcReportPage';
 import RcMessagesPage from '@/pages/rc/RcMessagesPage';
 import RcNotFound from '@/pages/rc/RcNotFound';
 import RcPickupConfirmPage from '@/pages/rc/RcPickupConfirmPage';
+import RcMagicPage from '@/pages/rc/RcMagicPage';
 import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
@@ -220,7 +222,6 @@ export default function App() {
             <Route index element={<RcLoginPage />} />
             <Route path="signup" element={<RcSignupPage />} />
             <Route path="account" element={<RcAccountPage />} />
-            <Route path="auth/:token" element={<Navigate to="/rc" replace />} />
             <Route path="home" element={<RcHomePage />} />
             <Route path="estimates/:id" element={<RcEstimatePage />} />
             <Route path="invoices/:id" element={<RcInvoicePage />} />
@@ -229,6 +230,7 @@ export default function App() {
             <Route path="report/:token" element={<RcReportPage />} />
             <Route path="inspection/:token" element={<RcInspectionFormPage />} />
             <Route path="pickup/:token" element={<RcPickupConfirmPage />} />
+            <Route path="auth/:token" element={<RcMagicPage />} />
             <Route path="messages" element={<RcMessagesPage />} />
             <Route path="*" element={<RcNotFound />} />
           </Route>
@@ -243,6 +245,7 @@ export default function App() {
               <Route path="/hit-list" element={<Navigate to="/today" replace />} />
               <Route path="/hitlist" element={<HitlistIndex />} />
               <Route path="/hitlist/owner" element={<HitlistPage />} />
+              <Route path="/rwcom" element={<RwcomPage />} />
               <Route path="/hitlist/:slug" element={<PersonHitlistPage />} />
               <Route path="/hitlist/:slug/team" element={<TeamHitlistPage />} />
               <Route path="/estimates" element={<EstimatesListPage />} />
