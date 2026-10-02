@@ -64,7 +64,7 @@ export const RequestTab = ({ state, update, entity, goTab }: { state: RwState; u
       setResult(res);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not send'); } finally { setBusy(false); }
   };
-  if (result) return <Done res={result} legs={legLabels} photos={photos} onReset={() => { setResult(null); setLegs([]); setCondition([]); setNotes(''); setExtra([]); }} />;
+  if (result) return <Done res={result} legs={legLabels} photos={photos} onReset={() => { setResult(null); setLegs([]); setCondition([]); setNotes(''); setExtra([]); setContact({ firstName: '', lastName: '', email: '', phone: '' }); setHandover('drop_off'); }} />;
   const two = device === 'desktop' ? 'grid-cols-2' : '';
 
   return (

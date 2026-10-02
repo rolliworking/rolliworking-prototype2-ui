@@ -218,3 +218,8 @@ One entry per build session: what was built · what was decided · what was test
 
 ## Inbox panel sections + expand · dots only while in possession (2026-10-01)
 - Files: `components/inbox/InboxJobCard.tsx` (rewrite: ClientStrip · Section · JobSnippet/FlowSnippet · FulfilledRow · ClosedRow · RequestEntry), `components/jobs/JobDetailContent.tsx` (new, extracted from `pages/jobs/JobDetailPage.tsx`), `client.ts` (`jobInPossessionSync`, `clientPanelSync`, dots rule in `wbpForJobSync`/`wbpForClientSync`), `components/shared/WbpDots.tsx` (`WbpEmptyRings`), `CallPop.tsx` (empty rings), `RatingBadge.tsx` (tooltip), fixture `estimates.ts` e-hw1. Decisions D-448…D-451. Smoke: `/app/memory/tools/smoke_panel_sections.py`.
+
+## 2026-10-02 — rw.com emulator (Phase B) built + tested
+- `/rwcom` emulator complete: device frame (phone default), entity switch, three tabs, claim deep links, dev instrumentation. Testing iteration_74 — all five MH acceptance lines green; one reset bug fixed. Decisions D-452…D-458.
+- Open question for MH: web submissions number RQ-26-#### (RQ = web/portal, SUB = physical receiving per 2026-09-27); the brief said "SUB-" — confirm.
+- Next paste queued: pickup station (`EMERGENT-PICKUP-STATION-2026-10-01.md`, final).
