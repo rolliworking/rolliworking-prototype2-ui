@@ -160,7 +160,7 @@ const InspectionRedirect = () => { const { id } = useParams(); const { search } 
 const InspectionNewRedirect = () => { const { search } = useLocation(); return <Navigate to={`/intake/inspect/new${search}`} replace />; };
 const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`/rw/testing/test/${jobId}`} replace />; };
 // Super-admin staff-message folders live inside the Inbox's Internal tree (one tree, Outlook layout); /messages/all?staff=<Short> is the URL those folders resolve to
-const MessagesAllRedirect = () => { const [p] = useSearchParams(); return <Navigate to={`/inbox?section=staff&staff=${encodeURIComponent(p.get('staff') ?? 'all')}${p.get('msg') ? `&msg=${p.get('msg')}` : ''}`} replace />; };
+const MessagesAllRedirect = () => { const [p] = useSearchParams(); const s = p.get('staff') ?? 'all'; const folder = s === 'me' ? 'in-all' : s === 'sent' ? 'in-sent' : s === 'all' ? 'in-everyone' : `in-staff-${s}`; return <Navigate to={`/inbox?folder=${encodeURIComponent(folder)}${p.get('msg') ? `&msg=${p.get('msg')}` : ''}`} replace />; };
 
 export default function App() {
   return (

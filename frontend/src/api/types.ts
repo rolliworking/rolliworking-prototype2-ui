@@ -1173,7 +1173,7 @@ export interface ConvMessage {
 }
 export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
 // New list model: who = person tag filter (ALL · MIKE · VIENNA · CHYNA); lane = Quoted / Answered sections under All; archived out of the way
-export interface InboxFilter { who?: Exclude<ConvTag, 'update_wo'>; lane?: ConvLane | 'archived' | 'snoozed' }
+export interface InboxFilter { who?: ConvTag; lane?: ConvLane | 'archived' | 'snoozed' }
 export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; unreplied: number; needsReply: boolean; ageHours: number; attachments: number; last?: ConvMessage; assigneeLabel?: string; linkedEstimate?: { id: string; number: string; status: string } }
 export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
 export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[]; source: 'shop' | 'personal'; owner?: string }

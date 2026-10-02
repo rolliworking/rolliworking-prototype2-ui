@@ -4051,10 +4051,16 @@ export async function getInboxThreads(filter: InboxFilter = {}): Promise<Convers
   if (filter.who) rows = rows.filter((r) => r.tags?.includes(filter.who!));
   return resolve(sortThreads(rows));
 }
-export async function getInboxThreadCounts(): Promise<{ all: number; needsReply: number; quoted: number; answered: number; archived: number; snoozed: number; byTag: Record<ConvTag, number> }> {
+export async function getInboxThreadCounts(): Promise<{ all: number; needsReply: number; quoted: number; answered: number; archived: number; snoozed: number; pinned: number; byTag: Record<ConvTag, number> }> {
   wakeSnoozed(); const div = getSessionDivision(); const rows = cx.conversations.filter((c) => c.division === div).map(convRefs); const live = rows.filter((r) => r.status !== 'closed');
   const byTag = { vienna: 0, mike: 0, chyna: 0, update_wo: 0 } as Record<ConvTag, number>; live.forEach((r) => r.tags?.forEach((t) => { byTag[t] += 1; }));
-  return resolve({ all: live.length, needsReply: live.filter((r) => r.needsReply).length, quoted: live.filter((r) => r.lane === 'quoted').length, answered: live.filter((r) => r.lane === 'answered').length, archived: rows.length - live.length, snoozed: live.filter((r) => r.status === 'snoozed').length, byTag });
+  return resolve({ all: live.length, needsReply: live.filter((r) => r.needsReply).length, quoted: live.filter((r) => r.lane === 'quoted').length, answered: live.filter((r) => r.lane === 'answered').length, archived: rows.length - live.length, snoozed: live.filter((r) => r.status === 'snoozed').length, pinned: live.filter((r) => r.pinned).length, byTag });
+}
+// SENT folder (Outlook tree): every outbound client message in this division, newest first, with its thread
+export interface InboxSentRow { message: ConvMessage; conversation: ConversationWithRefs }
+export async function getInboxSent(): Promise<InboxSentRow[]> {
+  const div = getSessionDivision(); const convs = new Map(cx.conversations.filter((c) => c.division === div).map((c) => [c.id, convRefs(c)] as const));
+  return resolve(cx.messages.filter((m) => m.direction === 'out' && convs.has(m.conversationId)).sort((a, b) => b.at.localeCompare(a.at)).map((m) => ({ message: m, conversation: convs.get(m.conversationId)! })));
 }
 export async function tagConversation(id: string, tag: ConvTag, on = true): Promise<ConversationWithRefs> { const c = convOf(id); const cur = new Set(c.tags ?? []); if (on) cur.add(tag); else cur.delete(tag); c.tags = cur.size ? [...cur] : undefined; const t = CONV_TAGS.find((x) => x.key === tag)!; cxStamp(`${on ? 'Tagged' : 'Untagged'} ${t.label} · ${c.subject}`); return resolve(convRefs(c)); }
 export async function pinConversation(id: string, on = true): Promise<ConversationWithRefs> { const c = convOf(id); c.pinned = on || undefined; cxStamp(`${on ? 'Pinned' : 'Unpinned'} · ${c.subject}`); return resolve(convRefs(c)); }

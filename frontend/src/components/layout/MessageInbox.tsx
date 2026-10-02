@@ -11,9 +11,10 @@ import { OwnerChip } from '@/components/ui/Pills';
 import { fmtTime } from '@/lib/format';
 
 // INBOX — compact rows for the bubble: unread dot, photo, from · when, text, job chip, status; Claim (role queue) · Done · Reply (= a new message back)
-export const MessageInbox = ({ me, dark, pad, tick, onChange, onReply, jobBase }: { me: User; dark?: boolean; pad: boolean; tick: number; onChange: () => void; onReply: (row: InboxRow) => void; jobBase: string }) => {
-  const [rows, setRows] = useState<InboxRow[]>([]); const [open, setOpen] = useState<InboxRow | null>(null);
+export const MessageInbox = ({ me, dark, pad, tick, onChange, onReply, jobBase, show = 'all' }: { me: User; dark?: boolean; pad: boolean; tick: number; onChange: () => void; onReply: (row: InboxRow) => void; jobBase: string; show?: 'all' | 'open' | 'done' }) => {
+  const [all, setRows] = useState<InboxRow[]>([]); const [open, setOpen] = useState<InboxRow | null>(null);
   useEffect(() => { void hl.getInbox(me.id).then(setRows); }, [me.id, tick]);
+  const rows = show === 'all' ? all : all.filter((r) => (r.status === 'done') === (show === 'done'));
   const read = async (r: InboxRow) => { if (r.unread) { await hl.markInboxRead(r.id, me.shortName, true); onChange(); } };
   const muted = dark ? 'text-slate-400' : 'text-ink-400'; const btn = pad ? 'min-h-[40px] px-3 text-xs' : 'h-6 px-1.5 text-[11px]';
   return <>
@@ -36,7 +37,7 @@ export const MessageInbox = ({ me, dark, pad, tick, onChange, onReply, jobBase }
           </div>
         </div>
       </li>)}
-      {!rows.length && <li data-testid="msg-inbox-empty" className={`flex items-center gap-2 py-6 text-xs ${muted}`}><Inbox size={13} /> Nothing sent to you yet.</li>}
+      {!rows.length && <li data-testid="msg-inbox-empty" className={`flex items-center gap-2 py-6 text-xs ${muted}`}><Inbox size={13} /> {show === 'done' ? 'Nothing archived yet.' : 'Nothing sent to you yet.'}</li>}
     </ul>
     {open?.photo && <div data-testid="msg-inbox-lightbox" className="fixed inset-0 z-[100] grid place-items-center bg-black/90 p-6" onClick={() => setOpen(null)}>
       <button type="button" data-testid="msg-inbox-lightbox-close" onClick={() => setOpen(null)} className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white" aria-label="Close"><X size={16} /></button>
