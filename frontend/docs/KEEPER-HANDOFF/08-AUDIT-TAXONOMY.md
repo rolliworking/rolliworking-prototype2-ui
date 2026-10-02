@@ -32,7 +32,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `station_reset` | `resetDeviceRegistration` | All only |
 | `intake` | `commitArrivals`, `shipStamp`, `stamp` | Intake |
 | `estimate` | `closeRequest`, `convertLegacy`, `estStamp`, `overrideSoScanGate`, `setKioskRequired`, `writeClientRef` | Estimates |
-| `job` | `addJobAddon`, `addSwoLine`, `advanceSwo`, `binEvent`, `bulkCommit`, `conciergeBridge`, `confirmJobAddon`, `createHubShipment`, `createSwoHub`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `printSwoLabel`, `receiveSwoLine`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox`, `updateSwoHub` | Jobs (with task, pin, parts) |
+| `job` | `addJobAddon`, `addSwoLine`, `advanceSwo`, `binEvent`, `bulkCommit`, `conciergeBridge`, `confirmJobAddon`, `createHubShipment`, `createSwoHub`, `createSwoOutboundLabel`, `enterStorageSync`, `finishAudit`, `gateScanJob`, `jobStamp`, `leaveStorageSync`, `logBypass`, `padSendBack`, `padSetTech`, `printSwoLabel`, `receiveSwoLine`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox`, `updateSwoHub` | Jobs (with task, pin, parts) |
 | `task` | `taskStamp` | All only |
 | `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
 | `sales` | `convertLegacy`, `pickupEvidenceSweep`, `soStamp` | Sales |
@@ -50,7 +50,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `rgtime` | `rgAudit` | RGTime |
 | `kiosk` | `kioskAudit`, `markRequestNotified`, `resolveKioskMatch`, `saveBenchSettings`, `submitBuilderRequest`, `submitWebRequest` | Kiosk |
 | `appointments` | `auditAppointments` | All only |
-| `settings` | `accessLog`, `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setRcDocAccess` | All only |
+| `settings` | `accessLog`, `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setLtsThresholdDays`, `setRcDocAccess` | All only |
 | `shipping` | `portalCreateLabel` | All only |
 | `view_as_started` | `startViewAs` | All only |
 | `session_continued_as_self` | `continueAsSelf` | All only |

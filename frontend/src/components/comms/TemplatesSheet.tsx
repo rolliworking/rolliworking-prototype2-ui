@@ -18,7 +18,7 @@ export const TemplatesSheet = ({ channel, onUse, onClose, initialCategory }: { c
   const load = () => { void api.getTemplateLibrary({ channel, includeArchived: archived, clientOnly: true }).then(setRows); setPins(api.pinnedKeysSync()); };
   useEffect(load, [channel, archived]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { window.addEventListener(api.TEMPLATES_CHANGED_EVENT, load); return () => window.removeEventListener(api.TEMPLATES_CHANGED_EVENT, load); }); // eslint-disable-line react-hooks/exhaustive-deps
-  const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 2200); };
+  const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3200); };
   const act = async (f: () => Promise<unknown>, ok: string) => { try { await f(); say(ok); } catch (e) { say(e instanceof Error ? e.message : 'Failed'); } };
   const counts = useMemo(() => rows.reduce<Record<string, number>>((m, t) => { const k = t.category ?? 'general'; m[k] = (m[k] ?? 0) + 1; return m; }, {}), [rows]);
   const shown = useMemo(() => { const qq = q.trim().toLowerCase(); return rows.filter((t) => (cat === 'all' || (t.category ?? 'general') === cat) && (!qq || `${t.name} ${t.subject} ${t.body}`.toLowerCase().includes(qq))); }, [rows, cat, q]);

@@ -785,3 +785,23 @@ _Iteration 79 — End-to-end verification of (A) iteration_78 leftovers and (B) 
 
 _Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
 - Make InboxJobCard.QuickActions.onReload also trigger a ThreadView refresh so the 'parts requested: PR-####' internal line appears immediately after parts-submit (not only after re-nav). Options: (a) call a passed-down thread refetch callback from InboxPage into InboxJobCard; (b) have ThreadView subs
+
+## Iteration 80
+
+_Frontend-only testing of RolliSuite long-term storage (LTS) feature. Signed in as MH → /choose-view-own and exercised: hitlist LtsCard, Assign/Move LTS destination + ltsCommit + notice, job header storage chip + status pill, Today card recount, Client 360 storage chip, Intake/Sent record, Jobs 'In storage' filter + storage list, scan-out via dest-node-finished, Setup threshold + template editor, Floor map node rendering, and regression on JV BIN (dest-node-vc_safe → bulk-bin-strip). 1 real bug uncovered on /jobs; everything else PASS._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix /jobs 'In storage' filter: either set API_SOURCE.getJobs='mock' in /app/frontend/src/api/config.ts for this prototype OR change JobsPage to compute `stored` from api.ltsBoardSync()/getLtsBoard() rather than the real-API `rows`. After the fix, verify count = 2 after moving j-lt1 (j-lt1 + j-lt3) a
+
+## Iteration 81
+
+_Comprehensive E2E test of Message Templates (slide-out sheet, pinned row, Save-as-template, Setup → Templates page, Estimate Send modal) and Inbox Views exit UX (MH). 11 of 12 test groups fully pass; T11 (Views exit) fully passes on retest with proper focus handling. One minor issue noted in T4 (templates-flash disappears before readable). All testids are correctly wired._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Optional: ensure templates-flash 'Saved' banner stays visible 1-2s after tplf-*-save (currently not detectable in automated tests).
+- Optional: investigate 'LIVE API' banner persisting when localStorage.rollisuite.api.mode='mock' is set before sign-in — data behaves as mock but label is misleading.
+
+_Issues reported in this iteration (all fixed by the following commit unless noted in SESSION-LOG):_
+- App header during tests: Banner reads 'PROTOTYPE — FAKE DATA · LIVE API' even though localStorage.rollisuite.api.mode is set to 'mock' before sign-in. Data is correct (template counts match mock seed) so this may be cosmetic only, but the mode toggle may not re-initialize on soft nav.

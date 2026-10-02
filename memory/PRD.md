@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-10-02  
+**Last updated**: 2026-10-02 (templates v2 + Views exit)  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -659,3 +659,12 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - `_gen.py`: `[v2]` tag (`_baseline_refresh2.txt` 723 → 926 exports, 230 v2), definition-anchored side-effect scan (`email → Sent`, `sms (MOCK)`, `hitlist pin`, more audit helpers), auth classes `token` / `public` / `owner`, audit families 51–65, module tags for 2026-09-29+ ruling blocks, iterations to 199. 02/05/08/09 regenerated; mirrored to `frontend/docs` (in sync).
 - **Pickup ⚠ GAP rows = MH's next paste**: open-by-any-reference, gate-2 "invoice Sent + QBO balance", 3-fail → 10-min lockout, ≥$10k value-tier second factor, authorized pickup persons, Reolink clip reference, manager-only ID photos + purge. Outbox → Sent rename confirmed complete (user-facing strings gone; internal identifiers unchanged, D-467).
 - Next: user **Save to GitHub** → LTS build when MH pastes the full text → Pickup gap paste → docs delta for both.
+
+### LTS verification · Message templates v2 · Inbox Views exit (2026-10-02; D-473…D-480; testing agent iteration_81: T1–T12 all pass)
+- **LTS Jobs filter** re-verified after the `getStoredJobs` patch: `/jobs` → In storage chip = 1 (j-lt3), storage row renders.
+- **One `message_templates` store** (`getTemplateLibrary`, `MessageTemplate.category/channel/division/shared/attachments/sortOrder/system/usage`; `TemplateKey` widened to `KnownTemplateKey | string`): Inbox composer `TemplateBar` (pinned chips `pin-chip-<key>`, `composer-templates-open`, `composer-save-template`), `TemplatesSheet` right slide-out (categories · search · Use / Pin / Edit / Archive · PLACEHOLDER thumbnails · channel filter), `SaveAsTemplateModal` (merge fields restored, attachments carried, optional pin), Estimate → Send modal (`send-pins`, same sheet; non-estimate picks go out as one-off body), `/setup/templates` full page (`TemplatesPage`: pins row drag/‹›, per-category drag/▲▼ reorder, create · edit · archive · restore, variants read-only); Setup card = summary + `setup-open-templates`. Pins per user max 6 (`TemplatePin`, seeds Vienna 3 / MH 2). Seeds: 4 Bracelet-questions templates (3 with `/public/templates/PLACEHOLDER-*.svg`), 3 General, pickup_hours, rs_boutique_followup (RS only). Files: `components/comms/{TemplateBar,TemplatesSheet,TemplateForm,TemplateBits}.tsx`, `pages/setup/TemplatesPage.tsx`, client.ts "Template library" block after `unrenderTemplate`, fixtures `rs.ts`.
+- **Views exit**: `inbox-view-exit` on the banner, Esc (blur-first in text fields; panel / sheet / menu close first), tabs leave the view, Back walks thread → list → Views (history pushes). Flash "Exited <Short>’s view".
+- Docs: DECISIONS D-473…D-480, KEEPER 07 (Template library v2), 15 (two rows), `_gen.py` regenerated + synced.
+- Open (cosmetic, pre-existing): the top banner may read "LIVE API" when `rollisuite.api.mode` is set to mock right before sign-in (mode is read at module load).
+- Next: user **Save to GitHub** → Pickup gaps (MH pastes `EMERGENT-PICKUP-STATION-2026-10-01.md`: build only the seven ⚠ GAP items in SPEC-PICKUP-STATION.md; the four ✓ items stay) → docs delta for LTS + Pickup.
+

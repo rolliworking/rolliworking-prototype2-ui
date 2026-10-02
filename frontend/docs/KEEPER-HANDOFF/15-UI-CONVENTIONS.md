@@ -43,6 +43,8 @@ Code is truth; every rule below is implemented and the cited ruling is where it 
 | rule | owner |
 |---|---|
 | One **flat** list; tabs **Portal · Team · Calls** (+ **Views**, owner only); no folder tree | D-459 |
+| **Views** (owner) always has a visible way out: ✕ Exit view on the banner, Esc from anywhere, tabs leave the view, Back walks thread → list → Views | D-480 |
+| Template pickers are a **right slide-out** (1/3 width) + a **pinned row of ≤ 6 chips** above the composer — never a `<select>` | D-473, D-476 |
 | **No count badges inside the Inbox** — a 6 px tag dot per tag, bold + rose = unread / reply owed, paperclip + n for attachments | D-459 |
 | **Tags are pointers, not assignment**; several tags may sit on one thread; WHO filter = "their action items" | D-443 |
 | **Archive, never delete** — the Delete key on a focused row archives | D-460 |
