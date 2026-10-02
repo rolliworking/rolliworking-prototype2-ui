@@ -38,11 +38,11 @@ export const useRowMenu = () => {
   return { menu, close: () => setMenu(null), rowProps: (id: string) => ({ onContextMenu: onContextMenu(id), onTouchStart: onTouchStart(id), onTouchEnd, onTouchMove: onTouchEnd }) };
 };
 
-// Tag dots on a row (people colored · "Update work order" amber chip)
+// Tag dots on a row (people colored · "Update work order" amber chip). Row size = a 6px dot, no letters, name on hover; md = the thread header chip with initials.
 export const TagDots = ({ tags, testId, size = 'sm' }: { tags?: ConvTag[]; testId?: string; size?: 'sm' | 'md' }) => {
   if (!tags?.length) return null;
   return <span data-testid={testId} data-tags={tags.join(' ')} className="inline-flex items-center gap-1">
     {tags.map((k) => { const t = api.CONV_TAGS.find((x) => x.key === k)!; return t.kind === 'status' ? <span key={k} data-testid={`${testId}-${k}`} className="rounded-sm bg-amber-100 px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-900 ring-1 ring-amber-300">Update WO</span>
-      : <span key={k} data-testid={`${testId}-${k}`} title={t.label} className={clsx('inline-grid place-items-center rounded-full font-mono font-bold text-white', t.dot, size === 'md' ? 'h-5 w-5 text-[9px]' : 'h-3.5 w-3.5 text-[7px]')}>{size === 'md' ? t.short : ''}</span>; })}
+      : <span key={k} data-testid={`${testId}-${k}`} title={t.label} aria-label={t.label} className={clsx('inline-grid shrink-0 place-items-center rounded-full font-mono font-bold text-white', t.dot, size === 'md' ? 'h-5 w-5 text-[9px]' : 'h-1.5 w-1.5')}>{size === 'md' ? t.short : ''}</span>; })}
   </span>;
 };

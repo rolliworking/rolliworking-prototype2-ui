@@ -5,6 +5,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import * as api from '@/api/client';
 import * as calls from '@/api/calls';
+import { clearInboxContext } from '@/api/inboxContext';
 import { LOOKUP_OPEN_EVENT } from '@/components/layout/CornerLookup';
 import { NAV_GROUPS, navForUser, type NavGroup, type NavItem } from '@/config/navigation';
 
@@ -43,7 +44,7 @@ export const Sidebar = () => {
   return (
     <aside data-testid="sidebar" className="flex w-[216px] shrink-0 flex-col bg-ink text-[#c7d0dc]">
       <div className="flex h-12 items-center gap-2 px-4"><span className="grid h-6 w-6 place-items-center rounded-sm bg-white/10 font-mono text-[11px] font-semibold text-white">RS</span><span className="text-[14px] font-semibold tracking-tight text-white">RolliSuite</span></div>
-      <nav className="flex-1 overflow-y-auto px-2 pb-4" aria-label="Primary">
+      <nav className="flex-1 overflow-y-auto px-2 pb-4" aria-label="Primary" onClickCapture={(e) => { if ((e.target as HTMLElement).closest('a')) clearInboxContext(); }}>
         <ul className="space-y-px">
           {rows.map((row) => {
             if (!('path' in row) || !('tiers' in row)) { const g = row as NavGroup; return <Group key={g.key} g={g} items={all.filter((i) => i.group === g.key)} pathname={pathname} />; }

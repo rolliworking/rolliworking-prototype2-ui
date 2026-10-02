@@ -3989,7 +3989,7 @@ const anchorRef = (a?: ConversationAnchor): { label?: string; path?: string } =>
   if (a.kind === 'estimate') { const e = store.estimates.find((x) => x.id === a.id); return e ? { label: `Estimate ${e.number}`, path: `/estimates/${e.id}` } : {}; }
   const r = store.requests.find((x) => x.id === a.id); return r ? { label: `Request ${r.number}`, path: `/clients/${r.clientId}?hit=req-${r.id}` } : {};
 };
-const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, unreplied: unrepliedOf(c).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined, linkedEstimate: linkedEstimateFor(c.anchor) }; };
+const convRefs = (c: Conversation): ConversationWithRefs => { const msgs = cx.messages.filter((m) => m.conversationId === c.id); const ar = anchorRef(c.anchor); return { ...c, client: byId(fx.clients, c.clientId), anchorLabel: ar.label, anchorPath: ar.path, unread: msgs.filter((m) => m.direction === 'in' && !m.readByStaff).length, unreplied: unrepliedOf(c).length, needsReply: convNeedsReply(c), ageHours: c.lastInboundAt ? Math.round((Date.now() - new Date(c.lastInboundAt).getTime()) / 3_600_000) : 0, attachments: msgs.reduce((n, m) => n + (m.photos?.length ?? 0), 0), last: msgs.sort((a, b) => b.at.localeCompare(a.at))[0], assigneeLabel: c.assignedTo ? assigneeLabel(c.assignedTo) : undefined, linkedEstimate: linkedEstimateFor(c.anchor) }; };
 const convOf = (id: string) => byId(cx.conversations, id);
 const ensureConversation = (clientId: string, subject: string, anchor?: ConversationAnchor, division?: Division): Conversation => {
   const found = cx.conversations.find((c) => c.clientId === clientId && c.status !== 'closed' && (anchor ? c.anchor?.kind === anchor.kind && c.anchor.id === anchor.id : !c.anchor));
@@ -4488,8 +4488,7 @@ export async function submitKioskCheckIn(input: KioskSubmission): Promise<KioskR
   const at = new Date().toISOString();
   const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'kiosk', status: 'new', summary: kioskSummary(details, input.brand), createdAt: at, createdBy: 'Kiosk', station: KIOSK_STATION, division: input.brand, kiosk: details };
   store.requests.unshift(r);
-  const c = ensureConversation(client.id, 'General', undefined, input.brand);
-  pushConv(c, { direction: 'in', source: 'kiosk', by: `${firstName} ${lastName}`, station: KIOSK_STATION, text: `${kioskSummary(details, input.brand)} · ${r.number}${matched ? ` · possible existing client (${matchedOn.join(' + ')})` : ' · new client created'}`, at });
+  // Requests are intake records, not conversations (MH 2026-10-02): no Inbox row — the Requests page is the record
   kioskAudit(`${r.number} · ${firstName} ${lastName} · ${fx.RG_DIVISION_LABEL[input.brand]} · ${details.services.length} service(s)${matched ? ` · possible match ${client.firstName} ${client.lastName} on ${matchedOn.join(' + ')}` : ' · new client'}`);
   return resolve({ request: { ...r }, client, possibleExisting: !!matched });
 }
@@ -4508,8 +4507,7 @@ export async function submitWebRequest(input: WebRequestInput): Promise<WebReque
   const photos = input.photos.map((p) => ({ ...p, stage: 0, origin: 'web' as const, controlled: false }));
   const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'web', status: 'new', summary, createdAt: at, createdBy: 'rolliworks.com', station: 'rolliworks.com', division: input.brand, legs: input.legDepts, photos };
   store.requests.unshift(r);
-  const conv = ensureConversation(client.id, 'General', undefined, input.brand);
-  pushConv(conv, { direction: 'in', source: 'web', by: `${firstName} ${lastName}`, station: 'rolliworks.com', text: `${summary} · ${r.number}${matched ? ' · existing client matched on email/phone' : ' · new client'}${photos.length ? ` · ${photos.length} photo(s) attached (stage 0, uncontrolled)` : ''}`, at });
+  // No Inbox row: the Requests page is the record; the Inbox gets a row only when the client writes on it (MH 2026-10-02)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const ackEmail: OutboxEmail = { id: `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, to: email, toName: `${firstName} ${lastName}`, relatedRef: r.number, status: 'pending', subject: `We received your request — ${r.number}`, body: `Hello ${firstName},\n\nThank you — your request ${r.number} is with our team. A person reads every one; expect an estimate or a question within one business day.\n\nWhat you told us: ${input.legs.join(', ')}${input.ref ? ` on a ${input.model ?? ''} (ref ${input.ref})` : ''}.${input.typical ? `\n${input.typical} — a range, not a quote.` : ''}\n\n▶ Follow it in RolliConnect (your first link — a code we email you is the key, no password): ${origin}/rc?email=${encodeURIComponent(email)}&mode=create\n\n— RolliWorks`, createdAt: at, createdBy: 'rolliworks.com', station: 'rolliworks.com' };
   queueOutbox(ackEmail);
@@ -4517,6 +4515,13 @@ export async function submitWebRequest(input: WebRequestInput): Promise<WebReque
   return resolve({ request: { ...r }, client, possibleExisting: !!matched, ackEmail });
 }
 const requestRow = (r: ServiceRequest): RequestRow => ({ ...r, client: byId(fx.clients, r.clientId), watch: r.watchId ? store.watches.find((w) => w.id === r.watchId) : undefined });
+// "Notify…" on a request: the hand-off itself is an internal message (hitlist.sendMessage, caller's side); here we only stamp who was told. The pool stays unowned.
+export async function markRequestNotified(requestId: string, to: string): Promise<RequestRow> {
+  const r = store.requests.find((x) => x.id === requestId); if (!r) throw new Error('Request not found');
+  const a = actor(); r.notified = [...(r.notified ?? []), { to, by: a.by, at: new Date().toISOString() }];
+  appendAudit({ type: 'kiosk', stationName: a.station, detail: `${r.number} · notified ${to} (internal message) · request stays unowned` });
+  return resolve(requestRow(r));
+}
 export async function getRequestsQueue(): Promise<RequestRow[]> {
   const div = getSessionDivision();
   if (API_MODE === 'hybrid' && API_SOURCE.getRequests === 'real') {

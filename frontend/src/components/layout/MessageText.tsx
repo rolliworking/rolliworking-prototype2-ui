@@ -11,7 +11,7 @@ const internalPath = (raw: string): string | null => {
   if (raw.startsWith('/')) return raw;
   try { const u = new URL(raw); return u.origin === window.location.origin ? `${u.pathname}${u.search}` : null; } catch { return null; }
 };
-const chipLabel = (path: string) => { const [, area, id] = path.split('/'); const job = area === 'jobs' && id ? api.wbpForJobSync(id) : null; return `${RS_LABEL[area] ?? area} · ${job ? estDigits(job.jobNumber) : id ? estDigits(id) : ''}`.trim(); };
+const chipLabel = (path: string) => { const [, area, id] = path.split('/'); const job = area === 'jobs' && id ? api.wbpForJobSync(id) : null; const rq = area === 'requests' && id ? api.requestByIdSync(id) : undefined; return `${RS_LABEL[area] ?? area} · ${job ? estDigits(job.jobNumber) : rq ? rq.number : id ? estDigits(id) : ''}`.trim(); };
 
 export const MessageText = ({ text, pad, dark, testId }: { text: string; pad?: boolean; dark?: boolean; testId?: string }) => {
   const [copied, setCopied] = useState<string | null>(null);

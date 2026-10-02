@@ -881,6 +881,7 @@ export interface ServiceRequest {
   kiosk?: KioskDetails;
   legs?: DeptCode[]; // what the client ticked / described — W · B · P, when captured
   photos?: PackagePhoto[]; // what the client attached (web form / portal)
+  notified?: { to: string; by: string; at: string }[]; // "Notify…" hand-offs (internal messages) — the request itself stays unowned
 }
 
 export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request' | 'shipment' | 'swo';
@@ -1173,7 +1174,7 @@ export interface ConvMessage {
 export type InboxView = 'needs_reply' | 'mine' | 'open' | 'snoozed' | 'closed';
 // New list model: who = person tag filter (ALL · MIKE · VIENNA · CHYNA); lane = Quoted / Answered sections under All; archived out of the way
 export interface InboxFilter { who?: Exclude<ConvTag, 'update_wo'>; lane?: ConvLane | 'archived' | 'snoozed' }
-export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; unreplied: number; needsReply: boolean; ageHours: number; last?: ConvMessage; assigneeLabel?: string; linkedEstimate?: { id: string; number: string; status: string } }
+export interface ConversationWithRefs extends Conversation { client: Client; anchorLabel?: string; anchorPath?: string; unread: number; unreplied: number; needsReply: boolean; ageHours: number; attachments: number; last?: ConvMessage; assigneeLabel?: string; linkedEstimate?: { id: string; number: string; status: string } }
 export interface ThreadView { conversation: ConversationWithRefs; messages: ConvMessage[]; folder: ConversationWithRefs[] }
 export interface RenderedTemplate { key: TemplateKey; subject: string; body: string; missing: string[]; source: 'shop' | 'personal'; owner?: string }
 // A staff member's own version of a shop template — used automatically for THEIR point-of-use sends; system/automated sends always use the shop default

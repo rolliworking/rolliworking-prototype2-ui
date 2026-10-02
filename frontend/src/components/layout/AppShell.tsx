@@ -9,6 +9,7 @@ import { TopBar } from './TopBar';
 import { QuickAddProvider } from '@/components/today/QuickAddOverlay';
 import { CompanionDock, CompanionProvider } from '@/components/companion/CompanionPanel';
 import { CallPopHost } from '@/components/layout/CallPop';
+import { InboxReturnChip } from '@/components/inbox/InboxReturnChip';
 import { roleKind } from '@/config/roles';
 
 // E17: banner reads config + last-call health. Click the chip to flip hybrid ↔ mock (safety line).
@@ -63,6 +64,7 @@ export default function AppShell() {
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar />
             <main data-testid="main-content" className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <InboxReturnChip />
               <RouteErrorBoundary><Outlet /></RouteErrorBoundary>
             </main>
           </div>

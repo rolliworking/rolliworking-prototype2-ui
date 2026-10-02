@@ -1,8 +1,9 @@
-import { ArrowLeft, Briefcase, Check, Copy, Lock, Mail, PackageCheck, PenLine, Printer, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { Briefcase, Check, Copy, Lock, Mail, PackageCheck, PenLine, Printer, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { LegacyBadge, LegacyBanner } from '@/components/LegacyBits';
+import { BackOrList } from '@/components/inbox/InboxReturnChip';
 import type { Address, DeptCode, EstimateLine, EstimateWithRefs, Watch } from '@/api/client';
 import { EstimateStatusPill, Provisional } from '@/components/estimates/EstimateBits';
 import { EstimateAddresses, EstimateMeta, WatchPicker } from '@/components/estimates/EstimateForm';
@@ -107,7 +108,7 @@ export default function EstimateDetailPage() {
   return (
     <div data-testid="estimate-detail-page" className="space-y-4">
       <div className="flex items-center justify-between">
-        <Link to="/estimates" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Estimates</Link>
+        <BackOrList to="/estimates" label="Estimates" testId="estimate-back" />
         <div className="flex items-center gap-2 text-[11px] text-ink-400">
           {saving === 'saving' && <span data-testid="autosave-state">Saving…</span>}
           {saving === 'saved' && <span data-testid="autosave-state" className="inline-flex items-center gap-1 text-moss-700"><Check size={11} /> Saved</span>}

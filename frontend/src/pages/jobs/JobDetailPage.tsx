@@ -1,9 +1,10 @@
-import { ArrowLeft, Pin, Receipt, Tags, Trash2, Wrench } from 'lucide-react';
+import { Pin, Receipt, Tags, Trash2, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { JobAction, JobWithRefs, LabelJob, PartsRequestWithRefs, SalesOrderWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
+import { BackOrList } from '@/components/inbox/InboxReturnChip';
 import { ItemHeader } from '@/components/jobs/ItemHeader';
 import { Provisional } from '@/components/jobs/JobBits';
 import { JobDetailContent, JobModals, type JobModalState, type JobRun } from '@/components/jobs/JobDetailContent';
@@ -62,7 +63,7 @@ export default function JobDetailPage() {
     <div data-testid="job-detail-page" className="space-y-4">
       <ConciergeBackBar />
       <div className="flex items-start justify-between gap-4">
-        <Link to="/jobs" className="inline-flex h-8 items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Jobs</Link>
+        <BackOrList to="/jobs" label="Jobs" testId="job-back" />
         <ActionsBar j={j} so={so} run={run} setModal={setModal} setError={setError} setLabels={setLabels} setOpenPr={setOpenPr} />
       </div>
 

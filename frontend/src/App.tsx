@@ -281,6 +281,7 @@ export default function App() {
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/messages/all" element={<MessagesAllRedirect />} />
               <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/requests/:id" element={<RequestsPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/calls" element={<CallsPage />} />
