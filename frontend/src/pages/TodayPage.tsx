@@ -13,6 +13,7 @@ import { NewTaskForm } from '@/components/today/NewTaskForm';
 import { WaitingOnList } from '@/components/today/TodayBits';
 import { PinForm, PinModal, PinnedList } from '@/components/today/PinBits';
 import { LtsCard } from '@/components/today/LtsCard';
+import { BonusProgressCard, BonusResultsCard } from '@/components/today/BonusCards';
 import { StaffHitListModal } from '@/components/today/StaffHitListModal';
 import { Card } from '@/components/ui/Card';
 import { FilterChip, PageHeader } from '@/components/ui/Button';
@@ -87,6 +88,8 @@ export default function TodayPage({ forUser }: { forUser?: User }) {
         </Card>
       </div>
       {own && api.isOwnerSync() && <LtsCard />}
+      {own && api.isOwnerSync() && <BonusResultsCard />}
+      <BonusProgressCard userId={me.id} />
 
       <Card accent="moss" title={<span className="inline-flex items-center gap-2">Derived <span className="font-mono text-[11px] text-ink-400">{rows.length}</span></span>} subtitle="From jobs, holds, discrepancies and tasks — grouped by priority · hover a row to pin it" bodyClassName="p-0" testId="today-list-card"
         action={<div className="flex flex-wrap items-center gap-1.5" data-testid="today-filters">

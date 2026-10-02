@@ -25,8 +25,9 @@ import { PhoneCall,
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound, Globe } from 'lucide-react';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound, Globe, Target } from 'lucide-react';
 import { OWNER_USER_ID, accessOverrideSync, type AccessTier, type User } from '@/api/client';
+import { BONUS_ANALYTICS_USER_IDS } from '@/api/bonus';
 
 export type NavGroupKey = 'intake' | 'clients' | 'rw' | 'parts';
 // Expandable sidebar groups. `path` = the header itself is a page (Intake → /intake); no path = pure folder (RW).
@@ -45,6 +46,7 @@ export interface NavItem {
   icon: LucideIcon;
   tiers: AccessTier[];
   ownerOnly?: boolean;
+  only?: string[];
   pinned?: boolean;
   group?: NavGroupKey;
   built?: boolean;
@@ -86,6 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, built: true, blurb: 'Bag tags, shipping labels and QR codes.' },
   { key: 'wm-kiosk', label: 'WM Photo Kiosk', path: '/wm-kiosk', icon: Camera, tiers: ALL, built: true, blurb: 'Watchmaker-room shared photo station — required 4-step set + ad-hoc photos with @-mentions.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
+  { key: 'bonuses', label: 'Bonuses', path: '/analytics/bonuses', icon: Target, tiers: MGR, only: BONUS_ANALYTICS_USER_IDS, built: true, blurb: 'Bonus targets (MH + Operations Manager): actual vs target, working-day pace, projected payout, EOM close, Mark paid, CSV.' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
   { key: 'rwcom', label: 'rw.com', path: '/rwcom', icon: Globe, tiers: MGR, built: true, blurb: 'Emulator of the public rolliworks.com flows — identify · check · request — with a phone/desktop frame. NOT-KEEPER: in KEEPER this is the public site, not an RS screen.' },
   { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },
@@ -111,8 +114,8 @@ export const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 // Role default from the tier table; a per-user override (Access control panel, owner-only) wins. Owner-only screens never open by override.
-export const roleDefaultAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => i.tiers.includes(user.accessTier) && (!i.ownerOnly || user.id === OWNER_USER_ID);
-export const canAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => { if (i.ownerOnly) return user.id === OWNER_USER_ID; const o = accessOverrideSync(user.id, i.key); return o === undefined ? roleDefaultAccess(i, user) : o; };
+export const roleDefaultAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => i.tiers.includes(user.accessTier) && (!i.ownerOnly || user.id === OWNER_USER_ID) && (!i.only || i.only.includes(user.id));
+export const canAccess = (i: NavItem, user: Pick<User, 'id' | 'accessTier'>) => { if (i.ownerOnly) return user.id === OWNER_USER_ID; if (i.only && !i.only.includes(user.id)) return false; const o = accessOverrideSync(user.id, i.key); return o === undefined ? roleDefaultAccess(i, user) : o; };
 export const navForTier = (tier: AccessTier) => NAV_ITEMS.filter((i) => i.tiers.includes(tier));
 export const SCREENS = NAV_ITEMS.filter((i) => !i.ownerOnly);
 export const navForUser = (user: Pick<User, 'id' | 'accessTier'>) => NAV_ITEMS.filter((i) => canAccess(i, user));

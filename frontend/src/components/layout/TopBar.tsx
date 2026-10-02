@@ -2,7 +2,6 @@ import * as api from '@/api/client';
 import { Bot, MonitorSmartphone, Plus, UserRound } from 'lucide-react';
 import { SimulateCallMenu } from '@/components/layout/CallPop';
 import { IntercomButton } from '@/components/layout/IntercomPanel';
-import { MessagesButton } from '@/components/layout/MessagesPopover';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { QUICK_ACTIONS } from '@/config/navigation';
@@ -79,7 +78,6 @@ export const TopBar = () => {
           <Plus size={14} />
         </button>
         <SimulateCallMenu />
-        <MessagesButton />
         <IntercomButton />
         <button
           type="button"

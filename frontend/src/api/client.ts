@@ -6171,6 +6171,11 @@ export const hitlistBridge = {
   audit: (detail: string) => appendAudit({ type: 'pin', stationName: actor().station, userShortName: actor().user?.shortName, userDisplayName: actor().user?.displayName, detail }),
   jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (j) jobStamp(j, detail); },
 };
+// ---- Bonus bridge (./bonus.ts) — users · actor · owner check · audit writer; the view seam itself lives in bonus.ts ----
+export const bonusBridge = {
+  users: () => fx.users, actor: () => actor(), isOwner: isOwnerSync, newId,
+  audit: (type: 'settings' | 'accounting', detail: string) => { const a = actor(); return appendAudit({ type, stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, onBehalfOf: 'onBehalfOf' in a ? a.onBehalfOf : undefined, detail }); },
+};
 // ---- Appraisal bridge (./appraisals.ts) ----
 // D-085: insured (declared) values from OUTBOUND shipments of the same reference — never service invoice amounts
 const insuredComps = (reference: string): { value: number; date: string; ref: string }[] => {

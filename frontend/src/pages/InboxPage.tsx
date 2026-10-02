@@ -1,35 +1,30 @@
 import clsx from 'clsx';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Eye, Folder as Folder_, Lock } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Archive, Eye, Lock, Phone } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
-import type { CallEvent, ConvLane, ConvTag, ConversationWithRefs, InboxFilter, ThreadView, User } from '@/api/client';
+import type { CallEvent, ConvLane, ConvTag, ConversationWithRefs, InboxFilter, ThreadView } from '@/api/client';
 import * as calls from '@/api/calls';
 import * as hl from '@/api/hitlist';
-import type { InboxRow } from '@/api/hitlist';
 import { applyScroll, captureScroll, getInboxContext, rememberInboxScroll, setInboxContext } from '@/api/inboxContext';
 import { useAuth } from '@/auth/AuthContext';
 import { canClientComms } from '@/config/roles';
 import { CallRow } from '@/components/clients/CallLedger';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { InboxJobCard } from '@/components/inbox/InboxJobCard';
+import { IntercomSection } from '@/components/inbox/IntercomSection';
 import { ThreadList } from '@/components/inbox/ThreadList';
 import { ThreadStack, type Run } from '@/components/inbox/ThreadView';
 import { ViewsSection } from '@/components/inbox/ViewsSection';
 import { MissedCallsPanel } from '@/components/layout/MissedCallsPanel';
-import { BUBBLE_COMPOSE_EVENT, type BubbleComposeDetail } from '@/components/layout/MessageBubble';
-import { SentList, StatusChip } from '@/components/layout/MessageComposer';
-import { MessageInbox } from '@/components/layout/MessageInbox';
-import { MessageText } from '@/components/layout/MessageText';
+import { TeamMessages, type TeamChip } from '@/components/layout/TeamMessages';
 import { Flash, Head } from '@/components/rs/RsBits';
-import { OwnerChip } from '@/components/ui/Pills';
-import { fmtDate, fmtTime } from '@/lib/format';
 
-type Section = 'threads' | 'staff' | 'calls' | 'views';
+type Section = 'threads' | 'staff' | 'intercom' | 'calls' | 'views';
 const WHO: { key: InboxFilter['who'] | undefined; label: string; tag?: ConvTag }[] = [{ key: undefined, label: 'ALL' }, { key: 'mike', label: 'MIKE', tag: 'mike' }, { key: 'vienna', label: 'VIENNA', tag: 'vienna' }, { key: 'chyna', label: 'CHYNA', tag: 'chyna' }];
 
 // ONE GENERAL INBOX (MH 2026-10-01, flat layout kept 2026-10-02): every client thread lands in All, unowned. Tags, not assignment · color = client spoke last · archive fast · pin · Quoted / Answered lanes.
-// Tabs: Portal (client threads, MH · VC · CM only) · Team (staff messages, same store as the bubble) · Calls · Views (MH only — any staff member's inbox as they see it).
+// Tabs: Portal (client threads, MH · VC · CM only) · Team (staff one-shot messages — the ONE home, D-481) · Intercom (paging + station calls, D-483) · Calls (Vonage, external only) · Views (MH only — any staff member's inbox as they see it).
 export default function InboxPage() {
   const { user } = useAuth(); const comms = canClientComms(user); const owner = api.isOwnerSync();
   const [params, setParams] = useSearchParams();
@@ -73,13 +68,14 @@ export default function InboxPage() {
     archive: () => void run(() => api.archiveConversation(r.id), 'Archived — left All'),
     unarchive: () => void run(() => api.unarchiveConversation(r.id), 'Back in All'),
   });
-  const tabs: [Section, string][] = [['threads', 'Portal'], ['staff', 'Team'], ['calls', 'Calls'], ...(owner ? [['views', 'Views'] as [Section, string]] : [])];
+  const tabs: [Section, string][] = [['threads', 'Portal'], ['staff', 'Team'], ['intercom', 'Intercom'], ['calls', 'Calls'], ...(owner ? [['views', 'Views'] as [Section, string]] : [])];
+  const teamUnread = user ? hl.unreadCount(user.id) : 0;
   const pane = <section ref={threadPane} data-testid="thread-pane" onScroll={(e) => { if (thread && !quiet.current) rememberInboxScroll(thread.conversation.id, captureScroll(e.currentTarget)); }} className="min-h-0 overflow-y-auto">{thread ? <ThreadStack t={thread} run={run} onFolder={() => go({ client: thread.conversation.clientId, thread: thread.conversation.id })} onPick={(id) => go({ thread: id, card: undefined })} panelOpen={panelOpen} onPanel={() => go({ panel: panelOpen ? undefined : '1', card: undefined })} actionsFor={actionsFor} /> : <div data-testid="thread-empty" className="grid h-full place-items-center text-xs text-ink-400">Select a thread</div>}</section>;
   return (
     <div data-testid="inbox-page" data-section={section} data-view-as={viewUser?.shortName} data-panel={panelOpen || undefined} className="flex h-full flex-col gap-3 transition-[padding] duration-200" style={{ paddingRight: panelOpen && threadsShown ? 'max(33.333vw, 520px)' : undefined }}>
       <Head title="Inbox" sub={<>One general inbox — every client thread lands in <b>All</b>, unowned. Tag, don’t assign · colored = the client spoke last · archive in one click <Provisional note="Email/kiosk/photo inbound are mocked; tokens are matched by a simulate button" /></>} />
       <div data-testid="inbox-sections" className="flex items-center gap-1 border-b border-line text-xs">
-        {tabs.map(([k, l]) => <button key={k} type="button" data-testid={`inbox-section-${k}`} aria-selected={section === k} onClick={() => go({ section: k, as: undefined, who: undefined, lane: undefined, client: undefined, thread: undefined, panel: undefined, card: undefined, msg: undefined })} className={clsx('-mb-px inline-flex items-center border-b-2 px-3 py-1.5 font-semibold', section === k ? 'border-ink text-ink' : 'border-transparent text-ink-500 hover:text-ink')}>{k === 'views' && <Eye size={11} className="mr-1" />}{l}{k === 'threads' && !comms && <Lock size={10} className="ml-1 inline" />}{k === 'threads' && comms && counts && counts.needsReply > 0 && <span data-testid="inbox-section-threads-count" className="ml-1.5 text-[10px] font-bold text-rose-700">{counts.needsReply}</span>}</button>)}
+        {tabs.map(([k, l]) => <button key={k} type="button" data-testid={`inbox-section-${k}`} aria-selected={section === k} onClick={() => go({ section: k, as: undefined, who: undefined, lane: undefined, client: undefined, thread: undefined, panel: undefined, card: undefined, msg: undefined, chip: undefined, compose: undefined, staff: undefined })} className={clsx('-mb-px inline-flex items-center border-b-2 px-3 py-1.5 font-semibold', section === k ? 'border-ink text-ink' : 'border-transparent text-ink-500 hover:text-ink')}>{k === 'views' && <Eye size={11} className="mr-1" />}{k === 'intercom' && <Phone size={11} className="mr-1" />}{l}{k === 'staff' && teamUnread > 0 && <span data-testid="inbox-section-staff-count" className="ml-1.5 rounded-full bg-rose-600 px-1.5 text-[10px] font-bold text-white">{teamUnread}</span>}{k === 'threads' && !comms && <Lock size={10} className="ml-1 inline" />}{k === 'threads' && comms && counts && counts.needsReply > 0 && <span data-testid="inbox-section-threads-count" className="ml-1.5 text-[10px] font-bold text-rose-700">{counts.needsReply}</span>}</button>)}
       </div>
       <Flash error={error} msg={msg} />
       {section === 'threads' && !comms && <div data-testid="inbox-restricted" className="rounded-md border border-line bg-canvas p-6 text-sm text-ink-600"><Lock size={14} className="mr-1 inline" /> Portal threads are handled by the front desk (MH · VC · CM). When they need you on one, you get the client’s message quoted in <b>Team</b>.</div>}
@@ -97,7 +93,8 @@ export default function InboxPage() {
         </div>
         {pane}
       </div>}
-      {section === 'staff' && user && <StaffMessagesSection me={user} focusId={params.get('msg') ?? undefined} folder={params.get('staff') ?? 'me'} onFolder={(f) => go({ staff: f === 'me' ? undefined : f, msg: undefined })} />}
+      {section === 'staff' && user && <section data-testid="inbox-staff-section" className="min-h-0 flex-1 overflow-y-auto"><TeamMessages me={user} jobBase="/jobs" chip={(params.get('chip') as TeamChip | null) ?? (params.get('staff') ? 'all' : 'received')} onChip={(c) => go({ chip: c === 'received' ? undefined : c, staff: c === 'all' ? params.get('staff') ?? undefined : undefined, msg: undefined })} compose={params.get('compose') === '1'} onCompose={(o) => go({ compose: o ? '1' : undefined })} staff={params.get('staff') === 'all' ? undefined : params.get('staff') ?? undefined} onStaff={(st) => go({ chip: 'all', staff: st })} focusId={params.get('msg') ?? undefined} /></section>}
+      {section === 'intercom' && <section data-testid="inbox-intercom-section" className="min-h-0 flex-1 overflow-y-auto"><IntercomSection /></section>}
       {section === 'calls' && <CallsSectionInline />}
       {section === 'views' && owner && <ViewsSection viewUser={viewUser} rows={rows} threadId={threadId} onPick={(short) => go({ as: short, thread: undefined, panel: undefined, card: undefined })} onBack={exitView} onOpen={(id) => go({ thread: id, card: undefined })} actionsFor={actionsFor} pane={pane} />}
       {thread && panelOpen && threadsShown && <InboxJobCard thread={thread} onClose={() => go({ panel: undefined, card: undefined })} expandedId={cardId} onExpanded={(id) => go({ card: id })} />}
@@ -106,49 +103,6 @@ export default function InboxPage() {
 }
 
 const Legend = ({ rows, who, lane }: { rows: ConversationWithRefs[]; who?: InboxFilter['who']; lane?: InboxFilter['lane'] }) => <div className="flex items-center justify-between px-1 text-[10px] text-ink-400"><span data-testid="inbox-list-count">{rows.length} thread{rows.length === 1 ? '' : 's'}{who ? ` · ${api.CONV_TAGS.find((t) => t.key === who)?.label}’s action items` : lane === 'archived' ? ' · archived' : ''}</span><span className="inline-flex items-center gap-2"><span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-rose-200 ring-1 ring-rose-300" /> client spoke last</span><span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-surface ring-1 ring-line" /> we did</span></span></div>;
-
-// TEAM section — the same store as the bubble (one-shot messages), laid out as one tree: To me · Sent by me · (MH only) a folder per staff name = everything they sent / received / claimed / completed.
-// ?staff=<me|sent|all|Short> picks the folder (also reachable as /messages/all?staff=…). ?msg=<id> scrolls to and highlights a row.
-const StaffMessagesSection = ({ me, focusId, folder, onFolder }: { me: User; focusId?: string; folder: string; onFolder: (f: string) => void }) => {
-  const [tick, setTick] = useState(0); const bump = () => setTick((n) => n + 1); const done = useRef(false);
-  const owner = api.isOwnerSync(); const f = !owner && folder !== 'me' && folder !== 'sent' ? 'me' : folder;
-  useEffect(() => { const h = () => bump(); window.addEventListener(hl.MESSAGE_EVENT, h); return () => window.removeEventListener(hl.MESSAGE_EVENT, h); }, []);
-  useEffect(() => { done.current = false; }, [focusId]);
-  useEffect(() => { if (!focusId || done.current) return; const t = window.setTimeout(() => { const el = document.querySelector(`[data-testid='msg-inbox-${focusId}'], [data-testid='msg-sent-${focusId}'], [data-testid='internal-msg-${focusId}']`); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('ring-2', 'ring-accent'); done.current = true; } }, 400); return () => window.clearTimeout(t); }, [focusId, tick, f]);
-  const reply = (r: InboxRow) => window.dispatchEvent(new CustomEvent<BubbleComposeDetail>(BUBBLE_COMPOSE_EVENT, { detail: { replyTo: r } }));
-  const folders = owner ? hl.staffFolders() : [];
-  const Folder = ({ k, label, count, tone }: { k: string; label: string; count?: number; tone?: 'unread' }) => <button type="button" data-testid={`internal-folder-${k}`} aria-selected={f === k} onClick={() => onFolder(k)} className={clsx('flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-xs', f === k ? 'bg-ink font-semibold text-white' : 'text-ink-700 hover:bg-canvas')}><Folder_ size={12} className={f === k ? 'text-white/70' : 'text-ink-400'} /><span className="truncate">{label}</span>{count !== undefined && count > 0 && <span className={clsx('ml-auto font-mono text-[10px] tabular-nums', tone === 'unread' ? 'font-bold text-rose-700' : f === k ? 'text-white/70' : 'text-ink-400')}>{count}</span>}</button>;
-  const title = f === 'me' ? `To me · ${hl.unreadCount(me.id)} unread` : f === 'sent' ? 'Sent by me' : f === 'all' ? 'Everyone · every staff message' : `${f} · sent, received, claimed or completed`;
-  return <div data-testid="inbox-staff-section" data-folder={f} className="grid min-h-0 flex-1 grid-cols-[220px_1fr] gap-3">
-    <nav data-testid="internal-tree" className="min-h-0 space-y-0.5 overflow-y-auto rounded-md border border-line bg-surface p-2">
-      <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Team</div>
-      <Folder k="me" label="To me" count={hl.unreadCount(me.id)} tone="unread" /><Folder k="sent" label="Sent by me" />
-      {owner && <><div className="mt-2 px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">All staff · MH only</div><Folder k="all" label="Everyone" count={hl.allMessagesSync().length} />{folders.map((x) => <Folder key={x.name} k={x.name} label={x.name} count={x.count} />)}</>}
-    </nav>
-    <section className="min-h-0 overflow-y-auto rounded-md border border-line bg-surface p-3">
-      <div data-testid="internal-folder-title" className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500">{title}</div>
-      {f === 'me' && <MessageInbox me={me} pad={false} tick={tick} onChange={bump} onReply={reply} jobBase="/jobs" />}
-      {f === 'sent' && <SentList tick={tick} testId="msg-sent" />}
-      {f !== 'me' && f !== 'sent' && <AllMessagesList staff={f === 'all' ? undefined : f} tick={tick} />}
-    </section>
-  </div>;
-};
-
-// Super-admin list (MH): read-only rows — from → to · status · when · station · job · text · photo
-export const AllMessagesList = ({ staff, tick, rows: given }: { staff?: string; tick: number; rows?: hl.AllMessageRow[] }) => {
-  const rows = useMemo(() => given ?? hl.allMessagesSync(staff), [staff, tick, given]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <ul data-testid="internal-all-list" data-count={rows.length} className="divide-y divide-line/70">
-    {rows.map((r) => <li key={r.id} data-testid={`internal-msg-${r.id}`} data-status={r.status} className={clsx('flex gap-2 py-2 text-xs', r.status === 'done' && 'opacity-60')}>
-      {r.photo && <img src={r.photo.dataUrl} alt="" className="h-12 w-16 shrink-0 rounded-sm object-cover ring-1 ring-line" />}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-1.5 text-[10px] text-ink-400"><OwnerChip owner={r.from} /><span>→</span><b className="text-ink-700">{r.toLabel}</b><span>· {fmtDate(r.createdAt)} {fmtTime(r.createdAt)} · {r.station}</span>{r.replyToId && <span className="text-moss-700">reply</span>}{r.doneBy && <span>· done by {r.doneBy}</span>}</div>
-        <div className="mt-0.5 text-[13px] leading-snug text-ink-800">{r.text ? <MessageText text={r.text} /> : 'Photo'}</div>
-        <div className="mt-1 flex items-center gap-1.5">{r.jobId && <Link to={`/jobs/${r.jobId}`} data-testid={`internal-msg-job-${r.id}`} className="font-mono text-[11px] font-semibold text-brand hover:underline">{r.jobNumber}</Link>}{r.jobLabel && <span className="text-[10px] text-ink-400">{r.jobLabel}</span>}<StatusChip status={r.status} /></div>
-      </div>
-    </li>)}
-    {!rows.length && <li className="py-6 text-center text-xs text-ink-400">No messages in this folder</li>}
-  </ul>;
-};
 
 // CALLS section — missed queue + the latest calls (same ledger as /calls and the client record)
 const CallsSectionInline = () => {

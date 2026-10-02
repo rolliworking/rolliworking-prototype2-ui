@@ -1,23 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
-import * as hl from '@/api/hitlist';
-import type { InboxRow } from '@/api/hitlist';
+import clsx from 'clsx';
+import { MessageCircle, Phone } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
-import { MessageComposer, SentList } from '@/components/layout/MessageComposer';
-import { InboxPanel } from '@/components/today/InboxPanel';
+import { IntercomSection } from '@/components/inbox/IntercomSection';
+import { TeamMessages, type TeamChip } from '@/components/layout/TeamMessages';
 
-// iPad "Messages" tab — my inbox (Done / Claim) + one-shot composer + Sent. No thread.
+// iPad "Messages" — the pad mount of Inbox → Team (same list · chips · collapsed Directory · composer) plus the Intercom tab. `?tab=intercom`, `?compose=1`, `?chip=`.
 export default function RwMessagesPage() {
-  const { user } = useAuth(); const [inbox, setInbox] = useState<InboxRow[]>([]); const [tick, setTick] = useState(0);
-  const load = useCallback(() => { if (user) void hl.getInbox(user.id).then(setInbox); }, [user]);
-  useEffect(() => { load(); }, [load, tick]);
+  const { user } = useAuth(); const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'intercom' ? 'intercom' : 'team';
+  const go = (patch: Record<string, string | undefined>) => { const p = new URLSearchParams(params); Object.entries(patch).forEach(([k, v]) => (v ? p.set(k, v) : p.delete(k))); setParams(p); };
   if (!user) return null;
-  return <div data-testid="rw-messages-page" className="mx-auto grid max-w-6xl gap-5 p-5 lg:grid-cols-2">
-    <div><InboxPanel me={user} items={inbox} onChange={() => setTick((t) => t + 1)} jobBase="/rw/jobs" /></div>
-    <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-      <h2 className="text-xl font-semibold text-white">Send a message</h2>
-      <div className="mt-3"><MessageComposer dark testId="rw-msg" onSent={() => setTick((t) => t + 1)} /></div>
-      <h3 className="mt-6 text-base font-semibold text-white">Sent</h3>
-      <div className="mt-1"><SentList dark tick={tick} testId="rw-sent" /></div>
-    </section>
+  return <div data-testid="rw-messages-page" data-tab={tab} className="mx-auto max-w-5xl space-y-4 p-5">
+    <div data-testid="rw-messages-tabs" className="flex gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1 text-sm font-semibold">
+      {([['team', 'Team', MessageCircle], ['intercom', 'Intercom', Phone]] as const).map(([k, l, Icon]) => <button key={k} type="button" data-testid={`rw-messages-tab-${k}`} aria-selected={tab === k} onClick={() => go({ tab: k === 'team' ? undefined : k, compose: undefined, chip: undefined })} className={clsx('inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl', tab === k ? 'bg-accent text-[#161b22]' : 'text-slate-300 hover:bg-white/10')}><Icon size={16} /> {l}</button>)}
+    </div>
+    {tab === 'team' && <TeamMessages me={user} dark pad jobBase="/rw/jobs" chip={(params.get('chip') as TeamChip | null) ?? 'received'} onChip={(c) => go({ chip: c === 'received' ? undefined : c })} compose={params.get('compose') === '1'} onCompose={(o) => go({ compose: o ? '1' : undefined })} />}
+    {tab === 'intercom' && <IntercomSection dark pad />}
   </div>;
 }

@@ -121,3 +121,12 @@ State machines and guards (`source/STATE-MACHINES.md`), field lists and validati
 | Hitlist system pins recomputed by sweeps on every read (`autoPoSweepSync`, `approvalsToSendSweepSync`, `pickupEvidenceSweep`) | `client.ts` tail | scheduled server jobs writing the same pin keys |
 | `?rig=kiosk\|bench` query deciding `controlled` shots | `pages/rw/RwInspectPage.tsx`, `inspectionLabels.isControlledStation` | the station record (`station_camera`, device type) |
 | `Station.cameraRole` chosen in a sheet per browser (`CameraSettings`) | `components/sales/pickup/PickupBits.tsx` | station record + registered camera map |
+
+## Added 2026-10-02 (Bonus targets)
+
+| prototype piece | where | Keeper replacement |
+|---|---|---|
+| **"As of" time-travel control** (`AsOfControl`, `getAsOf/setAsOf`, localStorage `rollisuite.bonus.asOf`, quick picks Oct 2 · 20 · 25 · Nov 1) | `/analytics/bonuses`, `components/bonus/BonusBits.tsx` | none — the as-of date is always today; drop the control and the event |
+| Seeded monthly totals spread across Mon–Fri dates (`MONTHLY`, `MONTHLY_TECH`, `spreadMoney/spreadCount`) | `api/bonus.ts` | the real `v_bonus_*` SQL views (`SELECT date, amount, ref …`) behind `viewRows()` |
+| Plans / early-close / paid maps in memory | `api/bonus.ts` | `bonus_plan`, `bonus_period_close`, `bonus_payment` tables; results stay derived |
+| `OPS_MANAGER_USER_ID = 'u-vienna'` constant for the analytics allow-list | `api/bonus.ts`, `config/navigation.ts NavItem.only` | a role / permission (`bonus.analytics`) in Access control |
