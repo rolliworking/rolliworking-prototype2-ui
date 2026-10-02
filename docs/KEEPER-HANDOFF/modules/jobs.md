@@ -1,5 +1,7 @@
 # Module — Jobs (pipeline · kinds · holds · owner/assignees · inspection · evidence · report to client · timing · components)
 
+> **Superseded in part (2026-10-02):** the `/jobs/:id` page layout (components card, verification chain, line items) is replaced by **`job-detail-v2-wbp.md`** (item header, process flow, add-ons, collapsed cards, W·B·P dots). Pipeline, kinds, holds (now component-scoped — D-428), inspection, photos, evidence and timing below still hold.
+
 ## Screens & layout intent
 - `/jobs`: **board** (lanes: Intake · In review · Awaiting customer · Approved · In service · **Awaiting components** · On hold · Testing/QC · Ready to ship · Closed) or **list**; workflow filter (W/B/P/PM counts), status filter chips with counts, search. Cards: number, client, watch, kind/priority, assignee chips, owner badge, hold badge, component chips (when a split job has ≥1 component done), reply indicator.
 - `/jobs/:id`: header (number, status+hold, kind, priority, workflow badges, simple status, owner, money-tail pill), actions bar (legal actions; reason modals; Create invoice; Parts request; Add to hit list; Delete = manager), review gate banner, hold banner. Left column cards: Watch, Line items (money), **Components**, Inspection (multiple-choice form, service kind only), Notes, Inspection report to client, Timing tests, Service evidence (4 slots), Photos, Parts requests, Shop time. Right: Status timeline + linked tasks, Owner, Assignees, Holds, Details (priority, due, intake notes).

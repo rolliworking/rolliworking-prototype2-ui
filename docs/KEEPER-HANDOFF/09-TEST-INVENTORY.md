@@ -723,3 +723,65 @@ _Comprehensive frontend testing of RolliSuite 'ONE GENERAL INBOX — tag, don't 
 
 _Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
 - Fix stale aria-pressed on thread-view header tag chips: in src/pages/InboxPage.tsx (~line 147) the chip `on` state must be derived from the latest conversation tags (e.g. subscribe to INBOX_REFRESH_EVENT or re-select the conversation from the store after `actions.tag`), so clicking thread-tag-<key> 
+
+## Iteration 72
+
+_Frontend-only Playwright testing of RolliSuite Inbox Job-Card slide-out (sections + expand + dots rule). Signed in as Vienna in mock mode and exercised the untested surface area called out by the main agent: thread-note save flow, request Show-submission expand/collapse on rq-07, all three snippet quick actions on j-01 (Note, Parts request modal PR-0045 opens, Generate summary drops a Claude draft into composer-text), expand/collapse full job card (12 cards present inside job-detail-embedded), one-at-a-time rule (expanding j-20 collapses j-01), Fulfilled row + snippet have NO wbp dots, Closed E01033 expired row renders, rating tooltip on both inbox-panel-rating and thread-rating, panel swap …_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- SPEC vs SEED mismatch (not a code bug): review request says cv-05 renders `inbox-panel-request-rq-05`, but src/api/fixtures/comms.ts line 21 anchors cv-05 to request id `rq-03` (number RQ-26-0043, Naomi Castellanos). The component emits `inbox-panel-request-rq-03`. Either (a) update the spec testid 
+
+## Iteration 73
+
+_End-to-end testing of RolliSuite Pickup Station v2 (5 gated steps) — backend OCR + full frontend flow. Backend POST /api/ai/read-serials verified with real Claude on /app/frontend/public/pickup-ocr-samples: match case (intake+hand → A9T4M2K8, conf ≥0.8 both) and mismatch case (intake+hand_bad → handback A9T4M2K1) — 2/2 pytest passes. Frontend via Playwright on public URL as Vienna (mock mode, SPA pushState): Gate 1 queue + evidence strip (so-pu8 3/6 pending) rendered; Gate 2 so-pu2 balance gate blocks, bypass manager list correctly excludes Vienna (MH/Walter/JV only), wrong PIN 9999 shows error, correct PIN 1234+reason approves, Continue enabled, code CD5F-22 verifies, placeholder hand-back …_
+
+
+## Iteration 74
+
+_Phase B /rwcom emulator tested end-to-end (frontend only, mock mode). 47 of 52 Playwright checks PASS. TypeScript build clean (npx tsc --noEmit exits 0). All five user acceptance checks verified: (1) phone frame default + desktop toggle; (2) ?tab=request&ref=16233 deep link prefills ref/model/Rolex-pressed, typical BLANK with no leg selected, shows '$950–$1,450 · about 21 days' with Full service, blanks on uncheck, stays blank with only 'other' (no '$0'); (3) &claim=<unknown> shows dismissible 'not found' line, page still loads; (4) web request submits as RQ-26-0053 and appears on /requests UNOWNED (no data-tags attr, '— right-click to tag') with source 'web form', summary includes 'Web requ…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Minor: In RequestTab.tsx Done component onReset, also reset contact state (setContact({firstName:'',lastName:'',email:'',phone:''})) and handover to defaults so the next request starts clean per acceptance spec.
+- No other action items — all core /rwcom acceptance checks pass.
+
+## Iteration 75
+
+_Inbox batch review: Requests-not-in-Inbox (A), No-count-badges (B), Inbox-as-context (C). Signed in as Vienna in mock mode; TypeScript `tsc --noEmit` exits 0. 11 of 13 sub-checks pass. Two findings: (1) HIGH: thread-pane scroll position is NOT restored when the user navigates back through the inbox context (scrollTop reset to 0 after browser-Back twice from /jobs/j-01, expected ~168). (2) MINOR: cv-ib1 Rebecca row renders data-unread='true' with bold subject even though the row meta says 'Vienna spoke last' — likely a fixture inconsistency (an extra Rebecca message after Vienna's reply). All other acceptance criteria pass._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix thread-pane scrollTop restoration on browser-Back when returning from /jobs/<id> via the inbox context (rememberInboxScroll / getInboxContext in src/api/inboxContext.ts + InboxPage effect that applies scrollTop when ?thread= is set and no &panel=/&card=). The scroll gets lost once the user trans
+- Review cv-ib1 Rebecca fixture: either (a) remove the trailing Rebecca message so Vienna's reply is last and data-unread resolves to false, or (b) adjust data-unread/last-sender logic so a staff reply beats an older unread flag. Right now the row contradicts its own meta line.
+
+## Iteration 76
+
+_Phase-1 Inbox folder-tree batch (Vienna profile) tested in mock mode via SPA navigation. TypeScript `tsc --noEmit -p .` exits 0. Vienna acceptance: PASS for tree render (all 16 required folders present, no staff section, counts render as plain mono numbers – not rounded badge circles), default folder/section ('all'/'threads'), ALL list (live+quoted+answered sections, group toggle, title 'All · every client thread, unowned'), composer-send text='Send' exactly, Vienna tag folder flat with all 4 rows having `data-tags` containing 'vienna' (tagging never moves — all 4 still in ALL), PINNED contains cv-ib4 (Robert Calloway) and count=1, Archive one-click flow (hover→archive→count 2→3, row leaves …_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- FIX BUG B (HIGH): thread-pane scrollTop is 0 even after the first inbox return from /jobs/j-01 (job-back lands /inbox?thread=cv-01&panel=1&card=j-01). The intended rAF-driven restore in InboxPage must run when (?thread && !?card? && !?panel) OR must also run on the intermediate card state. Current f
+- FIX MEDIUM: namespace or filter out `thread-row-wbp-<id>` siblings in Pinned/Quoted/Answered folders — spec expects every row with [data-testid^=thread-row-] in those filtered folders to carry the matching data-pinned/data-lane attribute.
+
+## Iteration 77
+
+_Full acceptance of RolliSuite Inbox FLAT-layout + VIEWS tab batch, mock mode, SPA nav only. TypeScript `tsc --noEmit -p .` exits 0. ALL requested acceptance bullets PASS. Vienna (/inbox): tabs Portal/Team/Calls present, no inbox-section-views, no inbox-tree. inbox-who-(all|mike|vienna|chyna), inbox-lanes with all/quoted/answered/snoozed, inbox-group-toggle, inbox-lane-archived, legend 'client spoke last / we did', inbox-sec-pinned (contains thread-row-cv-ib4 Robert Calloway), inbox-sec-live, inbox-sec-quoted, inbox-sec-answered all present. Zero numbered-circle badges inside inbox-page. Filters: who=vienna URL rewritten + 2 rows all data-tags contains 'vienna'; who=all restores all 8; lane=q…_
+
+
+## Iteration 78
+
+_Iteration 78 — Portal Request Builder + Rate Card wiring: TS clean (npx tsc 0 errors). Extensively tested rate card (18 seeded rows, add/edit/dup-guard/validation/?key= prefill), staff on-behalf auto-quote (c-25: $1,100+$280=$1,380 quoted estimate sent, flash + row pill), unresolved line + live re-resolve ($300 lights up after rate added), duplicate/group numbering (1/5..5/5 → edit copy #3 polish untouched → remove → 1/4..4/4), trade auto-quote OFF staff side (c-11 fresh: queued + Draft estimate), portal regular client (typical range, draft), portal trade auto-quote ON Vidal ($1,050 + $280 = Quote E01060 $1,330, Review & approve), NOT signed-in /rc/request/new → correctly redirects to /www?t…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Render request-line-group-<lid> labels in the request sheet (RequestLines.tsx) so grouped-line labels (1/n…n/n) show after submit, matching the builder's rb-line-group-<lid>.
+- Fix stale client state in RequestNewPage: sync `client` state from URL search param on change (useEffect), or add a route `key={params.get('client')}` so RequestBuilder remounts when client ID changes.
+
+## Iteration 79
+
+_Iteration 79 — End-to-end verification of (A) iteration_78 leftovers and (B) Inbox job-card quick-action guardrails. All 9 scenarios PASS with 1 MINOR UX issue in B4. B1 portal/email channel chips + token behaviour ✓; B2 portal reply visible in RolliConnect messages ✓; B3 NOTE guardrail (flash, no new client-facing message, note-origin chip on /jobs/j-32 timeline, inbox-return-link round-trip) ✓; B4 PARTS REQUEST core logic ✓ (flash 'PR-0045 on the job · logged on the thread', internal 'parts requested: PR-0045 · 25-295-C1 Crystal, sapphire with cyclops · for E02033' line IS pushed server-side and visible after re-nav), BUT ThreadView does not auto-refresh when the parts request is submitted…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Make InboxJobCard.QuickActions.onReload also trigger a ThreadView refresh so the 'parts requested: PR-####' internal line appears immediately after parts-submit (not only after re-nav). Options: (a) call a passed-down thread refetch callback from InboxPage into InboxJobCard; (b) have ThreadView subs

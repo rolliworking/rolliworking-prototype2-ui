@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-10-01  
+**Last updated**: 2026-10-02  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -652,3 +652,10 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - Seeds: w-pu1..8, j-pu1..8 (E02090–E02097, intake photos), so-pu1..so-pu8 (gate fixtures + so-pu7 complete 6/6 Claude match, so-pu8 pending 3/6 → incomplete).
 - Docs: DECISIONS "PICKUP STATION — FIVE GATED STEPS", NOT-KEEPER table (mock phone, dev tools, MOCK_OCR_MAY_PASS, sendSms, sweep, retention). `_gen.py` NOT re-run (API census stale by one section).
 - Next: public `/track/:token` (P1) · Sales vs Completions remainder (P1) · Front Desk Kiosk UI vs RS Intake clarity (P2) · regen KEEPER-HANDOFF via `_gen.py`.
+
+### KEEPER-HANDOFF refresh v2 — "DOCUMENT EVERYTHING v2" (2026-10-02; documentation-only, MH approved proceeding from summary + code)
+- New: `15-UI-CONVENTIONS.md` (one line per rule + D-number; 14 was taken — never renumber), `specs/SPEC-PICKUP-STATION.md` (**BUILT** + ✓/⚠ GAP check vs MH's gate list), `specs/SPEC-LONG-TERM-STORAGE.md` (**PLANNED** stub), module specs `inbox-v2`, `request-builder`, `calls-telephony`, `concierge-swo`, `job-detail-v2-wbp`, `jv-bin-containers`, `inspection-labels`, `rwcom-emulator`.
+- Updated: 00 (files, v2 refresh block, vocabulary), 01 (routes **[v2]** + UNGUARDED re-check), 03 (Q103–Q114), 04 (v2 entity table), 06 (seam addendum), 07 (reply channel / Sent / new emails), 10 (v2 scaffolding), 11 (§4 §6 §10–13 + §15 Supabase Auth, §16 WatchM8 engine, §17 inbox context), 12 (§9 + drift), 13 (gaps 16–22), 14 (rw.com + Request Builder rows), superseded-pointer notes on comms-hub / jobs / sales / rolliconnect; `docs/SESSION-LOG.md` entry; `source/` re-copied.
+- `_gen.py`: `[v2]` tag (`_baseline_refresh2.txt` 723 → 926 exports, 230 v2), definition-anchored side-effect scan (`email → Sent`, `sms (MOCK)`, `hitlist pin`, more audit helpers), auth classes `token` / `public` / `owner`, audit families 51–65, module tags for 2026-09-29+ ruling blocks, iterations to 199. 02/05/08/09 regenerated; mirrored to `frontend/docs` (in sync).
+- **Pickup ⚠ GAP rows = MH's next paste**: open-by-any-reference, gate-2 "invoice Sent + QBO balance", 3-fail → 10-min lockout, ≥$10k value-tier second factor, authorized pickup persons, Reolink clip reference, manager-only ID photos + purge. Outbox → Sent rename confirmed complete (user-facing strings gone; internal identifiers unchanged, D-467).
+- Next: user **Save to GitHub** → LTS build when MH pastes the full text → Pickup gap paste → docs delta for both.

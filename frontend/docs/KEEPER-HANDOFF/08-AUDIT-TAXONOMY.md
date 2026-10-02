@@ -35,12 +35,12 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `job` | `addJobAddon`, `addSwoLine`, `advanceSwo`, `binEvent`, `bulkCommit`, `conciergeBridge`, `confirmJobAddon`, `createHubShipment`, `createSwoHub`, `createSwoOutboundLabel`, `finishAudit`, `gateScanJob`, `jobStamp`, `logBypass`, `padSendBack`, `padSetTech`, `printSwoLabel`, `receiveSwoLine`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox`, `updateSwoHub` | Jobs (with task, pin, parts) |
 | `task` | `taskStamp` | All only |
 | `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
-| `sales` | `convertLegacy`, `soStamp` | Sales |
+| `sales` | `convertLegacy`, `pickupEvidenceSweep`, `soStamp` | Sales |
 | `parts` | `approvalAction`, `partsStamp` | All only |
 | `portal` | `portalStamp`, `replyToClient` | RolliConnect |
 | `purchasing` | `rsStamp` | All only |
 | `inventory` | `invBridge`, `pickAction` | All only |
-| `setup` | `addGradeCategory`, `setAuditStaleDays`, `toggleGradeCategory` | All only |
+| `setup` | `addGradeCategory`, `saveRateCardRow`, `setAuditStaleDays`, `toggleGradeCategory` | All only |
 | `evidence` | (stamp helper — see below) | All only |
 | `labels` | (stamp helper — see below) | All only |
 | `accounting` | `baStamp`, `deleteSalesOrder`, `qboLog`, `zeroBalanceNoSync` | All only |
@@ -48,7 +48,7 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `comms` | `callsBridge`, `clearMessage`, `cxStamp`, `deletePersonalTemplate`, `exitViewAsClient`, `learnDialVariant`, `learnInspectionNote`, `portalAskArrived`, `saveInspectionForm`, `savePersonalTemplate`, `setClientRating`, `startViewAsClient`, `submitClientReview` | All only |
 | `rollitime` | `rtStamp`, `setTechGoal` | All only |
 | `rgtime` | `rgAudit` | RGTime |
-| `kiosk` | `kioskAudit`, `resolveKioskMatch`, `saveBenchSettings` | Kiosk |
+| `kiosk` | `kioskAudit`, `markRequestNotified`, `resolveKioskMatch`, `saveBenchSettings`, `submitBuilderRequest`, `submitWebRequest` | Kiosk |
 | `appointments` | `auditAppointments` | All only |
 | `settings` | `accessLog`, `rcResetAccount`, `setAccessOverride`, `setFeatureFlag`, `setRcDocAccess` | All only |
 | `shipping` | `portalCreateLabel` | All only |
@@ -108,3 +108,25 @@ The prototype did **not** add enum values for these — they ride on existing ty
 | 48 | hitlist claim / reassign | `pin` / `task` | `hl.reassign`, `pinToHitList`, `setTaskDone` | `{item, from_assignee, to_assignee, by, at}` |
 | 49 | scan-gate override | `estimate` | `overrideScanGate` | `{so, by, reason, at}` |
 | 50 | client reference set | `estimate` | `setClientRef` | `{estimate\|job, before, after, by}` |
+
+## v2 event families (2026-09-30 → 2026-10-02; numbering continues: 51+)
+
+None of these added an enum value — they ride on `sales` / `job` / `comms` / `kiosk` / `settings` or on store-local timelines (`soStamp`, `jobStamp`, thread lines, `BinEvent`, `swo_event`). `⚠ DRIFT` → each family gets its own `type` in KEEPER. Emitters are the owning functions.
+
+| # | family | prototype type | emitted by | payload KEEPER needs |
+|---|---|---|---|---|
+| 51 | inbox tag / pin / lane / archive / share | — (thread internal line via `pushConv` / `logShare`; no `appendAudit`) | `tagConversation`, `pinConversation`, `moveConversation`, `archiveConversation`, `unarchiveConversation`, `logShare` | `{conversation, action, tag?, lane?, by, at}`; share → `{message_id, recipients[], note?}` (D-443…D-446, D-460) |
+| 52 | inbox quick action on a job | `job` (`jobStamp`) + thread internal line | `addJobNote(origin)`, `logPartsRequestOnThread`, `draftJobSummary` (no row — draft only) | note `{job, origin: "from inbox · <subject>"}`; parts `{job, pr, thread}`; summary drafts are NOT audited (never sent) (D-463…D-465) |
+| 53 | reply channel chosen | `comms` (`pushConv`) | `replyInThread` | `{conversation, channel: portal\|email, message_id, token?}` (D-466) |
+| 54 | SWO hub / line lifecycle (vendor lanes) | `job` (`jobStamp` + `appendAudit`) + `Swo.timeline[]` / `SwoHub.timeline[]` | `saveShopWorkOrder`, `advanceSwo`, `sendBackSwo`, `createSwoHub`, `addSwoLine`, `removeSwoLine`, `moveSwoLines`, `moveLineToHub`, `createHubShipment`, `receiveSwoLine`, `markPartReturned`, `createSwoOutboundLabel`, `queueSwoReturnLabel`, `setSwoPaid`, `pushSwoToQbo`, `concierge.addVendorInvoice/markInvoicePaid/startRedo` | `{hub, line?, job, vendor, from_stage, to_stage, reason?, label?, invoice?, redo_cycle?, by, device, at}`; custody to `vendor:<id>` is a `part_move` |
+| 55 | container (JV bin) events | `job` (`jobStamp`) + `BinEvent` ledger | `assignToBin`, `binEnter`, `binHandTo`, `binTakeBack`, `binToSafe`, `binOutOfSafe`, `binCommit` | `{container, ticket, kind: assign\|enter\|hand_to\|take_back\|to_safe\|out_of_safe\|missing, tech?, count_expected?, count_present?, by, at}` (D-420…D-424) |
+| 56 | request submitted (web / portal / staff builder) | `kiosk` (same as the kiosk walk-in) | `submitWebRequest`, `submitBuilderRequest`, `markRequestNotified` | `{request, source: web\|portal\|staff, mode, outcome quoted\|queued\|draft, lines[], auto_quote, estimate?, notified_to?}` → own type `request_submitted` (D-457, D-471) |
+| 57 | add-on since estimate (manual / phone → confirmed) | `job` (`jobStamp`) | `addJobAddon`, `confirmJobAddon`, `calls.setDisposition(approval_given)` | `{job, addon, source manual\|phone, channel, amount?, status pending\|confirmed, by, at}` (D-405, D-434) |
+| 58 | inspection opinion label / second opinion / specimen | — (store-local in `inspectionLabels.ts`; `m3keEvents` row kind `inspection_opinion`) | `saveOpinion`, `setShareable`, `requestSecondOpinion`, `submitSecondOpinion`, `recordShot`, `promoteCandidate`, `rejectCandidate`, `confirmTag`, `mergeTag`, `waiveSpecimen`, `setOfferToAcquire` | `{job, component, opinion, confidence, variant?, tags[], revision, shareable, by, station, controlled?}`; second opinion `{request, to, blind: true}`; specimen `{job, decision}` (D-415) |
+| 59 | owner Views (another person's inbox opened) | — (read, no row) | `InboxPage ?section=views&as=` | `⚠ DRIFT`: telemetry read event `{viewer: MH, inbox_of, at}` (D-459) — same gap as family 39 |
+| 60 | pickup gate steps + exceptions | `sales` (`soStamp` on every step; `jobStamp` on stops) + `BypassEvent payment_release` | `pickupStart`, `pickupConfirmItem`, `pickupAbort`, `pickupApproveBypass`, `pickupResendCode`, `pickupVerifyCode` (incl. FAILED), `pickupVerifyProxy`, `pickupIssueReverseQr`, `portalConfirmPickup`, `portalDeclinePickup`, `pickupCheckSerial`, `pickupOverrideSerial`, `confirmPickup`, `pickupAppendFrame`, `pickupEvidenceSweep`, `adminMarkComplete` | `{so, step 1–5, fact, approver?, reason?, code_generation?, verify_method?, serial_result?, failed_pair?, source claude\|mock, frames_n, evidence_status}`; failed verifies MUST be counted (lockout — Q104) (`specs/SPEC-PICKUP-STATION.md`) |
+| 61 | call lifecycle + disposition | `comms` (`b.audit`) + thread event | `calls.callAnswered`, `callMissed`, `startOutboundCall`, `setDisposition`, `logCall`, `addCallNote`, `linkCallToJob`, `resolveMissedCall` | `{call_id, direction, number, client?, answered_by?, station, outcome, duration, disposition?, recording_ref?, job?}` (D-430…D-436) |
+| 62 | portal passwordless / LINK tier / step-up | `settings` (`appendAudit`) + `portalStamp` | `rcRequestCode`, `rcVerifyCode`, `rcVerifyMagicLink`, `rcSignInWithTouchId`, `rcRequestStepUp`, `requireStepUp`, `sendClientLink`, `revokeClientLink`, `resolveClientLink` (open counted), `setRcDocAccess`, `setPhotoUnlocked` | `{client, challenge_id, method code\|magic_link\|touch_id, attempts, result}`; link `{type, object, token_hash, sent_to, opened_at, revoked_by?}`; step-up `{action, grant_id, consumed_at}` (CLIENT PORTAL — THREE TIERS) |
+| 63 | access control (owner) | `settings` (`appendAudit`) + `AccessChange` log | `setAccessOverride`, `setUserEnabled`, `setUserLimits`, `createUserFromTemplate` | `{by: MH, whom, screen?, from, to, reason?, limits?, template_from?}` (D-391, D-398…D-401) |
+| 64 | system pins (auto-PO · approvals to send · pickup evidence / item / declined) | `pin` (row via `upsertSystemPin`, no `appendAudit`) | `autoPoSweepSync`, `approvalsToSendSweepSync`, `pickupEvidenceSweep`, `pickupAbort`, `portalDeclinePickup` | `{key, priority, standing, assigned_to, link, dismiss_reason?}` — upsert by key; dismiss of a standing pin needs a reason (D-417, D-418) |
+| 65 | rate card edit | `setup` | `saveRateCardRow` | `{row, key, version_before, version_after, by}` (D-472) |

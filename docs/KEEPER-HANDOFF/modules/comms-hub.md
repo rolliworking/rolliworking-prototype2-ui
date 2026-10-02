@@ -1,5 +1,7 @@
 # Module — Comms hub `/inbox` (staff conversations)
 
+> **Superseded in part (2026-10-02):** views, per-person assignment, the "Staff" colleague-inbox section and the Outlook-style Team tree are replaced by **`inbox-v2.md`** (one flat general Inbox, tags not assignment, job-card slide-out, reply channel, context chip). The thread model, reply tokens, composer + templates and auto-threading below still hold.
+
 ## Screens & layout intent
 Three-pane inbox: **views** rail with counts (Needs reply · Mine · Open · Snoozed · Closed), **thread list** (client, subject/anchor label, last line, unread badge, age, assignee), **thread-space** for the selected client: folder of that client's conversations (General + one per anchor: job, estimate, sales order, request), message stream (in/out/internal; source icon: portal, email, kiosk, approval, photo, parts, pickup, staff, note, system; reply token shown on outbound, matched token on inbound), composer with **template picker** (merge-field preview, missing-field warnings, attach job photos) → Outbox, **internal note**, assign (user or role), snooze (until), close/reopen, "Simulate inbound" (prototype-only), link to Client 360. Reply indicators appear on job cards and estimate rows; `/today` gets "Replies" rows.
 

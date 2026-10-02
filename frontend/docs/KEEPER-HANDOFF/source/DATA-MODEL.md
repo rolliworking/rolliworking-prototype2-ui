@@ -34,7 +34,7 @@ Drift: `closeRequest` (staff) writes `type: 'estimate'` — there is no `request
 
 ## 2. Clients & watches
 
-### Client (`fixtures/clients.ts`, 25) — `id, firstName, lastName, email, phone, company?, street, city, state, type: retail|trade, since`. `createClient` writes blank address, type retail. Emails are the join key for Outbox → Client 360 emails and for RolliConnect magic links.
+### Client (`fixtures/clients.ts`, 25) — `id, firstName, lastName, email, phone, company?, street, city, state, type: retail|trade, since`. `createClient` writes blank address, type retail. Emails are the join key for Sent → Client 360 emails and for RolliConnect magic links.
 
 ### Watch (`fixtures/watches.ts`, 21) — `id, clientId→Client, brand: Rolex|Tudor, model, reference, serial, dial, bracelet, status: WatchStatus, receivedAt`.
 `WatchStatus` lookup: `expected | intake | awaiting_approval | in_service | awaiting_parts | qc | awaiting_pickup | released`. **Display-only projection** written by intake stage 4, job transitions (`WATCH_STATUS_FOR`), holds. Seeds drift from their jobs (e.g. w-14 `awaiting_approval` while j-21 is `ready_to_ship`) — KEEPER should derive it, not store it.

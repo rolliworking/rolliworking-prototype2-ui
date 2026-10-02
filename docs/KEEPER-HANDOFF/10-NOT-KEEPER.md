@@ -101,3 +101,23 @@ State machines and guards (`source/STATE-MACHINES.md`), field lists and validati
 | Link tokens are random ids (`lnk-…`), not signed; expiry enforced only for revoke / decided state | `client.ts ClientLink` | signed, scoped tokens with per-type `expiresAt`, verified server-side |
 | Touch ID: local challenge, credential id per device, no signature verification | `api/webauthn.ts` | server-issued challenge + assertion verification (py-webauthn), action-bound step-up grant |
 | Step-up grants in localStorage (`rollisuite.rc.stepups`) | `client.ts requireStepUp` | server-side grant bound to `{session, action, nonce}`, consumed atomically |
+
+## Added 2026-10-02 (v2 pass — rw.com emulator · Inbox v2 · Request Builder · Concierge · dots · calls)
+| prototype scaffolding | where | replacement |
+|---|---|---|
+| **`/rwcom` as an RS screen** + the `/www` public mount, device frame (Phone 390×844 / Desktop), entity switch, **Instrumentation panel** + `[wm8]` console mirror (D-458) | `pages/RwcomPage.tsx`, `components/rwcom/RwcomDev.tsx` | the real rolliworks.com; only `submitWebRequest` (the POST contract) and the behaviours in `modules/rwcom-emulator.md` are KEEPER |
+| `watchm8.ts` engine mock (deterministic from photo bytes), `REFS` / `MODELS` / `QUESTION_TREE` tables, in-memory `Claim` store | `src/api/watchm8.ts`, `components/rwcom/rwState.ts` | the WatchM8 service + a persisted `claim` table |
+| TopBar **Simulate call** dev menu, timed scenarios (`simulateIncoming`, `simulateVoicemailUnknown`), seeded recordings as links | `api/telephony.ts`, `components/layout/SimulateCallMenu` | Vonage webhook receiver; recordings referenced in Vonage |
+| `sendSms` MOCK receipt (`vonage-mock <id>`) written as a Sent row | `api/telephony.ts`, `pickupResendCode` | Vonage Messages API + delivery receipt |
+| `seedSwoVolume` — 10 synthetic SWOs per stage per lane (`Swo.synth`, parent `j-01`), excluded from chips and the one-lane guard | `client.ts` SWO block | none (board density came from real rows) |
+| `simulateShipmentDelivered` on SWO hub shipments | `client.ts` SWO HUBS | carrier tracking webhook |
+| `CameraLookup` (`BarcodeDetector`, pad Concierge ASSIGN) | `components/concierge/CameraLookup.tsx` | optional — wedge scanner is the contract |
+| Inbox context in `sessionStorage`, `INBOX_REFRESH_EVENT` / `INBOX_DRAFT_EVENT` / `BUBBLE_COMPOSE_EVENT` window events, `MESSAGE_EVENT` + 2 s poll for the bubble banner | `api/inboxContext.ts`, `InboxPage.tsx`, `MessageBubble.tsx` | UI state may stay client-side; live updates via server push |
+| Legacy assignment plumbing kept exported but unreachable: `assignConversation`, `getStaffInboxRows`, `getColleagueInbox`, `threadsNeedingReplyForUser`; `/messages/all` redirect; `/today` thread rows from `assignedTo` | `client.ts` | delete (D-442, D-459) |
+| Access overrides / change log / disabled users in `localStorage` (`rollisuite.access.overrides`, `rollisuite.access.log`); new-user password `firstname123` / PIN 1234 | `client.ts` Access control + G6 | server tables + the auth provider |
+| `?fast=1`, **Simulate scan (dev)**, placeholder shutters, `pickupDevQrPayload`, inline mock phone, `MOCK_OCR_MAY_PASS`, `SalesOrder.pickupDemo` seed switch | Pickup Station (see the 2026-10-01 table) | none |
+| Rate card + request lines in memory (`api/requestBuilder.ts`), `liveRateSync` recomputed on every read | `requestBuilder.ts`, `client.ts` builder block | `rate_card_row` table with versions; stored rate snapshot per quote |
+| Deterministic `AskDraft` fallback (`source: 'local'`) and `localSummaryFields` when Claude is down | `client.ts askContext`, `ai.ts` | keep the fallback as behaviour; the model choice is not KEEPER |
+| Hitlist system pins recomputed by sweeps on every read (`autoPoSweepSync`, `approvalsToSendSweepSync`, `pickupEvidenceSweep`) | `client.ts` tail | scheduled server jobs writing the same pin keys |
+| `?rig=kiosk\|bench` query deciding `controlled` shots | `pages/rw/RwInspectPage.tsx`, `inspectionLabels.isControlledStation` | the station record (`station_camera`, device type) |
+| `Station.cameraRole` chosen in a sheet per browser (`CameraSettings`) | `components/sales/pickup/PickupBits.tsx` | station record + registered camera map |

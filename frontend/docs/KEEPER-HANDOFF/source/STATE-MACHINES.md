@@ -2,7 +2,7 @@
 
 Everything here is enforced today in `frontend/src/api/client.ts`. In KEEPER each machine becomes: a status lookup table, a `transition(<entity>_id, action, reason)` SQL function that validates from-state + guards + required reason, and an append-only transition table. The UI must call the function, never `UPDATE status`.
 
-Notation: `✉` = client email queued to Outbox · `reason*` = required non-empty · **who** = what the client module enforces today (route tiers are UI-only and listed separately).
+Notation: `✉` = client email queued to Sent · `reason*` = required non-empty · **who** = what the client module enforces today (route tiers are UI-only and listed separately).
 
 ## 1. Job pipeline
 

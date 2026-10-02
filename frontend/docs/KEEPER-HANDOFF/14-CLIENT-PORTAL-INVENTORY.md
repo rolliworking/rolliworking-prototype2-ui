@@ -1,7 +1,7 @@
 # Client portal — BUILT vs PLACEHOLDER (against the 2026-10-01 tier ruling)
 Filed 2026-10-01 · prepared by Emergent for MH · companion to "Client portal — what's public, what's link-only, what's behind sign-in" (MH ruling, D-418 for Cursor)
 
-Updated 2026-10-01 after the P0 + LINK-tier build (see DECISIONS "CLIENT PORTAL — THREE TIERS").
+Updated 2026-10-01 after the P0 + LINK-tier build (see DECISIONS "CLIENT PORTAL — THREE TIERS"); **v2 addendum 2026-10-02** (rw.com emulator, Request Builder) marked **[v2]**.
 
 Legend · **BUILT** works end-to-end in the prototype on mock data · **PARTIAL** exists but misses part of the ruling · **PLACEHOLDER** stub, copy or nothing · **CONFLICT** built, but differently from the ruling (needs an MH call)
 
@@ -16,8 +16,9 @@ Legend · **BUILT** works end-to-end in the prototype on mock data · **PARTIAL*
 | Surface | Ruling tier | Prototype | Where | Gap to the ruling |
 |---|---|---|---|---|
 | rolliworks.com pages, ref pages, articles, care guides | PUBLIC | — | website | out of scope for RolliSuite; nothing to build here |
-| `/identify`, `/check`, bracelet check (results saved only with identity or claim code, D-417) | PUBLIC | PLACEHOLDER | — | not built; the claim-code object does not exist in the data model |
-| Request service form (SUB-) → lead/client, acknowledgment email carries the first link | PUBLIC | PARTIAL | RS side only: `SUB-` submissions arrive as leads (`fixtures/intake.ts`, Pending Submissions) | the public form itself and the acknowledgment-email link are not in the prototype |
+| `/identify`, `/check`, bracelet check (results saved only with identity or claim code, D-417) | PUBLIC | **EMULATED [v2]** | `/www?tab=identify\|check` = public mount of `RwcomPage` (`modules/rwcom-emulator.md`); claim codes `watchm8.ts saveClaim / findClaim` (in memory) | the real public pages live on rolliworks.com; the emulator is NOT KEEPER; `claim` must persist (D-453) |
+| Request service form → lead / client, acknowledgment email carries the first link | PUBLIC | **BUILT (emulated) [v2]** | `/www?tab=request` → `submitWebRequest` → **RQ-26-####** unowned on `/requests`, `source = 'web'`, ack email with the RolliConnect first link (D-457) | numbering: RQ (web / portal) vs SUB (physical receiving) — MH to confirm the brief's one "SUB-" mention (Q103); the real form posts to the same contract |
+| **Request Builder** `/rc/request/new` — regular client (one watch line, range → Draft estimate) / trade (multi-line shipment, Duplicate +n, Auto-quoted or Estimate queued) **[v2]** | SIGNED-IN only (D-469) | BUILT | `RcRequestNewPage.tsx` → `RequestBuilder` (`modules/request-builder.md`); nav `rc-nav-request`, home `rc-home-request-service`; no session → redirect `/www?tab=request` | trade waivers are chips (no `client_waivers` entity); `ref_bracelets` prefill + per-line L# barcodes not built |
 | Estimate approval `/rc/estimates/:id` | LINK (+ portal); money action → OTP even on link | BUILT (2026-10-01) | `RcEstimatePage.tsx` + `?t=<token>` (`portalGetEstimateByLink`); every estimate send issues the link; Approve → `StepUpModal` (emailed code / Touch ID) → `requireStepUp` at commit; "Send us your watch" + Ask only via sign-in; `LinkFooter` pre-fills the email | tokens are random ids, not signed (Keeper) |
 | Parts approval `/rc/parts/:id` | LINK (+ portal); same | BUILT (2026-10-01) | `RcPartsPage.tsx` + `?t=<token>`; parts-approval email carries the link; Approve → step-up | same as estimates |
 | Invoice + payment `/pay/:token` | LINK (+ portal); QBO link; expires with the invoice; never shows other invoices | BUILT | `PayPage.tsx` (MOCK Intuit host), `/rc/invoices/:id` in portal; pay link = life of the invoice; one SO only | token is a random id, not signed; MOCK payment host |
@@ -27,7 +28,7 @@ Legend · **BUILT** works end-to-end in the prototype on mock data · **PARTIAL*
 | Passport share page (view-once / listing / permanent, I-058) | LINK, owner-created | PLACEHOLDER | — | passport object, share tokens, masked serial, open log: none |
 | Portal home `/rc/home` — all watches, dots, process flow, history | SIGNED-IN | BUILT | `RcHomePage.tsx`: Needs-you list, watch cards with W·B·P dots, request cards, process flow, history; first-run note shown once per account | — |
 | Watch page — unlocked photos, timeline, passport | SIGNED-IN | PARTIAL | `RcWatchPage.tsx`: documents, service history, photo sections with per-photo unlock | passport section does not exist |
-| Messages / Ask (portal threads → RS Inbox); red-dot tap → message (D-409) | SIGNED-IN | BUILT | `RcMessagesPage.tsx`, `RcDots.tsx` dot → message, General Inbox on the RS side; the report link now says "Sign in to ask" | — |
+| Messages / Ask (portal threads → RS Inbox); red-dot tap → approval or pre-drafted Ask (D-426 / D-427) | SIGNED-IN | BUILT | `RcMessagesPage.tsx`, `RcDots.tsx` dot → `/rc/estimates/:id` · `/rc/parts/:id` · Ask (`askContext`, `AskDraft`), lands in the RS Inbox anchored to the job (role concierge); staff reply via `AskDraftCard` → portal + email; **staff replies follow the thread channel** (portal → RolliConnect Messages, D-466) | — |
 | Add-on confirmation (phone approvals pending, D-405) | LINK (+ portal) | PLACEHOLDER | RS side only (`AddOnsPanel.tsx` phone approvals) | no client-facing confirm link |
 | Authorized pickup persons, contact details, notification prefs | SIGNED-IN + re-verify | PLACEHOLDER | `RcAccountPage.tsx` shows sign-in method, Touch ID, and a labelled PLACEHOLDER card for these three | sections + re-verify (step-up seam exists: `requireStepUp`) |
 | Passport transfer (claim code redeem, new owner) | SIGNED-IN | PLACEHOLDER | — | none |

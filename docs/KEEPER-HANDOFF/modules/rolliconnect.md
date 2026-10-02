@@ -1,5 +1,7 @@
 # Module — RolliConnect `/rc` (client portal)
 
+> **Superseded in part (2026-10-02):** magic-link / password + TOTP sign-in is retired — see **`../14-CLIENT-PORTAL-INVENTORY.md`** (passwordless OTP / magic link, Touch ID, LINK tier, step-up). Portal dots + Ask reply loop → `job-detail-v2-wbp.md` §4; `/rc/request/new` → `request-builder.md`; `/rc/pickup/:token` → `../specs/SPEC-PICKUP-STATION.md`.
+
 ## Screens & layout intent
 Warm, customer-grade skin (cream paper, serif headings) — deliberately different from staff screens. Own shell, own session, no staff route reachable.
 - **Login** `/rc`: email → "magic link" (prototype shows the link on screen; nothing is emailed). **Auth** `/rc/auth/:token` redeems.

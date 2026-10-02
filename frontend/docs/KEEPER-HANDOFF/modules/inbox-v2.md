@@ -1,0 +1,34 @@
+# Module — INBOX v2 (one general inbox · tags · job-card slide-out · reply channel · context chip) **[v2 2026-10-01 → 10-02]**
+
+Supersedes the per-person / "Staff section" / Outlook-tree behaviour in `comms-hub.md` (kept for the thread model, reply tokens and templates). Rulings: D-437…D-441, D-442…D-447 (D-447 tree **superseded**), D-459…D-467 (`02-DECISIONS-CONSOLIDATED.md`). Tested iteration_70, 71, 79. Code: `pages/InboxPage.tsx`, `components/inbox/{ThreadList,ThreadView,ThreadContextMenu,InboxJobCard,InboxReturnChip,ViewsSection,inboxBits}.tsx`, `components/ui/RightSheet.tsx`, `components/layout/ShareCompose.tsx`, `src/api/inboxContext.ts`; data in `client.ts` sections "ONE GENERAL INBOX" (L4046) and "Inbox job-card slide-out + sidebar badges" (L4082).
+
+## 1. What the user sees
+- Sidebar: **Dashboard · Inbox (unread badge) · Requests (no-estimate badge) · Hitlist …** (D-440; `inboxUnreadCountSync`, `openRequestsNoEstimateCountSync`).
+- `/inbox` = one **flat** list (D-459). Tabs **Portal · Team · Calls** (+ **Views**, owner only). Portal = client threads for the division, unowned (D-442); only MH · Vienna · Chyna (`canClientComms`) may open Portal — everyone else sees the restricted note and gets client messages quoted in Team. Team = staff one-shot messages (the message-bubble store, `hitlist.ts`). Calls = `MissedCallsPanel` / call rows (`calls.ts`). Views (`ViewsSection`, `?section=views&as=<slug>`) = MH opens any staff member's inbox exactly as they see it (tag filter = `tagOfUser`).
+- Filters: WHO **ALL · MIKE · VIENNA · CHYNA** (`?who=`), lane chips **All · Quoted · Answered · Snoozed · Archived** (`?lane=`), **Pinned** section on top, grouped-by-anchor toggle (`?group=1`), client folder (`?client=`).
+- Row: client + rating badge + `WbpClientRows` (active jobs newest first, this thread's job outlined — D-437), subject, age, **6 px tag dots** (`TagDots`), bold + rose left border when the client spoke last (D-444), paperclip + n. **No count badges** (D-459). Hover → one-click Archive / Un-archive (keyboard-focusable). Delete key on a focused row **archives** (D-460). Right-click / long-press (`ThreadContextMenu`) → tag Vienna · Mike · Chyna · Update work order · pin · move Quoted / Answered / back · archive (D-445).
+- Thread header: tags chips, dots, **Job card** button → `RightSheet` slide-out (D-438; `?panel=1` keeps it open and swaps content per thread; `?card=` selects another job). Composer chip `→ portal` / `→ email` (D-466). Every inbound message has **Share with staff** (`msg-share-<id>`) and **Copy message**.
+
+## 2. Job-card slide-out (`InboxJobCard`, modes `job` · `request` · `client`)
+| anchor | content | quick actions |
+|---|---|---|
+| job (active) | `ItemHeader` + dots, `ProcessFlow` (custody + blockers), client requests, add-ons, outsource info, timeline, collapsed estimate / inspection / more; **dots only while in possession** (`jobInPossessionSync`) | **Add note** → `addJobNote(id, text, origin)` stamped "from inbox · <subject>" (`JobNote.origin`, chip `note-origin-<id>`), never sent (D-463) · **Parts request** → existing `PartsRequestModal`; on draft → pending `logPartsRequestOnThread` drops ONE internal line `parts requested: PR-#### · part · for E0####` and fires `INBOX_REFRESH_EVENT` (D-464) · **Generate summary** → `ai.draftJobSummary` (Claude, rule-based fallback; `JobSummaryContext.lastEvent` in plain words) → `INBOX_DRAFT_EVENT` fills the reply box, never auto-sent (D-465) · **Open job** |
+| job (finished) | banner "Finished <date> · picked up <date> · SO" (`jobPickupSync`); return jobs show "Returned from E0xxxx" + foldable original inspection (`jobReturnInfoSync`, `jobsReturnedFromSync`, `Job.returnOfJobId/returnReason` — D-439) | Open job |
+| request (RQ) | the submission: what they wrote, photos, watch / bracelet / legs (`requestLegsSync`), instant range when a quote key exists (`requestInstantRangeSync`), structured `RequestLines` + outcome pill when built by the Request Builder, source, **Create estimate** | Create estimate · Open request |
+| none | Client 360 summary (`clientPanelSync`: `PanelActive` · `PanelFulfilled` · `PanelClosed`) | Open client |
+Other active jobs of the client sit beneath with dots; tap swaps the panel, back returns.
+
+## 3. Context chip (D-462)
+`api/inboxContext.ts`: `setInboxContext({threadId, clientName, subject, anchorId, scrollTop})` when a thread link opens a job / client / estimate; `InboxReturnChip` (`inbox-return-link`) on the destination page restores the thread **and its scroll position** (`rememberInboxScroll`, `captureScroll`, `applyScroll`). One level deep: a second hop replaces the context; Escape or a plain `/inbox` visit clears (`clearInboxContext`). Storage = `sessionStorage` (prototype — KEEPER keeps it client-side too; it is UI state).
+
+## 4. Share with staff (D-446)
+`msg-share-<id>` → `BUBBLE_COMPOSE_EVENT` opens the message bubble in share mode (`ShareCompose`): quoted client message (`hl.quoteClientMessage`), multi-pick people / roles, optional note → `hl.shareClientMessage` = one-shot staff messages (`InboxItem`, `replyToId` chain) + thread log "Shared with … by …" (`logShare`, internal line, `INBOX_REFRESH_EVENT`).
+
+## 5. Requests ≠ Inbox (D-461)
+`/requests` rows: client + rating, dots, source, age, **Tags** column (right-click tag menu, `tagsForRequestSync`), Create estimate; row click → `/inbox?thread=&panel=1` with the slide-out on the submission. Tagging creates the thread on first touch (`ensureRequestThread`, `conversationForRequestSync`); the pool stays unowned. "Notify…" (`markRequestNotified`, `ServiceRequest.notified[]`) creates an Internal thread that links the request.
+
+## 6. Data (→ `04`)
+`Conversation.tags?: ConvTag[]`, `pinned?`, `lane?: 'quoted' | 'answered'`; `ConvMessage.channel?: 'portal' | 'email'`, `component?`, `ask?: AskDraft`, `event.kind` gains `'shared'`; `MessageSource` gains `'staff' | 'web'`. API: `CONV_TAGS`, `tagOfUser`, `getInboxThreads({who, lane})`, `getInboxThreadCounts`, `getInboxSent`, `tagConversation`, `pinConversation`, `moveConversation`, `archiveConversation` (clears tags + pin), `unarchiveConversation`, `logShare`, `replyInThread` (channel-aware: portal → `store.messages` + `channel: 'portal'`; else email + reply token), `replyChannelSync`. Legacy plumbing still exported, unreachable from the UI: `assignConversation`, `getStaffInboxRows`, `getColleagueInbox`, `threadsNeedingReplyForUser` (⚠ DRIFT — delete in KEEPER). Skipped by MH ("defaults for now"): `/today` client-thread rows still come from legacy `assignedTo`.
+
+## 7. Audit / telemetry
+Tag · pin · move · archive · share write `comms` rows via `pushConv` / `logShare` (internal lines on the thread) — ⚠ DRIFT: no `appendAudit` row for tag / pin / lane changes (KEEPER: audit family 51, `08`). Opening another person's inbox via **Views** is not logged (same gap as family 39).

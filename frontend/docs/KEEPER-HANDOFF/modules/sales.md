@@ -1,5 +1,7 @@
 # Module — Sales (sales orders · payments · pickup station · ship station · custody close)
 
+> **Superseded in part (2026-10-02):** the pickup station section is replaced by **`../specs/SPEC-PICKUP-STATION.md`** (five gated steps, BUILT, with the gap check against MH's gate list). Fulfill ▾ menu, zero-balance (MH-only), scan gate + manager override and the ship station stay as described in `02` and below.
+
 ## Screens & layout intent
 `/sales` list (status, channel, balance), `/sales/:id` detail: lines editor (draft/open), totals + shipping amount, payments list + record payment, fulfilment channel toggle (pickup ↔ ship), pickup code card (regenerate), shipping address card (request from client / set), shipment card (tracking, label), QBO badge (stub), cancel. **Pickup Station** `/sales/pickup`: queue of pickup-channel orders, code entry (or proxy name + ID photo), handover photos, partial line quantities, unpaid bypass with reason. **Ship Station** `/sales/ship`: queue, address check, carrier, declared value (insurance), photos, label (mock), unpaid bypass. Both stations are one-order-at-a-time task screens.
 

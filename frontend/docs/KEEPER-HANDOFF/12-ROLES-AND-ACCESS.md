@@ -1,4 +1,4 @@
-# 12 — ROLES AND ACCESS (as implemented, 2026-09-29)
+# 12 — ROLES AND ACCESS (as implemented, 2026-09-29; v2 addenda 2026-10-02 marked **[v2]**)
 
 Code is truth. Every name below is a real identifier in `/app/frontend/src`. Where the seed or behaviour disagrees with MH's corrections it is flagged **⚠ DRIFT** and left.
 
@@ -30,6 +30,14 @@ Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, use
 | `OWNER_USER_ID = 'u-michael'`, `isOwnerSync()` = real user is MH **and not in View-as** | `getHitlist` (MH Accountability), `zeroBalanceNoSync`, `startViewAs`, nav `ownerOnly` | owner actions |
 | `verifySupervisorPin(pin)` = any manager-tier PIN | bench lock overrides | pad unlock |
 | `RwManagerOnly` | `/rw/qc`, `/rw/supervisor`, `/rw/bulk` | routes |
+| **[v2]** `canClientComms(user)` = MH · Vienna · Chyna (owner + front desk) | Inbox **Portal** tab content (`InboxPage`) — everyone else sees the restricted note and receives client messages quoted in **Team** (D-446) | client threads |
+| **[v2]** Inbox **Views** tab (`?section=views&as=<slug>`) — `isOwnerSync()` only | MH opens any staff member's inbox exactly as they see it (D-459); not audited (⚠ DRIFT, family 59) | reads |
+| **[v2]** `approveAsManager({managerId, pin, reason})` — **second-person rule** | every Pickup Station exception (payment bypass, proxy release, serial override, camera bypass): active manager tier, **≠ the staffer running the step**, PIN (or password) match, reason required; `getApprovingManagers()` excludes the runner (`specs/SPEC-PICKUP-STATION.md`) | exceptions |
+| **[v2]** owner-only API: `setAccessOverride`, `getAccessUsers`, `getAccessLog`, `setUserEnabled`, `setUserLimits`, `createUserFromTemplate`, `getBin` (owner / supervisor read) | `/setup/access` (D-391, D-398…D-401) | writes |
+| **[v2]** `isDisabledSync(user)` / `assertEnabled` | disabled users refused on password, PIN and Touch ID (`sign_in_failed` audit), dropped from `getDivisionStaff` (cards, pickers, View-as tiles), kept in Access control under Active / Disabled / All (D-400) | sign-in |
+| **[v2]** `limitsOf(user) → UserLimits { lockedStations[], partsCategories[], pricing: 'full' \| 'cost_only' \| 'none' }` | recorded + logged; **enforcement is partial** — `pricing` is read by the pad money context only, `lockedStations` / `partsCategories` are not yet consulted by the Assign maps or Parts (⚠ DRIFT, Q99) | limits |
+| **[v2]** `managerOf / directReports / chainOf / subtreeOf / inSubtree / getOrgTree` (`User.reportsTo`) | tree walks replace hand-coded lists: `hitlist.getTeam` = direct reports (+ MM's read-only band / polish oversight), `canViewHitlist` = self · chain above · manager tier · MH; `supervisorOf` (D-398) | scope |
+| **[v2]** `canSeeMoney` / `useFmtMoney` | `MoneyContext` = `accessTier === 'manager'` (supervisor tier MM sees no $) — unchanged rule, now also applied to pad Dashboard / Quick Add / Review / Parts prices | money |
 
 ## 4. Concierge restrictions (as built vs ruled)
 - Pad blocked: `rwAllowed('concierge') === false` → any `/rw/*` bounces to `/` with a toast. ✔
@@ -77,9 +85,33 @@ Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, use
 Team rollups (`hitlist.ts TEAM_MAP`): `MM → watchmaker + band_tech + polisher` (band/polish rows **read-only** for MM: `readOnlyRoles`, `teamRowReadOnly(viewer, tech)`), `JV → band_tech + polisher`. Other supervisors/managers never roll up as techs (`isTech`). MM's team view is merged and colour-differentiated (legend `team-legend`, `W` / `B·P` chip on every tech tag). MM's tab bar: Hitlist · Assign/Move · Work Queue · Jobs · Pad · Band Pad (`SUPERVISOR_NAV`). Hitlist visibility `canViewHitlist(viewer, target)`: self, supervisor of target, manager tier, MH (also via View-as); others are redirected to their own list.
 Stations: `st-01 Front Desk 1` (reception ✔, default pre-registered), `st-02 Front Desk 2` (reception ✔), `st-03 Inspection Bench`, `st-04 Watchmaker Room`, `st-05 Shipping`, `st-rs RS Counter` (rollishop), **`st-wm1…st-wm8` "WM 1–8" = bench iPads (`deviceType: 'pad'`) — devices, NOT people**, `st-jv-pad`, `st-kiosk-fd` Front-desk check-in kiosk, `st-kiosk-wm` WM room photo kiosk (`deviceType: 'kiosk'`).
 
+## 9. v2 additions — where the new screens sit (2026-09-30 → 2026-10-02)
+| screen | tier / guard | notes |
+|---|---|---|
+| `/calls` | manager (TierGate MGR) | screen-pop card itself: desktop shell, **manager tier + concierge role** (`CallPopHost` mount rule) |
+| `/concierge`, `/swo`, `/swo/:id` | manager | pad twin `/rw/concierge`, `/rw/swo/:id` = `RwRoleGuard pad` (supervisor / manager) |
+| `/rwcom` | manager | NOT KEEPER screen; `/www` public mount outside `RequireAuth` |
+| `/setup/access` | owner (`ownerOnly` + API checks) | G6: enable / disable, Limits drawer, org tree, new user from template |
+| `/setup/inspection`, `/setup/rate-card` | manager (inherits `/setup`) | rate-card edits audit `setup` |
+| `/requests/new` | ALL (inherits `/requests`) | staff builder on behalf of a client; `source = 'staff'` |
+| `/parts/approvals` | manager (inherits `/parts`) | MH daily item; one-tap Send is manager-only in the API |
+| `/inventory/reports` | manager | consumption / spending reports |
+| `/rw/inspect(/:jobId)` | any RW role | `?rig=kiosk` marks shots `controlled` — should be the station record (⚠) |
+| `/rw/device`, `/rw/messages` | any RW role | device check; staff messages |
+| `/rc/request/new` | portal session (signed-in only, D-469) | no session → `/www?tab=request` |
+| `/rc/parts/:id` | portal session **or** LINK token; approve = step-up | D-426 |
+| `/rc/pickup/:token` | token, 2 min, single-use | public by design |
+| Hitlist **Views** / team | `canViewHitlist` (tree-based since G6) | — |
+| Inbox tag / pin / archive / share | any Inbox user (ALL tier); Portal tab = `canClientComms` | tags are pointers, not permissions (D-443) |
+
 ### ⚠ DRIFT remaining (2026-09-29 fix batch cleared: `band_tech` kind, dead WM branch in `auditScopeFor`, `RwPadPage` comment, `safe-jv`, reception idle sign-out, item 7 guards, MM = WM-room supervisor)
 - Concierge tier name (`accessTier: 'concierge'`) still covers watchmakers, band techs and MM — rename to `bench` in KEEPER; MM's "no $" rides on that tier.
 - Division wall applies to the MOCK path only; rows served by the live staging API carry no division and are shown to everyone (Q102).
 - Two colour families are applied on the team hitlist only; queue, pad and shop-floor map still lack the W / B·P chip (Q101).
 - JV lands on `/rw/pad` like MM (Q92 recommends `/rw/band`).
 - Single-session: not built (§6).
+- **[v2]** Inbox Views (owner reading another inbox) and tag / pin / lane / archive changes write no audit row.
+- **[v2]** `UserLimits.lockedStations` / `partsCategories` are recorded but not enforced on the Assign maps or Parts (Q99 open).
+- **[v2]** `/rw/inspect?rig=kiosk` trusts a query flag for `controlled` shots; `pickupAppendFrame` is callable by any staff session (auth expected: station).
+- **[v2]** Legacy per-person Inbox plumbing (`assignConversation`, `getStaffInboxRows`, `getColleagueInbox`, `threadsNeedingReplyForUser`) still exported — delete.
+- **[v2]** Authorized pickup persons do not exist on the client record (proxy pickup is ad-hoc + manager) — ⚠ GAP in `specs/SPEC-PICKUP-STATION.md`.

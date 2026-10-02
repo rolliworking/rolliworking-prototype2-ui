@@ -72,3 +72,18 @@ A **seam** is a place where the prototype fakes an outside system behind a `clie
 | Notifications / push (none) | 11 §12 |
 | Telephony (Vonage mock); Google Home/Nest, Microsoft Graph (nothing) | 11 §13 |
 | Kiosk check-in, RGTime | 11 §14 |
+
+## Seam index addendum (v2, 2026-10-02) → `11-INTEGRATIONS.md`, `13-INTEGRATION-GAPS.md`
+| seam | prototype | real requirement | pointer |
+|---|---|---|---|
+| **Telephony v2** (`telephony.ts` → `calls.ts`) | timed simulations drive ring → live / answered-elsewhere → ended / missed; dispositions; recording **links** | Vonage VIP webhook receiver → same `callRinging / callAnswered / callMissed / callEnded`; number → client index; recordings stay in Vonage (D-315) | 11 §13 · `modules/calls-telephony.md` |
+| **SMS** (`telephony.sendSms`) | MOCK receipt + Sent row (pickup code resend) | Vonage Messages API behind the same function; sender id, opt-out, delivery receipt onto the SO | 11 §13 · 13 §16 |
+| **Supabase Auth / passwordless portal** (`rcRequestCode`, `rcVerifyCode`, `rcVerifyMagicLink`, `requireStepUp`) | challenges + grants in `localStorage` (plain codes, dev "fill the code") | `signInWithOtp` + magic link, server-side step-up grants bound to `{session, action, nonce}` | 11 §15 · 13 §17 · `14` |
+| **WebAuthn / Touch ID** (`webauthn.ts`) — now BUILT for RW sign-in and RC step-up | local random challenge, credential id per user per device, no signature verification | server-issued challenge + assertion verification (py-webauthn), RP id = host | 11 §11 · 13 §11 |
+| **WatchM8 engine** (`watchm8.ts`: identify / rank variants / bracelet check / claims) | deterministic mock from photo bytes | HTTP client to the WatchM8 service with the same return shapes; claim store | 11 §16 · 13 §18 · `modules/rwcom-emulator.md` |
+| **WatchM8 export** (`inspectionLabels.ts watchm8Export`) | read-only table in Setup → Inspection | push / pull of `WatchM8Record[]` (controlled shots only) | 11 §WatchM8 |
+| **QR / barcode decode** (`jsQR` in Pickup step 3, `BarcodeDetector` in `CameraLookup`, `useWedge` hook) | browser camera decode (pad), wedge keystrokes (desk) | keep the wedge as primary; camera decode is an optional fallback; station pairing | 11 §10 · 13 §10 · §19 |
+| **Claude read-serials** (`ai.readSerials` → `POST /api/ai/read-serials`) | real call when photos are real; MOCK on placeholders (`MOCK_OCR_MAY_PASS` prototype only) | production key, image retention policy, a mock may never release a watch | 11 §6 · 13 §6 · §20 |
+| **Client-camera evidence** (`pickupAppendFrame`, `cameraRole: 'client'`) | browser camera frames stored as data URLs on the SO | object storage lifecycle (90 d), optional NVR (Reolink) clip reference — ⚠ GAP in `specs/SPEC-PICKUP-STATION.md` | 13 §21 |
+| **Offline scan queue** (`offline.ts`) | `localStorage` queue, replay on reconnect | server accepts out-of-order replays with `scanned_at`; conflict rule when custody moved meanwhile | 11 §12 · 13 §22 |
+| **Public form POST** (`submitWebRequest`, `/www`) | emulator calls the mock directly | rate limiting / bot protection on the public endpoint; division = host entity | 11 §16 · `modules/rwcom-emulator.md` |

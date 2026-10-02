@@ -363,7 +363,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **Device type (D-384)**: in production comes from the registered station record, not screen size; the prototype heuristic + `?device=` override are NOT-KEEPER.
 - Carried rulings restated: no `E` prefix on estimate numbers in scans/labels; PDF417 exception for band-only jobs; photo lock default (client-visible off until released); appraisal signers are entity-scoped with stored signatures; zero-balance invoices excluded from Sales.
 
-**Modules touched:** cross-cutting
+**Modules touched:** 12-ROLES-AND-ACCESS
 
 ## Fix batch from ⚠ UNGUARDED / ⚠ DRIFT · MM role correction — 2026-09-29 (MH briefs)
 - **MM is a SUPERVISOR, not a bench watchmaker**: supervises the watchmaker room (Leo + future WM 1–8 sitters) and has **read-only oversight** of band/polish; JV keeps band/polish actions. MM lands `/rw/pad` (iPad and PC), never assigned jobs (seed reassigned MM → Leo), no dollar figures (unchanged), tab bar Pad · Team hitlist · Queue · Assign · Messages. `/hitlist/mm/team` is real: both teams merged, two colour families (W watchmakers / B·P band-polish), legend on top, chip on every row — colour never alone.
@@ -376,7 +376,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Labels: docs and dialog agree — a mock printer list is what exists.
 - Cleanup: dead WM-supervisor regex removed from `auditScopeFor`; `RwPadPage` comment corrected; `safe-joseph` → `safe-jv`.
 
-**Modules touched:** cross-cutting
+**Modules touched:** 12-ROLES-AND-ACCESS, 01-ROUTE-MAP
 
 ## Rebuild-spec items 5–7 — paging & one-shot messages · one photo pipeline · access control panel — 2026-09-29 (MH spec text)
 - **D-389 Messages are one-shot, not chat.** `hitlist.ts sendMessage` (= `flagToHitlist` kind `message`): pick a person, `#role`, or **station** (`Assignee` gains `{type:'station', stationId}` — matched to whoever is signed in at that station); type or **dictate** (browser Web Speech API, no cloud STT); optional photo + job. Lands as an inbox row + hitlist pin with unread badge. Recipient **Done** (`markMessageDone` → pin dismissed, sender sees done) or **Claim** (`claimMessage`, role-tagged items are a claimable queue — visible to every holder until one claims, then theirs alone; the pin follows). Sender sees **delivered → seen → done** (`messageStatus`, `getSent`). No thread — a reply is a new message back (existing `replyToInbox`). Job-attached notes with @mentions stay on the job (`JobMessages`) as the record; a message is the nudge. Surfaced: desktop top bar `messages-btn` (New / Sent), RW header, Pad tab **Page** (`pad-tab-comms` → `PadComms`).
@@ -385,7 +385,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-391 Access control panel — owner only.** `/setup/access` (nav `access`, ownerOnly): one row per user × one column per screen (`SCREENS` = NAV_ITEMS minus owner-only); cell = toggle; hover a column header → description box (blurb + role default); role default pre-fills (`roleDefaultAccess`), a per-user override renders as an amber-ring diff with a per-row "n from role" + reset; right-click a cell = back to role. `canAccess` = override ?? role default (owner-only screens never open by override; the owner's own row is fixed). Stored `rollisuite.access.overrides`; every change → `AccessChange` log (`rollisuite.access.log`, who/whom/screen/from→to/when/station) + `settings` audit row. Takes effect on the user's next route load (TierGate + sidebar), never mid-page.
 - Item 8 (Concierge module: standalone sidebar button, one board, a lane per vendor, lane shape by "do we ship to them?", counts per stage → cards → job screen) — **spec still to come from MH**, not started.
 
-**Modules touched:** cross-cutting
+**Modules touched:** dashboard-today, 12-ROLES-AND-ACCESS
 
 ## Q5 AMENDMENT — Sales vs Completions — 2026-09-29 (MH; supersedes the 2026-09-28 "dated when paid" line)
 - **Sales are dated by the INVOICE SENT date** — the RS Sent timestamp of the finalized invoice's **first** send (`SalesOrder.invoiceSends[0].at`). Re-sends and edits never re-date the sale; an edit that changes the total adjusts the sale **in the original month** (`saleDateOf(o)` + current total). Seeded orders without a recorded send fall back to `orderDate` (STAND-IN).
@@ -395,7 +395,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Consequence: Sales in RS lines up with QBO's invoice date under invoice-first (VB4-03) — the two ledgers agree by construction.
 - Applied: dashboard KPI **"Sales this month · invoices sent, MTD (first-send date)"** + department MTD strip; Reports → `pnl` = "Department sales (by invoice-sent date)"; Reports → `completions` untouched. Live wire lacks `invoice_sent_at` (STAND-IN in `realClient.getDashboardStats`).
 
-**Modules touched:** cross-cutting
+**Modules touched:** labels-reports-accounting
 
 ## MH = Owner / Super Admin · View-as without credentials · mandatory entry screen · supervisor tier — 2026-09-29 (MH)
 - **D-392 MH is Owner / Super Admin, not "Inspector".** Seed roles `['manager']`, dutyLabel "Owner / Super Admin"; Walter = "Manager (RolliShop)". `inspector` stays only as a TASK role (`#inspector` tasks, job `owner: 'inspector'`) and resolves to **manager tier or above** (`holdsRole`); bench gates that said "watchmaker or inspector" now say "watchmaker or manager tier". UI header reads "MH · Owner".
@@ -403,12 +403,12 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-385 amendment — no credentials, mandatory entry.** View-as never asks for the viewed user's password/PIN/Touch ID; MH's sign-in is the only credential. After ANY MH sign-in on ANY device `/choose-view` loads first (keyed on owner account, not device detection): "Continue as MH" (logged `session_continued_as_self`) + grouped tiles Watchmakers · Supervisors · Band/Polish · Front desk · Kiosks (initials, role, landing). Exit from any View-as returns to this screen on every device. Top-bar picker remains for switching later.
 - Front-desk initials (VC = Vienna, CM = Chyna) are shown on tiles; shortNames unchanged pending MH's call on a global rename.
 
-**Modules touched:** cross-cutting
+**Modules touched:** 12-ROLES-AND-ACCESS
 
 ## iPad role tab bar — 2026-09-29 (MH)
 - **D-393** Every RW-shell route (`/rw/*`: bench, pad, band, hitlist, testing, queue, station, assign, messages…) gets a persistent thumb-height (64 px + safe-area) bottom tab bar scoped to the **viewed** role (`components/rw/RoleTabBar.tsx`, `roleTabs(user)`): Watchmaker = Bench · Hitlist · Photos (`/rw/evidence`) · Messages; Band tech = Band pad · Hitlist · Photos · Messages; Supervisor / manager = Pad (JV → `/rw/band`, MM → `/rw/pad`) · Team hitlist · Queue · Assign · Messages. Active tab highlighted; Messages carries the unread badge. MH under View-as sees the viewed role's tabs with the View-as banner sitting above the bar. `/choose-view` and kiosks (`/kiosk`, `/wm-kiosk`, `/rg/kiosk`) mount no bar. The Supervisor Pad's own internal tab strip moves up 64 px. New `/rw/messages` page = Inbox (Done / Claim) + composer + Sent. Bench PIN-in now refreshes the shell identity (`refreshStation` → `syncIdentity`) so the bar knows the tech; PIN re-lock / idle rules unchanged.
 
-**Modules touched:** cross-cutting
+**Modules touched:** rolliworking, 15-UI-CONVENTIONS
 
 ## CONCIERGE — one board, one lane per vendor (replaces the SWO front) — 2026-09-29 (MH)
 - **D-394** `/concierge` (sidebar **Concierge**, standalone; `/swo` redirects). SWO data model, custody (`vendor:<id>`, excluded from asset-value on hand), Paid flag, labels and QBO push are unchanged underneath. Vendors reuse the Purchasing module (`kind: 'outsource'`) + new fields `ships` (the ONE lane-shaping question), `location`, `work`; `international` = `country !== 'US'` (drives customs). Seeds: **Claudio** (gold band work, California, ships, domestic) · **Jacques** (gold band work, Italy, ships, intl) · **James** (reluming, Netherlands, ships, intl) · **Chyna (CM)** (concierge, in-house, no ship). Old outsource seeds deactivated.
@@ -418,7 +418,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Paid + QBO: unchanged for shipping vendors; hidden on the concierge lane (her labor is a dept line).
 - "Send to vendor" from any job detail (`job-send-to-vendor`) drops the job at In queue on the chosen lane; a job may ride several lanes over its life, one at a time. Supervisor-pad outsource-hold entry point: NOT wired yet (queued).
 
-**Modules touched:** cross-cutting
+**Modules touched:** concierge-swo
 
 ## CONCIERGE v2 — vendors with payment terms, required expected date + point person, health, component-wait chips, redo, vendor invoices, prepay exposure, escalation, vendor parts requests — 2026-09-29 (MH paste)
 - **D-395** Five seeded vendors: Claudio (CA, ships, domestic) · Jacques (IT, ships, intl) · James (NL, ships, intl) · **Chronosky** (NY, ships, domestic, **PREPAY**) · Chyna (CM) (in-house, no ship). Vendor gains `paymentTerms: 'on_receipt' | 'prepay'`.
@@ -436,7 +436,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 ## CONCIERGE v3 — TRACK | ACTION views, slide-out drill-down, 320-SWO seed — 2026-09-29 (MH)
 - **D-396** `/concierge` has two views, remembered per user: **TRACK** = lane board (counts + aging per stage); **ACTION** = click-map treatment (`components/concierge/ActionMap.tsx`) — look up jobs (est# / ref# / barcode / SWO#), scan several labels, then tap a destination node (hand-off / outbound box / received) → one custody commit. Tapping any count opens the **SlidePanel** (right third on desktop, full sheet on a pad; Esc closes) with the cards — no inline popups. Manual "Push to QBO" removed; QBO bill state is derived from the invoice lines. 320 shop work orders seeded across the 5 lanes (10 per stage) so every cell, split and lane total is exercised.
 
-**Modules touched:** shipping-inbound, comms-hub, client-360
+**Modules touched:** concierge-swo
 
 ## G5 — Hitlist layout rework — 2026-09-30 (MH)
 - **D-397** Personal Hitlist (`pages/TodayPage.tsx`): header **"Hitlist · MH · Owner"** (`roleTitle`: owner → "Owner", others → duty label); top row **Appointments | Pinned** side by side (`hitlist-top-row`, stacks on a pad < 1024 px; Pinned scrolls at 320 px, dense rows); **Inbox behind a header chip** (`hitlist-inbox-chip`, unread badge) → **slide-out drawer** (`components/today/InboxDrawer.tsx`, `hitlist-inbox-drawer`, Esc / scrim closes) — the board stays visible; **Derived grouped by priority** (`components/today/DerivedGroups.tsx`): Overdue → Urgent → Due today → Upcoming → No due date, collapsible, each header shows count + "N waiting on a component"; **component-wait chips** on every derived row (compact = worst 3 + "+N more" so a row never explodes — `ComponentWaitChips compact`). Filter chips moved into the Derived card header.
@@ -444,7 +444,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Seeds: MH's list carries **25 rows** (16 derived incl. t-mh-01…10 across overdue / today / upcoming / no-date, 9 pinned incl. pin-mh-01…06).
 - Known seed artefact: the 320-SWO seed attaches many SWOs to a few parent jobs (e.g. E02016 shows "+243 more") — cosmetic in the prototype.
 
-**Modules touched:** cross-cutting
+**Modules touched:** dashboard-today, 15-UI-CONVENTIONS
 
 ## G6 — Access control: enable / disable, Limits drawer, org tree, containers, new user from template — 2026-09-30 (MH hub-and-spoke ruling)
 - **D-398 Org tree** `User.reportsTo` (one person). Seed: VC (Vienna) → MH; Walter → MH; MM, JV, CM (Chyna) → VC; Leo (WM bench) → MM; Dre, Sam, Nico, MAM → JV. Helpers `managerOf`, `directReports`, `chainOf`, `subtreeOf`, `inSubtree`, `getOrgTree`. **Tree walks replace hand-coded lists**: `hitlist.ts getTeam` = direct reports (+ MM's read-only band/polish oversight via `TEAM_MAP.readOnlyRoles`), `supervisorOf`/`isSupervisor` from the tree; `/choose-view` tile groups = Supervisors (anyone with reports) · Watchmakers (report to MM) · Band/Polish (report to JV) · Front desk (report to VC / MH); Concierge escalation **L2 = the point person's manager** (`managerShortOf`), L3 = MH. Paging zones stay station-based (a zone is a room, not a person) — not tree-derived.
@@ -453,12 +453,12 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-400 Enable / Disable** (`setUserEnabled`, reason required, owner only): `User.disabled = { at, by, reason }`; blocks password, PIN and Touch ID sign-in (`assertEnabled`, audited `sign_in_failed`); disabled users drop out of `getDivisionStaff` (sign-in cards, assignee pickers, view-as tiles) but stay in Access control under the **Active / Disabled / All** filter (`access-status-*`).
 - **D-401 New user from template** (`createUserFromTemplate`, `components/setup/NewUserFromTemplate.tsx`): copies tier + roles + limits + reportsTo from the chosen user; reportsTo editable in the same dialog; password `firstname123` / PIN 1234 (prototype); `createdFrom` badge; logged.
 
-**Modules touched:** cross-cutting
+**Modules touched:** 12-ROLES-AND-ACCESS, setup-integrations-help
 
 ## G7 — Theme tokens — 2026-09-30 (MH: keep the theme, only selection/active/focus → accent)
 - **D-402** `--accent: #5CE1FF` (`--accent-rgb`, Tailwind `accent` colour with alpha) and `--warn: #F5B400`. Every **selection / active / focus** highlight that was yellow is now `accent`: RW nav active, role tab bar active, pad tab strip, pad primary buttons, Assign/Move + Shop Floor selected node + "destination" tag, Action-map active track / destination, choose-view tiles + "Continue as", RW sign-in card, station scanner mode toggle, pad reason / tech / row selection, job-message hit highlight. **Yellow stays for `--warn` only** (aging amber, at-risk, hold, bypass, View-as banner, PROTOTYPE banner). No other token changes, no light-mode work.
 
-**Modules touched:** cross-cutting
+**Modules touched:** 15-UI-CONVENTIONS
 
 ## G8 — iPad-first pass on the RW shell — 2026-09-30 (MH)
 - **D-403 PWA**: `/rw-manifest.webmanifest` (start `/rw`, scope `/rw`, standalone, landscape, `rw-icon.svg`) injected by `RwShell` with `apple-mobile-web-app-*` meta; `viewport-fit=cover`; safe-area insets on the RW header, shell edges and tab bar; **44 pt minimum** on every button / select / input inside `[data-testid=rw-shell]` (CSS rule); numeric fields use `inputMode` numeric / decimal + `pattern="[0-9]*"`.
@@ -469,13 +469,13 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-408 Container reconcile** (`components/rw/ContainerReconcile.tsx`, band pad Jobs tab): JV's bin — expected = every part in JV's custody; scan the container (`BIN-JV`) then each label (or tap Present); Finish flags unscanned as MISSING → pins to JV + manager hitlists; **night prompt from 17:00** ("not tonight" dismisses for the day); all targets ≥ 44 pt; offline → scans queue.
 - **Supervisor pad → Send to vendor** (open since Concierge v1): truck button on every pad job card (`pad-send-vendor-<job>`) opens the SAME `SwoForm` as job detail — vendor, required expected date, point person **default CM (Chyna)** → job lands at In queue on that lane; custody unchanged until the outbound scan.
 
-**Modules touched:** cross-cutting
+**Modules touched:** rolliworking, 15-UI-CONVENTIONS
 
 ## CONCIERGE ACTION MAP — interactive, same contract as Shop Floor Assign / Move — 2026-09-30 (MH)
 - **D-409** `components/concierge/ActionMap.tsx` rebuilt to the Assign / Move contract: (1) **lookup bar above the map** ("Look up ONE job · est # / ref # / barcode" + Find; a **wedge scanner works with any focus** — fast keystrokes + Enter are captured unless an input owns focus); found job → **job strip** under the bar (est #, client, model, vendor, stage, health chip, point person; removable chips); the map **dims every node except the legal destinations** (next · previous = back-with-reason · redo off-ramp at Inspection) and the **current node pulses** (`.node-pulse`); (2) **multi-job**: more labels join the strip, the legal set is the **intersection** (two vendors → "no common destination"); (3) **click a node = destination** → **bottom bar** "Move 3 jobs → Outbound box · Chronosky" with what the move requires: custody nodes (Outbound box · Hand-off · Received) need the **label scan(s) at commit** (strip shows scanned ✓ / not yet; Outbound box also prints the label, queues the return label and emails the vendor; Received = arrival scan); status nodes (In route · In progress · Returning · Inspection · Fulfilled) = no scan, "logged as a status move by <user>"; Back and Redo need a reason. **COMMIT** — nothing moves before it; pressing it early refuses with "<node> is a custody node — scan the label(s) first (0/2). Nothing moved."; (4) **stage counts stay tappable** (`anode-count-<vendor>-<stage>`) → the same right-side slide-out as Track (one-third width) and every card there has **"Load into the lookup strip"** (`panel-pick-<swo>`); (5) Track and Action share the board state, custody and logs — moves show in both immediately; (6) **MM's and JV's pads**: `/rw/concierge` ("Vendors" tab) = the same map with horizontal scroll per track, 44 pt targets, **camera lookup** (`CameraLookup.tsx`: rear camera + `BarcodeDetector` where WebKit offers it — NOT-KEEPER, falls back to the wedge scanner / keypad), slide-out as a **full-width sheet**, bottom bar above the tab bar.
 - Seed check passed (desktop + pad): two Chronosky queue jobs packed into one outbound box and committed (queue 10 → 8, In route 10 → 12, mirrored in Track); one redo opened from Jacques Inspection (Inspection 10 → 9, In route +1 redo); a Returning job dropped on Received without a scan was refused and counts stayed put.
 
-**Modules touched:** cross-cutting
+**Modules touched:** concierge-swo, rw-shop-floor
 
 ## CONCIERGE — TRACK | ASSIGN split — 2026-09-30 (MH; supersedes the "ACTION" naming in D-396 / D-409)
 - **D-410** One map (a horizontal track per vendor, custody points as icons), two views, toggle remembered per user (old stored value `action` reads as `assign`):
@@ -485,7 +485,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
   - Same state underneath: a COMMIT in ASSIGN changes TRACK's counts immediately. Pads (`/rw/concierge`, Vendors tab) carry the same TRACK | ASSIGN toggle (44 pt).
 - Seed check re-run (desktop + pad): two Chronosky jobs loaded from Track → packed → COMMIT (queue 10 → 8, In route 10 → 12 in both views); Jacques redo from Inspection (refused without reason, then 10 → 9); Returning job dropped on Received without a scan refused, counts unchanged; wedge scan ignored while on TRACK, accepted on ASSIGN; toggle remembered after reload.
 
-**Modules touched:** shipping-inbound, comms-hub, client-360
+**Modules touched:** concierge-swo
 
 ## JOB DETAIL v2 — "where is it and where is it in the process" — 2026-09-30 (MH brief, tested iteration_64)
 - **D-411** `/jobs/:id` rebuilt around location + process. Left column, top → bottom: **Item header** (model · ref · serial · client + rating · status / hold / priority chips · photo strip → lightbox · **Request SUB-** → submission · **Est** → estimate · SO) replaces the Watch card; **Process flow** (`components/jobs/ProcessFlow.tsx`, data `jobFlowSync` in client.ts); **Client requests** (unchanged); **Add-ons since estimate** (replaces Line items); **Original estimate** (collapsed); **Inspection report** (collapsed); **Outsource / concierge** (information only — the Send-to-vendor button is gone, moves happen on the Concierge board → Assign); **More** (collapsed: Photos · Parts requests · Messages · Bench tests · Timing · Service evidence · Shop time · Appraisals · Authentication photos; Photos + Parts requests carry a count). Right column unchanged (Status timeline · Owner · Assignees · Holds · Summary draft · Details · custody card). REMOVED: "Components · per-component completion" card and "Components · verification chain" card.
@@ -494,19 +494,19 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **Add-ons since estimate**: derived rows are the truth — client-approved parts requests (`clientDecidedAt` or a "client approved" history row) and estimate-revision lines added after the first send; manual **Add add-on** (description · approver · channel portal/email/phone/counter/text · amount · note) covers counter / phoned-in approvals, is flagged `manual`, stamps the job and lands in the audit log (`addJobAddon`).
 - Seeds: E02031 (j-30) = 3 lines, head blocked by PR-0037, band back from Claudio at Received, PR-0056 clasp (client-approved, $520) + manual crown/tube ($185); **E02063 (j-mi1)** multi-item 1/3 head finished · 2/3 bracelet in progress · 3/3 case waiting for the polisher; **E02064 (j-os1)** head at James 6 days late (red on At vendor). Live-API jobs (e.g. SEED48-48) render a single derived line — the wire carries no component/custody data.
 
-**Modules touched:** cross-cutting
+**Modules touched:** job-detail-v2-wbp
 
 ## ASSIGN / MOVE — VENDORS: destination-first — 2026-09-30 (MH; refines D-409 / D-410)
 - **D-412** `components/concierge/ActionMap.tsx` is destination-first. (1) Click any station or safe → it is the **armed destination** (highlighted; bottom bar "Destination: In progress · Jacques — scan labels"); the lookup bar is optional — "Look up a job first" is gone. (2) Every scan (wedge with any focus, camera, or the scan box in the bottom bar) adds a chip (est # · client · watch · vendor · current stage · health); a chip that is not legal for the armed destination is **red with the reason** ("wrong vendor — on Claudio's lane", "not legal from In queue — next is In route", "already at …") and is **excluded from the commit, never dropped**. (3) **COMMIT** moves every legal chip in one event — "Move 6 → In progress · Jacques — COMMIT · 6"; for safes (Outbound box / Hand-off / Received) the scans ARE the custody scans (a typed lookup chip shows "looked up · needs the label scan" and stays behind until scanned); status nodes log "status move by <user>"; Back / Redo take **one reason for the batch**. Refused chips stay in the strip after the commit; the destination stays armed for the next batch. (4) Lookup-first unchanged: look up → common legal nodes light (soft — every node stays armable, `DestinationMap softLegal`) → click → commit. (5) **Clear strip** button; **Esc disarms**; chips and the armed destination survive a flip to TRACK (ASSIGN stays mounted).
 - Seed check (Playwright, `/app/memory/tools/seed_destfirst.py`): armed Jacques → In progress, scanned 6 (one from Claudio's lane on purpose) → strip 6 · 5 legal · 1 refused "wrong vendor — on Claudio's lane"; COMMIT → 5 moved, refused chip still in the strip; TRACK Jacques In route 10 → 5, In progress 10 → 15, Claudio unchanged; flip back keeps 1 chip + armed node; Esc disarmed; lookup-first → Outbound box lit → armed → "1 looked up, not scanned" → scanned → COMMIT · 1 → queue 10 → 9, In route 5 → 6.
 
-**Modules touched:** cross-cutting
+**Modules touched:** concierge-swo, rw-shop-floor
 
 ## W·B·P DOT ROWS — 2026-09-30 (MH brief)
 - **D-413** `components/shared/WbpDots.tsx` + `wbpRowSync / wbpForJobSync / wbpForClientSync` (client.ts tail). One row per open job: **W** = head / movement, **B** = bracelet, **P** = case / polish. Empty ring = the job has no such leg · **green** = on track · **blue** = that component line is at Finished (waiting on the others / pickup) · **red** = blocker (hold, delayed vendor, parts not returned, awaiting client approval). Derived from the SAME per-component flow the Job page draws (`jobFlowSync`) — never a separate status. Multi-item jobs: several lines per leg → the worst state wins.
 - Mounted directly under the client name on: Job page header (every open job of the client, **this job outlined + first**), Client 360 header, `/clients` directory rows, Hitlist rows (derived + pinned, RS + team), Concierge TRACK slide-out cards (real jobs only — never synthetic volume rows), front-desk check-in staff screens (`/appointments` day list + Today appointments card, `/intake` Arrival · Receive Package · Receive Watch lists), the Vonage screen-pop toast (known caller), and the top-bar / clients-page search client hits. Kiosks never show them.
 
-**Modules touched:** cross-cutting
+**Modules touched:** job-detail-v2-wbp
 
 ## MESSAGING — bubble · directory · inbox — 2026-09-30 (MH brief; refines D-389)
 - **D-414** The corner **History lookup** pill leaves the corner: RS → sidebar bottom entry (`sidebar-history-lookup`, above Access tier) opens the same panel anchored to the sidebar; RW → the `/rw/history` page only. The corner is the **message bubble** (`components/layout/MessageBubble.tsx`) on every desktop / pad screen (AppShell + RwShell; kiosks mount no shell) with the unread badge; the top-bar speech-bubble popover stays.
@@ -515,7 +515,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Seed: 12 messages across MM · JV · Leo · Dre · VC · CM (6 with photos, 2 role-tagged queues #polisher / #watchmaker, 1 station message to Front Desk 1, 1 reply pair). Concierge escalation alerts continue to land as inbox rows.
 - **Link rule (item 6)** — `components/layout/MessageText.tsx`, used by the bubble inbox, SENT list and the hitlist inbox card: RS links (`/jobs/…`, `/clients/…`, `/swo/…`, same-origin URLs) render as **in-app chips** (`msg-link-chip`, label resolves the job number); external URLs open in a **new tab on desktop** (`msg-link-external[data-mode=newtab]`) and render as **plain text + Copy** on pads (`data-mode=copy`); **never unfurled**. Seeds ib-02 (external ref) and ib-06 (`/jobs/j-04`) demonstrate both.
 
-**Modules touched:** cross-cutting
+**Modules touched:** inbox-v2, dashboard-today
 
 ## INSPECTION LABELS — scantron ↔ guided photos ↔ opinion labels (WatchM8 training feed) — 2026-09-30 (MH brief)
 - **D-415** `api/inspectionLabels.ts` + `components/inspection/{OpinionBits,OpinionRow,GuidedShots,OpinionCard}.tsx`, `pages/setup/InspectionSetupPage.tsx` (`/setup/inspection`), `pages/rw/RwInspectPage.tsx` (`/rw/inspect/:jobId?`). Opinions are revisable; nothing is a verdict.
@@ -527,13 +527,13 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **Pad** — `/rw/inspect` (ref-label scan → job, never typed): shot list + the component's opinion row on one screen, shoot → tick → next component, 44 pt, dictation into notes; `?rig=kiosk` forces controlled.
 - Seeds: j-08 all Genuine – original, dial MK4 by MH (sure) · j-r1 Dial = Counterfeit by MH (likely, #lume #font) + blind 2nd opinion MM = Aftermarket (DISAGREES) · j-30 Bezel = Genuine – service replacement (MK3). Guided lists complete on all three (controlled), one bench ad-hoc dial photo on j-r1 (controlled=false). Variant sets for the top-10 refs' dials + inserts with placeholder exemplars.
 
-**Modules touched:** cross-cutting
+**Modules touched:** inspection-labels
 
 ## JOBS LIST — dept letters → W·B·P column — 2026-09-30 (MH)
 - **D-416** `WorkflowBadges` (JobBits) renders the job's own dots + a small amber **PM** tag (`PmTag`, department flag — not a leg) whenever a `jobId` is given; dept letter chips remain only for rows without a job (incoming packages / estimate lines / catalog). Swapped on: Jobs list (header **W · B · P**, `jobs-sort-wbp`), Jobs board cards, All jobs (`all-jobs-sort-wbp`), Client 360 jobs table, Shop Time on-hand list, Floor map chips, Supervisor board, Bench page, RW jobs / QC / job header. Job header shows the PM tag only (dots already sit under the client name). Hitlist and `/clients` already carried dots.
 - Sort (`wbpSortKey`): red (any blocker) first → blue (finished) → green (on track) → no legs; on the grouped list it sorts within each lane.
 
-**Modules touched:** cross-cutting
+**Modules touched:** job-detail-v2-wbp
 
 ## AUTO-PO THRESHOLD + MH DAILY ITEMS — 2026-09-30 (MH)
 - **D-417 Auto-PO ≥ $400** (`autoPoSweepSync`, client.ts tail): runs on every stock movement (`adjustStock`), count close (`postCycleCount*`), needs-ordering entry (`queueNeedsOrdering`, `setReorderRule`), PO receive / cancel, and every hitlist / purchasing read. Needs rows group by **preferred vendor** (part's own vendor → last-bought vendor). Per vendor: draft total ≥ `AUTO_PO_THRESHOLD` (400) → the PO is CREATED as a draft (`auto: true`, division-agnostic — inventory is the shared RW + RS pool) and PINNED to MH as **HIGH · standing** (`key auto-po:<poId>`, title `PO-26-0026 · Cousins UK · $682 · 9 lines · 2 red`, link → `/purchasing?po=`). Under $400 the lines wait; a vendor under threshold ≥ 14 days pins **NORMAL** (`auto-po-wait:<vendorId>`, `RSC · $156 · 16 days waiting`). One open auto draft per vendor — new lines join it. Send = MH / manager only for auto drafts, red lines acknowledged first; send or cancel resolves the pin; a manual dismiss needs a reason (`dismissPinned(id, reason)`, standing pins).
@@ -541,12 +541,12 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Pins gained `key · priority · standing · link · subtitle · global · dismissReason`; HIGH pins sort first with a red rail; `PinnedList` asks for a reason on standing items.
 - Seeds: vendor **Cousins UK** (`v-cousins`) + 9 generic supply parts below min → auto draft $682 (2 red lines via history); RSC lines under threshold since 14–16 days (`inv.lowSince`); 4 unsent approvals (PR-0049 · 0051 · 0052 · 0053) + PR-0050 unpriced.
 
-**Modules touched:** cross-cutting
+**Modules touched:** purchasing-inventory, dashboard-today
 
 ## OUTBOX → SENT — 2026-09-30 (MH)
 - **D-419** "Outbox" is renamed **Sent** everywhere (Intake tab, route `/intake/sent` with `/intake/outbox` redirecting, labels, seeds, docs). It is the record of what left RS — estimates, inspection reports, approval requests, invoices — not a queue. Inbox · Sent sit together as the RS mail surface. No behaviour change; internal identifiers (`queueOutbox`, `getOutbox`, `OutboxEmail`) kept.
 
-**Modules touched:** cross-cutting
+**Modules touched:** 15-UI-CONVENTIONS, comms-hub
 
 ## JV BIN — container custody — 2026-09-30 (MH ruling; supersedes D-408)
 - **D-420 The bin holds custody.** `Container jv_bin` (barcode `BIN-JV`, owner JV) has two homes: **Vienna's safe (VC)** overnight (`holder safe:VC`, station `vc_safe`) and **JV's bench** by day (`holder person:JV`, station `jv_bench`, custody "JV workshop"). A ticket inside carries `JobComponent.containerKey = 'jv_bin'`; its custody is JV and its location follows the bin. Every bin move writes a `PartMove via: 'container'` on each ticket, so Floor / Custody / Audit / Job flow read the same record as always.
@@ -557,7 +557,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Custody page: tickets riding in the bin sit under a **JV bin · <where>** sub-header inside JV's section (chip on the collapsed row). Shop Floor board + Assign / Move map gain the `JV BIN` row (Assign → Vienna's safe → JV's bench). Audit band scope includes both bin stations.
 - Seeds: 9 tickets E02070–E02078 assigned by Vienna (clients c-38…c-46, watches w-57…w-65); 6 inside (bin at JV's bench since 08:05), 3 out: E02076 case → Dre (Polish room), E02077 → Sam, E02078 → Nico (band bench); bin log from the desk assign through last night's confirm and this morning's hand-outs.
 
-**Modules touched:** cross-cutting
+**Modules touched:** jv-bin-containers
 
 ## CLIENT PORTAL — W·B·P dots + reply loop — 2026-09-30 (MH)
 - **D-425 Portal dots** (`rc/RcDots.tsx`, data `portalDotsSync` in client.ts, carried on `PortalWatch.dots`): the same three positions W · B · P under the watch on `/rc/home` rows and `/rc/watches/:id`, client words only — **empty ring** = not part of this service · **green** = moving (in progress, on track) · **red** = not moving (ANY internal blocker: hold, approval wait, parts, vendor delay, part away / missing) · **blue** = done, ready for pickup. No vendor names, no hold reasons, no station names on the dot; **rating a/b/c never reaches the portal**. Legend (`RcDotsLegend`) opens the first time (localStorage `rollisuite.rc.dotsLegendSeen`), then sits under "What do these dots mean?".
@@ -567,7 +567,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-429 Portal process line** (`rc/RcProcessFlow.tsx`, `portalFlowSync`): one line per component with five client-safe stops **Received · In queue · In progress · Quality check · Ready** + projected date; vendor legs fold into "In progress"; custody never shown. Replaces the split strip on the watch page when a job is open (the strip stays on request cards).
 - Seeds: Eleanor Vance (portal account) · **w-66 Submariner Date 126610LN · E02079 (j-pd1)** — W on Leo's bench (green) · B at the band bench under a bracelet-only parts hold (red → Ask) · C refinished, waiting in the safe (blue); **PR-0056** (`pr-pd1`, bracelet, priced $345, pending_review) → MH "Approvals to send" (now 5) → Send → B shows "Waiting on you — approve the parts" → `/rc/parts/pr-pd1`. Tool: `/app/memory/tools/smoke_portal_dots.py`.
 
-**Modules touched:** cross-cutting
+**Modules touched:** rolliconnect, job-detail-v2-wbp, 14-CLIENT-PORTAL-INVENTORY
 
 ## VONAGE SCREEN-POP + CALL LOG — 2026-10-01 (MH; Vonage MOCKED per D-315 — recordings stay in Vonage, no audio copied, no transcription in v1)
 - **D-430 The card** (`components/layout/CallPop.tsx` `CallPopHost`, top-right on every **desktop** RS station in front-desk / sales / manager tiers — `accessTier === 'manager' || roleKind === 'concierge'`; never on workshop pads or supervisor tier): slides in on ring, stays during the call, collapses to a chip after hang-up. Order: `NAME · number · a/b/c` (22 px name — readable from a metre), one **W · B · P row per ACTIVE job, newest first** (xl dots, est digits, watch label), one small **last contact** line (newest of estimate sent + opened flag · outbox email · client message · call), actions **Open client · Open job ▾ (newest first) · Note (saved to the log on hang-up) · Page (intercom "Vienna, John Smith on line 1")**, Answer (handset here) / Hang up. **Click anywhere → the client record, call stays live, card → chip** (expand ▾ / X). **Tap a dot → `/jobs/:id?leg=head|band|case`** — `ProcessFlow` lights + scrolls that line. Unmatched: `UNKNOWN · number · New` → **Create client** (`/clients?new=1&phone=&call=` attaches the call on save) / **Attach to client…** (type-ahead). X / Esc dismisses the card only — the call and the answerer's card are untouched; a dismissed ringing call that goes unanswered still files as missed.
@@ -579,7 +579,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-436 One-tap disposition** (`DispositionDialog` after every hang-up at this station): pick one + optional job + note. **"Approval given by phone" requires what was approved + amount** → `addJobAddon(channel 'phone', pendingConfirmation: true)` logged with who took the call; **MH ruling (b): phone approvals stay PENDING until the client confirms by portal / email** — a confirmation request email is queued at once; the Add-ons card shows `pending client confirmation` with **Client confirmed · portal / email / counter** (`confirmJobAddon`). Skipping the dialog leaves the row without a disposition.
 - Dev menu (top-bar 📞): matched — two active jobs, one band blocked · matched — one active, all green · unmatched · missed (known) · voicemail (unknown) · answered at another station. Scenario numbers are resolved from live seed data (`scenarioNumber`). Seeds: **15 calls across 6 clients** (Calloway ×5, Okafor ×2, Castellanos ×3, Marsh ×2, Brandt ×2, Vance ×1) + 1 unknown, with dispositions, recording links, 3 open missed → inbox items.
 
-**Modules touched:** cross-cutting
+**Modules touched:** calls-telephony
 
 ## INBOX — JOB-CARD SLIDE-OUT + DOTS ON THREADS + SIDEBAR — 2026-10-01 (MH)
 - **D-437 Dots on threads**: every Inbox thread row (`thread-row-wbp-<id>`) and the thread header (`thread-wbp`) show the client's `WbpClientRows` next to the rating — all ACTIVE jobs newest first, the thread's own job outlined when the thread is tied to a job. Completed / returned jobs add no rows (dots are active jobs only).
@@ -589,7 +589,7 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - **D-441 Requests list** (`/requests`): RQ submissions with client + rating, **dots**, source (web form / kiosk / email / call / walk-in), summary, status, **age**, **assigned** (the thread's assignee), Client 360 / Open estimate / **Create estimate**. **Row click → the request's thread in the Inbox with the slide-out open on the submission** (`ensureRequestThread` creates the thread on first open, seeded with what the client wrote). The floating "Client / job history" pill is gone on every RS screen (sidebar **History lookup** above Access tier is the only entry).
 - Seeds (every anchor case visible at once in Inbox → All open): **cv-ib1** Rebecca Halloran — ONE active job E02080 (W green · B red scoped parts hold · P blue) · **cv-ib2** Victoria Rosenthal — TWO active (E02033 thread, warranty E02026 beneath) · **cv-ib3** Oliver Pemberton — thread on COMPLETED E02019 (picked up, SO-26-0106), active E02030 beneath · **cv-ib4** Robert Calloway — RETURN job E02081 ← E01871 · **cv-05** Naomi Castellanos — request-only RQ-26-0043 (legs W·B, 2 photos, range) · **cv-ib5** Priya Raghunathan — no anchor.
 
-**Modules touched:** cross-cutting
+**Modules touched:** inbox-v2, comms-hub
 
 ## INBOX — ONE GENERAL INBOX, TAG-DON'T-ASSIGN — 2026-10-01 (MH)
 - **D-442 One inbox, unowned**: every client thread lands in **All** for the division, unowned. Per-person inboxes and the "Staff" colleague-inbox view are gone; `assignConversation` is legacy plumbing only (no UI). Client threads are visible to the front desk only — `CLIENT_COMMS_SHORTNAMES = MH · Vienna · Chyna` (`canClientComms`); everyone else sees a restricted note and gets client messages only as quotes via Share with staff.
@@ -601,4 +601,77 @@ All BUILT unless marked otherwise; rulings, not proposals. Where a default was C
 - Not changed (MH "skipped, defaults"): the Hitlist `/today` client-thread rows still derive from the legacy `assignedTo` (`threadsNeedingReplyForUser`) — candidates for "my tag" later.
 - Tested testing-agent iteration_71 (118/119; the one miss — header tag chip aria-pressed — did not reproduce in-app, verified flipping to true).
 
-**Modules touched:** cross-cutting
+**Modules touched:** inbox-v2, comms-hub
+
+## INBOX JOB-CARD SLIDE-OUT — SECTIONS + EXPAND · DOTS ONLY WHILE IN POSSESSION — 2026-10-01 (MH)
+- **D-448 Panel = the client's record in three groups** (`components/inbox/InboxJobCard.tsx`, data `clientPanelSync`): **ACTIVE** — open requests without an estimate + jobs in our possession, expanded, newest first, the thread's own job / request outlined ("this thread"); **FULFILLED** — jobs that left us (picked up / shipped) or closed, header count, collapsed; rows = est# · watch · finished date · picked up / shipped · SO#, expand per row; **CLOSED** — expired / declined estimates + closed requests, header count, collapsed; rows = est# / RQ# · watch · closed reason · date (→ estimate / requests). Client strip on top (name · a/b/c · dots · Client 360 · thread note). Replaces "Other active jobs" / Client 360 summary modes.
+- **D-449 Snippet ⇄ full job card**: every job renders as a SNIPPET — header + dots · condensed process-flow lines (where now · custody · blocker · next step) · quick actions (Add note · Parts request · Generate summary · Open job) · **Expand full job card** → the complete `/jobs/:id` content in place (`JobDetailContent embedded` — the same component the job page renders: client requests, add-ons, estimate, inspection, opinions, outsource, timeline, owner, assignees, holds, summary draft, details, More) with **Collapse** / **Open job**. One job expanded at a time. Requests: one line + Show submission (the thread's own request opens expanded).
+- **D-450 Dots only while in possession** (`jobInPossessionSync` = not closed and no picked-up / shipped sales order; `wbpForJobSync` / `wbpForClientSync` honour it): a job carries W·B·P dots only while the piece is physically with us — in-house, at a vendor, or in transit back. Fulfilled / closed → NO dots anywhere (no greyed row): thread rows, headers, call pop, Client 360, lists, the panel's Fulfilled / Closed sections. A client with nothing in possession shows the **three empty rings once** (`WbpEmptyRings`, `<id>-empty`).
+- **D-451 a/b/c tooltip**: `RatingBadge` hover / focus shows a small legend — **a** temperament · **b** responsiveness · **c** items with us (lifetime, completed) — so new staff read the badge right (`<badge-testid>-tip`).
+- Seed: Harrison Whitfield (c-01) = 1 active job E02011 (j-01) · 1 fulfilled E01887 (j-20, SO-26-0108 picked up) · 1 expired estimate **E01033 (e-hw1)** · 2 open requests RQ-26-0044 / 0045 (Active). Refactor: `components/jobs/JobDetailContent.tsx` (JobDetailContent · MoreSection · JobModals) extracted from `JobDetailPage.tsx` — page unchanged visually.
+
+**Modules touched:** inbox-v2, comms-hub
+
+## PICKUP STATION — FIVE GATED STEPS — 2026-10-01 (MH)
+- **Gates enforced where the release is committed**: every step writes a fact into `SalesOrder.pickupDraft`; `confirmPickup()` re-validates all of them (item confirmed · balance $0 or approved bypass · identity · serial match or override · first client-camera frame). The UI only mirrors `pickupBlockers()`.
+- **Balance gate**: hard refuse. The SOLE exception is a manager-approved bypass — approver must be a **different person** from the staffer at the counter (manager tier, their PIN, reason required), per SO, logged on the SO timeline and as `payment_release` on MH's Hitlist. The old free-text bypass is gone.
+- **Code rotation**: every resend (email or SMS) rotates the code; older generations die immediately and are refused with "replaced on <date> (generation n of N)". QR payload `RSPU:<SO>:<code>`; scanned, typed and wedge input share one verify path.
+- **Reverse QR**: station shows a single-use token QR bound to SO + station, **2 min** TTL (portal ruling 2026-10-01; was 10); the client's phone opens `/rc/pickup/:token` (public, tokened) and taps Yes / That's not me. Decline stops the hand-over and pins MH.
+- **Proxy** = weakest path: name + government ID photo + a different manager's approval; ID photo retention 30 days.
+- **Serial check**: Claude vision reads both crops in one call; three-way compare (record / intake / hand-back) names the failing pair; `unreadable` (null or confidence < 0.6) is its own result → retake, not a mismatch; mismatch = hard stop unless a manager overrides with a reason (OCR result stays on the record next to the override). MOCK results are badged and (prototype only) may pass.
+- **Evidence strip**: Done requires frame 1 from the `cameraRole: 'client'` camera (proves the camera works at release); frames 2–6 arrive over 60 s; 6/6 → complete; still short after 90 s → `incomplete` + MH Hitlist pin (ruling: a message is fine — USB cams are flaky). "Camera not working" = manager camera bypass → `released without camera evidence` everywhere.
+- **One record, three views**: `PickupSession` on the SO is the source; the job timeline close row and the Client 360 custody row are derived (`pickupSummaryLine`, `jobReleaseLineSync`) so evidence status flows through after Done.
+- Retention policy recorded on the session: frames 90 days · proxy ID photo 30 days · summary rows permanent (enforcement = Keeper).
+
+**Modules touched:** specs/SPEC-PICKUP-STATION, sales
+
+## CLIENT PORTAL — THREE TIERS · PASSWORDLESS SIGN-IN · LINK TIER FOR MONEY — 2026-10-01 (MH ruling; retires D-357)
+- **Tiers**: PUBLIC (tools, nothing client-specific) · LINK (signed, scoped, expiring token in the URL; ONE object, ONE purpose; no sign-in) · SIGNED-IN (email one-time code / magic link; Touch ID once enrolled; everything the client owns). Inventory of built vs placeholder: `docs/CLIENT-PORTAL-INVENTORY.md`.
+- **Password + TOTP + backup codes are RETIRED** (D-357 "a link is not a credential", 2026-09-28, superseded). Clients never hold a password. `rcRequestCode` issues one challenge with a 6-digit code AND a single-use magic link (separate secrets), 10 min, 5 attempts, 60 s resend cooldown, 3 per 15 min. The code proves the email; the first verified code CREATES the account and attaches it to the client on file (same email = same person). Cursor: do not resurrect passwords.
+- **Touch ID / Face ID** (`api/webauthn.ts`, credential id `rc:<clientId>`) is a shortcut once enrolled from Account — for sign-in and for step-up. Biometrics never leave the device.
+- **Step-up for sensitive actions**: approve estimate, approve parts, pay balance → `requireStepUp(clientId, action)` where the action is committed (`portalApproveEstimate`, `portalDecideParts('approve')`, `portalPayBalance`). Grant = fresh (≤5 min), bound to that exact action, consumed on success; emailed code or Touch ID; applies on a LINK (code goes to the link's email) and while signed in. Replays of recorded RC events skip it.
+- **LINK tier** (`ClientLink` in client.ts): `issueClientLink(type, objectId)` on every estimate / parts send (the email carries `/rc/estimates/:id?t=<token>` / `/rc/parts/:id?t=<token>`); every send logged (`sends[]`, Sent page row), opens counted, `revokeClientLink` (manager) kills it. A dead or expired link ALWAYS says "This link has expired — sign in to see your watch." (`LINK_EXPIRED_COPY`) with a Sign-in CTA. Expiry defaults (`LINK_EXPIRY`, shown in Setup ▸ RolliConnect access): estimate/parts until decided · pay life of invoice · report 90 d · pickup 2 min · track delivery + 30 d.
+- **Link pages**: one object only; "Create your account / Sign in" footer pre-fills the email from the token (`LinkFooter`); "Ask" and "Send us your watch" only via sign-in. First sign-in shows "Links we email you still work; here you can see everything in one place." once per account.
+- **Phone-first**: RC pages are single-column at 390 px with a `sm:` desktop breakpoint; no tablet layout.
+- Not built yet (see inventory): `/track/:token` (P1), passport share/transfer/claim codes, authorized pickup persons / contact details / notification prefs (Account shows PLACEHOLDER card), add-on confirm link, appointment booking link, report watermark + 90-day expiry enforcement.
+
+**Modules touched:** rolliconnect, job-detail-v2-wbp, 14-CLIENT-PORTAL-INVENTORY
+
+## rw.com emulator — public identify · check · request flows — 2026-10-02 (MH rulings)
+- **D-452 Emulator, not a screen.** `/rwcom` (sidebar **rw.com**, manager tier) emulates the public site inside a DEVICE FRAME — **Phone 390×844 is the default**, Desktop secondary; the frame, tab, ref, claim and entity all live in the URL (`?tab=identify|check|request&frame=desktop&ref=16233&claim=WM8-XXXX&entity=rollishop`). NOT-KEEPER: in KEEPER this is the public website; the only shared seam is `api/watchm8.ts` (identify-model · rank-variants · bracelet-check, all MOCK, deterministic from the photo bytes). `components/rwcom/{RwcomBits,IdentifyTab,CheckTab,RequestTab,RwcomDev,rwState}.tsx`, `pages/RwcomPage.tsx`.
+- **D-453 Entity is the host, never a choice.** Rolliworks vs RolliShop is decided by which site the widget is embedded on; the emulator exposes it only as a toolbar switch. The REQUEST form's brand boxes are the **watch brand** (Rolex · Tudor · Cellini).
+- **D-454 Legs = service types.** Full service · Polish · Band/bracelet · Battery/quartz · Crystal · Estimate only · **Authentication · Passport inspection** · Other. The typical range (RANGE language, never a quote) appears only once ref + ≥1 leg are known — blank before that, never "$0".
+- **D-455 Photos follow the visitor.** Every emulator photo is `stage 0 · origin web · controlled false`. A claim code (`WM8-xxxx`, localStorage) or a phone hand-off session re-attaches its photos automatically on the REQUEST tab ("N photos attached from your phone" + strip) and on `&claim=` load; an unknown code is a dismissible line, never a blocked page.
+- **D-456 CHECK report shape.** Dial and bezel ranked with similarity %, **tie** flag when the top two are < 5 pts apart, serial-era consistency line per variant; the **Bracelet** line (end-link number vs reference · clasp code / bracelet type vs case era) is the authority piece and is ALWAYS in the report ("not checked" when the optional clasp / end-link shots are missing). Every report ends with **"Consistency check against reference data — not an authentication."**
+- **D-457 Landing.** `submitWebRequest` creates a request (`RQ-26-####` — RQ = portal/web, SUB = physical receiving, kept separate per the 2026-09-27 ruling) that appears on `/requests` **unowned, no auto-tag, source = web, dots empty**; ack email to Sent with the RolliConnect first-link; General thread entry; `kiosk` audit row. Division = the host entity.
+- **D-458 Instrumentation (NOT-KEEPER).** Dev-only panel, collapsed by default, toolbar toggle next to the entity switch: shown · captured · retaken · abandoned per tab + engine calls (method · ms · result · device). Every event is mirrored to the console as `[wm8] {json}`.
+
+**Modules touched:** rwcom-emulator, request-builder
+
+## INBOX v2 — flat layout · VIEWS tab · context chip — 2026-10-02 (MH; supersedes the Outlook-style tree of D-447)
+- **D-459 Flat Inbox.** The Outlook-style folder tree (D-447 "Team tree") is **SUPERSEDED**. `/inbox` is one flat list with tabs **Portal · Team · Calls** plus **VIEWS** (owner only — MH opens any staff member's inbox exactly as they see it, `?view=<slug>`). Tag filters ALL · MIKE · VIENNA · CHYNA stay; lane chips All · Quoted · Answered · Snoozed · Archived; Pinned on top. **No count badges anywhere in the Inbox** — a 6 px tag dot per tag on the row (`TagDots`), bold + rose accent = unread / reply owed, a paperclip + n for attachments.
+- **D-460 Archive, never delete.** The Delete key on a focused thread row archives it (`archiveConversation`); nothing in the Inbox deletes. Tags are pointers, not assignment (D-443 stands).
+- **D-461 Requests ≠ Inbox.** RQ / SUB records are intake records on `/requests`, never Inbox rows. "Notify…" on a request creates an Internal thread that links the request (`ensureRequestThread` + `notified[]` on the request); the request itself stays unowned.
+- **D-462 Inbox context + back-to-message chip.** Opening a job, client or estimate from a thread remembers `{threadId, clientName, subject, scrollTop, anchorId}` (`api/inboxContext.ts`); every destination page shows a **Back to message** chip (`inbox-return-link`) that restores the thread and its scroll position. History rule: the chip is one level deep — a second hop replaces the context, Escape or a plain `/inbox` visit clears it.
+
+**Modules touched:** inbox-v2, comms-hub
+
+## INBOX JOB-CARD QUICK ACTIONS — guardrails · reply channel — 2026-10-02 (MH)
+- **D-463 Add note** = an internal note on the job stamped **"from inbox · <thread subject>"** (`JobNote.origin`), visible on the job page's Status timeline (`note-origin-<id>` chip); never sent to the client.
+- **D-464 Parts request** opens the existing RW parts-request flow prefilled with the job (`PartsRequestModal`); the request is created ON the job, and the moment it leaves draft ONE internal line is dropped in the thread — `parts requested: PR-#### · <part> · for E0####` (`logPartsRequestOnThread`, source `parts`). No new parts UI.
+- **D-465 Generate summary** builds a client-facing status draft from the job's dots, custody, last event (plain words, `JobSummaryContext.lastEvent`) and open approvals via the AI seam (`ai.draftJobSummary`, Claude with rule-based fallback — NOT-KEEPER as a model choice). It lands in the reply box as editable text and is **never auto-sent**. Plain-language status names only, never internal codes.
+- **D-466 Reply channel follows the thread.** `replyChannelSync(conversationId)`: the client's last inbound message came from the portal → the reply posts to RolliConnect Messages (`store.messages`, `ConvMessage.channel = 'portal'`, no email); otherwise it goes by email with a reply token (`channel = 'email'`). **No SMS** from the Inbox. Composer shows `→ portal` / `→ email`; the sent row shows `via portal` / `via email`. All three quick actions keep the inbox context + back-to-message chip.
+- **D-467 Sent, not Outbox** (confirms D-419): the last user-facing "Outbox" label (Inbox Sent rows → "Sent") is gone; the folder is Sent, the record is a Sent record. Internal identifiers unchanged.
+
+**Modules touched:** inbox-v2, comms-hub
+
+## PORTAL REQUEST BUILDER + RATE CARD — 2026-10-02 (MH; KEEPER ref **D-418 portal signed-in only**)
+- **D-468 One builder, three audiences** (`components/requests/RequestBuilder.tsx`, `BuilderMode = 'client' | 'trade' | 'staff'`): regular signed-in client → one watch line, typical RANGE only, **Draft estimate**; trade client (`client.type === 'trade'`) → multi-line shipment (watch + band lines, Duplicate +n → n/N group labels, pre-approvals, waivers, tracking # / PO / pieces); staff → `/requests/new` "New request on behalf of client" (client picked first or `?client=`, `source = staff`, every line shows quote key + rate or **Add rate for this key →**).
+- **D-469 `/rc/request/new` is SIGNED-IN only** (KEEPER D-418). No portal session → redirect to the public rw.com Request tab (`/www?tab=request`, the emulator's public mount), which already produces an unowned RQ with `source = web`. The portal is the signed-in surface; rw.com is the public one. The builder has no public mode.
+- **D-470 Quote key** = `<ref or BAND>-<legs> · <material> · <type> · <construction>` (`quoteKeyFor`); job types map to legs (`legsForJobTypes`: movement → W · case → P · bezel → P · polish (band lines) → P · band → B · other → no leg, quoted by estimate); bracelet config cascades material → type → construction (`MATERIALS`, `BAND_TYPES`, `CONSTRUCTIONS`). ⚠ NOT BUILT from the brief: pre-fill of the bracelet from a `ref_bracelets` table and per-line **L# barcodes** (lines are numbered n/N only). The same key is shared by the request line, the rate card row and the estimate line.
+- **D-471 Outcomes** (`submitBuilderRequest`): **Auto-quoted** = trade account with `Client.autoQuote` AND every line resolves in the rate card → estimate created and marked sent, quote email, RQ `quoted`; **Estimate queued** = trade account otherwise (auto-quote off → every line "Estimate queued"; a line without a rate → "· needs rates"); **Draft estimate** = regular client. Requests sheet shows the structured line table + the Auto-quoted / Estimate queued / Draft pill; a line without a rate links straight to `/setup/rate-card?key=…` prefilled, and the line re-resolves live once the rate exists.
+- **D-472 Rate card** lives in Setup (`/setup/rate-card`, manager tier): columns ref (or BAND) · legs · material · type · construction → price or range · typical days · version; duplicate keys refused; edits bump `version`. Matching: exact ref row first, BAND rows for band lines, blank bracelet fields are wildcards, most specific wins.
+- Seeds: Vidal (c-25) + RolliShop internal (c-31) auto-quote ON; Hartwell & Co. (c-11) trade, auto-quote OFF. 18 rate rows rc-01…rc-18.
+- **Trade waivers (NOT a `client_waivers` entity yet — PLANNED):** today a trade line carries free-text `preApprovals[]` / `waivers[]` chips and the account carries one flag `Client.autoQuote`; `ship_direct`, `terms_standing`, `pre_approve_links` kinds, approval methods, inheritance to jobs and ship-step behaviour are not built (`specs/` + `04` flag).
+
+**Modules touched:** request-builder
