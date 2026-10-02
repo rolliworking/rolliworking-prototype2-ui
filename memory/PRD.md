@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-10-02 (templates v2 + Views exit)  
+**Last updated**: 2026-10-02 (Bonus targets — Phase 3)  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -666,5 +666,12 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - **Views exit**: `inbox-view-exit` on the banner, Esc (blur-first in text fields; panel / sheet / menu close first), tabs leave the view, Back walks thread → list → Views (history pushes). Flash "Exited <Short>’s view".
 - Docs: DECISIONS D-473…D-480, KEEPER 07 (Template library v2), 15 (two rows), `_gen.py` regenerated + synced.
 - Open (cosmetic, pre-existing): the top banner may read "LIVE API" when `rollisuite.api.mode` is set to mock right before sign-in (mode is read at module load).
-- Next: user **Save to GitHub** → Pickup gaps (MH pastes `EMERGENT-PICKUP-STATION-2026-10-01.md`: build only the seven ⚠ GAP items in SPEC-PICKUP-STATION.md; the four ✓ items stay) → docs delta for LTS + Pickup.
+- Team messaging + Intercom consolidated into the Inbox (`TeamMessages.tsx`, `TeamComposer.tsx`, `IntercomSection.tsx`; floating popovers removed) — covered by iteration_82 smoke (/inbox loads).
+
+### Bonus targets — Phase 3 (2026-10-02; D-481…D-487; `KEEPER-HANDOFF/specs/SPEC-BONUS-TARGETS.md`; testing agent iteration_82: T1–T9 all pass, Walter restricted-path verified by code)
+- **Seam** `api/bonus.ts`: `viewRows(plan, from, to)` reads named MOCK views `v_bonus_band_room_total · matthew_total · joseph_total (= Band Room − Matthew, derived) · dept_w_sales · dept_p_sales · jobs_completed · components_completed · custom view`; revenue by invoice date, counts by completed date; deterministic daily rows from seeded monthly totals Jul–Dec 2026. Plans (`BonusPlan`: basis, period 1/2/3 months anchored at an effective month, target, flat payout, optional tiers, showToStaff default ON, showPayout, active), `BonusSettings.workingDays` (Setup value, default Mon–Fri; Oct 2026 = 22), pace = actual ÷ elapsed WD × period WD, `BonusProgress` (status reached / on_pace / behind, projected payout, weekly breakdown, view rows), `BonusResult` derived per closed period (automatic the day after period end; owner early close with reason freezes actual at as-of), `markBonusPaid` locks, `resultsCsv`. "As of" = NOT-KEEPER (`getAsOf/setAsOf`, localStorage, picks Oct 2 · 20 · 25 · Nov 1).
+- **Screens**: `/setup/bonus-plans` (owner; working-day toggles, plans table with Show-to-staff / Show-payout / Active toggles, add/edit form with tiers; Setup card `setup-bonus-card`), `/analytics/bonuses` (sidebar **Bonuses**, MH + Vienna via `NavItem.only`; as-of control, summary strip, cards with pace marker + projected bonus, totals row, Closed periods table with Mark paid (owner) + CSV, card → weekly drawer with owner "Close this period early…"), staff `bonus-progress-card` on `/hitlist/<name>` (own plan only, payout obeys toggle, drawer), MH `bonus-results-hitlist-card` (unpaid payout rows → Mark paid, disappears when all paid).
+- **Seeds (Oct 2)**: MAM on pace ($985 / $9k), JV reached (Aug–Oct $39k, tiers → 125 % $3,000 projected), Dre behind (3 / 40; Aug paid, Sep $300 unpaid), MM Sep–Oct on pace ($50k / $90k, payout hidden), Leo hidden from staff. Sep closed: MAM missed, Dre + Leo reached. Nov 1 closes October for everyone.
+- Open for MH: Saturdays as working days (Setup toggle), holiday exclusions, payroll export beyond CSV / QBO posting on Mark paid.
+- Next: **STOP — wait for MH to paste `EMERGENT-PICKUP-STATION-2026-10-01.md`** (exact gate order + wording), then build only the seven ⚠ GAP items in SPEC-PICKUP-STATION.md; docs delta for LTS + Pickup.
 

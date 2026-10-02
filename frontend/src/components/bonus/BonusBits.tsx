@@ -76,7 +76,7 @@ export const BonusDrawer = ({ p, onClose, canCloseEarly, onChanged, showPayout =
     </div>
     <div className="rounded-md bg-surface shadow-card">
       <div className="border-b border-line px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">View rows · {p.rows.length}</div>
-      <ul data-testid="bonus-drawer-rows" className="max-h-72 divide-y divide-line/70 overflow-y-auto text-xs">{p.rows.map((r, i) => <li key={`${r.date}-${i}`} className="flex items-center justify-between px-3 py-1"><span className="font-mono text-ink-500">{bz.shortDay(r.date)}</span><span className="font-mono text-ink-400">{r.ref}</span><span className="font-mono font-semibold text-ink">{f(r.amount)}</span></li>)}{!p.rows.length && <li className="px-3 py-3 text-ink-400">No rows yet this period.</li>}</ul>
+      <ul data-testid="bonus-drawer-rows" data-count={p.rows.length} className="max-h-72 divide-y divide-line/70 overflow-y-auto text-xs">{p.rows.map((r, i) => <li key={`${r.date}-${i}`} className="flex items-center justify-between px-3 py-1"><span className="font-mono text-ink-500">{bz.shortDay(r.date)}</span><span className="font-mono text-ink-400">{r.ref}</span><span className="font-mono font-semibold text-ink">{f(r.amount)}</span></li>)}{!p.rows.length && <li className="px-3 py-3 text-ink-400">No rows yet this period.</li>}</ul>
     </div>
   </RightSheet>;
 };
