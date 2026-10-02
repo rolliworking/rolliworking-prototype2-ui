@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Job, JobWithRefs, LabelJob, PanelClosed, PanelFulfilled, PartsRequestWithRefs, ServiceRequest, ThreadView } from '@/api/client';
 import { draftJobSummary } from '@/api/ai';
+import { INBOX_REFRESH_EVENT } from '@/api/hitlist';
 import { RatingBadge } from '@/components/clients/RatingBadge';
 import { JobDetailContent, JobModals, type JobModalState, type JobRun } from '@/components/jobs/JobDetailContent';
 import { KindPill } from '@/components/jobs/JobBits';
@@ -86,7 +87,7 @@ const QuickActions = ({ job, threadId, threadSubject, onReload }: { job: JobWith
   const addNote = async () => { if (!note.trim()) return; await api.addJobNote(job.id, note, `from inbox · ${threadSubject}`); setNote(''); setNoting(false); say('Note added to the job · stamped from inbox · never sent'); onReload(); };
   const gen = async () => { setBusy(true); try { const r = await draftJobSummary(await api.jobSummaryContext(job.id, job)); dropDraft(threadId, r.text); say(`${r.source === 'claude' ? 'Claude' : 'Rule-based'} draft dropped into the reply box — edit, then Send`); } catch (e) { say(e instanceof Error ? e.message : 'Could not draft'); } finally { setBusy(false); } };
   // the request is created on the job by the parts flow; the moment it leaves draft we log one internal line on the thread
-  const prChanged = (next: PartsRequestWithRefs) => { if (pr?.status === 'draft' && next.status !== 'draft') void api.logPartsRequestOnThread(threadId, next.id).then(() => { say(`${next.number} on the job · logged on the thread`); onReload(); }); setPr(next); };
+  const prChanged = (next: PartsRequestWithRefs) => { if (pr?.status === 'draft' && next.status !== 'draft') void api.logPartsRequestOnThread(threadId, next.id).then(() => { say(`${next.number} on the job · logged on the thread`); onReload(); window.dispatchEvent(new CustomEvent(INBOX_REFRESH_EVENT, { detail: { conversationId: threadId } })); }); setPr(next); };
   return <div data-testid={`inbox-panel-actions-${job.id}`} className="space-y-2">
     <div className="flex flex-wrap items-center gap-1.5">
       <Button size="sm" data-testid={`inbox-panel-note-${job.id}`} onClick={() => setNoting((v) => !v)}><StickyNote size={12} /> Add note</Button>

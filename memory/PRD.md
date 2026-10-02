@@ -291,7 +291,19 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - Engine seam `api/watchm8.ts` (MOCK, deterministic from photo bytes) + `components/rwcom/rwState.ts` (shared visitor state, `maskSerial`). Decisions D-452…D-458 in `docs/DECISIONS.md` (synced to frontend/docs).
 - OPEN for MH: web requests number as **RQ-** (per the 2026-09-27 RQ-vs-SUB ruling); the brief said "SUB-" once — confirm which. In hybrid/LIVE mode `/requests` reads live leads (pre-existing), so the landing check needs mock mode.
 
+### Portal Request Builder + Rate card wired · Inbox job-card guardrails (2026-10-02; tested iteration_78 ~95% → fixes, iteration_79 ~98% → last gap fixed + self-verified)
+- **Routes**: `/requests/new` (staff "New request on behalf of client", `requests-new` button; `?client=<id>`; client state follows the URL), `/setup/rate-card` (Setup card `setup-open-rate-card`, manager tier), `/rc/request/new` (**signed-in only, D-418** — nav `rc-nav-request` + home `rc-home-request-service`; no portal session → redirect to the public rw.com emulator Request tab **`/www?tab=request`**, a public mount of `RwcomPage`). `BuilderMode` = client | trade | staff (public mode removed; rw.com owns the public form).
+- **Outcomes** (`submitBuilderRequest`): `quoted` = trade auto-quote account + every line resolves in the rate card (estimate marked sent, quote email, RQ quoted) · `queued` = trade account otherwise (auto-quote OFF → every line "Estimate queued"; or a line without a rate → "· needs rates") · `draft` = regular client (typical range only). Seeds: c-25 Vidal + c-31 RolliShop auto-quote ON, **c-11 Hartwell auto-quote OFF**.
+- **Duplicate +n**: adds n copies sharing a groupId → labels 1/(n+1)…; copies start without a polish #; remove → renumber. Requests sheet shows `RequestLines` (live rate re-resolve, "Add rate for this key →" prefill) + `OutcomePill`; rows carry `request-outcome-<rq>`.
+- **Inbox job card quick actions (MH guardrails)**: Add note → `addJobNote(id, text, origin)` stamped "from inbox · <thread subject>" (`JobNote.origin`, chip `note-origin-<id>` on the job timeline), never sent · Parts request → existing `PartsRequestModal`; on draft→pending `logPartsRequestOnThread` drops ONE internal line "parts requested: PR-#### · part · for E0####" and fires `INBOX_REFRESH_EVENT` so the thread updates live · Generate summary → `draftJobSummary` (Claude, rule-based fallback; context now carries `lastEvent` in plain words) into the reply box, never auto-sent.
+- **Reply channel** (`replyChannelSync`): last inbound portal → `replyInThread` posts a staff message into `store.messages` (RolliConnect Messages) and stamps the ConvMessage `channel: 'portal'`; otherwise email + reply token as before (`channel: 'email'`). No SMS. Composer chip `composer-channel[data-channel]`, message chip `msg-channel-<cm>`.
+- Known env note: the preview proxy (Cloudflare) rate-limits repeated full page loads — test with one sign-in + SPA navigation.
+
+
 ## Pending / next
+- (P1) Camera bypass / robustness for the kiosk: "Retry camera" before bypass, remember working camera id per station, live/dead dot on the station header, mid-flow dropout handling, per-station failure counters on the Hitlist.
+- (P2) Public `/track/:token` page (no sign-in tracking). (P2) Sales vs Completions dashboard remainder (goal gauges, tech pace).
+- OPEN for MH: web requests number as RQ- (brief once said SUB-) — confirm.
 - Real shop lat/lng for the RGTime geofence (user left the field blank). Q91 verdict (bench techs in count mode). Backlog: amber/provisional items (Q57 floor lanes, per-kind evidence slots, cross-division inventory rules, templates → Outbox wiring for legacy emails, hide-money for non-manager tiers).
 
 ### Code review fixes (2026-09-27; tested iteration_39, backend 16/16)
