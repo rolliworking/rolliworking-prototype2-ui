@@ -105,6 +105,7 @@ export interface Client {
   since: string;
   managerShort?: string;
   internal?: boolean;
+  autoQuote?: boolean; // trade accounts: lines that resolve in the rate card are quoted instantly (MH 2026-10-02)
 }
 
 export type WatchStatus =
@@ -856,9 +857,20 @@ export interface FloorMap { lanes: { key: FloorLane; label: string; jobs: JobWit
 
 // ---- E7 Client 360 ---------------------------------------------------------------
 
-export type RequestSource = 'call' | 'email' | 'web' | 'walk_in' | 'kiosk';
+export type RequestSource = 'call' | 'email' | 'web' | 'walk_in' | 'kiosk' | 'portal' | 'staff';
 export type RequestStatus = 'new' | 'quoted' | 'closed' | 'closed_by_client';
 export type RequestCloseReason = 'duplicate' | 'no_longer_needed' | 'mistake';
+
+// ---- Portal request builder (MH 2026-10-02): structured lines · bracelet cascade · quote key · rate card ----
+export type JobType = 'movement' | 'case' | 'band' | 'bezel' | 'polish' | 'other';
+export type BandMaterial = 'SS' | 'TT' | 'YG' | 'WG' | 'RG' | 'PT';
+export type BandType = 'Oyster' | 'Jubilee' | 'President' | 'Pearlmaster' | 'Leather' | 'Rubber';
+export interface BraceletConfig { material?: BandMaterial; type?: BandType; construction?: string }
+export interface RateMatch { rowId: string; price?: number; priceLow?: number; priceHigh?: number; days: number; key: string }
+export interface RequestLine { id: string; kind: 'watch' | 'band'; jobTypes: JobType[]; legs: DeptCode[]; quoteKey: string; ref?: string; model?: string; bracelet?: BraceletConfig; polishNumber?: string; serialMasked?: string; notes?: string; groupId?: string; preApprovals?: string[]; waivers?: string[]; rate?: RateMatch }
+export interface RateCardRow { id: string; ref: string; legs: DeptCode[]; material?: BandMaterial; type?: BandType; construction?: string; price?: number; priceLow?: number; priceHigh?: number; days: number; version: number; editedBy: string; editedAt: string; active: boolean }
+export type BuilderMode = 'client' | 'trade' | 'staff'; // portal is signed-in only (D-418); the public form is rw.com's Request tab
+export interface RequestBuilderInfo { mode: BuilderMode; autoQuote: boolean; outcome: 'quoted' | 'draft' | 'queued'; shipment?: { tracking?: string; poNumber?: string; pieces: number }; unresolved: string[] }
 
 export interface ServiceRequest {
   id: string;
@@ -882,6 +894,8 @@ export interface ServiceRequest {
   legs?: DeptCode[]; // what the client ticked / described — W · B · P, when captured
   photos?: PackagePhoto[]; // what the client attached (web form / portal)
   notified?: { to: string; by: string; at: string }[]; // "Notify…" hand-offs (internal messages) — the request itself stays unowned
+  lines?: RequestLine[]; // structured builder lines (portal / staff on behalf) — each carries its quote key + rate snapshot
+  builder?: RequestBuilderInfo;
 }
 
 export type IdentifierKind = 'client' | 'estimate' | 'job' | 'package' | 'sales_order' | 'watch' | 'request' | 'shipment' | 'swo';

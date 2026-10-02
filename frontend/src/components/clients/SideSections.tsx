@@ -10,7 +10,7 @@ import { fmtDate, fmtTime } from '@/lib/format';
 
 const when = (iso: string) => { const d = new Date(iso); const y = d.getFullYear() !== new Date().getFullYear() ? ` ${d.getFullYear()}` : ''; return `${fmtDate(iso)}${y} · ${fmtTime(iso)}`; };
 
-const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User, kiosk: Tablet };
+const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User, kiosk: Tablet, portal: Globe, staff: User };
 
 const StaffClose = ({ r, all, onDone }: { r: ServiceRequest; all: ServiceRequest[]; onDone: () => void }) => {
   const [reason, setReason] = useState<RequestCloseReason>('no_longer_needed');

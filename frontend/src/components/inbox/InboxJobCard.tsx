@@ -23,7 +23,7 @@ import { fmtDate, fmtMoney, fullName, relativeTime } from '@/lib/format';
 // Every job renders as a SNIPPET (header + dots · process-flow lines · custody · blockers · next step) with "Expand full job card" = the whole /jobs/:id content in place. One expanded at a time.
 export const INBOX_DRAFT_EVENT = 'rollisuite:inbox-draft';
 export const dropDraft = (threadId: string, text: string) => window.dispatchEvent(new CustomEvent(INBOX_DRAFT_EVENT, { detail: { threadId, text } }));
-const SOURCE_LABEL: Record<ServiceRequest['source'], string> = { web: 'Web form', kiosk: 'Kiosk', email: 'Email', call: 'Phone call', walk_in: 'Walk-in' };
+const SOURCE_LABEL: Record<ServiceRequest['source'], string> = { web: 'Web form', kiosk: 'Kiosk', email: 'Email', call: 'Phone call', walk_in: 'Walk-in', portal: 'Portal', staff: 'Staff · on behalf' };
 const LEG_LABEL: Record<string, string> = { W: 'Watch', B: 'Band', P: 'Polish', PM: 'Watch (PM)' };
 
 // Every step has its own URL: ?panel=1 = the client card · &card=<jobId> = the expanded job card → browser Back pops one level (inbox context, MH 2026-10-02).

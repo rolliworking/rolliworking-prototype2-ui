@@ -65,6 +65,9 @@ import RcMessagesPage from '@/pages/rc/RcMessagesPage';
 import RcNotFound from '@/pages/rc/RcNotFound';
 import RcPickupConfirmPage from '@/pages/rc/RcPickupConfirmPage';
 import RcMagicPage from '@/pages/rc/RcMagicPage';
+import RcRequestNewPage from '@/pages/rc/RcRequestNewPage';
+import RequestNewPage from '@/pages/RequestNewPage';
+import RateCardPage from '@/pages/setup/RateCardPage';
 import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
@@ -232,8 +235,11 @@ export default function App() {
             <Route path="pickup/:token" element={<RcPickupConfirmPage />} />
             <Route path="auth/:token" element={<RcMagicPage />} />
             <Route path="messages" element={<RcMessagesPage />} />
+            <Route path="request/new" element={<RcRequestNewPage />} />
             <Route path="*" element={<RcNotFound />} />
           </Route>
+          {/* Public rw.com (emulator) — where /rc/request/new sends visitors without a portal session (D-418) */}
+          <Route path="/www" element={<div data-testid="www-public" className="min-h-screen bg-canvas px-6 py-5"><RwcomPage /></div>} />
           {/* RolliTime re-homed into RW (2026-09-27) — old /rt routes redirect */}
           <Route path="/rt" element={<Navigate to="/rw/testing" replace />} />
           <Route path="/rt/test/:jobId" element={<RtRedirect />} />
@@ -281,6 +287,7 @@ export default function App() {
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/messages/all" element={<MessagesAllRedirect />} />
               <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/requests/new" element={<RequestNewPage />} />
               <Route path="/requests/:id" element={<RequestsPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
@@ -288,6 +295,7 @@ export default function App() {
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/access" element={<AccessControlPage />} />
               <Route path="/setup/inspection" element={<InspectionSetupPage />} />
+              <Route path="/setup/rate-card" element={<RateCardPage />} />
               <Route path="/wm-kiosk" element={<WmKioskPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />

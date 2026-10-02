@@ -1,4 +1,4 @@
-import { Eye, Lock, LogOut, MessageCircle, ShieldCheck } from 'lucide-react';
+import { ClipboardPlus, Eye, Lock, LogOut, MessageCircle, ShieldCheck } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import { RcButton, RcCard } from './RcBits';
@@ -21,7 +21,8 @@ function Frame() {
   const { pathname, search } = useLocation(); const nav = useNavigate();
   const docType = api.rcDocTypeForPath(pathname);
   const linkToken = new URLSearchParams(search).get('t'); // LINK tier: the page validates the token itself and shows the expired copy
-  const isPublic = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/rc/auth/') || pathname.startsWith('/rc/pickup/') || (!!linkToken && (docType === 'estimate' || docType === 'invoice' || pathname.startsWith('/rc/parts/'))) || (docType !== null && api.rcDocAccess()[docType] === 'public');
+  // /rc/request/new is NOT public — it redirects visitors to rw.com itself (D-418), so the lock wall must not intercept it
+  const isPublic = AUTH_ROUTES.includes(pathname) || pathname === '/rc/request/new' || pathname.startsWith('/rc/auth/') || pathname.startsWith('/rc/pickup/') || (!!linkToken && (docType === 'estimate' || docType === 'invoice' || pathname.startsWith('/rc/parts/'))) || (docType !== null && api.rcDocAccess()[docType] === 'public');
   if (loading) return null;
   const wall = !client && !isPublic;
   return (
@@ -37,6 +38,7 @@ function Frame() {
         {client ? (
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
             <NavLink to="/rc/home" data-testid="rc-nav-home" className={({ isActive }) => (isActive ? 'text-rc-ink underline decoration-rc-accent underline-offset-4' : 'text-rc-muted hover:text-rc-ink')}>My watches</NavLink>
+            <NavLink to="/rc/request/new" data-testid="rc-nav-request" className={({ isActive }) => `inline-flex items-center gap-1 ${isActive ? 'text-rc-ink underline decoration-rc-accent underline-offset-4' : 'text-rc-muted hover:text-rc-ink'}`}><ClipboardPlus size={14} /> Request service</NavLink>
             <NavLink to="/rc/messages" data-testid="rc-nav-messages" className={({ isActive }) => `inline-flex items-center gap-1 ${isActive ? 'text-rc-ink underline decoration-rc-accent underline-offset-4' : 'text-rc-muted hover:text-rc-ink'}`}><MessageCircle size={14} /> Messages</NavLink>
             <NavLink to="/rc/account" data-testid="rc-nav-account" className={({ isActive }) => `inline-flex items-center gap-1 ${isActive ? 'text-rc-ink underline decoration-rc-accent underline-offset-4' : 'text-rc-muted hover:text-rc-ink'}`}><ShieldCheck size={14} /> Account</NavLink>
             <span className="text-rc-muted">·</span>

@@ -165,6 +165,7 @@ export default function SetupPage() {
         </Table>
       </Card>
       <Card title="Inspection" subtitle="Variant sets (per ref × component) · guided shot lists · findings tags · WatchM8 export" testId="setup-inspection-card" action={<Link to="/setup/inspection" data-testid="setup-open-inspection" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Inspection <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">Every inspection produces per-component opinion labels attached to guided photos. Opinions are revisable; nothing is a verdict. Exemplars are our own photos only.</p></Card>
+      <Card title="Rate card" subtitle="Ref (or BAND) · legs · material · type · construction → price or range · typical days · versioned" testId="setup-rate-card-card" action={<Link to="/setup/rate-card" data-testid="setup-open-rate-card" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Rate card <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">One quote key shared by the portal request line, the estimate line and this table. Trade auto-quote accounts are quoted the moment every line resolves here; a request line without a rate links straight back to add one.</p></Card>
       {isAdmin && <SetupAuditsCard />}
       {isAdmin && <SetupGradingCard />}
       <SetupRsPanels />

@@ -7,6 +7,7 @@ import type { RequestRow } from '@/api/client';
 import * as hl from '@/api/hitlist';
 import { useAuth } from '@/auth/AuthContext';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { RequestLines } from '@/components/requests/RequestLines';
 import { field } from '@/components/rs/RsBits';
 import { WbpClientRows } from '@/components/shared/WbpDots';
 import { Button } from '@/components/ui/Button';
@@ -14,7 +15,7 @@ import { StatusPill } from '@/components/ui/Pills';
 import { RightSheet } from '@/components/ui/RightSheet';
 import { fmtDate, fmtMoney, fmtTime, fullName, relativeTime } from '@/lib/format';
 
-const SOURCE_LABEL: Record<RequestRow['source'], string> = { web: 'Web form', kiosk: 'Kiosk', email: 'Email', call: 'Phone call', walk_in: 'Walk-in' };
+const SOURCE_LABEL: Record<RequestRow['source'], string> = { web: 'Web form', kiosk: 'Kiosk', email: 'Email', call: 'Phone call', walk_in: 'Walk-in', portal: 'Portal', staff: 'Staff · on behalf' };
 const LEG_LABEL: Record<string, string> = { W: 'Watch', B: 'Band', P: 'Polish', PM: 'Watch (PM)' };
 export const requestIsOpen = (r: Pick<RequestRow, 'status'>) => r.status === 'new' || r.status === 'quoted';
 
@@ -60,6 +61,7 @@ export const RequestSheet = ({ r, onClose, onChanged }: { r: RequestRow; onClose
         <div><div className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Instant range</div><div data-testid="request-sheet-range">{range ? <span className="font-semibold text-ink">{fmtMoney(range.low)} – {fmtMoney(range.high)}<span className="ml-1 font-normal text-ink-400">from the quote key · not a promise</span></span> : <span className="text-ink-400">No quote key yet</span>}</div></div>
       </div>
     </section>
+    {r.lines?.length ? <RequestLines r={r} /> : null}
     <section data-testid="request-sheet-actions" className="rounded-md border border-line bg-surface p-3 text-xs">
       <div className="flex flex-wrap items-center gap-1.5">
         {r.estimateId ? <Link to={`/estimates/${r.estimateId}`} data-testid="request-sheet-open-estimate"><Button size="sm">Open estimate</Button></Link> : requestIsOpen(r) && <Link to={`/estimates/new?request=${r.id}`} data-testid="request-sheet-create-estimate"><Button size="sm" variant="primary"><FilePlus2 size={12} /> Create estimate</Button></Link>}

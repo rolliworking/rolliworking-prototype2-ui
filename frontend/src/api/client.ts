@@ -1,6 +1,7 @@
 // The ONLY data-access module in the app. Screens call these functions and nothing else.
 // Today they resolve from local fixtures; later this file alone is repointed at the real API.
 import * as fx from './fixtures';
+import * as rb from './requestBuilder';
 import { fillSummaryTemplate, localSummaryFields, readSerials } from './ai';
 import { sendSms } from './telephony';
 import type {
@@ -23,6 +24,12 @@ import type {
   ShopTimeEntry,
   Department,
   Address,
+  BuilderMode,
+  RequestBuilderInfo,
+  JobType,
+  RateCardRow,
+  RequestLine,
+  RequestSource,
   CatalogService,
   Estimate,
   EstimateLine,
@@ -4521,6 +4528,34 @@ export async function submitWebRequest(input: WebRequestInput): Promise<WebReque
   return resolve({ request: { ...r }, client, possibleExisting: !!matched, ackEmail });
 }
 const requestRow = (r: ServiceRequest): RequestRow => ({ ...r, client: byId(fx.clients, r.clientId), watch: r.watchId ? store.watches.find((w) => w.id === r.watchId) : undefined });
+// ---- PORTAL REQUEST BUILDER (MH 2026-10-02): structured lines → RQ + estimate. Regular client → Draft estimate; trade (autoQuote) → quoted instantly when every line resolves in the rate card, else a draft is QUEUED for pricing. ----
+export interface BuilderSubmitInput { mode: BuilderMode; clientId: string; lines: RequestLine[]; shipment?: { tracking?: string; poNumber?: string }; notes?: string; photos?: PackagePhoto[] }
+export interface BuilderSubmitResult { request: ServiceRequest; estimate?: Estimate; client: Client }
+const JOB_LABEL: Record<JobType, string> = { movement: 'Movement service', case: 'Case refinish', band: 'Band work', bezel: 'Bezel', polish: 'Band polish', other: 'Other' };
+export const builderLineDescription = (l: RequestLine, group?: string) => `${l.jobTypes.map((j) => JOB_LABEL[j]).join(' + ') || 'Service'} — ${[l.model, l.ref ? `ref ${l.ref}` : l.kind === 'band' ? 'bracelet only' : ''].filter(Boolean).join(' ')}${l.bracelet && rb.braceletKey(l.bracelet) ? ` · ${rb.braceletKey(l.bracelet)}` : ''}${group ? ` · ${group}` : ''}${l.polishNumber ? ` · Polish #${l.polishNumber}` : ''}`;
+export async function submitBuilderRequest(input: BuilderSubmitInput): Promise<BuilderSubmitResult> {
+  if (!input.lines.length) throw new Error('Add at least one line');
+  const lines = input.lines.map(rb.normaliseLine); const bad = lines.find((l) => !l.legs.length && !l.jobTypes.includes('other')); if (bad) throw new Error('Every line needs at least one job type');
+  const client = byId(fx.clients, input.clientId);
+  const a = actor(); const at = new Date().toISOString(); const mode = input.mode; const autoQuote = !!client.autoQuote;
+  const groups = rb.groupLabels(lines); const unresolved = lines.filter((l) => !l.rate).map((l) => l.id);
+  const source: RequestSource = mode === 'staff' ? 'staff' : 'portal';
+  // quoted = trade auto-quote account, every line resolved · queued = trade account priced by a person (auto-quote off or a line without a rate) · draft = regular client
+  const outcome: RequestBuilderInfo['outcome'] = autoQuote && !unresolved.length ? 'quoted' : client.type === 'trade' ? 'queued' : 'draft';
+  const summary = `${mode === 'staff' ? 'Staff-entered request' : 'Portal request'} · ${lines.length} line${lines.length === 1 ? '' : 's'} · ${lines.map((l) => l.quoteKey).join(' · ')}${input.shipment?.tracking ? ` · tracking ${input.shipment.tracking}` : ''}${input.shipment?.poNumber ? ` · PO ${input.shipment.poNumber}` : ''}${input.notes?.trim() ? ` · “${input.notes.trim()}”` : ''}`;
+  const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source, status: 'new', summary, createdAt: at, createdBy: mode === 'staff' ? a.by : `${client.firstName} ${client.lastName}`, station: mode === 'staff' ? a.station : 'RolliConnect', division: getSessionDivision(), legs: rb.sortLegs(lines.flatMap((l) => l.legs)), photos: input.photos?.map((p) => ({ ...p, stage: 0, origin: 'web' as const, controlled: false })), lines, builder: { mode, autoQuote, outcome, shipment: mode === 'trade' || input.shipment ? { ...input.shipment, pieces: lines.length } : undefined, unresolved } };
+  store.requests.unshift(r);
+  const address: Address = { name: `${client.firstName} ${client.lastName}`, street: client.street, city: client.city, state: client.state };
+  const estLines: EstimateLine[] = lines.map((l) => ({ id: newLineId(), description: builderLineDescription(l, groups[l.id]), qty: 1, unitPrice: rb.rateAmount(l.rate), dept: l.legs[0] ?? 'W', taxable: false, type: 'service' as const }));
+  const e = await createEstimate({ clientId: client.id, requestId: r.id, lines: estLines, validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), clientNotes: input.notes?.trim() ?? '', messageNotes: '', internalNotes: `Origin: request ${r.number} (${source}) · quote keys ${lines.map((l) => l.quoteKey).join(' · ')}${unresolved.length ? ` · ${unresolved.length} line(s) without a rate — price before sending` : ''}${lines.some((l) => l.preApprovals?.length || l.waivers?.length) ? ` · pre-approvals / waivers on file` : ''}`, billingAddress: address, shippingAddress: address, shippingMirrorsBilling: true, components: rb.sortLegs(lines.flatMap((l) => l.legs)) });
+  r.estimateId = e.id;
+  if (r.builder!.outcome === 'quoted') { await markEstimateSent(e.id); r.status = 'quoted'; queueOutbox({ id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: e.number, status: 'pending', subject: `Your quote ${e.number} is ready — ${r.number}`, body: `Hello ${client.firstName},\n\nEvery line of ${r.number} matched our rate card, so your quote ${e.number} is ready now:\n${lines.map((l) => `• ${builderLineDescription(l, groups[l.id])} — ${rb.rateLabel(l.rate)} · about ${l.rate!.days} days`).join('\n')}\n\nApprove it in RolliConnect when you are ready.\n\n— RolliWorks`, createdAt: at, createdBy: 'RolliConnect', station: 'RolliConnect' }); }
+  appendAudit({ type: 'kiosk', stationName: r.station, userShortName: mode === 'staff' ? a.user?.shortName : undefined, detail: `${r.number} · ${source} request · ${client.firstName} ${client.lastName} · ${lines.length} line(s) · ${r.builder!.outcome === 'quoted' ? `auto-quoted ${e.number}` : r.builder!.outcome === 'queued' ? `estimate ${e.number} queued — ${unresolved.length} line(s) need a rate` : `draft estimate ${e.number}`}` });
+  return resolve({ request: { ...r }, estimate: store.estimates.find((x) => x.id === e.id), client });
+}
+export const getRateCard = rb.getRateCard;
+export async function saveRateCardRow(input: rb.RateRowInput): Promise<RateCardRow> { const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Rate card is owner / manager only'); const row = await rb.saveRateRow(input, a.by); appendAudit({ type: 'setup', stationName: a.station, userShortName: a.user?.shortName, detail: `Rate card · ${rb.rowKey(row)} → ${rb.rateLabel(row)} · ${row.days} d · v${row.version}` }); return resolve(row); }
+export const liveRateSync = rb.matchRate;
 // "Notify…" on a request: the hand-off itself is an internal message (hitlist.sendMessage, caller's side); here we only stamp who was told. The pool stays unowned.
 export async function markRequestNotified(requestId: string, to: string): Promise<RequestRow> {
   const r = store.requests.find((x) => x.id === requestId); if (!r) throw new Error('Request not found');
@@ -5420,6 +5455,7 @@ export const callsBridge = {
   addAddon: (jobId: string, input: AddonInput) => addJobAddon(jobId, input),
 };
 export const clientByIdSync = (id: string): Client | undefined => fx.clients.find((c) => c.id === id);
+export const estimateByIdSync = (id: string): Estimate | undefined => store.estimates.find((e) => e.id === id);
 export const jobNumberSync = (id: string): string | undefined => store.jobs.find((j) => j.id === id)?.number;
 
 // ---- INVENTORY DEEP SESSION — pricing intelligence · needs-ordering · auto-PO · PO labels · receiving flips · cycle-count lock/queue/variance $ ----

@@ -1,9 +1,10 @@
-import { Globe, Mail, Phone, Tablet, User, type LucideIcon } from 'lucide-react';
+import { Globe, Mail, MonitorSmartphone, Phone, Plus, Tablet, User, UserCog, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type SyntheticEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { RequestRow, RequestSource } from '@/api/client';
 import { RatingBadge } from '@/components/clients/RatingBadge';
+import { OutcomePill } from '@/components/requests/RequestLines';
 import { RequestSheet, requestIsOpen as isOpen } from '@/components/requests/RequestSheet';
 import { WbpClientRows } from '@/components/shared/WbpDots';
 import { Button, FilterChip, PageHeader } from '@/components/ui/Button';
@@ -11,23 +12,25 @@ import { StatusPill } from '@/components/ui/Pills';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { relativeTime } from '@/lib/format';
 
-const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User, kiosk: Tablet };
-const SOURCE_LABEL: Record<RequestSource, string> = { call: 'call', email: 'email', web: 'web form', walk_in: 'walk-in', kiosk: 'kiosk' };
+const SOURCE_ICON: Record<RequestSource, LucideIcon> = { call: Phone, email: Mail, web: Globe, walk_in: User, kiosk: Tablet, portal: MonitorSmartphone, staff: UserCog };
+const SOURCE_LABEL: Record<RequestSource, string> = { call: 'call', email: 'email', web: 'web form', walk_in: 'walk-in', kiosk: 'kiosk', portal: 'portal', staff: 'staff (on behalf)' };
 
 // Requests = intake records (web · kiosk · portal · call) before an estimate exists — an UNOWNED pool, no tags, never Inbox rows (MH 2026-10-02).
 // Row click → the submission slide-out (/requests/:id). Hand-off = "Notify…" = an internal message that links here. Requests page = things to act on; Inbox = things to answer.
 export default function RequestsPage() {
-  const nav = useNavigate(); const { id: openId } = useParams();
+  const nav = useNavigate(); const { id: openId } = useParams(); const loc = useLocation();
   const [rows, setRows] = useState<RequestRow[]>([]); const [view, setView] = useState<'open' | 'all'>('open'); const [err, setErr] = useState<string | null>(null); const [msg, setMsg] = useState<string | null>(null);
   const load = () => api.getRequestsQueue().then(setRows);
   useEffect(() => { void load(); }, []);
+  // "New request on behalf of client" lands here with a flash (RQ created · auto-quoted / draft estimate)
+  useEffect(() => { const f = (loc.state as { flash?: string } | null)?.flash; if (f) { setMsg(f); window.history.replaceState({}, ''); const t = window.setTimeout(() => setMsg(null), 5000); return () => window.clearTimeout(t); } }, [loc.state]);
   const shown = rows.filter((r) => view === 'all' || isOpen(r)); const openRow = openId ? rows.find((r) => r.id === openId) : undefined;
   const pending = rows.filter((r) => r.kiosk?.matchState === 'possible').length; const noEstimate = rows.filter((r) => isOpen(r) && !r.estimateId).length;
   const decide = (id: string, d: 'confirm' | 'split') => api.resolveKioskMatch(id, d).then(load).catch((e) => setErr(e.message));
   const changed = (m?: string) => { void load(); if (m) { setMsg(m); window.setTimeout(() => setMsg(null), 3000); } };
   const stop = (e: SyntheticEvent) => e.stopPropagation();
   return <div data-testid="requests-page">
-    <PageHeader title="Requests" subtitle={`${rows.filter(isOpen).length} open · ${noEstimate} without an estimate yet · ${api.RG_DIVISION_LABEL[api.getSessionDivision()]} · web, kiosk and portal submissions land here${pending ? ` · ${pending} possible existing client${pending === 1 ? '' : 's'} to confirm` : ''} · unowned pool — click a row for the submission · Notify… hands it to someone`} action={<div className="flex gap-1"><FilterChip testId="requests-view-open" active={view === 'open'} onClick={() => setView('open')}>Open</FilterChip><FilterChip testId="requests-view-all" active={view === 'all'} onClick={() => setView('all')}>All</FilterChip></div>} />
+    <PageHeader title="Requests" subtitle={`${rows.filter(isOpen).length} open · ${noEstimate} without an estimate yet · ${api.RG_DIVISION_LABEL[api.getSessionDivision()]} · web, kiosk and portal submissions land here${pending ? ` · ${pending} possible existing client${pending === 1 ? '' : 's'} to confirm` : ''} · unowned pool — click a row for the submission · Notify… hands it to someone`} action={<div className="flex items-center gap-2"><div className="flex gap-1"><FilterChip testId="requests-view-open" active={view === 'open'} onClick={() => setView('open')}>Open</FilterChip><FilterChip testId="requests-view-all" active={view === 'all'} onClick={() => setView('all')}>All</FilterChip></div><Link to="/requests/new" data-testid="requests-new"><Button size="sm" variant="primary"><Plus size={12} /> New request on behalf of client</Button></Link></div>} />
     {err && <p data-testid="requests-error" className="mb-2 text-xs text-rose-700">{err}</p>}
     {msg && <p data-testid="requests-msg" className="mb-2 text-xs text-moss-700">{msg}</p>}
     <Table testId="requests-table">
@@ -35,7 +38,7 @@ export default function RequestsPage() {
       <tbody>
         {shown.map((r) => { const Icon = SOURCE_ICON[r.source]; const k = r.kiosk; return (
           <tr key={r.id} data-testid={`request-row-${r.id}`} data-open={openId === r.id || undefined} onClick={() => nav(`/requests/${r.id}`)} className={`cursor-pointer align-top hover:bg-canvas/60 ${isOpen(r) ? '' : 'opacity-60'} ${openId === r.id ? 'bg-canvas' : ''}`}>
-            <Td className="font-mono text-[11px] font-medium text-ink">{r.number}</Td>
+            <Td className="font-mono text-[11px] font-medium text-ink">{r.number}{r.builder && <div className="mt-0.5"><OutcomePill r={r} testId={`request-outcome-${r.id}`} /></div>}</Td>
             <Td><Link data-testid={`request-client-${r.id}`} to={`/clients/${r.clientId}`} onClick={stop} className="text-xs font-medium text-brand hover:underline">{r.client.firstName} {r.client.lastName}</Link> <RatingBadge clientId={r.clientId} testId={`request-rating-${r.id}`} />{k && <div className="text-[10px] text-ink-400">{k.email} · {k.phone}</div>}</Td>
             <Td><WbpClientRows clientId={r.clientId} compact testId={`request-wbp-${r.id}`} /></Td>
             <Td><span data-testid={`request-source-${r.id}`} className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-ink-500"><Icon size={12} /> {SOURCE_LABEL[r.source]}</span></Td>

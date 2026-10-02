@@ -54,6 +54,8 @@ const rows: Row[] = [
 const tradeIds = new Set(['c-11', 'c-25', 'c-31']);
 // Trade accounts: the account's division manager reviews finished trade work before it is invoiced (Walter for RolliShop)
 const ACCOUNT_MANAGER: Record<string, string> = { 'c-31': 'Walter', 'c-25': 'MH', 'c-11': 'MH' };
+// Auto-quote (MH 2026-10-02): Vidal + RolliShop are quoted from the rate card the moment every line resolves; Hartwell & Co. is priced by estimate
+const AUTO_QUOTE = new Set(['c-25', 'c-31']);
 
 export const clients: Client[] = rows.map(([id, firstName, lastName, email, phone, city, state, company], i) => ({
   id,
@@ -66,6 +68,7 @@ export const clients: Client[] = rows.map(([id, firstName, lastName, email, phon
   company,
   street: `${120 + i * 37} ${['Park Ave', 'Madison Ave', 'Elm St', 'Harbor Rd', 'Lakeview Dr', 'Oak Ln', 'Ocean Blvd'][i % 7]}`,
   type: tradeIds.has(id) ? 'trade' : 'retail',
+  autoQuote: tradeIds.has(id) ? AUTO_QUOTE.has(id) : undefined,
   managerShort: ACCOUNT_MANAGER[id],
   internal: id === 'c-31' ? true : undefined,
   since: daysAgo(120 + i * 37),

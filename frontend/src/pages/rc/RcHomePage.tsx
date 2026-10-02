@@ -1,10 +1,10 @@
-import { ArrowRight, ClipboardCheck, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, Wrench, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, ClipboardPlus, CreditCard, FileCheck2, MapPin, MessageCircle, PackageCheck, Wrench, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { NeedsYouKind, PortalWatch } from '@/api/client';
 import { useAsync } from '@/hooks/useAsync';
-import { RcCard, StatusWord, rcDate } from '@/rc/RcBits';
+import { RcButton, RcCard, StatusWord, rcDate } from '@/rc/RcBits';
 import { RcDots, RcDotsLegend } from '@/rc/RcDots';
 import { useRcSession } from '@/rc/RcSession';
 import { RcRequestCards } from '@/rc/RcRequestCards';
@@ -59,6 +59,7 @@ export default function RcHomePage() {
         <h1 className="font-serif text-4xl font-light tracking-tight sm:text-5xl">Hello, {data.client.firstName}.</h1>
         <FirstRunNote clientId={data.client.id} />
         <p className="mt-2 text-[15px] text-rc-muted" data-testid="rc-home-summary">{(() => { const n = cards.filter((c) => c.state === 'in_progress').length; const w = cards.filter((c) => c.state === 'received' || c.state === 'decision').length; return `${n ? `${n} watch${n === 1 ? '' : 'es'} in the workshop right now` : 'Nothing in the workshop right now'}${w ? ` · ${w} request${w === 1 ? '' : 's'} waiting on us` : ''}.`; })()}</p>
+        <Link to="/rc/request/new" data-testid="rc-home-request-service" className="mt-4 inline-flex"><RcButton type="button"><ClipboardPlus size={16} /> Request service{data.client.type === 'trade' ? ' · new shipment' : ''} <ArrowRight size={14} /></RcButton></Link>
       </div>
 
       <RcCard eyebrow="Needs you" title={data.needsYou.length ? `${data.needsYou.length} thing${data.needsYou.length === 1 ? '' : 's'} waiting on you` : 'Nothing waiting on you'} testId="rc-needs-you">
