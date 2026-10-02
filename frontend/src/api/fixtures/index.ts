@@ -12,7 +12,7 @@ export { activity } from './activity';
 export { packages, outbox, labels, seedPhoto, CONTENT_PILLS, CARRIERS, BINS, DEPT_LABEL, DEPT_COMPONENTS } from './intake';
 export { requests } from './requests';
 export { messages } from './portal';
-export { vendors, locations, stockLevels, purchaseOrders, stockMovements, cycleCounts, templates, evidence, integrations, MERGE_FIELDS } from './rs';
+export { vendors, locations, stockLevels, purchaseOrders, stockMovements, cycleCounts, templates, templatePins, BRACELET_REFS, evidence, integrations, MERGE_FIELDS } from './rs';
 export { modelReferences, priceEvidence, priceVerifications, knowledgeCards, routedQuestions, routedTasks, LABEL_PILLS, photoLabels } from './companion';
 export { conversations, convMessages } from './comms';
 export { inspectionReports, REPORT_COMPONENTS, decisionSeeds } from './reports';

@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { ArrowLeft, Eye, Lock } from 'lucide-react';
+import { ArrowLeft, Eye, Lock, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import * as api from '@/api/client';
 import type { ConversationWithRefs, User } from '@/api/client';
@@ -16,6 +16,7 @@ interface StaffSummary { user: User; tag?: ReturnType<typeof api.tagOfUser>; ope
 const summarise = (rows: ConversationWithRefs[], u: User): StaffSummary => { const tag = api.tagOfUser(u); const mine = tag ? rows.filter((r) => r.tags?.includes(tag) && r.status !== 'closed') : []; return { user: u, tag, open: mine.length, owed: mine.filter((r) => r.needsReply).length, unread: hl.unreadCount(u.id) }; };
 
 export const ViewsSection = ({ viewUser, rows, threadId, onPick, onBack, onOpen, actionsFor, pane }: { viewUser?: User; rows: ConversationWithRefs[]; threadId?: string; onPick: (short: string) => void; onBack: () => void; onOpen: (id: string) => void; actionsFor: ActionsFor; pane: ReactNode }) => {
+  // Exit UX (MH 2026-10-02): ✕ Exit view here, Esc anywhere on the page, Portal / Team / Calls tabs leave the view first, browser Back steps thread → list → Views (handled in InboxPage)
   const [all, setAll] = useState<ConversationWithRefs[]>([]);
   useEffect(() => { void api.getInboxThreads({}).then(setAll); }, [rows]);
   if (!viewUser) {
@@ -34,6 +35,7 @@ export const ViewsSection = ({ viewUser, rows, threadId, onPick, onBack, onOpen,
       <button type="button" data-testid="inbox-view-back" onClick={onBack} className="inline-flex items-center gap-1 font-medium hover:underline"><ArrowLeft size={12} /> Views</button><span className="text-amber-700">·</span>
       <span data-testid="inbox-view-title" className="font-semibold">Viewing as {viewUser.shortName}{s.tag ? ` · ${s.open} open · ${s.owed} reply owed` : ' · no Portal access'} · {s.unread} unread message{s.unread === 1 ? '' : 's'}</span>
       <span className="ml-auto text-[10px] text-amber-800">read-only view · anything you do here is logged as you (MH)</span>
+      <button type="button" data-testid="inbox-view-exit" onClick={onBack} title="Exit this view (Esc)" className="inline-flex h-6 items-center gap-1 rounded-sm border border-amber-400 bg-surface px-2 text-[11px] font-semibold text-amber-950 hover:bg-amber-100"><X size={12} /> Exit view <kbd className="ml-0.5 rounded-sm border border-amber-300 bg-amber-50 px-1 font-mono text-[9px] font-normal text-amber-800">Esc</kbd></button>
     </div>
     <div className="grid min-h-0 flex-1 grid-cols-[400px_1fr] gap-3">
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">

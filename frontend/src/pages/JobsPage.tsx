@@ -21,11 +21,11 @@ export default function JobsPage() {
   const lane = params.get('status') ?? 'all';
   const wf = params.get('wf') ?? 'all';
   const [q, setQ] = useState(params.get('q') ?? '');
-  const [rows, setRows] = useState<JobWithRefs[] | null>(null);
+  const [rows, setRows] = useState<JobWithRefs[] | null>(null); const [storedRows, setStoredRows] = useState<JobWithRefs[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => { api.searchJobs(q).then(setRows); }, 120);
+    const t = setTimeout(() => { api.searchJobs(q).then(setRows); void api.getStoredJobs().then(setStoredRows); }, 120);
     return () => clearTimeout(t);
   }, [q]);
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -37,7 +37,7 @@ export default function JobsPage() {
   };
 
   // In storage (MH 2026-10-02) drops off every active lane / board; it lives behind its own filter chip
-  const stored = useMemo(() => (rows ?? []).filter((j) => j.status === 'in_storage' && (wf === 'all' || j.workflow.includes(wf as DeptCode))), [rows, wf]);
+  const stored = useMemo(() => { const seen = new Set<string>(); const qq = q.trim().toLowerCase(); return [...storedRows, ...(rows ?? []).filter((j) => j.status === 'in_storage')].filter((j) => !seen.has(j.id) && seen.add(j.id) && (wf === 'all' || j.workflow.includes(wf as DeptCode)) && (!qq || `${j.number} ${j.client.firstName} ${j.client.lastName} ${j.watch.brand} ${j.watch.model}`.toLowerCase().includes(qq))); }, [rows, storedRows, wf, q]);
   const byWf = useMemo(() => (rows ?? []).filter((j) => j.status !== 'in_storage' && (wf === 'all' || j.workflow.includes(wf as DeptCode))), [rows, wf]);
   const shown = useMemo(() => byWf.filter((j) => lane === 'all' || laneOf(j) === lane), [byWf, lane]);
   const laneCounts = useMemo(() => Object.fromEntries(LANES.map((l) => [l, byWf.filter((j) => laneOf(j) === l).length])), [byWf]);

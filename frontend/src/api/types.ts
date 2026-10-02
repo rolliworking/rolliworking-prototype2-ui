@@ -1139,9 +1139,16 @@ export interface CycleCountLine { partId: string; expected: number; counted?: nu
 export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number; gainLoss?: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
-export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted' | 'swo_outbound' | 'swo_return_label' | 'long_term_storage';
+export type KnownTemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted' | 'swo_outbound' | 'swo_return_label' | 'long_term_storage';
+// Staff-made templates ("Save as template" from a reply, Setup → Templates) get generated keys — the union stays for autocomplete on the system ones
+export type TemplateKey = KnownTemplateKey | (string & {});
 export type TemplateAudience = 'client' | 'vendor' | 'internal';
-export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string; audience?: TemplateAudience; usedBy?: string; active?: boolean }
+export type TemplateCategory = 'intake' | 'estimate' | 'in_progress' | 'ready_pickup' | 'shipping' | 'bracelet' | 'storage' | 'general';
+export type TemplateChannel = 'email' | 'portal' | 'both';
+// ONE message_templates store (MH 2026-10-02): Inbox composer, Estimate → Send and Setup → Templates all read it. division + shared = who sees it; attachments ride along on Use; pins are per user (TemplatePin).
+export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string; audience?: TemplateAudience; usedBy?: string; active?: boolean; category?: TemplateCategory; channel?: TemplateChannel; division?: Division | 'both'; shared?: boolean; attachments?: PackagePhoto[]; sortOrder?: number; createdBy?: string; system?: boolean; usage?: number }
+export interface TemplatePin { owner: string; keys: TemplateKey[] }
+export interface TemplateInput { name: string; category: TemplateCategory; subject: string; body: string; channel: TemplateChannel; division: Division | 'both'; shared: boolean; attachments: PackagePhoto[] }
 
 export interface UserAdminInput { firstName: string; shortName: string; dutyLabel: string; accessTier: AccessTier; roles: Role[]; division: Division | 'both'; password: string; pin: string }
 

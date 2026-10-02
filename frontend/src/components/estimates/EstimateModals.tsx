@@ -1,7 +1,8 @@
 import { Mail, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
-import type { RenderedTemplate } from '@/api/client';
+import type { MessageTemplate, RenderedTemplate, TemplateKey } from '@/api/client';
+import { TemplateBar } from '@/components/comms/TemplateBar';
 import { TemplateEdit, type DraftMessage } from '@/components/comms/TemplateEdit';
 import type { EstimateRevision, EstimateWithRefs, QuoteContext } from '@/api/client';
 import { Button } from '@/components/ui/Button';
@@ -19,8 +20,10 @@ export const SendModal = ({ estimate: e, onClose, onSent }: { estimate: Estimate
   const [ctx, setCtx] = useState<QuoteContext | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [tpl, setTpl] = useState<(RenderedTemplate & { vals: Record<string, string> }) | null>(null); const [draft, setDraft] = useState<DraftMessage | null>(null);
-  const loadTpl = async (shopDefault = false) => { const r = await api.renderTemplateForEstimate(e.id, shopDefault); setTpl(r); setDraft({ subject: r.subject, body: r.body, mode: r.source, owner: r.owner }); };
+  const [tpl, setTpl] = useState<(RenderedTemplate & { vals: Record<string, string> }) | null>(null); const [draft, setDraft] = useState<DraftMessage | null>(null); const [tkey, setTkey] = useState<TemplateKey>('estimate_sent');
+  // Same message_templates store as the Inbox: estimate_sent is the shop default; any other template picked from the pinned row / sheet goes out as a one-off body
+  const loadTpl = async (shopDefault = false, key: TemplateKey = tkey) => { const r = await api.renderTemplateForEstimate(e.id, shopDefault, key); setTkey(key); setTpl(r); setDraft({ subject: r.subject, body: r.body, mode: key === 'estimate_sent' ? r.source : 'one_off', owner: r.owner }); };
+  const useTemplate = (t: MessageTemplate) => void loadTpl(false, t.key);
   useEffect(() => {
     api.getQuoteContext(e.clientId, e.watchId, e.id).then(setCtx); void loadTpl();
   }, [e]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -43,7 +46,8 @@ export const SendModal = ({ estimate: e, onClose, onSent }: { estimate: Estimate
       </div>
       <div className="space-y-4 p-5">
         {ctx && <QuoteContextStrip clientEstimates={ctx.clientEstimates} watchEstimates={ctx.watchEstimates} clientName={fullName(e.client)} />}
-        {tpl && draft && <TemplateEdit tkey="estimate_sent" rendered={tpl} vals={tpl.vals} draft={draft} onDraft={setDraft} onReload={loadTpl} />}
+        <TemplateBar channel="email" active={tkey} ctx={{ estimateId: e.id }} draft={draft ? { subject: draft.subject, text: draft.body, photos: [] } : undefined} initialCategory="estimate" onUse={useTemplate} testId="send" />
+        {tpl && draft && <TemplateEdit tkey={tkey} rendered={tpl} vals={tpl.vals} draft={draft} onDraft={setDraft} onReload={(shop) => loadTpl(shop, tkey)} />}
         <div className="rounded-md border border-line bg-canvas/50 p-4 text-[13px]" data-testid="send-preview">
           <div className="mb-2 grid grid-cols-[70px_1fr] gap-y-0.5 text-xs"><span className="text-ink-400">To</span><span>{fullName(e.client)} &lt;{e.client.email}&gt;</span><span className="text-ink-400">Subject</span><span className="font-medium" data-testid="send-preview-subject">{draft?.mode !== 'shop' && draft ? draft.subject : api.clientRefSubject(`${again ? 'Your updated estimate' : 'Your estimate'} ${e.number} is ready to review`, e.clientRef)}</span></div>
           {draft && draft.mode !== 'shop' ? <pre data-testid="send-preview-body" className="whitespace-pre-wrap font-sans text-[13px] leading-5">{draft.body}</pre> : <>

@@ -3594,7 +3594,7 @@ export async function replyToClient(clientId: string, text: string, watchId?: st
 }
 
 // ---- E9 RS modules ---------------------------------------------------------------------------------
-import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, UserLimits, Vendor, VendorInput, ZeroBalanceReason, VendorPartRow, VendorSummary } from './types';
+import type { CycleCount, EvidenceItem, EvidenceSlot, IntegrationTile, MessageTemplate, PartsGrade, TemplateCategory, TemplateChannel, TemplateInput, TemplatePin, PurchaseOrder, PurchaseOrderWithRefs, QboQueueRow, Report, StockLevel, StockLocation, StockMovement, StockRow, TemplateAudience, TemplateKey, UserAdminInput, UserLimits, Vendor, VendorInput, ZeroBalanceReason, VendorPartRow, VendorSummary } from './types';
 
 const rs = {
   vendors: fx.vendors.map((v): Vendor => ({ ...v })),
@@ -3603,7 +3603,8 @@ const rs = {
   pos: fx.purchaseOrders.map((p): PurchaseOrder => ({ ...p, lines: p.lines.map((l) => ({ ...l })) })),
   movements: fx.stockMovements.map((m): StockMovement => ({ ...m })),
   counts: fx.cycleCounts.map((c): CycleCount => ({ ...c, lines: c.lines.map((l) => ({ ...l })) })),
-  templates: fx.templates.map((t): MessageTemplate => ({ ...t, mergeFields: [...t.mergeFields] })),
+  templates: fx.templates.map((t): MessageTemplate => ({ ...t, mergeFields: [...t.mergeFields], attachments: t.attachments ? [...t.attachments] : [] })),
+  templatePins: fx.templatePins.map((p): TemplatePin => ({ owner: p.owner, keys: [...p.keys] })),
   // Seed: Vienna's personal estimate email (warmer opener, mentions the watch) so both paths — shop default vs personal — are visible
   personalTemplates: [{ key: 'estimate_sent', owner: 'Vienna', subject: 'Your estimate {{estimate.number}} — {{watch.brand}} {{watch.model}}', body: 'Dear {{client.first_name}},\n\nIt was a pleasure looking after your {{watch.brand}} {{watch.model}}. Your estimate {{estimate.number}} is ready — you can review and approve it here, or call me directly with any questions:\n\n{{portal.link}}\n\nWarm regards,\nVienna · Operations Manager', updatedAt: new Date(Date.now() - 12 * 86_400_000).toISOString() }] as PersonalTemplate[],
   evidence: fx.evidence.map((e): EvidenceItem => ({ ...e })),
@@ -3837,7 +3838,7 @@ export async function retireCatalogService(id: string, retired = true): Promise<
 }
 export { MERGE_FIELDS } from './fixtures/rs';
 const TEMPLATE_META: Record<string, { audience: TemplateAudience; usedBy: string }> = { long_term_storage: { audience: 'client', usedBy: 'Long-term storage · scan into the LTS safe' }, intake_confirmation: { audience: 'client', usedBy: 'Receive Package (Stage 2)' }, estimate_sent: { audience: 'client', usedBy: 'Estimate → Send' }, job_in_progress: { audience: 'client', usedBy: 'Job status change' }, back_in_progress: { audience: 'client', usedBy: 'QC fail → rework' }, ready_for_pickup: { audience: 'client', usedBy: 'Job finished · pickup channel' }, shipped: { audience: 'client', usedBy: 'Ship Station confirm' }, inspection_ready: { audience: 'client', usedBy: 'Issue inspection report' }, invoice_ready: { audience: 'client', usedBy: 'Sales order → Send invoice' }, evidence_available: { audience: 'client', usedBy: 'QC pass · evidence' }, shipping_dispute: { audience: 'vendor', usedBy: 'Bill audit → dispute report' }, po_email: { audience: 'vendor', usedBy: 'Purchasing → Send PO' }, receiving_report: { audience: 'internal', usedBy: 'Purchasing → Receive against PO' }, appointment_confirmation: { audience: 'client', usedBy: 'Schedule / booking page' }, package_accepted: { audience: 'client', usedBy: 'Scan 1 → shelved' }, swo_outbound: { audience: 'vendor', usedBy: 'Shop Work Order → Create outbound label' }, swo_return_label: { audience: 'vendor', usedBy: 'Shop Work Order → Queue return label' } };
-export async function getTemplates(): Promise<MessageTemplate[]> { return resolve(rs.templates.map((t) => ({ ...t, ...TEMPLATE_META[t.key], active: t.active ?? true }))); }
+export async function getTemplates(): Promise<MessageTemplate[]> { return resolve(rs.templates.map(withTplMeta)); }
 export async function setTemplateActive(key: TemplateKey, active: boolean): Promise<MessageTemplate> { const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); t.active = active; rsStamp('setup', `Template ${active ? 'reactivated' : 'retired'} · ${t.name}`); return resolve({ ...t, ...TEMPLATE_META[t.key], active }); }
 export async function saveTemplate(key: TemplateKey, subject: string, body: string): Promise<MessageTemplate> {
   const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); if (!subject.trim() || !body.trim()) throw new Error('Subject and body are required'); const a = actor();
@@ -4165,13 +4166,61 @@ export async function savePersonalTemplate(key: TemplateKey, subject: string, bo
 export async function deletePersonalTemplate(key: TemplateKey): Promise<void> { const a = actor(); rs.personalTemplates = rs.personalTemplates.filter((p) => !(p.key === key && p.owner === a.by)); appendAudit({ type: 'comms', stationName: a.station, userShortName: a.user?.shortName, detail: `Removed personal template · ${key}` }); return resolve(undefined); }
 // Turn an edited, already-merged text back into template text so "Save as my template" keeps merge fields live for the next client
 export const unrenderTemplate = (text: string, vals: Record<string, string>) => Object.entries(vals).filter(([, v]) => v && v.length > 2).sort((a, b) => b[1].length - a[1].length).reduce((t, [f, v]) => t.split(v).join(f), text);
+// ---- Template library (MH 2026-10-02): ONE message_templates store behind the Inbox composer, Estimate → Send and Setup → Templates. Visibility = own division + shared (MH 'both' sees all). Pins = per user, max 6, one tap inserts body + attachments. ----
+export const TEMPLATE_CATEGORIES: { key: TemplateCategory; label: string }[] = [{ key: 'intake', label: 'Intake' }, { key: 'estimate', label: 'Estimate' }, { key: 'in_progress', label: 'In progress' }, { key: 'ready_pickup', label: 'Ready / Pickup' }, { key: 'shipping', label: 'Shipping' }, { key: 'bracelet', label: 'Bracelet questions' }, { key: 'storage', label: 'Storage' }, { key: 'general', label: 'General' }];
+export const MAX_TEMPLATE_PINS = 6;
+export const TEMPLATES_CHANGED_EVENT = 'rollisuite:templates-changed';
+const tplChanged = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(TEMPLATES_CHANGED_EVENT)); };
+const tplOwner = () => currentUserSync()?.shortName ?? actor().by;
+const tplDivision = (): Division | 'both' => currentUserSync()?.division ?? getSessionDivision();
+const tplVisible = (t: MessageTemplate) => { const d = tplDivision(); return d === 'both' || !t.division || t.division === 'both' || t.division === d || !!t.shared; };
+const tplOf = (key: TemplateKey) => { const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); return t; };
+export const templateUsageSync = (key: TemplateKey) => cx.messages.filter((m) => m.templateKey === key).length;
+const withTplMeta = (t: MessageTemplate): MessageTemplate => ({ ...t, ...TEMPLATE_META[t.key], active: t.active ?? true, category: t.category ?? 'general', channel: t.channel ?? 'both', division: t.division ?? 'both', shared: t.shared ?? true, attachments: t.attachments ? t.attachments.map((p) => ({ ...p })) : [], usage: templateUsageSync(t.key) });
+const catIndex = (c?: TemplateCategory) => Math.max(0, TEMPLATE_CATEGORIES.findIndex((x) => x.key === (c ?? 'general')));
+const tplSort = (a: MessageTemplate, b: MessageTemplate) => catIndex(a.category) - catIndex(b.category) || (a.sortOrder ?? 50) - (b.sortOrder ?? 50) || a.name.localeCompare(b.name);
+// Picker / Setup list. channel = the reply's channel → templates for that channel + 'both'. clientOnly hides vendor / internal templates (a client reply never needs them).
+export async function getTemplateLibrary(opts: { channel?: ReplyChannel; includeArchived?: boolean; clientOnly?: boolean; all?: boolean } = {}): Promise<MessageTemplate[]> {
+  return resolve(rs.templates.map(withTplMeta).filter((t) => (opts.all || tplVisible(t)) && (opts.includeArchived || t.active !== false) && (!opts.channel || t.channel === 'both' || t.channel === opts.channel) && (!opts.clientOnly || (t.audience ?? 'client') === 'client')).sort(tplSort));
+}
+const pinsOf = (owner: string) => { let row = rs.templatePins.find((p) => p.owner === owner); if (!row) { row = { owner, keys: [] }; rs.templatePins.push(row); } return row; };
+export const pinnedKeysSync = (): TemplateKey[] => [...pinsOf(tplOwner()).keys];
+export async function getPinnedTemplates(channel?: ReplyChannel): Promise<MessageTemplate[]> { return resolve(pinsOf(tplOwner()).keys.map((k) => rs.templates.find((t) => t.key === k)).filter((t): t is MessageTemplate => !!t && t.active !== false && tplVisible(t) && (!channel || !t.channel || t.channel === 'both' || t.channel === channel)).map(withTplMeta)); }
+export async function pinTemplate(key: TemplateKey, on: boolean): Promise<TemplateKey[]> {
+  const t = tplOf(key); const row = pinsOf(tplOwner());
+  if (on && !row.keys.includes(key)) { if (row.keys.length >= MAX_TEMPLATE_PINS) throw new Error(`Pinned row is full (${MAX_TEMPLATE_PINS}) — unpin one first`); row.keys.push(key); }
+  if (!on) row.keys = row.keys.filter((k) => k !== key);
+  cxStamp(`Template ${on ? 'pinned' : 'unpinned'} · ${t.name}`); tplChanged(); return resolve([...row.keys]);
+}
+export async function reorderPins(keys: TemplateKey[]): Promise<TemplateKey[]> { const row = pinsOf(tplOwner()); row.keys = keys.filter((k) => row.keys.includes(k)).slice(0, MAX_TEMPLATE_PINS); tplChanged(); return resolve([...row.keys]); }
+const tplKeyFor = (name: string) => { const base = `tpl_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'template'}`; let k = base; let n = 2; while (rs.templates.some((t) => t.key === k)) k = `${base}_${n++}`; return k; };
+const checkTpl = (i: Pick<TemplateInput, 'name' | 'subject' | 'body'>) => { if (!i.name.trim()) throw new Error('Give the template a title'); if (!i.subject.trim() || !i.body.trim()) throw new Error('Subject and body are required'); };
+export async function createTemplate(input: TemplateInput): Promise<MessageTemplate> {
+  checkTpl(input); const a = actor(); const at = new Date().toISOString(); const d = tplDivision(); const division = d === 'both' ? input.division : d;
+  const t: MessageTemplate = { key: tplKeyFor(input.name), name: input.name.trim(), subject: input.subject.trim(), body: input.body.trim(), mergeFields: fx.MERGE_FIELDS.filter((f) => input.body.includes(f) || input.subject.includes(f)), category: input.category, channel: input.channel, division, shared: input.shared, attachments: input.attachments.map((p) => ({ ...p })), active: true, system: false, sortOrder: rs.templates.filter((x) => x.category === input.category).length, at, by: a.by, station: a.station, updatedBy: a.by, createdBy: a.by };
+  rs.templates.push(t); rsStamp('setup', `Template created · ${t.name} (${TEMPLATE_CATEGORIES.find((c) => c.key === t.category)?.label})`); tplChanged(); return resolve(withTplMeta(t));
+}
+export async function updateTemplate(key: TemplateKey, patch: Partial<TemplateInput>): Promise<MessageTemplate> {
+  const t = tplOf(key); const next = { name: patch.name ?? t.name, subject: patch.subject ?? t.subject, body: patch.body ?? t.body }; checkTpl(next); const a = actor();
+  Object.assign(t, { ...next, name: next.name.trim(), subject: next.subject.trim(), body: next.body.trim(), mergeFields: fx.MERGE_FIELDS.filter((f) => next.body.includes(f) || next.subject.includes(f)), category: patch.category ?? t.category, channel: patch.channel ?? t.channel, division: tplDivision() === 'both' ? patch.division ?? t.division : t.division, shared: patch.shared ?? t.shared, attachments: patch.attachments ? patch.attachments.map((p) => ({ ...p })) : t.attachments, at: new Date().toISOString(), by: a.by, station: a.station, updatedBy: a.by });
+  rsStamp('setup', `Template saved · ${t.name}`); tplChanged(); return resolve(withTplMeta(t));
+}
+// Archive = retire (history kept, hidden from pickers, pins drop it); Restore brings it back
+export async function archiveTemplate(key: TemplateKey, archived: boolean): Promise<MessageTemplate> { const t = await setTemplateActive(key, !archived); tplChanged(); return t; }
+export async function reorderTemplates(category: TemplateCategory, keys: TemplateKey[]): Promise<void> { keys.forEach((k, i) => { const t = rs.templates.find((x) => x.key === k && (x.category ?? 'general') === category); if (t) t.sortOrder = i; }); rsStamp('setup', `Templates reordered · ${TEMPLATE_CATEGORIES.find((c) => c.key === category)?.label}`); tplChanged(); return resolve(undefined); }
+// "Save as template" from a reply the staff member just wrote: title + category prompt; body + attachments carried over, names / watch / links de-rendered back to merge fields
+export async function saveDraftAsTemplate(ctx: { conversationId?: string; estimateId?: string }, input: { name: string; category: TemplateCategory; subject: string; text: string; photos: PackagePhoto[]; channel: TemplateChannel; shared: boolean }): Promise<MessageTemplate> {
+  const mctx = ctx.conversationId ? convOf(ctx.conversationId) : ctx.estimateId ? (() => { const e = getEst(ctx.estimateId); return { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; })() : undefined;
+  const vals = mctx ? mergeValues(mctx) : {}; const subject = input.subject.trim() || (ctx.conversationId ? `Re: ${convOf(ctx.conversationId).subject}` : 'Your estimate');
+  return createTemplate({ name: input.name, category: input.category, subject: unrenderTemplate(subject, vals), body: unrenderTemplate(input.text, vals), channel: input.channel, division: tplDivision(), shared: input.shared, attachments: input.photos });
+}
 const renderWith = (key: TemplateKey, ctx: { clientId: string; anchor?: ConversationAnchor }, shopDefault = false): RenderedTemplate => {
   const src = templateSource(key, shopDefault); const vals = mergeValues(ctx); const missing: string[] = [];
   const fill = (s: string) => s.replace(/\{\{[a-z_.]+\}\}/g, (f) => { const v = vals[f]; if (!v) missing.push(f); return v || f; });
   return { key, subject: fill(src.subject), body: fill(src.body), missing: uniq(missing), source: src.source, owner: src.owner };
 };
 export async function renderTemplate(conversationId: string, key: TemplateKey, shopDefault = false): Promise<RenderedTemplate> { return resolve(renderWith(key, convOf(conversationId), shopDefault)); }
-export async function renderTemplateForEstimate(estimateId: string, shopDefault = false): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...(() => { const r = renderWith('estimate_sent', ctx, shopDefault); return { ...r, subject: clientRefSubject(r.subject, e.clientRef) }; })(), vals: mergeValues(ctx) }); }
+export async function renderTemplateForEstimate(estimateId: string, shopDefault = false, key: TemplateKey = 'estimate_sent'): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...(() => { const r = renderWith(key, ctx, shopDefault); return { ...r, subject: clientRefSubject(r.subject, e.clientRef) }; })(), vals: mergeValues(ctx) }); }
 export async function mergeValuesForConversation(conversationId: string): Promise<Record<string, string>> { return resolve(mergeValues(convOf(conversationId))); }
 // The client sees the replier's NAME on every message — "— Vienna, Rolliworks" (appended unless the reply already signs off)
 const signed = (text: string, by: string, div: Division) => { const t = text.trim(); const sig = `— ${by}, ${div === 'rollishop' ? 'Rollishop' : 'Rolliworks'}`; return /—\s*[A-Z][a-z]+,\s*Rolli(works|shop)\s*$/.test(t) || t.endsWith(sig) ? t : `${t}\n\n${sig}`; };
@@ -7202,6 +7251,8 @@ export const ltsBoardSync = (): LtsBoard => {
   return { rows, stored, count: rows.length, totalBalance: rows.reduce((t, r) => t + r.balanceDue, 0), thresholdDays: ltsThresholdDays };
 };
 export async function getLtsBoard(): Promise<LtsBoard> { return resolve(ltsBoardSync()); }
+// Jobs → In storage filter reads the mock store directly: in hybrid mode the live /jobs list knows nothing about storage (the status lives in this engine until KEEPER)
+export async function getStoredJobs(): Promise<JobWithRefs[]> { return resolve(store.jobs.filter((j) => j.status === 'in_storage').sort((a, b) => (a.storage?.since ?? '').localeCompare(b.storage?.since ?? '')).map(jobRefs)); }
 export async function getLtsSettings(): Promise<LtsSettings> { const t = rs.templates.find((x) => x.key === 'long_term_storage')!; return resolve({ thresholdDays: ltsThresholdDays, template: { ...t, ...TEMPLATE_META[t.key], active: t.active ?? true } }); }
 export async function setLtsThresholdDays(days: number): Promise<LtsSettings> {
   const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Storage threshold is manager-only'); if (!Number.isFinite(days) || days < 1 || days > 3650) throw new Error('Days must be between 1 and 3650');

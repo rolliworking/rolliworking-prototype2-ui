@@ -68,6 +68,7 @@ import RcMagicPage from '@/pages/rc/RcMagicPage';
 import RcRequestNewPage from '@/pages/rc/RcRequestNewPage';
 import RequestNewPage from '@/pages/RequestNewPage';
 import RateCardPage from '@/pages/setup/RateCardPage';
+import TemplatesPage from '@/pages/setup/TemplatesPage';
 import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
@@ -296,6 +297,7 @@ export default function App() {
               <Route path="/setup/access" element={<AccessControlPage />} />
               <Route path="/setup/inspection" element={<InspectionSetupPage />} />
               <Route path="/setup/rate-card" element={<RateCardPage />} />
+              <Route path="/setup/templates" element={<TemplatesPage />} />
               <Route path="/wm-kiosk" element={<WmKioskPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />

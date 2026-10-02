@@ -58,6 +58,14 @@ export default function InboxPage() {
   useEffect(() => { const h = () => { if (comms && threadsShown) void reload().catch(() => undefined); }; window.addEventListener(hl.INBOX_REFRESH_EVENT, h); return () => window.removeEventListener(hl.INBOX_REFRESH_EVENT, h); }); // eslint-disable-line react-hooks/exhaustive-deps
   const run: Run = async (f, ok) => { try { setError(null); await f(); await reload(); if (ok) { setMsg(ok); setTimeout(() => setMsg(null), 2500); } } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } };
   const go = (patch: Record<string, string | undefined>) => { const p = new URLSearchParams(params); Object.entries(patch).forEach(([k, v]) => (v ? p.set(k, v) : p.delete(k))); setParams(p); };
+  // VIEWS exit (MH 2026-10-02): ✕ Exit view / Esc → back to the Views list; every `go` pushes history, so the browser Back button steps thread → person's list → Views on its own.
+  const inView = section === 'views' && !!viewUser;
+  const exitView = () => { const who = viewUser?.shortName; go({ as: undefined, thread: undefined, panel: undefined, card: undefined, msg: undefined }); if (who) { setMsg(`Exited ${who}’s view`); setTimeout(() => setMsg(null), 2000); } };
+  useEffect(() => {
+    if (!inView) return;
+    const h = (e: KeyboardEvent) => { if (e.key !== 'Escape' || panelOpen) return; const t = e.target as HTMLElement | null; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { t.blur(); return; } if (document.querySelector('[data-testid="templates-sheet"], [data-testid="save-template-modal"], [data-testid="thread-menu"], [data-testid="thread-header-menu"]')) return; exitView(); };
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   const actionsFor = (r: ConversationWithRefs) => ({
     tag: (t: ConvTag, on: boolean) => void run(() => api.tagConversation(r.id, t, on), `${on ? 'Tagged' : 'Untagged'} ${api.CONV_TAGS.find((x) => x.key === t)!.label}`),
     pin: (on: boolean) => void run(() => api.pinConversation(r.id, on), on ? 'Pinned to top' : 'Unpinned'),
@@ -91,7 +99,7 @@ export default function InboxPage() {
       </div>}
       {section === 'staff' && user && <StaffMessagesSection me={user} focusId={params.get('msg') ?? undefined} folder={params.get('staff') ?? 'me'} onFolder={(f) => go({ staff: f === 'me' ? undefined : f, msg: undefined })} />}
       {section === 'calls' && <CallsSectionInline />}
-      {section === 'views' && owner && <ViewsSection viewUser={viewUser} rows={rows} threadId={threadId} onPick={(short) => go({ as: short, thread: undefined, panel: undefined, card: undefined })} onBack={() => go({ as: undefined, thread: undefined, panel: undefined, card: undefined })} onOpen={(id) => go({ thread: id, card: undefined })} actionsFor={actionsFor} pane={pane} />}
+      {section === 'views' && owner && <ViewsSection viewUser={viewUser} rows={rows} threadId={threadId} onPick={(short) => go({ as: short, thread: undefined, panel: undefined, card: undefined })} onBack={exitView} onOpen={(id) => go({ thread: id, card: undefined })} actionsFor={actionsFor} pane={pane} />}
       {thread && panelOpen && threadsShown && <InboxJobCard thread={thread} onClose={() => go({ panel: undefined, card: undefined })} expandedId={cardId} onExpanded={(id) => go({ card: id })} />}
     </div>
   );
