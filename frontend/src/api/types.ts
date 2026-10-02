@@ -285,6 +285,7 @@ export interface JobHold {
 export interface JobNote extends Stamp {
   id: string;
   text: string;
+  origin?: string; // e.g. "from inbox · <thread subject>" — where the note was written; internal, never sent
 }
 
 export type JobPhoto = PackagePhoto & Stamp;
@@ -1179,9 +1180,11 @@ export interface Conversation {
   tags?: ConvTag[]; pinned?: boolean; lane?: ConvLane;
 }
 export type MessageSource = 'portal' | 'email' | 'kiosk' | 'web' | 'approval' | 'photo' | 'parts' | 'pickup' | 'staff' | 'note' | 'system';
+export type ReplyChannel = 'portal' | 'email';
 export interface ConvMessage {
   id: string; conversationId: string; clientId: string; direction: 'in' | 'out' | 'internal'; source: MessageSource; by: string; station?: string; text: string; at: string;
   token?: string; matchedToken?: string; readByStaff: boolean; photos?: PackagePhoto[]; emailId?: string; templateKey?: TemplateKey; cleared?: { by: string; at: string };
+  channel?: ReplyChannel; // outbound: how it went — portal thread → portal, otherwise email (no SMS)
   component?: ComponentKey; ask?: AskDraft; // portal "Ask about this" — tagged to the dot; the pre-drafted client update rides with the message
   event?: { kind: 'estimate_approved' | 'estimate_declined' | 'parts_approved' | 'parts_rejected' | 'pickup_window' | 'photo_submitted' | 'shared'; refId: string; label: string };
 }

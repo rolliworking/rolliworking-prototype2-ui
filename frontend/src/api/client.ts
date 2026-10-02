@@ -26,6 +26,7 @@ import type {
   Address,
   BuilderMode,
   RequestBuilderInfo,
+  ReplyChannel,
   JobType,
   RateCardRow,
   RequestLine,
@@ -1594,12 +1595,12 @@ export async function releaseHold(id: string, note?: string): Promise<JobWithRef
   return resolve(jobRefs(j));
 }
 
-export async function addJobNote(id: string, text: string): Promise<JobWithRefs> {
+export async function addJobNote(id: string, text: string, origin?: string): Promise<JobWithRefs> {
   const j = getJobRow(id);
   if (!text.trim()) throw new Error('Note is empty');
   const a = actor();
-  j.notes.unshift({ id: newId('jn'), text: text.trim(), at: new Date().toISOString(), by: a.by, station: a.station });
-  jobStamp(j, `Note added · ${text.trim().slice(0, 60)}`);
+  j.notes.unshift({ id: newId('jn'), text: text.trim(), at: new Date().toISOString(), by: a.by, station: a.station, origin });
+  jobStamp(j, `Note added${origin ? ` (${origin})` : ''} · ${text.trim().slice(0, 60)}`);
   return resolve(jobRefs(j));
 }
 
@@ -4167,16 +4168,31 @@ export async function renderTemplateForEstimate(estimateId: string, shopDefault 
 export async function mergeValuesForConversation(conversationId: string): Promise<Record<string, string>> { return resolve(mergeValues(convOf(conversationId))); }
 // The client sees the replier's NAME on every message — "— Vienna, Rolliworks" (appended unless the reply already signs off)
 const signed = (text: string, by: string, div: Division) => { const t = text.trim(); const sig = `— ${by}, ${div === 'rollishop' ? 'Rollishop' : 'Rolliworks'}`; return /—\s*[A-Z][a-z]+,\s*Rolli(works|shop)\s*$/.test(t) || t.endsWith(sig) ? t : `${t}\n\n${sig}`; };
+// Reply channel follows the client's last inbound message: portal thread → portal reply (lands in RolliConnect Messages), anything else → email. Never SMS. (MH 2026-10-02)
+export const replyChannelSync = (conversationId: string): ReplyChannel => { const last = cx.messages.filter((m) => m.conversationId === conversationId && m.direction === 'in').sort((a, b) => b.at.localeCompare(a.at))[0]; return last?.source === 'portal' ? 'portal' : 'email'; };
 export async function replyInThread(id: string, input: { text: string; subject?: string; templateKey?: TemplateKey; photos?: PackagePhoto[] }): Promise<ConvMessage> {
-  const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId);
+  const c = convOf(id); if (!input.text.trim()) throw new Error('Write a reply first'); const a = actor(); const client = byId(fx.clients, c.clientId); const channel = replyChannelSync(id); const at = new Date().toISOString();
+  if (channel === 'portal') {
+    const jobId = c.anchor?.kind === 'job' ? c.anchor.id : c.anchor?.kind === 'estimate' ? jobForEstimateSync(c.anchor.id)?.id : undefined;
+    store.messages.push({ id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`, clientId: c.clientId, jobId, watchId: jobId ? store.jobs.find((j) => j.id === jobId)?.watchId : undefined, from: 'staff', by: a.by, text: input.text.trim(), at, readByStaff: true, readByClient: false });
+    const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: signed(input.text, a.by, c.division), at, channel, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
+    await markConversationRead(id); if (c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; }
+    cxStamp(`Reply posted to RolliConnect · ${client.firstName} ${client.lastName}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
+  }
   const token = `RT-${c.id.replace(/[^a-z0-9]/gi, '').toUpperCase()}-${++c.tokenSeq}`;
-  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: anchorRef(c.anchor).label ?? c.subject, status: 'pending', subject: input.subject?.trim() || `Re: ${c.subject}`, body: `${input.text.trim()}\n\n[reply token ${token}]${input.photos?.length ? `\n[${input.photos.length} photo${input.photos.length === 1 ? '' : 's'} attached]` : ''}`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station };
+  const email: OutboxEmail = { id: `ob-${Date.now().toString(36)}`, to: client.email, toName: `${client.firstName} ${client.lastName}`, relatedRef: anchorRef(c.anchor).label ?? c.subject, status: 'pending', subject: input.subject?.trim() || `Re: ${c.subject}`, body: `${input.text.trim()}\n\n[reply token ${token}]${input.photos?.length ? `\n[${input.photos.length} photo${input.photos.length === 1 ? '' : 's'} attached]` : ''}`, createdAt: at, createdBy: a.by, station: a.station };
   queueOutbox(email);
-  const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: signed(input.text, a.by, c.division), at: email.createdAt, token, emailId: email.id, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
+  const m = pushConv(c, { direction: 'out', source: 'staff', by: a.by, station: a.station, text: signed(input.text, a.by, c.division), at: email.createdAt, token, emailId: email.id, channel, templateKey: input.templateKey, photos: input.photos?.length ? input.photos : undefined });
   await markConversationRead(id); if (c.status === 'snoozed') { c.status = 'open'; c.snoozedUntil = undefined; }
   cxStamp(`Reply queued → Sent · ${client.firstName} ${client.lastName} · ${token}${input.templateKey ? ` · template ${input.templateKey}` : ''}`); return resolve(m);
 }
 export async function addThreadNote(id: string, text: string): Promise<ConvMessage> { const c = convOf(id); if (!text.trim()) throw new Error('Write the note first'); const a = actor(); const m = pushConv(c, { direction: 'internal', source: 'note', by: a.by, station: a.station, text: text.trim(), at: new Date().toISOString() }); cxStamp(`Internal note on thread · ${c.subject}`); return resolve(m); }
+// Parts request raised from the Inbox job card: ONE internal line on the thread ("parts requested: …") — the request itself lives on the job (MH 2026-10-02)
+export async function logPartsRequestOnThread(conversationId: string, requestId: string): Promise<ConvMessage> {
+  const c = convOf(conversationId); const r = byId(store.partsRequests, requestId); const j = byId(store.jobs, r.jobId); const part = r.partId ? byId(store.parts, r.partId) : undefined; const a = actor();
+  const m = pushConv(c, { direction: 'internal', source: 'parts', by: a.by, station: a.station, at: new Date().toISOString(), text: `parts requested: ${r.number} · ${part ? `${part.partNumber} ${part.name}` : r.searchTerms.join(' ') || 'part'} · for ${j.number}${r.note ? ` — ${r.note}` : ''}` });
+  cxStamp(`Parts request ${r.number} logged on thread · ${c.subject}`); return resolve(m);
+}
 // MOCK: a client reply arriving by email, routed back to its thread by the reply token of the last outbound message
 export async function simulateInboundReply(id: string, text: string): Promise<ConvMessage> {
   const c = convOf(id); const lastOut = cx.messages.filter((m) => m.conversationId === id && m.direction === 'out' && m.token).sort((a, b) => b.at.localeCompare(a.at))[0];
@@ -4762,7 +4778,7 @@ export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: str
 }
 // -- Client-update summary context: everything the AI is allowed to see, already translated where the mapping is deterministic. AI fills template fields; a human edits and pastes. Never sent.
 const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished', vc_safe: 'secured overnight in the workshop safe', jv_bench: 'with the workshop supervisor, queued for the bracelet / polish team' };
-export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[]; focus?: { component: string; question: string } }
+export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[]; focus?: { component: string; question: string }; lastEvent?: { at: string; plain: string } }
 export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext> {
   const mock = store.jobs.find((x) => x.id === jobId);
   if (!mock) {
@@ -4781,7 +4797,10 @@ const summaryCtxSync = (j: Job): JobSummaryContext => {
   const components = ensureParts(j).map((p) => { const pl = derivePlacement(j, p); const last = p.history?.[p.history.length - 1]; const d = days(last?.at ?? j.createdAt); return { part: PART_LABEL[p.key], plainLocation: p.completedAt ? 'finished' : PLAIN_LOCATION[pl.station] ?? 'in progress', partStatus: pl.status, daysAtStep: d, slowFlag: d > 5 && pl.status !== 'fulfilled' }; });
   const open: string[] = []; if (j.status === 'awaiting_customer_approval') open.push('awaiting client approval of the estimate'); if (j.status === 'in_review' || j.status === 'intake') open.push('estimate still being prepared'); if (j.holds.some((h) => !h.releasedAt)) open.push(`on hold: ${j.holds.filter((h) => !h.releasedAt).map((h) => `${h.type.replace(/_/g, ' ')}${h.component ? ` (${PART_LABEL[h.component].toLowerCase()} only)` : ''}`).join(', ')}`);
   const pr = (store.partsRequests ?? []).filter((r) => r.jobId === j.id); if (pr.some((r) => r.status === 'on_order')) open.push('a part is on order'); else if (pr.some((r) => r.status === 'approved' || r.status === 'pending' || r.status === 'pending_review')) open.push('a part request is being reviewed'); if (j.status === 'ready_to_ship') open.push('finished, ready for pickup / return shipping');
-  return { jobNumber: j.number, clientFirstName: c.firstName, watch: `${w.brand} ${w.model}`, status: j.status, intakeStage: j.packageId ? store.packages.find((p) => p.id === j.packageId)?.status : undefined, dueAt: j.dueAt, daysOpen: days(j.createdAt), components, openItems: open, notes: j.notes.slice(-3).map((n) => n.text) };
+  // Last event in plain words (never the internal status code) — the newest status change on the job
+  const PLAIN_STATUS: Partial<Record<JobStatus, string>> = { intake: 'received at the workshop', in_review: 'inspected, estimate being prepared', awaiting_customer_approval: 'estimate sent for your approval', approved: 'estimate approved, queued for work', awaiting_manager_review: 'finished work under final review', in_service: 'work started', testing: 'in final testing', ready_to_ship: 'finished and ready', closed: 'returned to you' };
+  const lastT = j.timeline[j.timeline.length - 1]; const lastEvent = lastT ? { at: lastT.at, plain: PLAIN_STATUS[lastT.to] ?? statusLabel(lastT.to) } : undefined;
+  return { jobNumber: j.number, clientFirstName: c.firstName, watch: `${w.brand} ${w.model}`, status: j.status, intakeStage: j.packageId ? store.packages.find((p) => p.id === j.packageId)?.status : undefined, dueAt: j.dueAt, daysOpen: days(j.createdAt), components, openItems: open, notes: j.notes.slice(-3).map((n) => n.text), lastEvent };
 };
 // -- Custody by person: who physically holds each watch head / case / bracelet right now (same data as the floor board, grouped by holder)
 const HOLDER_NAME: Record<string, string> = { MH: 'Mike (MH)', MM: 'MM' };

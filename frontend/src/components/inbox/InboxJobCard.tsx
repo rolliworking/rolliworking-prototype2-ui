@@ -38,7 +38,7 @@ export const InboxJobCard = ({ thread, onClose, pad, expandedId, onExpanded }: {
   const focusJob = (id: string) => { if (panel.fulfilled.some((f) => f.job.id === id)) { setOpen((o) => ({ ...o, fulfilled: true })); setOpenRows((r) => (r.includes(id) ? r : [...r, id])); } setExpandedId(id); };
   const anchorNumber = anchorJobId ? api.jobNumberSync(anchorJobId) : anchorRequestId ? api.requestByIdSync(anchorRequestId)?.number : undefined;
   const title = <span className="flex items-center gap-2"><span>Job card</span><span className="truncate font-normal text-ink-600">{fullName(c.client)}</span>{anchorNumber && <span data-testid="inbox-panel-anchor" className="rounded-sm bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-ink-600 ring-1 ring-line">{anchorNumber}</span>}</span>;
-  const snippet = (job: Job, outlined: boolean) => <JobSnippet key={job.id} jobId={job.id} threadId={c.id} outlined={outlined} expanded={expandedId === job.id} onExpand={() => setExpandedId(job.id)} onCollapse={() => setExpandedId(null)} onFocusJob={focusJob} onChanged={() => setTick((n) => n + 1)} />;
+  const snippet = (job: Job, outlined: boolean) => <JobSnippet key={job.id} jobId={job.id} threadId={c.id} threadSubject={c.subject} outlined={outlined} expanded={expandedId === job.id} onExpand={() => setExpandedId(job.id)} onCollapse={() => setExpandedId(null)} onFocusJob={focusJob} onChanged={() => setTick((n) => n + 1)} />;
   return <RightSheet title={title} onClose={onClose} testId="inbox-panel" kind={mode} pad={pad}>
     <ClientStrip clientId={c.clientId} threadId={c.id} currentJobId={anchorJobId} />
     <Section k="active" label="Active" count={panel.active.length} open onToggle={undefined} hint="open requests without an estimate · jobs with us · newest first">
@@ -78,12 +78,15 @@ const ClientStrip = ({ clientId, threadId, currentJobId }: { clientId: string; t
   </section>;
 };
 
-// Quick actions on a job snippet: Add note · Parts request · Generate summary (→ reply box) · Open job
-const QuickActions = ({ job, threadId, onReload }: { job: JobWithRefs; threadId: string; onReload: () => void }) => {
+// Quick actions on a job snippet (MH 2026-10-02 guardrails): Add note → internal job note stamped "from inbox · <thread>" (job page Notes, never sent) ·
+// Parts request → the existing parts flow on the job + ONE internal "parts requested: …" line on the thread · Generate summary → client-facing draft INTO the reply box (never auto-sent) · Open job (keeps the back-to-message chip)
+const QuickActions = ({ job, threadId, threadSubject, onReload }: { job: JobWithRefs; threadId: string; threadSubject: string; onReload: () => void }) => {
   const [note, setNote] = useState(''); const [noting, setNoting] = useState(false); const [pr, setPr] = useState<PartsRequestWithRefs | null>(null); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState<string | null>(null);
   const say = (m: string) => { setMsg(m); window.setTimeout(() => setMsg(null), 2500); };
-  const addNote = async () => { if (!note.trim()) return; await api.addJobNote(job.id, note); setNote(''); setNoting(false); say('Note added to the job'); onReload(); };
-  const gen = async () => { setBusy(true); try { const r = await draftJobSummary(await api.jobSummaryContext(job.id, job)); dropDraft(threadId, r.text); say(`${r.source === 'claude' ? 'Claude' : 'Rule-based'} draft dropped into the reply box`); } catch (e) { say(e instanceof Error ? e.message : 'Could not draft'); } finally { setBusy(false); } };
+  const addNote = async () => { if (!note.trim()) return; await api.addJobNote(job.id, note, `from inbox · ${threadSubject}`); setNote(''); setNoting(false); say('Note added to the job · stamped from inbox · never sent'); onReload(); };
+  const gen = async () => { setBusy(true); try { const r = await draftJobSummary(await api.jobSummaryContext(job.id, job)); dropDraft(threadId, r.text); say(`${r.source === 'claude' ? 'Claude' : 'Rule-based'} draft dropped into the reply box — edit, then Send`); } catch (e) { say(e instanceof Error ? e.message : 'Could not draft'); } finally { setBusy(false); } };
+  // the request is created on the job by the parts flow; the moment it leaves draft we log one internal line on the thread
+  const prChanged = (next: PartsRequestWithRefs) => { if (pr?.status === 'draft' && next.status !== 'draft') void api.logPartsRequestOnThread(threadId, next.id).then(() => { say(`${next.number} on the job · logged on the thread`); onReload(); }); setPr(next); };
   return <div data-testid={`inbox-panel-actions-${job.id}`} className="space-y-2">
     <div className="flex flex-wrap items-center gap-1.5">
       <Button size="sm" data-testid={`inbox-panel-note-${job.id}`} onClick={() => setNoting((v) => !v)}><StickyNote size={12} /> Add note</Button>
@@ -92,8 +95,8 @@ const QuickActions = ({ job, threadId, onReload }: { job: JobWithRefs; threadId:
       <Link to={`/jobs/${job.id}`} data-testid={`inbox-panel-open-job-${job.id}`} className="inline-flex h-7 items-center gap-1 rounded-sm border border-line bg-surface px-2 text-xs font-medium text-ink hover:bg-canvas"><ExternalLink size={12} /> Open job</Link>
       {msg && <span data-testid={`inbox-panel-msg-${job.id}`} className="text-[11px] text-moss-700">{msg}</span>}
     </div>
-    {noting && <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); void addNote(); }}><input autoFocus data-testid={`inbox-panel-note-text-${job.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note on the job — stamped, audited" className={`${field} flex-1`} /><Button size="sm" type="submit" data-testid={`inbox-panel-note-save-${job.id}`}>Save</Button></form>}
-    {pr && <PartsRequestModal request={pr} onClose={() => { setPr(null); onReload(); }} onChange={setPr} />}
+    {noting && <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); void addNote(); }}><input autoFocus data-testid={`inbox-panel-note-text-${job.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note on the job — stamped from inbox, never sent" className={`${field} flex-1`} /><Button size="sm" type="submit" data-testid={`inbox-panel-note-save-${job.id}`}>Save</Button></form>}
+    {pr && <PartsRequestModal request={pr} onClose={() => { setPr(null); onReload(); }} onChange={prChanged} />}
   </div>;
 };
 
@@ -117,7 +120,7 @@ const FlowSnippet = ({ job }: { job: JobWithRefs }) => {
 };
 
 // One job: SNIPPET (header + dots · flow lines · quick actions · Expand) ⇄ FULL (the whole job page content in place · Collapse · Open job)
-const JobSnippet = ({ jobId, threadId, outlined, expanded, onExpand, onCollapse, onFocusJob, onChanged }: { jobId: string; threadId: string; outlined: boolean; expanded: boolean; onExpand: () => void; onCollapse: () => void; onFocusJob: (id: string) => void; onChanged: () => void }) => {
+const JobSnippet = ({ jobId, threadId, threadSubject, outlined, expanded, onExpand, onCollapse, onFocusJob, onChanged }: { jobId: string; threadId: string; threadSubject: string; outlined: boolean; expanded: boolean; onExpand: () => void; onCollapse: () => void; onFocusJob: (id: string) => void; onChanged: () => void }) => {
   const money = useShowMoney();
   const [job, setJob] = useState<JobWithRefs | null | undefined>(undefined); const [prs, setPrs] = useState<PartsRequestWithRefs[]>([]); const [err, setErr] = useState<string | null>(null);
   const [modal, setModal] = useState<JobModalState>(null); const [openPr, setOpenPr] = useState<PartsRequestWithRefs | null>(null); const [labels, setLabels] = useState<LabelJob[] | null>(null); const [flash, setFlash] = useState<string | null>(null);
@@ -141,8 +144,8 @@ const JobSnippet = ({ jobId, threadId, outlined, expanded, onExpand, onCollapse,
         {flash && <span data-testid={`inbox-panel-flash-${j.id}`} className="text-[11px] text-moss-700">{flash}</span>}{err && <span data-testid={`inbox-panel-error-${j.id}`} className="text-[11px] text-rose-700">{err}</span>}
       </div>
     </div>
-    {!expanded && <div className="space-y-2 border-t border-line p-2"><FlowSnippet job={j} /><QuickActions job={j} threadId={threadId} onReload={() => { void load(); onChanged(); }} /></div>}
-    {expanded && <div className="border-t border-line p-2"><QuickActions job={j} threadId={threadId} onReload={() => { void load(); onChanged(); }} /><div className="mt-2"><JobDetailContent j={j} run={run} load={() => void load()} prs={prs} setOpenPr={setOpenPr} setModal={setModal} money={money} embedded /></div><JobModals j={j} modal={modal} setModal={setModal} labels={labels} setLabels={setLabels} openPr={openPr} setOpenPr={setOpenPr} load={load} say={say} /></div>}
+    {!expanded && <div className="space-y-2 border-t border-line p-2"><FlowSnippet job={j} /><QuickActions job={j} threadId={threadId} threadSubject={threadSubject} onReload={() => { void load(); onChanged(); }} /></div>}
+    {expanded && <div className="border-t border-line p-2"><QuickActions job={j} threadId={threadId} threadSubject={threadSubject} onReload={() => { void load(); onChanged(); }} /><div className="mt-2"><JobDetailContent j={j} run={run} load={() => void load()} prs={prs} setOpenPr={setOpenPr} setModal={setModal} money={money} embedded /></div><JobModals j={j} modal={modal} setModal={setModal} labels={labels} setLabels={setLabels} openPr={openPr} setOpenPr={setOpenPr} load={load} say={say} /></div>}
   </article>;
 };
 

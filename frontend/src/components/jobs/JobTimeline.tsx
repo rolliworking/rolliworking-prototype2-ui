@@ -31,7 +31,7 @@ export const JobTimeline = ({ job: j }: { job: JobWithRefs }) => {
       return out;
     }),
     // Job notes (bench captures, caliber corrections, photo flags…) sit on the same timeline
-    ...j.notes.map((n) => ({ id: n.id, at: n.at, by: n.by, station: n.station, kind: 'note' as const, body: <span className="inline-flex flex-wrap items-center gap-1.5"><StickyNote size={11} className="text-ink-400" /><span>{n.text}</span></span> })),
+    ...j.notes.map((n) => ({ id: n.id, at: n.at, by: n.by, station: n.station, kind: 'note' as const, body: <span className="inline-flex flex-wrap items-center gap-1.5"><StickyNote size={11} className="text-ink-400" /><span>{n.text}</span>{n.origin && <span data-testid={`note-origin-${n.id}`} className="rounded-sm bg-yellow-50 px-1 py-0.5 text-[10px] font-medium text-yellow-900 ring-1 ring-yellow-200">{n.origin}</span>}</span> })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (

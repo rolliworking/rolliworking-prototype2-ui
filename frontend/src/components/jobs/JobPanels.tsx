@@ -116,7 +116,7 @@ export const NotesPanel = ({ job: j, run }: { job: JobWithRefs; run: Refresh }) 
         <Button size="sm" variant="primary" data-testid="note-add" onClick={add} className="h-8"><Send size={12} /> Add</Button>
       </div>
       <ul className="mt-2 divide-y divide-line/70">
-        {j.notes.map((n) => <li key={n.id} data-testid={`note-${n.id}`} className="py-1.5 text-xs"><div className="text-ink">{n.text}</div><div className="text-[11px] text-ink-400">{fmtDate(n.at)} {fmtTime(n.at)} · {n.by} · {n.station}</div></li>)}
+        {j.notes.map((n) => <li key={n.id} data-testid={`note-${n.id}`} className="py-1.5 text-xs"><div className="text-ink">{n.text}</div><div className="text-[11px] text-ink-400">{fmtDate(n.at)} {fmtTime(n.at)} · {n.by} · {n.station}{n.origin && <span data-testid={`note-origin-${n.id}`} className="ml-1 rounded-sm bg-yellow-50 px-1 py-0.5 text-[10px] font-medium text-yellow-900 ring-1 ring-yellow-200">{n.origin}</span>}</div></li>)}
         {j.notes.length === 0 && <li className="py-1.5 text-xs text-ink-400">No notes yet.</li>}
       </ul>
     </div>
