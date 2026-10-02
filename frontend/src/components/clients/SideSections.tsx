@@ -106,6 +106,8 @@ const CUSTODY: Record<CustodyKind, { icon: LucideIcon; tone: string; label: stri
   hold_released: { icon: PlayCircle, tone: 'text-brand bg-brand-50', label: 'Released' },
   shipped: { icon: Truck, tone: 'text-slate-600 bg-slate-100', label: 'Shipped' },
   picked_up: { icon: ArrowUpFromLine, tone: 'text-slate-600 bg-slate-100', label: 'Picked up' },
+  storage_in: { icon: Archive, tone: 'text-indigo-800 bg-indigo-50', label: 'In storage' },
+  storage_out: { icon: ArrowUpFromLine, tone: 'text-indigo-800 bg-indigo-50', label: 'Out of storage' },
 };
 
 export const CustodySection = ({ custody }: { custody: Client360['custody'] }) => (

@@ -1307,7 +1307,7 @@ export interface JobAction {
 
 // ---- Per-component completion (MH ruling, first board walk) — decoupled from invoicing ----------------------------------
 const COMPONENT_DEF: { key: ComponentKey; label: string; depts: DeptCode[] }[] = [{ key: 'head', label: 'Watch head', depts: ['W'] }, { key: 'band', label: 'Band', depts: ['B'] }, { key: 'case', label: 'Case', depts: ['P', 'PM'] }];
-const DONE_STATUSES: JobStatus[] = ['testing', 'ready_to_ship', 'closed'];
+const DONE_STATUSES: JobStatus[] = ['testing', 'ready_to_ship', 'in_storage', 'closed'];
 const techForDepts = (j: Job, depts: DeptCode[]) => (depts.includes('W') ? j.assignees.find((a) => a === 'MM' || a === 'MH') : j.assignees.find((a) => a === 'Walter')) ?? j.assignees[0] ?? j.createdBy;
 // Components are derived from the workflow on first touch (fixtures predate the ruling); a job with no workflow gets one implicit component.
 export const ensureComponents = (j: Job): JobComponent[] => {
@@ -1347,6 +1347,7 @@ const JOB_ACTIONS: Record<JobStatus, JobAction[]> = {
     { key: 'trade_send_back', label: 'Send back…', to: 'in_service', needsReason: true, tone: 'danger' },
   ],
   ready_to_ship: [{ key: 'close', label: 'Close job', to: 'closed', tone: 'primary' }],
+  in_storage: [], // scan-only: the LTS safe scan puts it here, any scan out (station / pickup) returns it — no status click (MH 2026-10-02)
   closed: [],
 };
 // Trade lane (B2B / internal): post-work inspection hands off to the account's division manager instead of straight to invoice
@@ -1386,7 +1387,7 @@ export function legalJobActions(j: Job): JobAction[] {
 const HOLDABLE: JobStatus[] = ['approved', 'in_service', 'testing'];
 export const canHold = (j: Job) => !activeHold(j) && j.simpleStatus === 'on_hand' && HOLDABLE.includes(j.status);
 
-const WATCH_STATUS_FOR: Partial<Record<JobStatus, Watch['status']>> = { in_service: 'in_service', testing: 'qc', awaiting_manager_review: 'qc', ready_to_ship: 'awaiting_pickup', closed: 'released', awaiting_customer_approval: 'awaiting_approval' };
+const WATCH_STATUS_FOR: Partial<Record<JobStatus, Watch['status']>> = { in_service: 'in_service', testing: 'qc', awaiting_manager_review: 'qc', ready_to_ship: 'awaiting_pickup', in_storage: 'awaiting_pickup', closed: 'released', awaiting_customer_approval: 'awaiting_approval' };
 
 const getJobRow = (id: string) => byId(store.jobs, id);
 const nextJobNumber = () => `E${String(++store.counters.job).padStart(5, '0')}`; // pack: `E` + digits from a next-job-id sequence
@@ -1795,7 +1796,7 @@ export async function deleteJob(id: string): Promise<void> {
 // E5: invoice = sales order born from a QC-passed job (pack: SO is the invoicing vehicle; QBO is a stub)
 export async function invoiceJob(id: string): Promise<SalesOrderWithRefs> {
   const j = getJobRow(id);
-  if (j.status !== 'ready_to_ship' && j.status !== 'closed') throw new Error('Invoice only after QC pass (ready to ship)');
+  if (j.status !== 'ready_to_ship' && j.status !== 'in_storage' && j.status !== 'closed') throw new Error('Invoice only after QC pass (ready to ship)');
   const existing = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled');
   if (existing) throw new Error(`Job already has sales order ${existing.number}`);
   const o = buildSO({ clientId: j.clientId, jobId: j.id, lines: j.lines.map((l) => ({ description: l.description, partNumber: l.partNumber, qty: l.qty, rate: l.unitPrice, dept: l.dept })), status: 'open' });
@@ -2003,7 +2004,7 @@ export const SO_BADGE = (o: SalesOrder): 'picked_up' | 'shipped' | 'paid' | 'unp
 
 // Where a QC-passed job sits in the money tail (brief's lane names, derived from the SO)
 export function tailStage(job: Job): TailStage | null {
-  if (job.status !== 'ready_to_ship' && job.status !== 'closed') return null;
+  if (job.status !== 'ready_to_ship' && job.status !== 'in_storage' && job.status !== 'closed') return null;
   const o = store.salesOrders.find((x) => x.jobId === job.id && x.status !== 'cancelled');
   if (!o) return job.status === 'closed' ? null : 'awaiting_invoice';
   if (o.status === 'picked_up') return 'picked_up';
@@ -2342,6 +2343,7 @@ export async function pickupStart(id: string): Promise<PickupContext> {
   if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not in the pickup queue');
   if (o.channel === 'ship' && o.shippingAddress) throw new Error('Order has outbound ship products — send staff to Ship Station');
   const a = actor(); o.pickupDraft = { startedAt: new Date().toISOString(), by: a.by, station: a.station };
+  const sj = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; if (sj?.status === 'in_storage') { leaveStorageSync(sj, 'pickup', `Pickup Station · ${o.number}`); ensureParts(sj).forEach((c) => { c.station = 'finished'; c.partStatus = 'fulfilled'; }); }
   soStamp(o, 'Pickup started · step 1 customer / item'); return resolve(pickupCtx(o));
 }
 export async function pickupConfirmItem(id: string, intakePhotoId?: string): Promise<PickupContext> {
@@ -2529,6 +2531,7 @@ const closeCustody = (o: SalesOrder, why: string) => {
   if (!o.jobId) return;
   const j = store.jobs.find((x) => x.id === o.jobId);
   if (!j || j.status === 'closed') return;
+  if (j.status === 'in_storage') leaveStorageSync(j, 'pickup', `Pickup · ${o.number}`);
   if (j.status === 'ready_to_ship') pushTransition(j, 'close', 'closed', why); // the reason IS the hand-over summary — one record, shown on the job timeline
   jobStamp(j, `Custody closed · ${why} · ${o.number}`);
 };
@@ -2622,6 +2625,7 @@ const floorLane = (j: Job): FloorLane => {
     case 'testing': return 'qc';
     case 'awaiting_manager_review': return 'qc';
     case 'ready_to_ship': return 'ready';
+    case 'in_storage': return 'ready';
     default: return 'out';
   }
 };
@@ -2855,6 +2859,7 @@ const custodyOf = (clientId: string): CustodyEvent[] => {
     if (p.status === 'discrepancy_hold' && p.inspectedAt) out.push({ id: `cu-${p.id}-dis`, kind: 'discrepancy', at: p.inspectedAt, by: p.inspectedBy ?? 'Unknown', station: 'Front Desk 1', detail: `Discrepancy hold on ${p.subNumber}: ${p.discrepancyReason ?? ''}`, packageId: p.id, hitKey: `pkg-${p.id}`, path: `/intake/inspection/${p.id}` });
   });
   store.jobs.filter((j) => j.clientId === clientId).forEach((j) => {
+    if (j.storage) { out.push({ id: `cu-${j.id}-lts`, kind: 'storage_in', at: j.storage.since, by: j.storage.by, station: j.storage.station, detail: `${watchLabel(j.watchId)} moved to long-term storage · ${j.number}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` }); if (j.storage.releasedAt) out.push({ id: `cu-${j.id}-lts-out`, kind: 'storage_out', at: j.storage.releasedAt, by: j.storage.releasedBy ?? 'Unknown', station: j.storage.station, detail: `${watchLabel(j.watchId)} out of long-term storage · ${j.storage.releasedTo ?? ''}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` }); }
     const scanIn = isTradeJob(j) ? j.timeline.find((t) => t.action === 'trade_scan_in') : undefined;
     if (scanIn) out.push({ id: `cu-${j.id}-tsi`, kind: 'watch_received', at: scanIn.at, by: scanIn.by, station: scanIn.station, detail: `${watchLabel(j.watchId)} scanned in — trade job ${j.number} (no inspection report, no estimate)`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
     else if (!j.packageId && j.intakeDate) out.push({ id: `cu-${j.id}-in`, kind: 'watch_received', at: j.intakeDate, by: j.timeline[0]?.by ?? j.createdBy, station: j.timeline[0]?.station ?? 'Front Desk 1', detail: `${watchLabel(j.watchId)} received on hand · ${j.number}`, jobId: j.id, watchId: j.watchId, hitKey: `job-${j.id}`, path: `/jobs/${j.id}` });
@@ -3248,6 +3253,7 @@ export const PORTAL_STATUS: Record<PortalStatusKey, { label: string; blurb: stri
   preparing_ship: { label: 'Being prepared to ship', blurb: 'We’re packing it insured and will send tracking.', active: true },
   on_its_way: { label: 'On its way', blurb: 'Shipped — tracking is below.', active: true },
   back_with_you: { label: 'Back with you', blurb: 'This service is complete.', active: false },
+  in_storage: { label: 'In storage', blurb: 'Your watch is finished and held safely in our long-term storage while the balance is settled. Pay the balance or get in touch and we will have it ready for you.', active: false },
 };
 
 const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefined, so: SalesOrder | undefined): PortalStatus => {
@@ -3266,6 +3272,7 @@ const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefin
       case 'testing': return 'final_checks';
       case 'awaiting_manager_review': return 'finishing';
       case 'ready_to_ship': return so?.status === 'fulfilled' || so?.status === 'partial_fulfilled' ? (so.channel === 'ship' ? 'preparing_ship' : 'ready_pickup') : 'finishing';
+      case 'in_storage': return 'in_storage';
       case 'closed': return 'back_with_you';
     }
   })();
@@ -3829,7 +3836,7 @@ export async function retireCatalogService(id: string, retired = true): Promise<
   rsStamp('setup', `Catalog service ${retired ? 'retired' : 'restored'} · ${row.name}`); return resolve(undefined);
 }
 export { MERGE_FIELDS } from './fixtures/rs';
-const TEMPLATE_META: Record<string, { audience: TemplateAudience; usedBy: string }> = { intake_confirmation: { audience: 'client', usedBy: 'Receive Package (Stage 2)' }, estimate_sent: { audience: 'client', usedBy: 'Estimate → Send' }, job_in_progress: { audience: 'client', usedBy: 'Job status change' }, back_in_progress: { audience: 'client', usedBy: 'QC fail → rework' }, ready_for_pickup: { audience: 'client', usedBy: 'Job finished · pickup channel' }, shipped: { audience: 'client', usedBy: 'Ship Station confirm' }, inspection_ready: { audience: 'client', usedBy: 'Issue inspection report' }, invoice_ready: { audience: 'client', usedBy: 'Sales order → Send invoice' }, evidence_available: { audience: 'client', usedBy: 'QC pass · evidence' }, shipping_dispute: { audience: 'vendor', usedBy: 'Bill audit → dispute report' }, po_email: { audience: 'vendor', usedBy: 'Purchasing → Send PO' }, receiving_report: { audience: 'internal', usedBy: 'Purchasing → Receive against PO' }, appointment_confirmation: { audience: 'client', usedBy: 'Schedule / booking page' }, package_accepted: { audience: 'client', usedBy: 'Scan 1 → shelved' }, swo_outbound: { audience: 'vendor', usedBy: 'Shop Work Order → Create outbound label' }, swo_return_label: { audience: 'vendor', usedBy: 'Shop Work Order → Queue return label' } };
+const TEMPLATE_META: Record<string, { audience: TemplateAudience; usedBy: string }> = { long_term_storage: { audience: 'client', usedBy: 'Long-term storage · scan into the LTS safe' }, intake_confirmation: { audience: 'client', usedBy: 'Receive Package (Stage 2)' }, estimate_sent: { audience: 'client', usedBy: 'Estimate → Send' }, job_in_progress: { audience: 'client', usedBy: 'Job status change' }, back_in_progress: { audience: 'client', usedBy: 'QC fail → rework' }, ready_for_pickup: { audience: 'client', usedBy: 'Job finished · pickup channel' }, shipped: { audience: 'client', usedBy: 'Ship Station confirm' }, inspection_ready: { audience: 'client', usedBy: 'Issue inspection report' }, invoice_ready: { audience: 'client', usedBy: 'Sales order → Send invoice' }, evidence_available: { audience: 'client', usedBy: 'QC pass · evidence' }, shipping_dispute: { audience: 'vendor', usedBy: 'Bill audit → dispute report' }, po_email: { audience: 'vendor', usedBy: 'Purchasing → Send PO' }, receiving_report: { audience: 'internal', usedBy: 'Purchasing → Receive against PO' }, appointment_confirmation: { audience: 'client', usedBy: 'Schedule / booking page' }, package_accepted: { audience: 'client', usedBy: 'Scan 1 → shelved' }, swo_outbound: { audience: 'vendor', usedBy: 'Shop Work Order → Create outbound label' }, swo_return_label: { audience: 'vendor', usedBy: 'Shop Work Order → Queue return label' } };
 export async function getTemplates(): Promise<MessageTemplate[]> { return resolve(rs.templates.map((t) => ({ ...t, ...TEMPLATE_META[t.key], active: t.active ?? true }))); }
 export async function setTemplateActive(key: TemplateKey, active: boolean): Promise<MessageTemplate> { const t = rs.templates.find((x) => x.key === key); if (!t) throw new Error('Unknown template'); t.active = active; rsStamp('setup', `Template ${active ? 'reactivated' : 'retired'} · ${t.name}`); return resolve({ ...t, ...TEMPLATE_META[t.key], active }); }
 export async function saveTemplate(key: TemplateKey, subject: string, body: string): Promise<MessageTemplate> {
@@ -4613,7 +4620,7 @@ const rwStageOf = (j: Job, lane: 'head' | 'band'): RwStage['key'] | null => {
 export async function getRwFloorMap(): Promise<RwFloorMap> {
   const division = getSessionDivision();
   const live = store.jobs.filter((j) => j.division === division && j.status !== 'closed');
-  const safe = (j: Job) => !!activeHold(j) || j.status === 'awaiting_customer_approval' || j.status === 'ready_to_ship';
+  const safe = (j: Job) => !!activeHold(j) || j.status === 'awaiting_customer_approval' || j.status === 'ready_to_ship' || j.status === 'in_storage';
   const flowing = live.filter((j) => !safe(j) && !awaitingComponents(j));
   const isHead = (j: Job) => j.workflow.includes('W') || j.workflow.length === 0;
   const isBand = (j: Job) => j.workflow.some((d) => d === 'B' || d === 'P' || d === 'PM');
@@ -4628,6 +4635,7 @@ export async function getRwFloorMap(): Promise<RwFloorMap> {
       { key: 'hold', label: 'On hold', jobs: live.filter((j) => !!activeHold(j)).map(jobRefs) },
       { key: 'approval', label: 'Awaiting approval', jobs: live.filter((j) => !activeHold(j) && j.status === 'awaiting_customer_approval').map(jobRefs) },
       { key: 'ready', label: 'Ready — in safe', jobs: live.filter((j) => !activeHold(j) && j.status === 'ready_to_ship').map(jobRefs) },
+      { key: 'storage', label: 'Long-term storage', jobs: live.filter((j) => j.status === 'in_storage').map(jobRefs) },
     ],
   });
 }
@@ -4648,6 +4656,7 @@ const derivePlacement = (j: Job, c: JobComponent): { station: RwStationKey; stat
   const lane = laneOfPart(c.key);
   if (PRE.has(j.status)) return { station: 'pre_approval', status: 'not_started' };
   if (j.status === 'approved') return { station: lane === 'band' ? 'band_pre_queue' : 'pre_queue', status: 'not_started' };
+  if (j.status === 'in_storage') return { station: 'lts_safe', status: 'waiting' };
   if (j.status === 'ready_to_ship' || j.status === 'closed') return { station: 'finished', status: 'fulfilled' };
   if (j.status === 'testing' || j.status === 'awaiting_manager_review') return { station: 'final_assembly', status: 'reunited' };
   if (c.completedAt) return { station: lane === 'band' ? 'safe_await_head' : 'safe_await_band', status: 'waiting' };
@@ -4677,9 +4686,12 @@ const recordMove = (j: Job, c: JobComponent, to: RwStationKey | undefined, statu
   c.history!.push({ at: new Date().toISOString(), by: tech ?? a.by, from, to, status, via, note });
   if (to) c.station = to; c.partStatus = status; if (tech) c.custodyTech = tech;
   jobStamp(j, `${PART_LABEL[c.key]} → ${to ? stationOf(to).label : status} (${via})${note ? ` · ${note}` : ''}`);
+  // Long-term storage ends by scan only: the first component scanned anywhere but the LTS safe returns the job to active
+  if (j.status === 'in_storage' && to && to !== 'lts_safe' && via !== 'lts') leaveStorageSync(j, 'scan', `${PART_LABEL[c.key]} scanned → ${stationOf(to).label}`);
 };
 export async function movePart(jobId: string, key: ComponentKey, to: RwStationKey, via: PartMove['via'] = 'drag'): Promise<FloorDot> {
   const { j, c } = partOf(jobId, key); const lane = stationOf(to).lane;
+  if (to === LTS_KEY && via !== 'lts') throw new Error('Long-term storage is scan-only — arm the safe on Assign / Move and scan the ticket (or BIN-JV)');
   if (lane !== 'shared' && lane !== laneOfPart(key)) throw new Error(`${PART_LABEL[key]} belongs in the ${laneOfPart(key)} lane — ${stationOf(to).label} is a ${lane}-lane station`);
   if (to === 'finished') { const out = finishBlockers(j); if (out.length) throw new Error(`Cannot finish ${j.number}: ${out.join(', ')}`); }
   const before = { station: c.station, partStatus: c.partStatus, custodyTech: c.custodyTech, historyLen: (c.history ?? []).length, timelineLen: j.timeline.length, status: j.status };
@@ -4777,7 +4789,7 @@ export async function bulkCommit(rows: BulkRow[], to: RwStationKey, handTo?: str
   return resolve(out);
 }
 // -- Client-update summary context: everything the AI is allowed to see, already translated where the mapping is deterministic. AI fills template fields; a human edits and pastes. Never sent.
-const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished', vc_safe: 'secured overnight in the workshop safe', jv_bench: 'with the workshop supervisor, queued for the bracelet / polish team' };
+const PLAIN_LOCATION: Partial<Record<RwStationKey, string>> = { pre_approval: 'waiting for the estimate to be approved', pre_queue: 'in the queue, work not yet started', wm_bench_1: 'on the watchmaker bench', wm_bench_2: 'on the watchmaker bench', wm_bench_3: 'on the watchmaker bench', uncase: 'being prepared for service', mgr_safe_polish_in: 'secured, next up for polishing', polish_room: 'being polished and refinished', mgr_safe_polish_out: 'polished, secured, returning to the watchmaker', movement_service: 'movement being serviced', parts_approval: 'waiting on parts approval', recase_test: 'being reassembled and tested', into_safe_head: 'secured, waiting for the other components', safe_await_band: 'secured, waiting for the bracelet', band_pre_queue: 'in the bracelet queue, work not yet started', band_assign: 'with the bracelet technician', band_mgr_safe_in: 'secured, next up for polishing', refinish: 'being polished and refinished', band_mgr_safe_out: 'polished, secured, returning to the bracelet technician', band_qc: 'in bracelet quality control', into_safe_band: 'secured, waiting for the watch head', safe_await_head: 'secured, waiting for the watch head', final_assembly: 'in final assembly', testing: 'in final testing and quality control', finished: 'finished', vc_safe: 'secured overnight in the workshop safe', jv_bench: 'with the workshop supervisor, queued for the bracelet / polish team', lts_safe: 'held in our long-term storage safe' };
 export interface JobSummaryContext { jobNumber: string; clientFirstName: string; watch: string; status: JobStatus; intakeStage?: string; dueAt?: string; daysOpen: number; components: { part: string; plainLocation: string; partStatus: PartStatus; daysAtStep: number; slowFlag: boolean }[]; openItems: string[]; notes: string[]; focus?: { component: string; question: string }; lastEvent?: { at: string; plain: string } }
 export async function jobSummaryContext(jobId: string, live?: JobWithRefs): Promise<JobSummaryContext> {
   const mock = store.jobs.find((x) => x.id === jobId);
@@ -4798,7 +4810,7 @@ const summaryCtxSync = (j: Job): JobSummaryContext => {
   const open: string[] = []; if (j.status === 'awaiting_customer_approval') open.push('awaiting client approval of the estimate'); if (j.status === 'in_review' || j.status === 'intake') open.push('estimate still being prepared'); if (j.holds.some((h) => !h.releasedAt)) open.push(`on hold: ${j.holds.filter((h) => !h.releasedAt).map((h) => `${h.type.replace(/_/g, ' ')}${h.component ? ` (${PART_LABEL[h.component].toLowerCase()} only)` : ''}`).join(', ')}`);
   const pr = (store.partsRequests ?? []).filter((r) => r.jobId === j.id); if (pr.some((r) => r.status === 'on_order')) open.push('a part is on order'); else if (pr.some((r) => r.status === 'approved' || r.status === 'pending' || r.status === 'pending_review')) open.push('a part request is being reviewed'); if (j.status === 'ready_to_ship') open.push('finished, ready for pickup / return shipping');
   // Last event in plain words (never the internal status code) — the newest status change on the job
-  const PLAIN_STATUS: Partial<Record<JobStatus, string>> = { intake: 'received at the workshop', in_review: 'inspected, estimate being prepared', awaiting_customer_approval: 'estimate sent for your approval', approved: 'estimate approved, queued for work', awaiting_manager_review: 'finished work under final review', in_service: 'work started', testing: 'in final testing', ready_to_ship: 'finished and ready', closed: 'returned to you' };
+  const PLAIN_STATUS: Partial<Record<JobStatus, string>> = { intake: 'received at the workshop', in_review: 'inspected, estimate being prepared', awaiting_customer_approval: 'estimate sent for your approval', approved: 'estimate approved, queued for work', awaiting_manager_review: 'finished work under final review', in_service: 'work started', testing: 'in final testing', in_storage: 'finished and held in our long-term storage while the balance is settled', ready_to_ship: 'finished and ready', closed: 'returned to you' };
   const lastT = j.timeline[j.timeline.length - 1]; const lastEvent = lastT ? { at: lastT.at, plain: PLAIN_STATUS[lastT.to] ?? statusLabel(lastT.to) } : undefined;
   return { jobNumber: j.number, clientFirstName: c.firstName, watch: `${w.brand} ${w.model}`, status: j.status, intakeStage: j.packageId ? store.packages.find((p) => p.id === j.packageId)?.status : undefined, dueAt: j.dueAt, daysOpen: days(j.createdAt), components, openItems: open, notes: j.notes.slice(-3).map((n) => n.text), lastEvent };
 };
@@ -4866,7 +4878,7 @@ export async function getQueuedOutbox(): Promise<OutboxEmail[]> { return resolve
 
 // -- Work queue
 export async function getWorkQueue(): Promise<WorkQueueRow[]> {
-  return resolve(roomJobs().filter((j) => j.status !== 'ready_to_ship').sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), overdue: !!j.dueAt && j.dueAt < new Date().toISOString(), clientReplied: rw18.replied.has(j.id), parts: ensureParts(j).map((c) => ({ key: c.key, done: ['waiting', 'reunited', 'fulfilled'].includes(derivePlacement(j, c).status) || !!c.completedAt, station: derivePlacement(j, c).station })) })));
+  return resolve(roomJobs().filter((j) => j.status !== 'ready_to_ship' && j.status !== 'in_storage').sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((j) => ({ job: jobRefs(j), overdue: !!j.dueAt && j.dueAt < new Date().toISOString(), clientReplied: rw18.replied.has(j.id), parts: ensureParts(j).map((c) => ({ key: c.key, done: ['waiting', 'reunited', 'fulfilled'].includes(derivePlacement(j, c).status) || !!c.completedAt, station: derivePlacement(j, c).station })) })));
 }
 export async function simulateClientReply(jobId?: string): Promise<string> {
   const j = jobId ? getJobRow(jobId) : roomJobs().find((x) => x.status === 'awaiting_customer_approval') ?? roomJobs()[0];
@@ -5282,7 +5294,7 @@ const splitState = (dots: FloorDot[]): SplitState => {
 };
 export async function getBenchBoard(userId: string): Promise<BenchBoard> {
   const u = byId(fx.users, userId); const me = u.shortName; const now = new Date().toISOString();
-  const mine = roomJobs().filter((j) => j.status !== 'ready_to_ship' && (j.assignees.includes(me) || ensureParts(j).some((c) => c.custodyTech === me)));
+  const mine = roomJobs().filter((j) => j.status !== 'ready_to_ship' && j.status !== 'in_storage' && (j.assignees.includes(me) || ensureParts(j).some((c) => c.custodyTech === me)));
   const row = (j: Job): BenchJobRow => { const idle = workingDaysBetween(lastMovementAt(j)); return { job: jobRefs(j), parts: ensureParts(j).map((c) => dotOf(j, c)), idleDays: idle, late: !!j.dueAt && j.dueAt < now, stuck: j.status === 'in_service' && !activeHold(j) && idle >= STUCK_WORKING_DAYS }; };
   const rows = mine.map(row);
   const inProgress = rows.filter((r) => (r.job.status === 'in_service' || r.job.status === 'approved') && !activeHold(r.job));
@@ -5330,6 +5342,7 @@ export const valueTierOf = (j: Job): ValueTier => { const est = j.estimateId ? s
 const believedLocation = (j: Job, c: JobComponent): AuditLocationKey => {
   const so = store.salesOrders.find((o) => o.jobId === j.id && o.status !== 'cancelled');
   if (j.status === 'closed') return so && (so.status === 'picked_up' || so.status === 'shipped') ? 'finished' : 'orphan_bin';
+  if (j.status === 'in_storage') return 'lts_safe';
   if (j.status === 'ready_to_ship' && (!so || !so.isPaid)) return 'awaiting_payment_bin';
   if (j.status === 'intake' || j.status === 'in_review') return 'pre_intake_bin';
   if (activeHold(j)?.type === 'parts') return 'stuck_parts_bin';
@@ -5981,14 +5994,15 @@ export async function getJobEmails(jobId: string): Promise<JobEmailRow[]> {
 }
 
 // ---- Shared job filter vocabulary — one list for the RS "All Jobs" view and the RW Reports section (modeled on the legacy RolliWorks Reports screen) ----
-export type JobCategoryKey = 'in_progress' | 'waiting_approval' | 'due_4w' | 'due_3w' | 'due_14d' | 'warranty' | 'outsourced' | 'awaiting_parts_approval' | 'parts_on_order' | 'needing_update_email' | 'past_due' | 'waiver_required' | 'in_testing' | 'awaiting_inspection';
+export type JobCategoryKey = 'in_storage' | 'in_progress' | 'waiting_approval' | 'due_4w' | 'due_3w' | 'due_14d' | 'warranty' | 'outsourced' | 'awaiting_parts_approval' | 'parts_on_order' | 'needing_update_email' | 'past_due' | 'waiver_required' | 'in_testing' | 'awaiting_inspection';
 export type ReportStatusKey = 'intake' | 'inspection' | 'waiting_approval' | 'in_queue' | 'in_progress' | 'parts_approval' | 'parts_on_order' | 'in_testing' | 'finished';
 const daysUntil = (iso?: string) => (iso ? Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000) : undefined);
-const openJob = (j: Job) => !['closed', 'ready_to_ship', 'awaiting_manager_review'].includes(j.status);
+const openJob = (j: Job) => !['closed', 'ready_to_ship', 'in_storage', 'awaiting_manager_review'].includes(j.status);
 const prsOf = (j: Job) => store.partsRequests.filter((r) => r.jobId === j.id);
 const lastEmailDays = (j: Job) => { const est = j.estimateId ? store.estimates.find((e) => e.id === j.estimateId) : undefined; const refs = new Set([j.number, est?.number].filter(Boolean)); const last = store.outbox.filter((e) => refs.has(e.relatedRef)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; return last ? Math.floor((Date.now() - new Date(last.createdAt).getTime()) / 86_400_000) : 999; };
 export const JOB_CATEGORIES: { key: JobCategoryKey; label: string; test: (j: Job) => boolean }[] = [
   { key: 'in_progress', label: 'In progress', test: (j) => j.status === 'in_service' },
+  { key: 'in_storage', label: 'In storage', test: (j) => j.status === 'in_storage' },
   { key: 'waiting_approval', label: 'Waiting for approval', test: (j) => j.status === 'awaiting_customer_approval' },
   { key: 'due_4w', label: 'Due within 4 weeks', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) <= 28 },
   { key: 'due_3w', label: 'Due within 3 weeks', test: (j) => openJob(j) && (daysUntil(j.dueAt) ?? 999) <= 21 },
@@ -6007,7 +6021,7 @@ export const REPORT_STATUSES: { key: ReportStatusKey; label: string; test: (j: J
   { key: 'intake', label: 'Intake', test: (j) => j.status === 'intake' }, { key: 'inspection', label: 'Inspection', test: (j) => j.status === 'in_review' }, { key: 'waiting_approval', label: 'Waiting Approval', test: (j) => j.status === 'awaiting_customer_approval' },
   { key: 'in_queue', label: 'In Queue', test: (j) => j.status === 'approved' }, { key: 'in_progress', label: 'In Progress', test: (j) => j.status === 'in_service' && !prsOf(j).some((r) => ['pending', 'pending_review', 'awaiting_client', 'on_order'].includes(r.status)) },
   { key: 'parts_approval', label: 'Parts Approval', test: (j) => openJob(j) && prsOf(j).some((r) => r.status === 'pending' || r.status === 'pending_review' || r.status === 'awaiting_client') }, { key: 'parts_on_order', label: 'Parts On Order', test: (j) => openJob(j) && prsOf(j).some((r) => r.status === 'on_order') },
-  { key: 'in_testing', label: 'In Testing', test: (j) => j.status === 'testing' }, { key: 'finished', label: 'Finished', test: (j) => j.status === 'ready_to_ship' || j.status === 'closed' || j.status === 'awaiting_manager_review' },
+  { key: 'in_testing', label: 'In Testing', test: (j) => j.status === 'testing' }, { key: 'finished', label: 'Finished', test: (j) => j.status === 'ready_to_ship' || j.status === 'in_storage' || j.status === 'closed' || j.status === 'awaiting_manager_review' },
 ];
 export type QuickReportKey = 'at_risk' | 'late' | 'overdue' | 'approval_wait' | 'pending_waivers' | 'parts_status';
 export const QUICK_REPORTS: { key: QuickReportKey; label: string; blurb: string; test: (j: Job) => boolean }[] = [
@@ -6734,11 +6748,11 @@ export interface FlowCustody { holder: string; where: string; since?: string; so
 export interface FlowLine { key: ComponentKey; code: 'H' | 'B' | 'C'; label: string; itemLabel?: string; stages: FlowStage[]; custody: FlowCustody; mismatch?: string; finished: boolean; swoId?: string; vendorName?: string }
 export interface JobFlow { lines: FlowLine[]; done: number; total: number; split: boolean; statusStage: FlowStageKey }
 const FLOW_LABEL: Record<FlowStageKey, string> = { intake: 'Intake', queue: 'In queue', progress: 'In progress', qc: 'QC', finished: 'Finished', v_route: 'In route', v_vendor: 'At vendor', v_return: 'Returning', v_received: 'Received', v_inspect: 'Inspection' };
-const STATUS_STAGE: Record<JobStatus, FlowStageKey> = { intake: 'intake', in_review: 'intake', awaiting_customer_approval: 'intake', approved: 'queue', in_service: 'progress', testing: 'qc', awaiting_manager_review: 'qc', ready_to_ship: 'finished', closed: 'finished' };
+const STATUS_STAGE: Record<JobStatus, FlowStageKey> = { intake: 'intake', in_review: 'intake', awaiting_customer_approval: 'intake', approved: 'queue', in_service: 'progress', testing: 'qc', awaiting_manager_review: 'qc', ready_to_ship: 'finished', in_storage: 'finished', closed: 'finished' };
 const SHOP_STAGES: FlowStageKey[] = ['intake', 'queue', 'progress', 'qc', 'finished'];
 const V_KEY: Partial<Record<SwoStage, FlowStageKey>> = { sent: 'v_route', at_vendor: 'v_vendor', inbound: 'v_return', received: 'v_received', inspection: 'v_inspect' };
 // Custody station → process stage. Await/into safes = the component's own work is done, waiting for reunification (QC boundary).
-const stationStage = (k: RwStationKey): FlowStageKey => (k === 'pre_approval' ? 'intake' : k.endsWith('pre_queue') ? 'queue' : k === 'finished' ? 'finished' : k === 'final_assembly' || k === 'testing' || k.includes('await') || k.startsWith('into_safe') ? 'qc' : 'progress');
+const stationStage = (k: RwStationKey): FlowStageKey => (k === 'pre_approval' ? 'intake' : k.endsWith('pre_queue') ? 'queue' : k === 'finished' || k === 'lts_safe' ? 'finished' : k === 'final_assembly' || k === 'testing' || k.includes('await') || k.startsWith('into_safe') ? 'qc' : 'progress');
 // Which custody stages are consistent with a job status — anything else is a real status/custody mismatch (shown, never hidden)
 const CUSTODY_OK: Record<FlowStageKey, FlowStageKey[]> = { intake: ['intake', 'queue'], queue: ['intake', 'queue'], progress: ['queue', 'progress', 'qc'], qc: ['qc'], finished: ['finished'], v_route: [], v_vendor: [], v_return: [], v_received: [], v_inspect: [] };
 const COMP_CODE: Record<ComponentKey, 'H' | 'B' | 'C'> = { head: 'H', band: 'B', case: 'C' };
@@ -7166,4 +7180,76 @@ export async function sendAskReply(conversationId: string, messageId: string, te
   jobStamp(j, `Client update sent · ${m.ask.componentLabel.toLowerCase()} · portal thread + email · ${a.by}`);
   j.notes.unshift({ id: newId('jn'), text: `Client update sent (portal thread + email) · ${m.ask.componentLabel.toLowerCase()} · "${text.trim().split('\n')[0].slice(0, 90)}…"`, at: out.at, by: a.by, station: a.station });
   return resolve(out);
+}
+
+import type { LtsBoard, LtsCommitResult, LtsNotice, LtsRow, LtsSettings } from './types';
+// ---- LONG-TERM STORAGE (MH 2026-10-02). Unpaid finished jobs past the Setup threshold surface on MH's Hitlist card; the ONLY way in or out is a scan (destination-first → LTS safe, custody root VC). No status click. ----
+export const LTS_KEY: RwStationKey = 'lts_safe';
+let ltsThresholdDays = 90;
+const ltsRowOf = (j: Job, o: SalesOrder): LtsRow => {
+  const sent = o.invoiceSends[0]?.at ?? o.invoiceSentAt ?? o.createdAt; const w = store.watches.find((x) => x.id === j.watchId); const c = byId(fx.clients, j.clientId);
+  const parts = ensureParts(j); const pl = parts[0] ? derivePlacement(j, parts[0]) : undefined; const tech = parts.find((x) => x.custodyTech)?.custodyTech;
+  return { jobId: j.id, jobNumber: j.number, clientId: c.id, clientName: `${c.firstName} ${c.lastName}`, watchLabel: w ? `${w.brand} ${w.model}` : 'watch', soId: o.id, soNumber: o.number, balanceDue: o.balanceDue, daysUnpaid: Math.max(0, Math.floor((Date.now() - new Date(sent).getTime()) / 86_400_000)), invoiceSentAt: sent, custody: `${pl ? stationOf(pl.station).label : '—'}${tech ? ` · ${tech}` : ''}`, inStorage: j.status === 'in_storage', since: j.storage?.since };
+};
+// Same basis as Sales: days count from the FIRST invoice send (fallback SO created). Finished + unpaid + still in our custody.
+export const ltsBoardSync = (): LtsBoard => {
+  const rows: LtsRow[] = []; const stored: LtsRow[] = [];
+  store.jobs.filter((j) => j.status === 'ready_to_ship' || j.status === 'in_storage').forEach((j) => {
+    const o = store.salesOrders.find((x) => x.jobId === j.id && x.status !== 'cancelled' && x.status !== 'draft' && x.status !== 'picked_up' && x.status !== 'shipped'); if (!o || o.balanceDue <= 0) return;
+    const r = ltsRowOf(j, o); if (j.status === 'in_storage') stored.push(r); else if (r.daysUnpaid > ltsThresholdDays) rows.push(r);
+  });
+  rows.sort((a, b) => b.daysUnpaid - a.daysUnpaid); stored.sort((a, b) => (a.since ?? '').localeCompare(b.since ?? ''));
+  return { rows, stored, count: rows.length, totalBalance: rows.reduce((t, r) => t + r.balanceDue, 0), thresholdDays: ltsThresholdDays };
+};
+export async function getLtsBoard(): Promise<LtsBoard> { return resolve(ltsBoardSync()); }
+export async function getLtsSettings(): Promise<LtsSettings> { const t = rs.templates.find((x) => x.key === 'long_term_storage')!; return resolve({ thresholdDays: ltsThresholdDays, template: { ...t, ...TEMPLATE_META[t.key], active: t.active ?? true } }); }
+export async function setLtsThresholdDays(days: number): Promise<LtsSettings> {
+  const a = actor(); if (a.user?.accessTier !== 'manager') throw new Error('Storage threshold is manager-only'); if (!Number.isFinite(days) || days < 1 || days > 3650) throw new Error('Days must be between 1 and 3650');
+  const before = ltsThresholdDays; ltsThresholdDays = Math.round(days); rsStamp('setup', `Long-term storage threshold · ${before} → ${ltsThresholdDays} days`);
+  appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `Long-term storage threshold ${before} → ${ltsThresholdDays} days` }); return getLtsSettings();
+}
+export const storageChipSync = (j: Job): { since: string; days: number; balance?: number } | null => { if (j.status !== 'in_storage' || !j.storage) return null; const o = store.salesOrders.find((x) => x.jobId === j.id && x.status !== 'cancelled'); return { since: j.storage.since, days: Math.floor((Date.now() - new Date(j.storage.since).getTime()) / 86_400_000), balance: o?.balanceDue }; };
+const ltsNotice = (j: Job, o: SalesOrder | undefined): LtsNotice => {
+  const c = byId(fx.clients, j.clientId); const src = templateSource('long_term_storage', true); const vals: Record<string, string> = { ...mergeValues({ clientId: j.clientId, anchor: { kind: 'job', id: j.id } }), '{{storage.since}}': new Date(j.storage!.since).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), '{{balance_due}}': fmtMoney(o?.balanceDue ?? 0) };
+  const fill = (t: string) => t.replace(/\{\{[a-z_.]+\}\}/g, (f) => vals[f] || f); const subject = fill(src.subject); const body = fill(src.body); const a = actor();
+  const email = queueOutbox({ id: `ob-lts-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o?.number ?? j.number, status: 'pending', subject, body, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station, templateKey: 'long_term_storage' });
+  return { jobId: j.id, jobNumber: j.number, clientName: `${c.firstName} ${c.lastName}`, to: c.email, subject, body, emailId: email.id };
+};
+// Entering storage: every component → LTS safe (custody VC, container-style), status In storage (status before kept), custody log line, client notice queued (Sent record) + portal mirror via status
+const enterStorageSync = (j: Job): LtsNotice => {
+  if (j.status === 'in_storage') throw new Error(`${j.number} is already in long-term storage`);
+  if (j.status === 'closed') throw new Error(`${j.number} is closed — nothing to store`);
+  if (!DONE_STATUSES.includes(j.status) && j.status !== 'awaiting_manager_review') throw new Error(`${j.number} is ${j.status.replace(/_/g, ' ')} — only finished jobs go to long-term storage`);
+  const a = actor(); const o = store.salesOrders.find((x) => x.jobId === j.id && x.status !== 'cancelled'); const at = new Date().toISOString();
+  j.storage = { since: at, by: a.by, station: a.station, statusBefore: j.status };
+  ensureParts(j).forEach((c) => { c.containerKey = undefined; recordMove(j, c, LTS_KEY, 'waiting', 'lts', 'long-term storage · custody VC', 'VC'); });
+  pushTransition(j, 'to_storage', 'in_storage', `Moved to long-term storage · unpaid ${o ? fmtMoney(o.balanceDue) : ''} · by scan at ${a.station}`.replace('  ', ' '));
+  if (o) soStamp(o, `Watch moved to long-term storage · balance ${fmtMoney(o.balanceDue)} · client notice queued`);
+  const n = ltsNotice(j, o); j.storage.noticeEmailId = n.emailId;
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} → long-term storage · ${o ? `${o.number} · ${fmtMoney(o.balanceDue)} due` : 'no invoice'} · notice queued to ${n.to}` });
+  return n;
+};
+// Leaving storage: any scan out (another station, Pickup Station) — restores the status it had before storage; chip clears
+export const leaveStorageSync = (j: Job, via: 'scan' | 'pickup', detail: string) => {
+  if (j.status !== 'in_storage') return; const a = actor(); const back = j.storage?.statusBefore ?? 'ready_to_ship';
+  if (j.storage) { j.storage.releasedAt = new Date().toISOString(); j.storage.releasedBy = a.by; j.storage.releasedTo = detail; }
+  pushTransition(j, 'from_storage', back, `Out of long-term storage · ${detail}`);
+  const o = store.salesOrders.find((x) => x.jobId === j.id && x.status !== 'cancelled'); if (o) soStamp(o, `Watch out of long-term storage · ${detail}`);
+  appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail: `${j.number} out of long-term storage (${via}) · ${detail}` });
+};
+export const isLtsCode = (s: string) => /^(LTS|SAFE-LTS|LTS-SAFE)$/i.test(s.trim());
+// Destination-first scan session for the LTS safe: a ticket label adds that job; BIN-JV adds every ticket riding in the bin. Nothing moves until Commit.
+export async function resolveLtsLabel(label: string): Promise<BulkRow[]> {
+  const raw = label.trim();
+  if (isBinCode(raw)) { const v = binViewSync(); const rows = v.inBin; if (!rows.length) throw new Error(`${BIN_CODE} is empty — nothing to store`); return resolve(rows.map((r) => { const j = byId(store.jobs, r.jobId); const w = store.watches.find((x) => x.id === j.watchId); return { id: newId('bulk'), at: new Date().toISOString(), label: `${BIN_CODE} · ${j.number}`, jobId: j.id, jobNumber: j.number, watchLabel: w ? `${w.brand} ${w.model}` : 'watch', key: 'case' as ComponentKey, clientName: clientName(j.clientId) }; })); }
+  const j = await findJobByLabel(raw.replace(/^BAND-/i, '').replace(/\|B$/i, '')); if (!j) throw new Error(`No job matches label ${label}`);
+  return resolve([{ id: newId('bulk'), at: new Date().toISOString(), label: raw, jobId: j.id, jobNumber: j.number, watchLabel: `${j.watch.brand} ${j.watch.model}`, key: 'case', clientName: `${j.client.firstName} ${j.client.lastName}` }]);
+}
+export async function ltsCommit(rows: BulkRow[]): Promise<LtsCommitResult<BulkResult>> {
+  if (stationLockedForMe(LTS_KEY)) throw new Error(`Long-term storage is a locked station for ${currentUserSync()?.shortName} (Access control → Limits)`);
+  const results: BulkResult[] = []; const notices: LtsNotice[] = []; const seen = new Set<string>();
+  for (const r of rows) { if (seen.has(r.jobId)) continue; seen.add(r.jobId);
+    try { const n = enterStorageSync(byId(store.jobs, r.jobId)); notices.push(n); results.push({ row: r, ok: true, detail: `${r.jobNumber} → long-term storage · notice to ${n.to}` }); }
+    catch (e) { results.push({ row: r, ok: false, detail: e instanceof Error ? e.message : 'Failed' }); } }
+  return resolve({ results, notices });
 }

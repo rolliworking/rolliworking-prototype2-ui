@@ -10,6 +10,7 @@ import { DeptBadge } from '@/components/ui/Pills';
 import { Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents } from '@/lib/format';
 import { BookingRulesCard } from '@/pages/SchedulePage';
+import { LongTermStorageCard } from '@/components/setup/LongTermStorageCard';
 
 type UserForm = { id?: string; firstName: string; shortName: string; dutyLabel: string; accessTier: AccessTier; roles: Role[]; division: Division | 'both'; password: string; pin: string };
 const blankUser: UserForm = { firstName: '', shortName: '', dutyLabel: '', accessTier: 'concierge', roles: ['concierge'], division: 'rolliworks', password: '', pin: '1234' };
@@ -37,6 +38,7 @@ export function SetupRsPanels() {
     </Card>
     <BookingRulesCard />
     <FeatureSwitchesCard />
+    <LongTermStorageCard />
     <RcAccessCard />
     <div className="grid grid-cols-2 gap-4">
       <Card title="Locations" subtitle="Stock locations · division-stamped" bodyClassName="p-0" testId="setup-locations-card"><ul className="divide-y divide-line/70">{data.locations.map((l) => <li key={l.id} className="flex justify-between px-4 py-2 text-xs"><span>{l.name}</span><span className="capitalize text-ink-500">{l.kind} · {l.division}</span></li>)}</ul><p className="px-4 py-2 text-[11px] text-ink-400">Add / edit locations <Provisional note="stub — not built" /></p></Card>

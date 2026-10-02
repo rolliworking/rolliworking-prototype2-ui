@@ -10,6 +10,7 @@ import { ClientRequestBadge } from '@/components/jobs/ClientRequests';
 import { AtRiskTag } from '@/components/jobs/ComponentWaitChips';
 import { AwayBreadcrumbs } from '@/components/jobs/OutsourceInfo';
 import { KindPill, OwnerBadge, PriorityPill, StatusWithHold } from '@/components/jobs/JobBits';
+import { StorageChip } from '@/components/jobs/StorageChip';
 import { TailPill } from '@/components/sales/SalesBits';
 import { PmTag, WbpClientRows, WbpLegend } from '@/components/shared/WbpDots';
 import { Modal } from '@/components/ui/Modal';
@@ -42,6 +43,7 @@ export const ItemHeader = ({ job: j, so, reload }: { job: JobWithRefs; so: Sales
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="item-chips">
           <StatusWithHold job={j} />
+          <StorageChip job={j} testId="job-storage-chip" />
           <PriorityPill priority={j.priority} testId="job-priority" />
           <KindPill kind={j.kind} testId="job-kind-pill" client={j.client} />
           <PmTag workflow={j.workflow} testId="job-pm-tag" />

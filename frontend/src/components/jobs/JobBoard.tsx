@@ -13,13 +13,13 @@ import { fmtDate, fmtMoneyCents, fullName, humanize } from '@/lib/format';
 
 export type Lane = JobStatus | 'on_hold' | 'awaiting_components';
 export const LANES: Lane[] = ['intake', 'in_review', 'awaiting_customer_approval', 'approved', 'in_service', 'awaiting_components', 'on_hold', 'testing', 'awaiting_manager_review', 'ready_to_ship', 'closed'];
-export const LANE_LABEL: Record<Lane, string> = { intake: 'Intake', in_review: 'In review', awaiting_customer_approval: 'Awaiting customer', approved: 'Approved', in_service: 'In service', awaiting_components: 'Awaiting components', on_hold: 'On hold', testing: 'Testing / QC', awaiting_manager_review: 'Trade · manager review', ready_to_ship: 'Ready to ship', closed: 'Closed' };
+export const LANE_LABEL: Record<Lane, string> = { intake: 'Intake', in_review: 'In review', awaiting_customer_approval: 'Awaiting customer', approved: 'Approved', in_service: 'In service', awaiting_components: 'Awaiting components', on_hold: 'On hold', testing: 'Testing / QC', awaiting_manager_review: 'Trade · manager review', ready_to_ship: 'Ready to ship', in_storage: 'In storage', closed: 'Closed' };
 
 export const laneOf = (j: JobWithRefs): Lane => (api.activeHold(j) ? 'on_hold' : api.awaitingComponents(j) ? 'awaiting_components' : j.status);
 
 export const groupByLane = (jobs: JobWithRefs[]) => {
   const g = Object.fromEntries(LANES.map((l) => [l, [] as JobWithRefs[]])) as Record<Lane, JobWithRefs[]>;
-  jobs.forEach((j) => g[laneOf(j)].push(j));
+  jobs.forEach((j) => { const l = laneOf(j); if (g[l]) g[l].push(j); }); // in_storage has no board lane — it lives behind the Jobs filter
   return g;
 };
 

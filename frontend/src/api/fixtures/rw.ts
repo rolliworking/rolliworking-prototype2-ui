@@ -29,6 +29,8 @@ export const RW_STATIONS: RwStation[] = [
   // JV bin — a container in the custody model: overnight in Vienna's safe, by day at JV's bench (both shared-lane so bracelets and cases ride together)
   { key: 'vc_safe', label: "Vienna's safe (VC)", lane: 'shared', order: 1 },
   { key: 'jv_bench', label: "JV's bench", lane: 'shared', order: 2 },
+  // Long-term storage safe (MH 2026-10-02) — unpaid finished jobs past the Setup threshold; custody root VC; scan-only in and out
+  { key: 'lts_safe', label: 'Long-term storage', lane: 'shared', order: 3 },
   { key: 'final_assembly', label: 'Final assembly', lane: 'shared', order: 13 },
   { key: 'testing', label: 'Testing', lane: 'shared', order: 14 },
   { key: 'finished', label: 'Finished', lane: 'shared', order: 15 },

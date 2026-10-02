@@ -7,6 +7,7 @@ import type { DeptCode, JobWithRefs } from '@/api/client';
 import { JobBoard, JobGroupedList, LANES, LANE_LABEL, laneOf } from '@/components/jobs/JobBoard';
 import { JobsSubNav, Provisional } from '@/components/jobs/JobBits';
 import { JobTabs, TAB_LABEL, tabOf, type JobTab } from '@/components/jobs/JobTabs';
+import { StorageList } from '@/components/jobs/StorageList';
 import { Card } from '@/components/ui/Card';
 import { FilterChip } from '@/components/ui/Button';
 import { DeptBadge } from '@/components/ui/Pills';
@@ -35,7 +36,9 @@ export default function JobsPage() {
     setParams(next);
   };
 
-  const byWf = useMemo(() => (rows ?? []).filter((j) => wf === 'all' || j.workflow.includes(wf as DeptCode)), [rows, wf]);
+  // In storage (MH 2026-10-02) drops off every active lane / board; it lives behind its own filter chip
+  const stored = useMemo(() => (rows ?? []).filter((j) => j.status === 'in_storage' && (wf === 'all' || j.workflow.includes(wf as DeptCode))), [rows, wf]);
+  const byWf = useMemo(() => (rows ?? []).filter((j) => j.status !== 'in_storage' && (wf === 'all' || j.workflow.includes(wf as DeptCode))), [rows, wf]);
   const shown = useMemo(() => byWf.filter((j) => lane === 'all' || laneOf(j) === lane), [byWf, lane]);
   const laneCounts = useMemo(() => Object.fromEntries(LANES.map((l) => [l, byWf.filter((j) => laneOf(j) === l).length])), [byWf]);
   const wfCounts = useMemo(() => Object.fromEntries(WORKFLOWS.map((d) => [d, (rows ?? []).filter((j) => j.workflow.includes(d)).length])), [rows]);
@@ -69,9 +72,10 @@ export default function JobsPage() {
       {tab === 'all' && <div className="mb-3 flex flex-wrap items-center gap-1.5" data-testid="status-filters">
         <FilterChip active={lane === 'all'} onClick={() => set({ status: 'all' })} testId="job-filter-all">All</FilterChip>
         {LANES.map((l) => <FilterChip key={l} active={lane === l} onClick={() => set({ status: l })} testId={`job-filter-${l}`}>{LANE_LABEL[l]} <span className="ml-1 opacity-60" data-testid={`job-filter-count-${l}`}>{laneCounts[l] ?? 0}</span></FilterChip>)}
+        <FilterChip active={lane === 'in_storage'} onClick={() => set({ status: 'in_storage' })} testId="job-filter-in_storage">{LANE_LABEL.in_storage} <span className="ml-1 opacity-60" data-testid="job-filter-count-in_storage">{stored.length}</span></FilterChip>
       </div>}
 
-      {tab !== 'all' ? (view === 'board' ? <JobTabs tab={tab} jobs={byWf} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={byWf.filter((j) => tabOf(j) === tab)} /></Card>) : view === 'board' ? <JobBoard jobs={shown} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={shown} /></Card>}
+      {tab === 'all' && lane === 'in_storage' ? <StorageList jobs={stored} /> : tab !== 'all' ? (view === 'board' ? <JobTabs tab={tab} jobs={byWf} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={byWf.filter((j) => tabOf(j) === tab)} /></Card>) : view === 'board' ? <JobBoard jobs={shown} /> : <Card bodyClassName="p-0"><JobGroupedList jobs={shown} /></Card>}
     </div>
   );
 }

@@ -115,8 +115,14 @@ const pickupJobs = (): Job[] => {
     ['j-pu6', 'E02095', 'c-17', 'w-pu6', ['W', 'B', 'P'], 'A9T4M2K8', 17, 'ready_to_ship', [line('Complete movement service — cal. 3235', 1450, 'W'), line('Jubilee re-pin', 180, 'B'), line('Case & bracelet refinish', 340, 'P')]],
     ['j-pu7', 'E02096', 'c-19', 'w-pu7', ['W'], 'B6N1R8V3', 30, 'closed', [line('Movement service — cal. MT5652', 1100, 'W')]],
     ['j-pu8', 'E02097', 'c-20', 'w-pu8', ['P'], 'H2P7L4Q9', 26, 'closed', [line('Case & bracelet refinish', 340, 'P')]],
+    // Long-term storage (MH 2026-10-02): finished + invoiced > 90 days, unpaid. j-lt3 is ALREADY in the LTS safe (storage set below)
+    ['j-lt1', 'E02098', 'c-22', 'w-lt1', ['W', 'B'], 'K8M2R7T1', 140, 'ready_to_ship', [line('Movement service — cal. 3235', 1450, 'W'), line('Jubilee bracelet re-pin + clasp', 260, 'B')]],
+    ['j-lt2', 'E02099', 'c-23', 'w-lt2', ['W'], 'P3Q9V2L6', 118, 'ready_to_ship', [line('Movement service — cal. MT5602', 1100, 'W')]],
+    ['j-lt3', 'E02100', 'c-24', 'w-lt3', ['W', 'P'], 'R6T1K9M4', 205, 'ready_to_ship', [line('Complete movement service — cal. 3235', 1450, 'W'), line('Case & bracelet refinish', 340, 'P')]],
   ];
-  return rows.map(([id, number, clientId, watchId, workflow, serial, d, status, lines]) => { const j = build({ id, number, clientId, watchId, workflow, status, owner: 'concierge', assignees: ['Leo'], createdDaysAgo: d, dueInDays: status === 'closed' ? undefined : 0, lines }); j.photos.unshift(intakeShot(number, serial, d)); return j; });
+  return rows.map(([id, number, clientId, watchId, workflow, serial, d, status, lines]) => { const j = build({ id, number, clientId, watchId, workflow, status, owner: 'concierge', assignees: ['Leo'], createdDaysAgo: d, dueInDays: status === 'closed' ? undefined : 0, lines }); j.photos.unshift(intakeShot(number, serial, d));
+    if (id === 'j-lt3') { const since = daysAgo(38, 16); j.status = 'in_storage'; j.storage = { since, by: 'Vienna', station: 'Front Desk 1', statusBefore: 'ready_to_ship' }; j.timeline.push({ id: `${id}-lts`, at: since, by: 'Vienna', station: 'Front Desk 1', action: 'to_storage', from: 'ready_to_ship', to: 'in_storage', reason: 'Moved to long-term storage · unpaid $1,790 · by scan at Front Desk 1' }); }
+    return j; });
 };
 
 export const jobs: Job[] = [

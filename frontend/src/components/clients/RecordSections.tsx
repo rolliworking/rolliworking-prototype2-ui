@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { Client360, EstimateWithRefs } from '@/api/client';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Pills';
+import { StorageChip } from '@/components/jobs/StorageChip';
 import { WbpJobCell } from '@/components/shared/WbpDots';
 import { EmptyRow, Table, Td, Th } from '@/components/ui/Table';
 import { fmtDate, fmtMoneyCents, humanize } from '@/lib/format';
@@ -72,7 +73,7 @@ export const JobsSection = ({ jobs }: { jobs: Client360['jobs'] }) => (
               <Td className="font-mono text-xs font-medium text-ink"><Link to={`/jobs/${j.id}`} className="hover:underline">{j.number}</Link>{j.kind !== 'service' && <span className="ml-1 text-[10px] font-sans text-ink-400">{humanize(j.kind)}</span>}</Td>
               <Td className="text-ink-700">{watchLabel(j.watch)}</Td>
               <Td><span className="inline-flex items-center gap-1"><WbpJobCell jobId={j.id} workflow={j.workflow} /><span className="ml-1 max-w-[160px] truncate text-ink-500">{j.lines[0]?.description}</span></span></Td>
-              <Td><span className="inline-flex items-center gap-1"><StatusPill status={j.status} />{hold && <span className="rounded-sm bg-amber-50 px-1 text-[10px] text-amber-800">hold · {hold.type}</span>}</span></Td>
+              <Td><span className="inline-flex items-center gap-1"><StatusPill status={j.status} /><StorageChip job={j} testId={`client360-storage-${j.id}`} dense />{hold && <span className="rounded-sm bg-amber-50 px-1 text-[10px] text-amber-800">hold · {hold.type}</span>}</span></Td>
               <Td className="text-ink-700">{j.assignees.join(', ') || <span className="text-ink-400">—</span>}</Td>
               <Td className="tabular text-right font-medium">{fmtMoneyCents(j.total)}</Td>
               <Td className="tabular whitespace-nowrap text-right text-ink-500">{when(j.createdAt)}</Td>

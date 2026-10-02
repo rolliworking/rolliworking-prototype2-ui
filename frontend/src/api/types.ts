@@ -247,7 +247,7 @@ export interface QuoteContext {
 
 // ---- Jobs (E4) — enums per PROMPT-PACK-jobs.md (DB enums win over app lists) ----
 
-export type JobStatus = 'intake' | 'in_review' | 'awaiting_customer_approval' | 'approved' | 'in_service' | 'testing' | 'awaiting_manager_review' | 'ready_to_ship' | 'closed';
+export type JobStatus = 'intake' | 'in_review' | 'awaiting_customer_approval' | 'approved' | 'in_service' | 'testing' | 'awaiting_manager_review' | 'ready_to_ship' | 'in_storage' | 'closed';
 export type JobSimpleStatus = 'estimate' | 'on_hand' | 'finished';
 export type JobPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type HoldType = 'parts' | 'outsource';
@@ -340,7 +340,10 @@ export interface Job {
   inboundDeclaredValue?: number;
   returnOfJobId?: string; // warranty / return job: the watch came back after pickup — linked to the original job ("returned from E0xxxx")
   returnReason?: string;
+  storage?: JobStorage; // long-term storage (MH 2026-10-02): set by the LTS safe scan, cleared by any scan out; status before storage is restored on exit
 }
+// Long-term storage record — entered by scan only (destination-first → LTS safe), never by a status click
+export interface JobStorage { since: string; by: string; station: string; statusBefore: JobStatus; noticeEmailId?: string; releasedAt?: string; releasedBy?: string; releasedTo?: string }
 
 // Client request notes — what the client asked for; surfaced on pad/wm cards, popped on every label scan, enforced at QC
 export interface ClientRequestAck { at: string; by: string; via: string }
@@ -363,7 +366,7 @@ export interface JobComponent {
   containerKey?: string; binOrigin?: string; // JV bin: inside the bin now · last bin this part rode in (out with team)
 }
 export type PartStatus = 'not_started' | 'in_progress' | 'waiting' | 'reunited' | 'fulfilled';
-export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo' | 'container'; note?: string }
+export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo' | 'container' | 'lts'; note?: string }
 export interface TechCompletionRow { tech: string; months: Record<string, { total: number; byDept: Record<DeptCode, number> }>; total: number }
 export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]; generatedAt: string }
 
@@ -556,6 +559,7 @@ export interface OutboxEmail {
   station: string;
   status: 'pending';
   payLink?: string;
+  templateKey?: TemplateKey; // which message template produced this send (usage counts, D-template picker)
 }
 
 export type LabelType = 'pdf417_data' | 'ref_serial';
@@ -937,7 +941,7 @@ export interface SearchHit {
 export interface SearchGroup { kind: IdentifierKind; label: string; hits: SearchHit[] }
 export interface SearchResults { query: string; groups: SearchGroup[]; total: number }
 
-export type CustodyKind = 'package_arrived' | 'arrival_scan' | 'shelved' | 'open_scan' | 'watch_received' | 'discrepancy' | 'hold_placed' | 'hold_released' | 'shipped' | 'picked_up';
+export type CustodyKind = 'package_arrived' | 'arrival_scan' | 'shelved' | 'open_scan' | 'watch_received' | 'discrepancy' | 'hold_placed' | 'hold_released' | 'shipped' | 'picked_up' | 'storage_in' | 'storage_out';
 
 export interface CustodyEvent {
   id: string;
@@ -1048,7 +1052,7 @@ export interface Message {
   emailId?: string;
 }
 
-export type PortalStatusKey = 'on_file' | 'expecting' | 'awaiting_approval' | 'inspecting' | 'queued' | 'on_bench' | 'awaiting_part' | 'with_specialist' | 'final_checks' | 'finishing' | 'ready_pickup' | 'preparing_ship' | 'on_its_way' | 'back_with_you';
+export type PortalStatusKey = 'on_file' | 'expecting' | 'awaiting_approval' | 'inspecting' | 'queued' | 'on_bench' | 'awaiting_part' | 'with_specialist' | 'final_checks' | 'finishing' | 'ready_pickup' | 'preparing_ship' | 'on_its_way' | 'back_with_you' | 'in_storage';
 export interface PortalStatus { key: PortalStatusKey; label: string; blurb: string; active: boolean }
 
 export type NeedsYouKind = 'approve_estimate' | 'approve_parts' | 'pay_balance' | 'confirm_pickup' | 'shipping_info' | 'staff_reply' | 'review_inspection';
@@ -1135,7 +1139,7 @@ export interface CycleCountLine { partId: string; expected: number; counted?: nu
 export interface CycleCount extends Stamp { id: string; number: string; locationId: string; status: 'open' | 'posted'; lines: CycleCountLine[]; postedAt?: string; postedBy?: string; variances: number; gainLoss?: number }
 export interface StockRow { part: Part; location: StockLocation; onHand: number; reorderPoint: number; low: boolean }
 
-export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted' | 'swo_outbound' | 'swo_return_label';
+export type TemplateKey = 'intake_confirmation' | 'estimate_sent' | 'job_in_progress' | 'back_in_progress' | 'ready_for_pickup' | 'shipped' | 'inspection_ready' | 'invoice_ready' | 'evidence_available' | 'shipping_dispute' | 'po_email' | 'receiving_report' | 'appointment_confirmation' | 'package_accepted' | 'swo_outbound' | 'swo_return_label' | 'long_term_storage';
 export type TemplateAudience = 'client' | 'vendor' | 'internal';
 export interface MessageTemplate extends Stamp { key: TemplateKey; name: string; subject: string; body: string; mergeFields: string[]; updatedBy: string; audience?: TemplateAudience; usedBy?: string; active?: boolean }
 
@@ -1250,13 +1254,14 @@ export interface RequestRow extends ServiceRequest { client: Client; watch?: Wat
 // ---- E11 RolliWorking `/rw` — legacy two-lane floor (head lane / band lane → Final assembly; Into safe off-ramp) — PROVISIONAL vs the 9-lane RS map
 export type RwStageKey = 'intake' | 'review' | 'bench' | 'polish';
 export interface RwStage { key: RwStageKey; label: string; jobs: JobWithRefs[] }
-export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage[]; finalAssembly: JobWithRefs[]; intoSafe: { key: 'components' | 'hold' | 'approval' | 'ready'; label: string; jobs: JobWithRefs[] }[] }
+export interface RwFloorMap { division: Division; head: RwStage[]; band: RwStage[]; finalAssembly: JobWithRefs[]; intoSafe: { key: 'components' | 'hold' | 'approval' | 'ready' | 'storage'; label: string; jobs: JobWithRefs[] }[] }
 
 // ---- E18 RW deep build — shop floor core ----------------------------------------------------------------
 export type RwLane = 'head' | 'band' | 'shared';
 export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'uncase' | 'mgr_safe_polish_in' | 'polish_room' | 'mgr_safe_polish_out' | 'movement_service' | 'parts_approval' | 'recase_test' | 'into_safe_head' | 'safe_await_band'
   | 'band_pre_queue' | 'band_assign' | 'band_mgr_safe_in' | 'refinish' | 'band_mgr_safe_out' | 'band_qc' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished'
-  | 'vc_safe' | 'jv_bench'; // JV bin: Vienna's safe overnight · JV's bench by day
+  | 'vc_safe' | 'jv_bench' // JV bin: Vienna's safe overnight · JV's bench by day
+  | 'lts_safe'; // Long-term storage safe (custody root VC) — unpaid finished jobs past the Setup threshold, scan-only in and out
 // Lock = the item is physically in a manager's safe (custody-holding point), never an abstract gate
 export const isSafeStation = (k: RwStationKey): boolean => k.includes('safe');
 export type GateDirection = 'in' | 'out';
@@ -1376,3 +1381,10 @@ export interface IntercomCall { id: string; from: string; to: string; startedAt:
 export type PageZone = 'all' | 'wm' | 'front';
 export interface StorePage { id: string; by: string; from: string; text: string; at: string; division: Division | 'all'; zone: PageZone }
 export interface IntercomState { me: string; stations: IntercomStation[]; call?: IntercomCall; pages: StorePage[]; history: IntercomCall[] }
+
+// ---- Long-term storage (MH 2026-10-02) ----
+export interface LtsRow { jobId: string; jobNumber: string; clientId: string; clientName: string; watchLabel: string; soId: string; soNumber: string; balanceDue: number; daysUnpaid: number; invoiceSentAt: string; custody: string; inStorage: boolean; since?: string }
+export interface LtsBoard { rows: LtsRow[]; stored: LtsRow[]; count: number; totalBalance: number; thresholdDays: number }
+export interface LtsSettings { thresholdDays: number; template: MessageTemplate }
+export interface LtsNotice { jobId: string; jobNumber: string; clientName: string; to: string; subject: string; body: string; emailId: string }
+export interface LtsCommitResult<R = unknown> { results: R[]; notices: LtsNotice[] }

@@ -4,7 +4,7 @@ import type { FloorDot, RwStationKey } from '@/api/client';
 import { PART_COLOR } from '@/components/rw/RwBits';
 
 // Station map = two tracks (WATCH / BRACELET) with a manager-gated branch-and-return Polish leg under each. Lock = the part is in a manager's safe.
-export type MapRow = 'wat' | 'wat_ramp' | 'bra' | 'bra_ramp' | 'bin';
+export type MapRow = 'wat' | 'wat_ramp' | 'bra' | 'bra_ramp' | 'bin' | 'lts';
 export interface MapNode { id: string; keys: RwStationKey[]; label: string; row: MapRow; col: number; lock?: boolean; owner?: string; assign?: boolean; sub?: string; free?: boolean }
 export const NODES: MapNode[] = [
   { id: 'pre_approval', keys: ['pre_approval'], label: 'Pre-approval', row: 'wat', col: 2 },
@@ -28,8 +28,10 @@ export const NODES: MapNode[] = [
   // JV bin — the container's two homes: Vienna's safe overnight, JV's bench by day (BIN-JV scan moves everything inside)
   { id: 'vc_safe', keys: ['vc_safe'], label: "Vienna's safe (VC)", row: 'bin', col: 3, lock: true, sub: 'JV bin overnight · BIN-JV scan · tickets enter here' },
   { id: 'jv_bench', keys: ['jv_bench'], label: "JV's bench", row: 'bin', col: 4, sub: 'JV bin by day · custody JV workshop' },
+  // Long-term storage safe (MH 2026-10-02) — same safe class as the main safe, custody root VC; finished + unpaid past the Setup threshold; scan-only in and out
+  { id: 'lts_safe', keys: ['lts_safe'], label: 'Long-term storage', row: 'lts', col: 3, lock: true, owner: 'Vienna', sub: 'unpaid past threshold · scan ticket or BIN-JV · custody VC' },
 ];
-const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4, bin: 5 };
+const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4, bin: 5, lts: 6 };
 const TRACK_LINES: string[][] = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band'], ['vc_safe', 'jv_bench']];
 const RAMPS: { from: string; leg: string[]; to: string }[] = [{ from: 'uncase', leg: ['safe_polish_in', 'polish_room', 'safe_polish_out'], to: 'movement' }, { from: 'assign_band', leg: ['band_safe_in', 'refinish', 'band_safe_out'], to: 'band_qc' }];
 
@@ -73,14 +75,15 @@ export const StationMap = ({ dots, onDrop, onOpen, onSelect, selectedId, focus }
   const dropTo = (n: MapNode) => (e: React.DragEvent) => onDrop(targetKey(n, dots), e);
   return <div data-testid="station-map" ref={host} className="relative rounded-md border border-white/10 bg-[#141920] p-3">
     <svg data-testid="station-map-lines" className="pointer-events-none absolute inset-0 z-0" width={size.w} height={size.h}>{paths.map((p, i) => <path key={i} d={p.d} fill="none" stroke={p.kind === 'ramp' ? '#f59e0b' : p.kind === 'merge' ? '#94a3b8' : '#64748b'} strokeWidth={p.kind === 'ramp' ? 2 : 1.5} strokeDasharray={p.kind === 'ramp' ? undefined : '5 5'} opacity={p.kind === 'ramp' ? 0.9 : 0.7} />)}</svg>
-    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(5, auto)' }}>
+    <div className="relative grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: '64px repeat(11, minmax(0, 1fr)) 150px', gridTemplateRows: 'repeat(6, auto)' }}>
       <div style={{ gridColumn: 1, gridRow: 1 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-blue-300" data-testid="track-label-wat">WAT</div>
       <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       <div style={{ gridColumn: 1, gridRow: 3 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-green-300" data-testid="track-label-bra">BRA</div>
       <div style={{ gridColumn: 1, gridRow: 4 }} className="self-center text-[9px] uppercase tracking-wide text-amber-300/80">polish leg</div>
       <div style={{ gridColumn: 1, gridRow: 5 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-amber-300" data-testid="track-label-bin">JV BIN</div>
+      <div style={{ gridColumn: 1, gridRow: 6 }} className="self-center text-[10px] font-bold uppercase tracking-widest text-indigo-300" data-testid="track-label-lts">STORAGE</div>
       {NODES.map((n) => <Node key={n.id} n={n} dots={at(n.keys)} onDrop={dropTo(n)} onOpen={onOpen} onSelect={onSelect} selected={selectedId === n.id} focus={focus} />)}
-      <div style={{ gridColumn: 13, gridRow: '1 / span 5' }} className="grid grid-rows-3 gap-2">
+      <div style={{ gridColumn: 13, gridRow: '1 / span 6' }} className="grid grid-rows-3 gap-2">
         {([['final', 'final_assembly', 'Final assembly'], ['testing', 'testing', 'Testing'], ['finished', 'finished', 'Finished']] as [string, RwStationKey, string][]).map(([id, k, label]) => <Node key={id} n={{ id, keys: [k], label, row: 'wat', col: 13, free: true }} dots={at([k])} onDrop={(e) => onDrop(k, e)} onOpen={onOpen} onSelect={onSelect} selected={selectedId === id} focus={focus} />)}
       </div>
     </div>

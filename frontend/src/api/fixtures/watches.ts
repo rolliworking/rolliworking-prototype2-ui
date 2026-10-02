@@ -61,5 +61,9 @@ export const watches: Watch[] = [
   { id: 'w-pu5', clientId: 'c-08', brand: 'Rolex', model: 'Yacht-Master 40', reference: '126622', serial: 'F3R9Q6N1', dial: 'Slate', bracelet: 'Oyster', status: 'awaiting_pickup', receivedAt: daysAgo(19) },
   { id: 'w-pu6', clientId: 'c-17', brand: 'Rolex', model: 'Datejust 36', reference: '126234', serial: 'A9T4M2K8', dial: 'Silver', bracelet: 'Jubilee', status: 'awaiting_pickup', receivedAt: daysAgo(17) },
   { id: 'w-pu7', clientId: 'c-19', brand: 'Tudor', model: 'Black Bay GMT', reference: 'M79830RB-0001', serial: 'B6N1R8V3', dial: 'Black', bracelet: 'Steel', status: 'released', receivedAt: daysAgo(30) },
+  // Long-term storage fixtures (MH 2026-10-02): finished, invoiced > 90 days, unpaid — two on MH's card, one already in the LTS safe
+  { id: 'w-lt1', clientId: 'c-22', brand: 'Rolex', model: 'Datejust 41', reference: '126334', serial: 'K8M2R7T1', dial: 'Blue', bracelet: 'Jubilee', status: 'awaiting_pickup', receivedAt: daysAgo(140) },
+  { id: 'w-lt2', clientId: 'c-23', brand: 'Tudor', model: 'Pelagos 39', reference: 'M25407N-0001', serial: 'P3Q9V2L6', dial: 'Black', bracelet: 'Titanium', status: 'awaiting_pickup', receivedAt: daysAgo(118) },
+  { id: 'w-lt3', clientId: 'c-24', brand: 'Rolex', model: 'Sea-Dweller', reference: '126600', serial: 'R6T1K9M4', dial: 'Black', bracelet: 'Oyster', status: 'awaiting_pickup', receivedAt: daysAgo(205) },
   { id: 'w-pu8', clientId: 'c-20', brand: 'Rolex', model: 'Oyster Perpetual 41', reference: '124300', serial: 'H2P7L4Q9', dial: 'Turquoise', bracelet: 'Oyster', status: 'released', receivedAt: daysAgo(26) },
 ];
