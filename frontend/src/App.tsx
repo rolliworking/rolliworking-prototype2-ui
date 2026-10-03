@@ -370,6 +370,7 @@ export default function App() {
               <Route path="/sales/:id" element={<SalesOrderDetailPage />} />
               <Route path="/actions/ship" element={<Navigate to="/sales/ship" replace />} />
               <Route path="/actions/pickup" element={<Navigate to="/sales/pickup" replace />} />
+              <Route path="/actions/drop-off" element={<Navigate to="/intake" replace />} />
               <Route path="/actions/:action" element={<ActionPlaceholder />} />
               {PLACEHOLDER_PATHS.map((p) => (
                 <Route key={p} path={p} element={<SectionPlaceholder />} />

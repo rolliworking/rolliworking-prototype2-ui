@@ -30,7 +30,8 @@ Legend · **BUILT** works end-to-end in the prototype on mock data · **PARTIAL*
 | Watch page — unlocked photos, timeline, passport | SIGNED-IN | PARTIAL | `RcWatchPage.tsx`: documents, service history, photo sections with per-photo unlock | passport section does not exist |
 | Messages / Ask (portal threads → RS Inbox); red-dot tap → approval or pre-drafted Ask (D-426 / D-427) | SIGNED-IN | BUILT | `RcMessagesPage.tsx`, `RcDots.tsx` dot → `/rc/estimates/:id` · `/rc/parts/:id` · Ask (`askContext`, `AskDraft`), lands in the RS Inbox anchored to the job (role concierge); staff reply via `AskDraftCard` → portal + email; **staff replies follow the thread channel** (portal → RolliConnect Messages, D-466) | — |
 | Add-on confirmation (phone approvals pending, D-405) | LINK (+ portal) | PLACEHOLDER | RS side only (`AddOnsPanel.tsx` phone approvals) | no client-facing confirm link |
-| Authorized pickup persons, contact details, notification prefs | SIGNED-IN + re-verify | PLACEHOLDER | `RcAccountPage.tsx` shows sign-in method, Touch ID, and a labelled PLACEHOLDER card for these three | sections + re-verify (step-up seam exists: `requireStepUp`) |
+| Authorized pickup persons | SIGNED-IN + re-verify | **BUILT** (2026-10-03, D-506 → KEEPER D-414) | `/rc/account` — add (`portalAddAuthorizedPickup`, step-up `STEP_UP_ACTION.pickupPerson`) / remove; the Pickup Station trusts the list (no manager approval, ID photo still required) — `specs/SPEC-PICKUP-V2.md` row 5 | — |
+| Contact details, notification prefs | SIGNED-IN + re-verify | PLACEHOLDER | `RcAccountPage.tsx` shows sign-in method, Touch ID, and a labelled PLACEHOLDER card for these two | sections + re-verify (step-up seam exists: `requireStepUp`) |
 | Passport transfer (claim code redeem, new owner) | SIGNED-IN | PLACEHOLDER | — | none |
 | Claim results from an anonymous tool session (claim code) | SIGNED-IN or identity on results page (D-417) | PLACEHOLDER | — | none |
 | Appointment booking / reschedule | LINK (from confirmation email) + SIGNED-IN | PARTIAL | `/rc/invoices/:id` lets the signed-in client **pick a pickup window** (date + slot) and submit shipping info | no emailed link variant, no reschedule, no general appointment object |
@@ -62,6 +63,6 @@ Lands on `/rc/home` with watches, Needs-you, requests and history — ✓. First
 - ~~P0 — align what exists~~ DONE 2026-10-01 (pickup 2 min · link footer · expired copy · first-run note).
 - ~~P1 — the sign-in decision~~ DONE 2026-10-01: passwordless OTP / magic link + Touch ID; password + TOTP retired (DECISIONS).
 - ~~P1 — LINK tier for money~~ DONE 2026-10-01 for estimate + parts (tokened pages, step-up on Approve, Sent log, revoke, expiry table). `/track/:token` stays P1 (fold into drop-off / ship flows).
-- **P2 — account**: authorized pickup persons · contact details · notification prefs, each behind re-verify.
+- **P2 — account**: ~~authorized pickup persons~~ (BUILT 2026-10-03) · contact details · notification prefs, each behind re-verify.
 - **P2 — new objects**: add-on confirm link (D-405) · appointment booking / reschedule · inspection report watermark + 90-day expiry.
 - **P3 — passport**: share page (view-once / listing / permanent), masked serial, open log, transfer via claim code; anonymous tool results claim (D-417).

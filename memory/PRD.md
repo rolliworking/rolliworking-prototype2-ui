@@ -696,3 +696,8 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - (P2) Prune legacy `/rg` pages + `RG_*` helpers once the `/rg*` redirects are confirmed on the real printed tags.
 - OPEN for MH (from the specs): warranty window for ID-photo retention (365 d prototype) · −1 at pickup hard stop vs manager override · who may run / close a custody audit (any staff today) · CM department label · real shop lat/lng for the Time Clock geofence · kiosk second factor when the client has no mobile number · payroll CSV columns.
 - Backlog unchanged: public `/track/:token` (P1), Sales vs Completions remainder (P1), Front Desk Kiosk vs RS Intake clarity (P2), amber items in DECISIONS.
+
+### RS FREEZE (2026-10-03, MH) — two fixes then no new RS work
+- Status check answered (BUILT: drop-off via `/intake` Walk-in, `/wm-kiosk`, per-photo lock/unlock, `/setup/access`; PARTIAL: kiosk "we found you" step (match exact, no client-facing step), MM pad colour-coding (W / B·P tones only on team hitlist); portal P0 placeholders: none — remaining P1–P3 listed in `14-CLIENT-PORTAL-INVENTORY.md §6`).
+- Fix 1: `14-CLIENT-PORTAL-INVENTORY.md` §2 authorized-pickup-persons row → BUILT (`/rc/account`). Fix 2: `/actions/drop-off` → `<Navigate to="/intake">` (verified via `memory/tools/smoke_dropoff_redirect.py`; `tsc` clean).
+- **RULE**: RS is frozen. Anything NOT BUILT (kiosk "we found you" step, pad colour-coding, portal P1–P3 placeholders) goes to KEEPER as spec. No new Emergent work on RS except fixes MH explicitly asks for.

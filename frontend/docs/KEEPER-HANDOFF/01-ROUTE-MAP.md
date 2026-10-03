@@ -63,7 +63,7 @@ Legend — **landing for**: which role kinds land here right after sign-in (`rol
 | `/help` | help | manager, concierge | TierGate(ALL) | — |
 | `/sales`, `/sales/new`, `/sales/:id`, `/sales/pickup`, `/sales/ship` | sales orders (Fulfill ▾ menu, zero-balance MH-only), **Pickup Station — five gated steps** (`specs/SPEC-PICKUP-STATION.md`) **+ v2 gap rows [10-03]** (`specs/SPEC-PICKUP-V2.md`, KEEPER D-414: any-reference open, Gate 2 QBO read, lockout, ≥ $10k kiosk second factor, authorized persons, Reolink stamp, identity photos), ship station (scan gate + manager override) | manager, concierge | TierGate(ALL); pickup exceptions need a **different manager's PIN + reason** in the API; identity photos stripped for non-managers in the data layer | user division (mock path) |
 | `/wm-kiosk` | **Watchmaker-room photo kiosk** (common area, guided 4-step + ad-hoc) | — | RequireAuth — left open to any signed-in tier in the prototype; **auth expected: station** | all |
-| `/actions/:action`, section placeholders, `*` | placeholders / not found | — | RequireAuth | — |
+| `/actions/:action`, section placeholders, `*` | placeholders / not found; **`/actions/drop-off` → redirect to `/intake` (Arrival → Walk-in) [10-03]**, `/actions/ship` → `/sales/ship`, `/actions/pickup` → `/sales/pickup` | — | RequireAuth | — |
 
 ## B. RolliWorking bench app `/rw` — `RwRoleGuard` → `RwShell` (MoneyContext = `roleKind !== 'watchmaker'`)
 | route | purpose | landing for | guard | data scope |
