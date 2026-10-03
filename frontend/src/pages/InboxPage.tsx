@@ -17,6 +17,7 @@ import { ThreadList } from '@/components/inbox/ThreadList';
 import { ThreadStack, type Run } from '@/components/inbox/ThreadView';
 import { ViewsSection } from '@/components/inbox/ViewsSection';
 import { MissedCallsPanel } from '@/components/layout/MissedCallsPanel';
+import { SimulateIncomingPanel } from '@/components/layout/CallPop';
 import { TeamMessages, type TeamChip } from '@/components/layout/TeamMessages';
 import { Flash, Head } from '@/components/rs/RsBits';
 
@@ -109,6 +110,7 @@ const CallsSectionInline = () => {
   const [rows, setRows] = useState<CallEvent[]>([]); const load = () => calls.getCallEvents({}).then((r) => setRows(r.slice(0, 25)));
   useEffect(() => { void load(); return calls.subscribeCalls(() => void load()); }, []);
   return <div data-testid="inbox-calls-section" className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+    <SimulateIncomingPanel />
     <MissedCallsPanel />
     <section className="rounded-md border border-line bg-surface px-3"><div className="flex items-center justify-between py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500"><span>Latest calls</span><Link to="/calls" data-testid="inbox-calls-all" className="text-brand hover:underline normal-case">Full call log →</Link></div><ul className="divide-y divide-line">{rows.map((c) => <CallRow key={c.id} c={c} onChange={() => void load()} showClient testId={`inbox-call-${c.id}`} />)}</ul></section>
   </div>;

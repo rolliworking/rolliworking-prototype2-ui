@@ -157,7 +157,7 @@ export default function SalesOrderDetailPage() {
               </dl>
               {o.shipment && <div className="mt-3 border-t border-line pt-2 text-xs" data-testid="so-shipment"><div className="text-ink">{o.shipment.service} · insured {fmtMoneyCents(o.shipment.coverage)}{o.shipment.bypassReason && <span className="ml-1 text-rose-700">· payment bypass</span>}</div><img src={o.shipment.labelDataUrl} alt="Mock label" className="mt-1 w-full rounded-sm ring-1 ring-line" /></div>}
             </Card>
-            <PickupSessionCard order={o} />
+            <PickupSessionCard order={o} onChange={() => void load()} />
           </div>
         )}
       </div>

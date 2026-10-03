@@ -5,6 +5,7 @@ import type { CallDisposition, CallEvent } from '@/api/client';
 import * as calls from '@/api/calls';
 import type { CallFilter } from '@/api/calls';
 import { CallRow } from '@/components/clients/CallLedger';
+import { SimulateIncomingPanel } from '@/components/layout/CallPop';
 import { MissedCallsPanel } from '@/components/layout/MissedCallsPanel';
 import { PageHeader } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -25,6 +26,7 @@ export default function CallsPage() {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <Kpi label="Calls today" value={todays.length} testId="calls-kpi-today" /><Kpi label="Missed · open" value={all.openMissed} tone={all.openMissed ? 'warn' : undefined} testId="calls-kpi-missed" /><Kpi label="This month" value={all.thisMonth} testId="calls-kpi-month" /><Kpi label="Avg duration" value={avg ? `${Math.floor(avg / 60)}:${String(avg % 60).padStart(2, '0')}` : '—'} testId="calls-kpi-avg" />
     </div>
+    <SimulateIncomingPanel />
     <Card title="Missed calls — front-desk queue" subtitle="Also an inbox item for the concierge role; cleared by a call back or a note" testId="calls-missed-card"><MissedCallsPanel /><div data-testid="calls-missed-empty" className="text-xs text-ink-400">{all.openMissed === 0 ? 'Nothing waiting.' : ''}</div></Card>
     <Card title="All calls" subtitle={`${rows.length} shown`} testId="calls-list-card" action={<div className="flex flex-wrap items-center gap-1.5">
       <input data-testid="calls-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Client or number…" className={`${sel} w-44`} />

@@ -1,9 +1,10 @@
-import { Camera, Clock3, Link2, MonitorSmartphone, Plus, Tablet, TabletSmartphone } from 'lucide-react';
+import { Camera, Clock3, Link2, MonitorSmartphone, Plus, Radio, Tablet, TabletSmartphone } from 'lucide-react';
 import { useState } from 'react';
 import * as api from '@/api/client';
+import * as ic from '@/api/intercom';
 import * as org from '@/api/org';
 import type { StationInput } from '@/api/org';
-import type { Division, Station } from '@/api/client';
+import type { Division, IntercomPreset, Station } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -52,5 +53,32 @@ export const StationsTab = ({ onFlash }: { onFlash: (m: string, err?: boolean) =
       </tbody></Table>
     </Card>
     {edit && <StationForm init={edit} onClose={() => setEdit(null)} onSaved={(s) => { setEdit(null); setList(org.getStationsSync()); onFlash(`${s.name} saved`); }} />}
+    <IntercomPresetsCard onFlash={onFlash} />
   </div>;
+};
+
+// Intercom presets = saved selections for the multi-ring grid ("All WM benches", "Front desk", "Supervisors") — data, editable here, read by Inbox → Intercom and the pad
+const IntercomPresetsCard = ({ onFlash }: { onFlash: (m: string, err?: boolean) => void }) => {
+  const [presets, setPresets] = useState<IntercomPreset[]>(() => ic.getIntercomPresets()); const [editing, setEditing] = useState<{ key?: string; label: string; stationIds: string[] } | null>(null); const [err, setErr] = useState<string | null>(null);
+  const targets = ic.presetTargets();
+  const save = () => { if (!editing) return; try { const p = ic.saveIntercomPreset(editing); setPresets(ic.getIntercomPresets()); setEditing(null); setErr(null); onFlash(`Preset “${p.label}” saved · ${p.stationIds.length} stations`); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } };
+  const remove = (key: string) => { try { ic.deleteIntercomPreset(key); setPresets(ic.getIntercomPresets()); onFlash('Preset removed'); } catch (e) { onFlash(e instanceof Error ? e.message : 'Failed', true); } };
+  return <Card title="Intercom presets" subtitle="Saved selections for the multi-ring grid (Inbox → Intercom · pad Intercom tab) — one tap rings every station in the preset, anyone who answers joins the room" action={<Button size="sm" data-testid="ic-preset-new" onClick={() => { setEditing({ label: '', stationIds: [] }); setErr(null); }}><Plus size={12} /> Add preset</Button>} bodyClassName="p-0" testId="intercom-presets-card">
+    <Table><thead><tr><Th>Preset</Th><Th>Stations</Th><Th /></tr></thead><tbody>
+      {presets.map((p) => <tr key={p.key} data-testid={`ic-preset-row-${p.key}`} data-count={p.stationIds.length}>
+        <Td className="text-xs font-medium text-ink"><span className="inline-flex items-center gap-1.5"><Radio size={12} className="text-ink-400" /> {p.label}</span>{p.system && <span className="ml-2 rounded-sm bg-canvas px-1 text-[9px] font-semibold uppercase text-ink-500">built-in</span>}</Td>
+        <Td data-testid={`ic-preset-stations-${p.key}`} className="text-xs text-ink-600">{p.stationIds.map((id) => ic.intercomLabel(id)).join(', ')}</Td>
+        <Td className="text-right"><span className="inline-flex gap-1"><Button size="sm" variant="ghost" data-testid={`ic-preset-edit-${p.key}`} onClick={() => { setEditing({ key: p.key, label: p.label, stationIds: [...p.stationIds] }); setErr(null); }}>Edit</Button>{!p.system && <Button size="sm" variant="ghost" data-testid={`ic-preset-delete-${p.key}`} onClick={() => remove(p.key)}>Remove</Button>}</span></Td>
+      </tr>)}
+    </tbody></Table>
+    {editing && <Modal testId="ic-preset-form" title={editing.key ? `Edit preset · ${editing.label}` : 'New intercom preset'} onClose={() => setEditing(null)}>
+      <div className="space-y-3 p-5 text-xs">
+        <Lbl>Name<input data-testid="ic-preset-label" value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} className={field} /></Lbl>
+        <div><div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Stations in this preset · <span data-testid="ic-preset-count">{editing.stationIds.length}</span></div>
+          <ul data-testid="ic-preset-targets" className="grid grid-cols-2 gap-1 md:grid-cols-3">{targets.map((t) => { const on = editing.stationIds.includes(t.id); return <li key={t.id}><button type="button" data-testid={`ic-preset-target-${t.id}`} aria-pressed={on} onClick={() => setEditing({ ...editing, stationIds: on ? editing.stationIds.filter((x) => x !== t.id) : [...editing.stationIds, t.id] })} className={`flex h-8 w-full items-center gap-2 rounded-sm border px-2 text-left ${on ? 'border-ink bg-ink text-white' : 'border-line hover:bg-canvas'}`}><span className="flex-1 truncate">{t.label}</span><span className={`text-[9px] uppercase ${on ? 'text-white/70' : 'text-ink-400'}`}>{t.kind}</span></button></li>; })}</ul></div>
+        {err && <p data-testid="ic-preset-error" className="font-medium text-rose-700">{err}</p>}
+        <div className="flex justify-end gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" data-testid="ic-preset-save" onClick={save}>Save</Button></div>
+      </div>
+    </Modal>}
+  </Card>;
 };

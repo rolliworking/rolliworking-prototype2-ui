@@ -31,7 +31,7 @@ export const JobTabs = ({ tab, jobs }: { tab: Exclude<JobTab, 'all'>; jobs: JobW
   const shown = inTab.filter((j) => lane === 'all' || laneOf(j) === lane);
   if (tab !== 'progress') {
     // Routing-only departments (Setup → Departments, e.g. EN Engraving): the job ALSO appears in that queue and keeps its W·B·P dots (D-497)
-    const routed = tab === 'queue' ? org.getDepartmentsSync().filter((d) => d.active && !d.dotLeg).map((d) => ({ d, jobs: inTab.filter((j) => org.routeDepartmentsSync(j.lines).some((x) => x.code === d.code)) })).filter((r) => r.jobs.length) : [];
+    const routed = tab === 'queue' ? org.getDepartmentsSync().filter((d) => d.active && !d.dotLeg).map((d) => ({ d, jobs: inTab.filter((j) => org.routeDepartmentsSync(j.lines).some((x) => x.code === d.code)) })): [];
     return <div data-testid={`jobs-tab-${tab}`} className="flex gap-2 overflow-x-auto pb-3">{TAB_LANES[tab].map((l) => <Column key={l} id={l} title={LANE_LABEL[l]} jobs={inTab.filter((j) => laneOf(j) === l)} tone={l === 'on_hold' ? 'rose' : undefined} />)}{routed.map(({ d, jobs: js }) => <Column key={d.code} id={`dept-${d.code}`} title={`${d.queue} · ${d.code}`} jobs={js} tone="amber" />)}</div>;
   }
   const byTech = (t: string) => shown.filter((j) => (t === 'unassigned' ? j.assignees.length === 0 : j.assignees.includes(t)));

@@ -2,7 +2,7 @@ import { orgBridge as b } from './client';
 import type { AccessTier, DeptCode, Division, EstimateLine, InviteChannel, Role, Station, User } from './types';
 
 // ---- Setup → Organisation (D-495…D-497): entities, departments, stations as DATA; the app reads names from here, never from string literals ----
-const K = { entities: 'rollisuite.org.entities', departments: 'rollisuite.org.departments' };
+const K = { entities: 'rollisuite.org.entities.v1', departments: 'rollisuite.org.departments.v1' }; // bump the suffix when a seed field changes shape
 const read = <T>(k: string, fb: T): T => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : fb; } catch { return fb; } };
 const write = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
 

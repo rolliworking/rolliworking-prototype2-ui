@@ -1,5 +1,5 @@
 import { appraisalValueSync } from './appraisals';
-import { onPartMoved, registerDaySweep, safesBridge as b, OWNER_USER_ID } from './client';
+import { onPartMoved, registerDaySweep, registerWatchValue, safesBridge as b, OWNER_USER_ID } from './client';
 import type { ComponentKey, Job, JobComponent, RwStationKey, Watch } from './types';
 
 // ---- Safes vs insurance (MH 2026-10-02, D-425) — container hierarchy + value on hand per safe, computed HERE (D-420), never summed in a page ----
@@ -143,3 +143,4 @@ export const canSeeSafes = (u: { id: string } | null | undefined) => !!u && (u.i
 export const safeForNodeSync = (node: RwStationKey | string): SafeContainer | undefined => { const k = ancestors(parents.get(node)).find((x) => containerOf(x)?.kind === 'safe'); return k ? containerOf(k) : undefined; };
 // Hitlist pins must exist before /today reads the pinned layer — recompute the board inside the day sweeps (getToday → runDaySweeps)
 registerDaySweep(() => { getSafesBoardSync(); });
+registerWatchValue(watchValueSync); // Pickup Station ≥ $10k value tier reads the same chain

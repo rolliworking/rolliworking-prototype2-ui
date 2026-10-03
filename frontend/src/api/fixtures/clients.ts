@@ -73,3 +73,6 @@ export const clients: Client[] = rows.map(([id, firstName, lastName, email, phon
   internal: id === 'c-31' ? true : undefined,
   since: daysAgo(120 + i * 37),
 }));
+
+// Authorized pickup persons (MH 2026-10-03) — people the account holder lets collect; checked at Pickup Station step 3. Samuel Adeyemi (c-17, SO-26-0115) lists his spouse.
+clients.find((c) => c.id === 'c-17')!.authorizedPickups = [{ id: 'ap-c17-1', name: 'Folake Adeyemi', relation: 'spouse', phone: '(404) 555-0171', addedAt: daysAgo(40), addedBy: 'Vienna', via: 'staff' }];

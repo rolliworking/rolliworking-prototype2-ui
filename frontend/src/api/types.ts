@@ -117,6 +117,7 @@ export interface Client {
   managerShort?: string;
   internal?: boolean;
   autoQuote?: boolean; // trade accounts: lines that resolve in the rate card are quoted instantly (MH 2026-10-02)
+  authorizedPickups?: AuthorizedPickup[]; // people the account holder lets collect — checked at Pickup Station step 3 (proxy) (MH 2026-10-03)
 }
 
 export type WatchStatus =
@@ -681,11 +682,20 @@ export interface PickupSerialCheck { record: string; intake: SerialRead; handbac
 export interface PickupResend { at: string; by: string; channel: 'email' | 'sms'; to: string; generation: number; smsId?: string }
 export interface PickupCodeHistory { code: string; generation: number; issuedAt: string; replacedAt?: string; replacedVia?: 'email' | 'sms' | 'push' }
 export interface ReverseQrToken { token: string; issuedAt: string; expiresAt: string; station: string; usedAt?: string; confirmedAt?: string; declinedAt?: string }
-export interface PickupRetention { framesUntil: string; idPhotoUntil?: string; policy: string }
+export interface PickupRetention { framesUntil: string; idPhotoUntil?: string; idPhotoRule?: string; idPhotoPurgedAt?: string; policy: string }
 export interface PickupAbort { at: string; by: string; step: string; reason: string }
-export interface PickupVerifyDraft { method: PickupVerifyMethod; at: string; codeUsed?: string; proxyName?: string; proxyIdPhoto?: PackagePhoto; proxyApproval?: ManagerApproval; reverseToken?: string }
+export interface PickupVerifyDraft { method: PickupVerifyMethod; at: string; codeUsed?: string; proxyName?: string; proxyIdPhoto?: PackagePhoto; proxyApproval?: ManagerApproval; proxyAuthorizedId?: string; reverseToken?: string }
+// Pickup gaps closed (MH 2026-10-03): gate 2 reads "invoice Sent + QBO balance", 6-digit codes with 3 fails → 10-min lockout, ≥ $10k value tier → kiosk second factor, authorized pickup persons, Reolink clip stamp, manager-only ID photos purged after the warranty window
+export interface PickupInvoiceCheck { at: string; invoiceSentAt?: string; localBalance: number; qboBalance: number | null; qboStatus: 'ok' | 'mismatch' | 'excluded' | 'unavailable' }
+export type PickupSecondFactorMethod = 'kiosk_otp' | 'kiosk_id_photo' | 'reverse_qr';
+export interface PickupSecondFactor { method: PickupSecondFactorMethod; at: string; kioskId?: string; kioskName?: string; otpLast2?: string; idPhoto?: PackagePhoto }
+export interface PickupValueTier { itemValue: number | null; itemSource: string; invoiceTotal: number; total: number; threshold: number; high: boolean }
+export interface PickupLock { until: string; at: string; attempts: number }
+export interface PickupKioskOtp { code: string; issuedAt: string; expiresAt: string; kioskId: string; maskedTo: string }
+export interface ReolinkClipRef { nvr: string; channel: string; clipFrom: string; clipTo: string; clipRef: string; retainUntil: string }
+export interface AuthorizedPickup { id: string; name: string; relation?: string; phone?: string; addedAt: string; addedBy: string; via: 'staff' | 'portal' }
 // In-progress counter session — every step writes a fact here; confirmPickup() re-validates ALL of them before anything is released
-export interface PickupDraft { startedAt: string; by: string; station: string; itemConfirmed?: { at: string; by: string; intakePhotoId?: string }; paymentBypass?: ManagerApproval & { amount: number }; verify?: PickupVerifyDraft; intakePhoto?: PackagePhoto; handbackPhoto?: PackagePhoto; serialCheck?: PickupSerialCheck }
+export interface PickupDraft { startedAt: string; by: string; station: string; openedVia?: string; itemConfirmed?: { at: string; by: string; intakePhotoId?: string }; invoiceCheck?: PickupInvoiceCheck; paymentBypass?: ManagerApproval & { amount: number }; codeAttempts?: number; verify?: PickupVerifyDraft; secondFactor?: PickupSecondFactor; intakePhoto?: PackagePhoto; handbackPhoto?: PackagePhoto; serialCheck?: PickupSerialCheck }
 
 export interface PickupSession extends Stamp {
   id: string;
@@ -712,6 +722,12 @@ export interface PickupSession extends Stamp {
   evidenceFlaggedAt?: string;
   retention?: PickupRetention;
   codeGeneration?: number;
+  openedVia?: string;
+  invoiceCheck?: PickupInvoiceCheck;
+  valueTier?: PickupValueTier;
+  secondFactor?: PickupSecondFactor;
+  proxyAuthorizedId?: string;
+  reolink?: ReolinkClipRef;
 }
 
 // One row per "Send invoice" — what the client was told at that moment (the link itself always shows the LIVE balance)
@@ -754,6 +770,8 @@ export interface SalesOrder {
   reverseQr?: ReverseQrToken;
   pickupDraft?: PickupDraft;
   pickupAborts?: PickupAbort[];
+  pickupLock?: PickupLock; // 3 failed codes → 10-min lockout on code / QR entry (proxy + reverse QR stay open)
+  pickupKioskOtp?: PickupKioskOtp; // ≥ $10k second factor: one-time code pushed to the paired kiosk flow (MOCK SMS)
   pickupDemo?: 'item_mismatch' | 'serial_mismatch' | 'serial_unreadable'; // SEED ONLY — drives the mock OCR / demo copy for the gate-failure fixtures
   shippingAddress?: Address;
   shippingInfoRequestedAt?: string;
@@ -1405,7 +1423,9 @@ export interface B2bMatch { code: string; tier: B2bTier; estimate?: EstimateWith
 // ---- Station intercom + storewide paging (mock state; Daily.co seam) ----
 export type IntercomKind = 'station' | 'room' | 'pad';
 export interface IntercomStation { id: string; label: string; kind: IntercomKind; division: Division; online: boolean; busy: boolean }
-export interface IntercomCall { id: string; from: string; to: string; startedAt: string; state: 'ringing' | 'live' | 'ended'; endedAt?: string }
+// `to` = first target (single tap-to-call); `targets` = every station rung (group call = one audio room), `joined` = who has answered so far
+export interface IntercomCall { id: string; from: string; to: string; targets: string[]; joined: string[]; skipped: string[]; startedAt: string; state: 'ringing' | 'live' | 'ended'; endedAt?: string }
+export interface IntercomPreset { key: string; label: string; stationIds: string[]; system?: boolean }
 export type PageZone = 'all' | 'wm' | 'front';
 export interface StorePage { id: string; by: string; from: string; text: string; at: string; division: Division | 'all'; zone: PageZone }
 export interface IntercomState { me: string; stations: IntercomStation[]; call?: IntercomCall; pages: StorePage[]; history: IntercomCall[] }

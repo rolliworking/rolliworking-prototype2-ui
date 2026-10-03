@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { Check, Send } from 'lucide-react';
-import { useState } from 'react';
+import { Check, RefreshCw, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { PackagePhoto, PickupContext } from '@/api/client';
 import { MoneyStrip, PaymentModal, SOLinesTable } from '@/components/sales/SalesBits';
@@ -39,31 +39,39 @@ export const StepItem = ({ ctx, refresh, onNext, onBack, onStopped, fail }: Step
   );
 };
 
-// Step 2 — money. Balance shown live; one-tap Send invoice; the gate refuses while a balance remains. Sole exception: a DIFFERENT manager approves a logged bypass.
+// Step 2 — money. Gate = invoice SENT + QBO balance read as $0 (local ledger alone is not enough). Sole exception: a DIFFERENT manager approves a logged bypass.
 export const StepInvoice = ({ ctx, refresh, onNext, onBack, fail }: StepProps) => {
-  const o = ctx.order; const [pay, setPay] = useState(false); const [bypass, setBypass] = useState(false); const [sent, setSent] = useState<string | null>(null);
+  const o = ctx.order; const [pay, setPay] = useState(false); const [bypass, setBypass] = useState(false); const [sent, setSent] = useState<string | null>(null); const [reading, setReading] = useState(false);
   const reload = () => api.getPickupContext(o.id).then(refresh).catch(fail);
-  const cleared = o.balanceDue <= 0 || !!ctx.draft?.paymentBypass;
+  const check = ctx.draft?.invoiceCheck; const invoiceSent = !!o.invoiceSentAt || !!o.zeroBalance;
+  const readQbo = () => { setReading(true); api.pickupCheckInvoice(o.id).then(refresh).catch(fail).finally(() => setReading(false)); };
+  useEffect(() => { if (!check && !ctx.draft?.paymentBypass) readQbo(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const qboOk = !!o.zeroBalance || check?.qboStatus === 'ok';
+  const cleared = !!ctx.draft?.paymentBypass || (o.balanceDue <= 0 && invoiceSent && qboOk);
   return (
     <>
-      <Card title={`Step 2 · Invoice · ${o.number}`} subtitle={`${o.job ? `job ${o.job.number} · ` : ''}${o.invoiceSentAt ? `invoice sent ${o.invoiceSends.length}× · last ${new Date(o.invoiceSentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'invoice not sent yet'}`} testId="pickup-invoice-card" bodyClassName="p-0">
+      <Card title={`Step 2 · Invoice · ${o.number}`} subtitle={`${o.job ? `job ${o.job.number} · ` : ''}${o.invoiceSentAt ? `invoice sent${o.invoiceSends.length ? ` ${o.invoiceSends.length}×` : ''} · last ${new Date(o.invoiceSentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'invoice NOT sent yet'}`} testId="pickup-invoice-card" bodyClassName="p-0">
         <SOLinesTable order={o} showFulfil />
         <div className="space-y-3 p-4">
           <MoneyStrip order={o} />
-          {o.balanceDue > 0 && !ctx.draft?.paymentBypass && <GateBanner tone="block" testId="pickup-balance-gate">Balance due {fmtMoneyCents(o.balanceDue)} — the pickup cannot continue. Take payment, or have a different manager approve a bypass (logged on the SO + Hitlist).</GateBanner>}
+          <div data-testid="pickup-gate2" className="grid grid-cols-2 gap-2 text-xs">
+            <div data-testid="pickup-gate2-sent" data-ok={invoiceSent} className={`rounded-sm border px-3 py-2 ${invoiceSent ? 'border-moss-200 bg-moss-50 text-moss-800' : 'border-rose-200 bg-rose-50 text-rose-700'}`}><div className="text-[10px] font-semibold uppercase tracking-wide">Invoice sent</div><div className="font-medium">{o.zeroBalance ? 'zero balance — no invoice needed' : o.invoiceSentAt ? `yes · ${new Date(o.invoiceSentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'NO — send it before the hand-over'}</div></div>
+            <div data-testid="pickup-gate2-qbo" data-status={o.zeroBalance ? 'excluded' : check?.qboStatus ?? 'unread'} className={`rounded-sm border px-3 py-2 ${qboOk ? 'border-moss-200 bg-moss-50 text-moss-800' : check ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-line bg-canvas text-ink-600'}`}><div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide"><span>QBO balance at the gate</span><button type="button" data-testid="pickup-gate2-reread" onClick={readQbo} disabled={reading} className="inline-flex items-center gap-1 normal-case text-brand hover:underline disabled:opacity-50"><RefreshCw size={10} className={reading ? 'animate-spin' : ''} /> {reading ? 'reading…' : 're-read'}</button></div><div className="font-medium">{o.zeroBalance ? 'excluded — no QBO sync' : !check ? (reading ? 'Reading QuickBooks…' : 'not read yet') : check.qboStatus === 'unavailable' ? 'QBO unreachable — try again' : check.qboStatus === 'mismatch' ? `QBO shows ${fmtMoneyCents(check.qboBalance ?? 0)} · local ${fmtMoneyCents(check.localBalance)}` : `${fmtMoneyCents(check.qboBalance ?? 0)} · matches local · ${new Date(check.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}</div></div>
+          </div>
+          {!cleared && <GateBanner tone="block" testId="pickup-balance-gate">{o.balanceDue > 0 ? `Balance due ${fmtMoneyCents(o.balanceDue)} — ` : !invoiceSent ? 'The invoice was never sent — ' : !qboOk ? 'QuickBooks does not agree the balance is $0 — ' : ''}the pickup cannot continue. {o.balanceDue > 0 ? 'Take payment, ' : !invoiceSent ? 'Send the invoice, ' : 'Re-read QBO or take payment, '}or have a different manager approve a bypass (logged on the SO + Hitlist).</GateBanner>}
           {ctx.draft?.paymentBypass && <GateBanner tone="warn" testId="pickup-bypass-approved">Payment bypass approved by {ctx.draft.paymentBypass.by} · {fmtMoneyCents(ctx.draft.paymentBypass.amount)} outstanding · “{ctx.draft.paymentBypass.reason}”</GateBanner>}
-          {o.balanceDue <= 0 && <GateBanner tone="ok" testId="pickup-balance-clear">Paid in full{o.zeroBalance ? ' · zero balance — no QBO sync' : ''}.</GateBanner>}
+          {cleared && !ctx.draft?.paymentBypass && <GateBanner tone="ok" testId="pickup-balance-clear">Paid in full{o.zeroBalance ? ' · zero balance — no QBO sync' : ' · invoice sent · QBO agrees'}.</GateBanner>}
           {sent && <div data-testid="pickup-invoice-sent" className="text-xs text-moss-800">{sent}</div>}
           <div className="flex flex-wrap items-center gap-2">
-            <Button data-testid="pickup-send-invoice" onClick={() => api.sendInvoice(o.id).then((r) => { setSent(`Invoice sent to ${r.client.email} · pay link included`); return reload(); }).catch(fail)}><Send size={12} /> Send invoice</Button>
+            <Button data-testid="pickup-send-invoice" onClick={() => api.sendInvoice(o.id).then((r) => { setSent(`Invoice sent to ${r.client.email} · pay link included`); return reload(); }).catch(fail)}><Send size={12} /> {o.invoiceSentAt ? 'Send invoice again' : 'Send invoice'}</Button>
             {o.balanceDue > 0 && <Button data-testid="pickup-take-payment" onClick={() => setPay(true)}>Record payment ({fmtMoneyCents(o.balanceDue)})</Button>}
-            {o.balanceDue > 0 && !ctx.draft?.paymentBypass && <Button data-testid="pickup-bypass-open" className="text-rose-700" onClick={() => setBypass(true)}>Manager bypass…</Button>}
+            {!cleared && !ctx.draft?.paymentBypass && <Button data-testid="pickup-bypass-open" className="text-rose-700" onClick={() => setBypass(true)}>Manager bypass…</Button>}
           </div>
         </div>
       </Card>
       <div className="flex items-center justify-between"><Button onClick={onBack}>Back</Button><Button variant="primary" data-testid="pickup-next-verify" disabled={!cleared} onClick={onNext}>Continue to verify →</Button></div>
-      {pay && <PaymentModal order={o} onClose={() => setPay(false)} onDone={() => { setPay(false); void reload(); }} />}
-      {bypass && <ManagerApprovalModal testId="pickup-bypass-modal" title={`Payment bypass · ${fmtMoneyCents(o.balanceDue)} outstanding`} hint="Release without payment is the ONLY exception to the balance gate." confirmLabel="Approve bypass" onClose={() => setBypass(false)} onApprove={async (input) => { refresh(await api.pickupApproveBypass(o.id, input)); setBypass(false); }} />}
+      {pay && <PaymentModal order={o} onClose={() => setPay(false)} onDone={() => { setPay(false); api.pickupCheckInvoice(o.id).then(refresh).catch(fail); }} />}
+      {bypass && <ManagerApprovalModal testId="pickup-bypass-modal" title={`Payment bypass · ${fmtMoneyCents(o.balanceDue)} outstanding${o.invoiceSentAt ? '' : ' · invoice never sent'}`} hint="Release without payment / without a sent invoice is the ONLY exception to the gate." confirmLabel="Approve bypass" onClose={() => setBypass(false)} onApprove={async (input) => { refresh(await api.pickupApproveBypass(o.id, input)); setBypass(false); }} />}
     </>
   );
 };

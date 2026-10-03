@@ -16,6 +16,16 @@ export const simulateIncoming = (scenario: calls.Scenario) => {
   return s;
 };
 export const simulateVoicemailUnknown = () => { const s = calls.callRinging({ number: '954-555-0182' }); later(s.callId, MISSED_AFTER_MS, () => calls.callMissed(s.callId, { voicemail: true })); return s; };
+// Calls → "Simulate incoming call" panel (NOT-KEEPER): any number (seeded client or unknown) + outcome → same D-405 screen-pop + call row as the webhook would produce
+export type SimOutcome = 'answered_here' | 'missed' | 'voicemail' | 'answered_elsewhere';
+export const simulateIncomingNumber = (number: string, outcome: SimOutcome = 'answered_here') => {
+  const n = number.trim(); if (n.replace(/\D/g, '').length < 7) throw new Error('Enter a phone number (7+ digits)');
+  const s = calls.callRinging({ number: n });
+  if (outcome === 'missed' || outcome === 'voicemail') later(s.callId, MISSED_AFTER_MS, () => calls.callMissed(s.callId, { voicemail: outcome === 'voicemail' }));
+  else if (outcome === 'answered_elsewhere') later(s.callId, ELSEWHERE_AFTER_MS, () => { calls.callAnswered(s.callId, { by: 'Vienna', station: 'Front Desk 2' }); later(s.callId, 6000, () => calls.callEnded(s.callId)); });
+  else later(s.callId, ANSWER_AFTER_MS, () => calls.callAnswered(s.callId));
+  return s;
+};
 // Handset picked up at THIS station (the card's Answer button) — stops the mock timer
 export const answerHere = (callId: string) => { cancel(callId); return calls.callAnswered(callId); };
 // Handset down (the card's Hang up button)

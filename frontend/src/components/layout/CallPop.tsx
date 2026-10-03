@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { ChevronDown, Megaphone, Phone, PhoneCall, PhoneIncoming, PhoneMissed, PhoneOff, PhoneOutgoing, StickyNote, UserPlus, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { CallDisposition, Client, Job, WbpLeg } from '@/api/client';
 import * as calls from '@/api/calls';
@@ -20,23 +20,35 @@ const LEG_KEY: Record<WbpLeg, string> = { W: 'head', B: 'band', P: 'case' };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const elapsed = (c: LiveCall) => Math.max(0, Math.round((Date.now() - new Date(c.answeredAt ?? c.startedAt).getTime()) / 1000));
 
-// Dev menu: 📞 Simulate incoming call (MOCK of the Vonage webhook → src/api/telephony.ts)
-export const SimulateCallMenu = () => {
-  const [open, setOpen] = useState(false);
-  const fire = (fn: () => void) => { setOpen(false); try { fn(); } catch (e) { window.alert(e instanceof Error ? e.message : 'Failed'); } };
-  return <div className="relative">
-    <button data-testid="dev-simulate-call" onClick={() => setOpen((v) => !v)} title="Simulate incoming call (Vonage mock)" className="grid h-8 w-8 place-items-center rounded-sm text-ink-500 hover:bg-canvas hover:text-ink"><Phone size={15} /></button>
-    {open && <div data-testid="dev-simulate-call-menu" className="absolute right-0 top-9 z-40 w-80 rounded-md border border-line bg-surface p-1 text-xs shadow-pop">
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-ink-400">Dev · Vonage mock · rings, then the handset is picked up here after 3 s</div>
-      <button data-testid="dev-call-two-jobs" onClick={() => fire(() => tel.simulateIncoming('two_active_band_blocked'))} className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-canvas">📞 Matched — two active jobs, one band blocked</button>
-      <button data-testid="dev-call-known" onClick={() => fire(() => tel.simulateIncoming('one_active_green'))} className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-canvas">📞 Matched — one active, all green</button>
-      <button data-testid="dev-call-unknown" onClick={() => fire(() => tel.simulateIncoming('unknown'))} className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-canvas">📞 Unmatched number</button>
-      <button data-testid="dev-call-missed" onClick={() => fire(() => tel.simulateIncoming('missed'))} className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-canvas">📵 Missed — known client, nobody picks up (→ front-desk queue)</button>
-      <button data-testid="dev-call-missed-unknown" onClick={() => fire(() => tel.simulateVoicemailUnknown())} className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-canvas">📵 Voicemail — unknown number (→ front-desk queue)</button>
-      <button data-testid="dev-call-elsewhere" onClick={() => fire(() => tel.simulateIncoming('answered_elsewhere'))} className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-canvas">📞 Answered at another station (Vienna · Front Desk 2)</button>
-    </div>}
-  </div>;
+// Top-right phone icon = the Vonage shortcut (MH 2026-10-03): badge = open missed calls, click → Inbox → Calls. No popover of its own — the simulator lives inside Calls.
+export const VonageButton = () => {
+  const nav = useNavigate(); const loc = useLocation(); const [missed, setMissed] = useState(() => calls.openMissedCountSync()); const [live, setLive] = useState(() => !!calls.activeCallSync());
+  useEffect(() => calls.subscribeCalls(() => { setMissed(calls.openMissedCountSync()); setLive(!!calls.activeCallSync()); }), []);
+  const active = loc.pathname === '/inbox' && loc.search.includes('section=calls');
+  return <button type="button" data-testid="vonage-btn" data-missed={missed} aria-pressed={active} title={`Calls · Vonage${missed ? ` · ${missed} missed` : ''} — opens Inbox → Calls`} onClick={() => nav('/inbox?section=calls')} className={clsx('relative flex h-7 items-center justify-center rounded-sm border px-1.5 text-ink-500 hover:border-ink-400 hover:text-ink', active ? 'border-ink bg-canvas text-ink' : 'border-line bg-canvas', live && '!border-emerald-500 !text-emerald-600')}>
+    <Phone size={13} />
+    {missed > 0 && <span data-testid="vonage-missed-badge" className="absolute -right-1.5 -top-1.5 grid h-4 min-w-[16px] place-items-center rounded-full bg-rose-600 px-1 font-mono text-[9px] font-bold text-white">{missed}</span>}
+  </button>;
 };
+
+// Calls → "Simulate incoming call" (NOT-KEEPER · MOCK of the Vonage webhook → src/api/telephony.ts): pick a seeded client or type an unknown number → fires the D-405 screen-pop and logs the call row.
+export const SimulateIncomingPanel = () => {
+  const [mode, setMode] = useState<'client' | 'number'>('client'); const [clientId, setClientId] = useState(''); const [number, setNumber] = useState(''); const [outcome, setOutcome] = useState<tel.SimOutcome>('answered_here'); const [msg, setMsg] = useState<string | null>(null); const [err, setErr] = useState<string | null>(null);
+  const clients = api.getClientsSync().filter((c) => c.phone).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const fire = () => { setErr(null); setMsg(null); try { const n = mode === 'client' ? clients.find((c) => c.id === clientId)?.phone ?? '' : number; if (mode === 'client' && !n) throw new Error('Pick a client'); tel.simulateIncomingNumber(n, outcome); setMsg(`Ringing from ${n} · ${OUTCOME_LABEL[outcome]}`); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } };
+  return <section data-testid="calls-simulate" className="rounded-md border border-dashed border-amber-300 bg-amber-50/40 px-3 py-2.5 text-xs">
+    <div className="mb-2 flex flex-wrap items-center gap-2"><PhoneIncoming size={13} className="text-amber-700" /><span className="font-semibold text-ink">Simulate incoming call</span><span data-testid="calls-simulate-badge" className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-800">Not-Keeper · Vonage mock</span><span className="text-ink-500">— fires the screen-pop (client card · jobs · dots · Answer / Dismiss) and logs the call row exactly like the webhook would</span></div>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <div className="inline-flex rounded-sm border border-line bg-surface p-0.5">{(['client', 'number'] as const).map((m) => <button key={m} type="button" data-testid={`calls-simulate-mode-${m}`} aria-pressed={mode === m} onClick={() => setMode(m)} className={clsx('h-6 rounded-sm px-2 font-semibold', mode === m ? 'bg-ink text-white' : 'text-ink-600 hover:bg-canvas')}>{m === 'client' ? 'Seeded client' : 'Unknown number'}</button>)}</div>
+      {mode === 'client' ? <select data-testid="calls-simulate-client" value={clientId} onChange={(e) => setClientId(e.target.value)} className="h-7 w-64 rounded-sm border border-line bg-surface px-1.5"><option value="">— pick a client —</option>{clients.map((c) => <option key={c.id} value={c.id}>{fullName(c)} · {c.phone}</option>)}</select>
+        : <input data-testid="calls-simulate-number" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="(954) 555-0142" inputMode="tel" className="h-7 w-44 rounded-sm border border-line bg-surface px-2 font-mono" />}
+      <select data-testid="calls-simulate-outcome" value={outcome} onChange={(e) => setOutcome(e.target.value as tel.SimOutcome)} className="h-7 rounded-sm border border-line bg-surface px-1.5">{(Object.keys(OUTCOME_LABEL) as tel.SimOutcome[]).map((k) => <option key={k} value={k}>{OUTCOME_LABEL[k]}</option>)}</select>
+      <Button size="sm" variant="primary" data-testid="calls-simulate-fire" onClick={fire}><PhoneIncoming size={12} /> Ring now</Button>
+      {msg && <span data-testid="calls-simulate-ok" className="text-emerald-700">{msg}</span>}{err && <span data-testid="calls-simulate-error" className="text-rose-700">{err}</span>}
+    </div>
+  </section>;
+};
+const OUTCOME_LABEL: Record<tel.SimOutcome, string> = { answered_here: 'Handset picked up here after 3 s', missed: 'Missed — nobody picks up (→ front-desk queue)', voicemail: 'Voicemail (→ front-desk queue)', answered_elsewhere: 'Answered at another station (Vienna · Front Desk 2)' };
 
 // Screen-pop host: one card (or chip) per live session, newest on top. Mounted on desktop RS stations in front-desk / sales / manager tiers only.
 export const CallPopHost = () => {

@@ -119,6 +119,12 @@ import type {
   PickupVerifyMethod,
   PickupSerialCheck,
   PickupResend,
+  PickupInvoiceCheck,
+  PickupSecondFactorMethod,
+  PickupValueTier,
+  PickupKioskOtp,
+  ReolinkClipRef,
+  AuthorizedPickup,
   ManagerApproval,
   ReverseQrToken,
   PortalDocument,
@@ -465,6 +471,7 @@ export async function signOut(): Promise<void> {
 export async function getClients(): Promise<Client[]> {
   return resolve(fx.clients);
 }
+export const getClientsSync = (): Client[] => [...fx.clients];
 
 export async function getClient(id: string): Promise<Client | null> {
   return resolve(fx.clients.find((c) => c.id === id) ?? null);
@@ -2200,10 +2207,9 @@ export async function fulfillSalesOrder(id: string): Promise<SalesOrderWithRefs>
   return resolve(soRefs(o));
 }
 
+// Pickup codes are 6 digits (MH 2026-10-03) — typed on a keypad, read aloud, no letter/digit ambiguity. Older alphanumeric seeds still verify (same normaliser).
 const issuePickupCode = (o: SalesOrder) => {
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  const pick = (n: number) => Array.from({ length: n }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-  o.pickupCode = `${pick(4)}-${pick(2)}`;
+  o.pickupCode = String(Math.floor(100000 + Math.random() * 900000));
   o.pickupCodeIssuedAt = new Date().toISOString();
 };
 
@@ -2294,11 +2300,21 @@ export const PICKUP_FRAMES = 6;
 export const PICKUP_FRAME_WINDOW_MS = 60_000;
 export const PICKUP_EVIDENCE_TIMEOUT_MS = 90_000;
 export const REVERSE_QR_TTL_MS = 2 * 60_000; // ruling 2026-10-01: pickup confirm link = 2 minutes
-export const PICKUP_RETENTION = { framesDays: 90, idPhotoDays: 30, policy: 'Frames kept 90 days · proxy ID photo 30 days · summary rows permanent' };
+export const PICKUP_RETENTION = { framesDays: 90, idPhotoDays: 30, policy: 'Frames kept 90 days · ID photos manager-only, purged when the service warranty window closes · summary rows permanent' };
 export const MOCK_OCR_MAY_PASS = true; // PROTOTYPE ONLY — Keeper sets false: a placeholder photo must never release a watch
 export const PICKUP_VERIFY_LABEL: Record<PickupVerifyMethod, string> = { qr_scan: 'QR scanned', code: 'Code typed', proxy: 'Proxy + ID', reverse_qr: 'Reverse QR (client phone)' };
+// Gaps closed 2026-10-03 (MH gate list): codes are 6 digits · 3 wrong codes → 10-minute lockout · ≥ $10k (item value + invoice) needs a second factor on the paired kiosk · ID photos live until the warranty window closes
+export const PICKUP_CODE_MAX_FAILS = 3;
+export const PICKUP_LOCKOUT_MS = 10 * 60_000;
+export const PICKUP_HIGH_VALUE_USD = 10_000;
+export const SERVICE_WARRANTY_DAYS = 365; // OPEN for MH: the warranty window that ends ID-photo retention (prototype: 12 months)
+export const PICKUP_KIOSK_OTP_TTL_MS = 5 * 60_000;
+export const PICKUP_SECOND_FACTOR_LABEL: Record<PickupSecondFactorMethod, string> = { kiosk_otp: 'Kiosk · one-time code', kiosk_id_photo: 'Kiosk · client-operated ID photo', reverse_qr: 'Reverse QR (client phone)' };
+// Item value for the tier comes from the safes value chain (appraisal → declared → typical); safes.ts registers it at load so client.ts never imports safes (module order)
+let watchValueFn: ((j: Job) => { value: number | null; source: string }) | null = null;
+export const registerWatchValue = (fn: (j: Job) => { value: number | null; source: string }) => { watchValueFn = fn; };
 
-export interface PickupContext { order: SalesOrderWithRefs; draft?: PickupDraft; intakePhotos: PackagePhoto[]; recordSerial: string; codeGeneration: number; codeIssuedAt?: string; resends: PickupResend[]; reverseQr?: ReverseQrToken; aborts: PickupAbort[]; blockers: string[] }
+export interface PickupContext { order: SalesOrderWithRefs; draft?: PickupDraft; intakePhotos: PackagePhoto[]; recordSerial: string; codeGeneration: number; codeIssuedAt?: string; resends: PickupResend[]; reverseQr?: ReverseQrToken; aborts: PickupAbort[]; blockers: string[]; valueTier: PickupValueTier; lock?: { until: string; secondsLeft: number }; authorizedPickups: AuthorizedPickup[]; pairedKiosk?: { id: string; name: string }; kioskOtp?: PickupKioskOtp }
 export interface ManagerApprovalInput { managerId: string; pin: string; reason: string }
 type PickupEventKind = 'reverse_confirmed' | 'reverse_declined' | 'frame' | 'evidence';
 const pickupListeners = new Set<(e: { soId: string; kind: PickupEventKind }) => void>();
@@ -2330,22 +2346,53 @@ export async function getApprovingManagers(): Promise<User[]> { const a = actor(
 const pickupBlockers = (o: SalesOrder): string[] => {
   const d = o.pickupDraft; const out: string[] = [];
   if (!d?.itemConfirmed) out.push('Step 1 · item not confirmed against the intake photos');
-  if (o.balanceDue > 0 && !d?.paymentBypass) out.push(`Step 2 · balance due ${fmtMoney(o.balanceDue)}`);
-  if (!d?.verify) out.push('Step 3 · identity not verified'); else if (d.verify.method === 'proxy' && !d.verify.proxyApproval) out.push('Step 3 · proxy release needs a manager approval');
+  if (!d?.paymentBypass) {
+    if (!o.invoiceSentAt && !o.zeroBalance) out.push('Step 2 · invoice has not been sent — send it (the client must have the invoice before the hand-over)');
+    if (!d?.invoiceCheck && !o.zeroBalance) out.push('Step 2 · QBO balance not read at the gate');
+    else if (d?.invoiceCheck?.qboStatus === 'mismatch') out.push(`Step 2 · QBO shows ${fmtMoney(d.invoiceCheck.qboBalance ?? 0)} outstanding — re-read or take payment`);
+    if (o.balanceDue > 0) out.push(`Step 2 · balance due ${fmtMoney(o.balanceDue)}`);
+  }
+  if (!d?.verify) out.push('Step 3 · identity not verified'); else if (d.verify.method === 'proxy' && !d.verify.proxyApproval && !d.verify.proxyAuthorizedId) out.push('Step 3 · proxy release needs a manager approval (not an authorized pickup person)');
+  const tier = pickupValueTierSync(o); if (tier.high && d?.verify && d.verify.method !== 'reverse_qr' && !d.secondFactor) out.push(`Step 3 · ≥ ${fmtMoney(PICKUP_HIGH_VALUE_USD)} value tier — the client confirms on the kiosk (one-time code / ID photo) or by reverse QR`);
   if (!d?.handbackPhoto) out.push('Step 4 · hand-back photo missing'); else if (!d.serialCheck) out.push('Step 4 · serial check not run'); else if (d.serialCheck.result !== 'match' && !d.serialCheck.override) out.push(`Step 4 · serial ${d.serialCheck.result === 'unreadable' ? 'unreadable' : 'MISMATCH'} — retake or manager override`); else if (d.serialCheck.source === 'mock' && !MOCK_OCR_MAY_PASS && !d.serialCheck.override) out.push('Step 4 · MOCK OCR result cannot release a watch');
   return out;
 };
-const pickupCtx = (o: SalesOrder): PickupContext => ({ order: soRefs(o), draft: o.pickupDraft, intakePhotos: intakePhotosOf(o.jobId ? store.jobs.find((j) => j.id === o.jobId) ?? null : null), recordSerial: (() => { const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; return j ? store.watches.find((w) => w.id === j.watchId)?.serial ?? '' : ''; })(), codeGeneration: o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0), codeIssuedAt: o.pickupCodeIssuedAt, resends: o.pickupResends ?? [], reverseQr: o.reverseQr, aborts: o.pickupAborts ?? [], blockers: pickupBlockers(o) });
+// Value tier: Σ item value (safes chain, dollars) + invoice total ≥ $10k → second factor (D-gap 4). Unvalued item = $0 for the tier (flagged on the step).
+export const pickupValueTierSync = (o: SalesOrder): PickupValueTier => {
+  const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; const v = j && watchValueFn ? watchValueFn(j) : { value: null, source: 'unknown' };
+  const invoiceTotal = Math.round(o.total); const total = (v.value ?? 0) + invoiceTotal;
+  return { itemValue: v.value, itemSource: v.source, invoiceTotal, total, threshold: PICKUP_HIGH_VALUE_USD, high: total >= PICKUP_HIGH_VALUE_USD };
+};
+const pickupLockOf = (o: SalesOrder): { until: string; secondsLeft: number } | undefined => { const l = o.pickupLock; if (!l) return undefined; const left = Math.ceil((new Date(l.until).getTime() - Date.now()) / 1000); if (left <= 0) { o.pickupLock = undefined; return undefined; } return { until: l.until, secondsLeft: left }; };
+const pairedKioskOf = (): { id: string; name: string } | undefined => { const st = readStation(); const k = st?.pairedKioskId ? readStations().find((s) => s.id === st.pairedKioskId) : undefined; return k ? { id: k.id, name: k.name } : undefined; };
+const pickupCtx = (o: SalesOrder): PickupContext => ({ order: soRefs(o), draft: o.pickupDraft, intakePhotos: intakePhotosOf(o.jobId ? store.jobs.find((j) => j.id === o.jobId) ?? null : null), recordSerial: (() => { const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; return j ? store.watches.find((w) => w.id === j.watchId)?.serial ?? '' : ''; })(), codeGeneration: o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0), codeIssuedAt: o.pickupCodeIssuedAt, resends: o.pickupResends ?? [], reverseQr: o.reverseQr, aborts: o.pickupAborts ?? [], blockers: pickupBlockers(o), valueTier: pickupValueTierSync(o), lock: pickupLockOf(o), authorizedPickups: byId(fx.clients, o.clientId).authorizedPickups ?? [], pairedKiosk: pairedKioskOf(), kioskOtp: o.pickupKioskOtp && new Date(o.pickupKioskOtp.expiresAt).getTime() > Date.now() ? o.pickupKioskOtp : undefined });
 export async function getPickupContext(id: string): Promise<PickupContext> { pickupEvidenceSweep(); return resolve(pickupCtx(getSO(id))); }
 
-// Step 1 — open the counter session (resets any half-finished draft from a previous customer)
-export async function pickupStart(id: string): Promise<PickupContext> {
+// Open by ANY reference (gap 1): job label (E0xxxx / PDF417 payload with the job #), REF-SERIAL label, SO# (typed or Code 128), estimate #, pickup QR RSPU:<SO>:<code>, client name. Several SOs → the station shows a picker.
+export interface PickupOpenResult { orders: SalesOrderWithRefs[]; via: 'pickup_qr' | 'job' | 'ref_serial' | 'estimate' | 'so' | 'search'; carriedCode?: string; note?: string }
+export async function pickupResolveReference(raw: string): Promise<PickupOpenResult> {
+  const s = raw.trim(); if (!s) return resolve({ orders: [], via: 'search' });
+  const inQueue = (o: SalesOrder) => ['open', 'partial_fulfilled', 'fulfilled'].includes(o.status) && !(o.channel === 'ship' && o.shippingAddress);
+  const m = /^RSPU:([^:]+):(.+)$/i.exec(s);
+  if (m) { const o = store.salesOrders.find((x) => normPickupCode(x.number) === normPickupCode(m[1])); return resolve({ orders: o && inQueue(o) ? [soRefs(o)] : [], via: 'pickup_qr', carriedCode: m[2], note: o ? (inQueue(o) ? `Pickup QR for ${o.number} — the code is carried to step 3` : `${o.number} is not in the pickup queue`) : `No order ${m[1]}` }); }
+  const scan = await resolveScan(s);
+  if (scan?.job) { const list = store.salesOrders.filter((o) => o.jobId === scan.job!.id && inQueue(o)); if (list.length) return resolve({ orders: list.map(soRefs), via: scan.via === 'ref_serial' ? 'ref_serial' : 'job', note: `${scan.via === 'ref_serial' ? 'REF-SERIAL label' : 'Job label'} → ${scan.job.number}` }); }
+  if (scan?.estimate) { const list = store.salesOrders.filter((o) => inQueue(o) && (o.estimateId === scan.estimate!.id || (o.jobId && store.jobs.find((j) => j.id === o.jobId)?.estimateId === scan.estimate!.id))); if (list.length) return resolve({ orders: list.map(soRefs), via: 'estimate', note: `Estimate ${scan.estimate.number} → ${list.length} order${list.length === 1 ? '' : 's'}` }); }
+  const soHit = store.salesOrders.filter((o) => inQueue(o) && (o.number.toLowerCase() === s.toLowerCase() || o.number.replace(/\D/g, '') === s.replace(/\D/g, '') && s.replace(/\D/g, '').length >= 6));
+  if (soHit.length) return resolve({ orders: soHit.map(soRefs), via: 'so', note: `SO# ${soHit[0].number}` });
+  const list = (await findSalesOrders(s)).filter((o) => inQueue(o)); return resolve({ orders: list, via: 'search' });
+}
+
+// Step 1 — open the counter session (resets any half-finished draft from a previous customer). `openedVia` records which reference opened it; a pickup QR carries its code to step 3.
+export async function pickupStart(id: string, opened?: { via: string; carriedCode?: string }): Promise<PickupContext> {
   const o = getSO(id);
   if (!['open', 'partial_fulfilled', 'fulfilled'].includes(o.status)) throw new Error('Order is not in the pickup queue');
   if (o.channel === 'ship' && o.shippingAddress) throw new Error('Order has outbound ship products — send staff to Ship Station');
-  const a = actor(); o.pickupDraft = { startedAt: new Date().toISOString(), by: a.by, station: a.station };
+  const a = actor(); o.pickupDraft = { startedAt: new Date().toISOString(), by: a.by, station: a.station, openedVia: opened?.via };
   const sj = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; if (sj?.status === 'in_storage') { leaveStorageSync(sj, 'pickup', `Pickup Station · ${o.number}`); ensureParts(sj).forEach((c) => { c.station = 'finished'; c.partStatus = 'fulfilled'; }); }
-  soStamp(o, 'Pickup started · step 1 customer / item'); return resolve(pickupCtx(o));
+  soStamp(o, `Pickup started · step 1 customer / item${opened?.via ? ` · opened by ${opened.via.replace(/_/g, ' ')}` : ''}`);
+  if (opened?.carriedCode) { const code = normPickupCode(opened.carriedCode); if (o.pickupCode && normPickupCode(o.pickupCode) === code) { o.pickupDraft.verify = { method: 'qr_scan', at: new Date().toISOString(), codeUsed: o.pickupCode }; soStamp(o, `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL.qr_scan} · pickup QR used to open the session · generation ${o.pickupCodeGeneration ?? 1}`); } else soStamp(o, 'Step 3 · pickup QR carried a stale / foreign code — verify again at step 3'); }
+  return resolve(pickupCtx(o));
 }
 export async function pickupConfirmItem(id: string, intakePhotoId?: string): Promise<PickupContext> {
   const o = getSO(id); const d = pickupDraftOf(o); const a = actor();
@@ -2361,9 +2408,19 @@ export async function pickupAbort(id: string, step: string, reason: string): Pro
 }
 // Step 2 — the ONLY way past a balance: a different manager approves, reason required, logged on the SO + Hitlist at release
 export async function pickupApproveBypass(id: string, input: ManagerApprovalInput): Promise<PickupContext> {
-  const o = getSO(id); const d = pickupDraftOf(o); if (o.balanceDue <= 0) throw new Error('Nothing owed — no bypass needed');
+  const o = getSO(id); const d = pickupDraftOf(o); if (o.balanceDue <= 0 && o.invoiceSentAt) throw new Error('Nothing owed and the invoice was sent — no bypass needed');
   const ap = approveAsManager(input); d.paymentBypass = { ...ap, amount: o.balanceDue };
-  soStamp(o, `Step 2 · PAYMENT BYPASS approved by ${ap.by} · ${fmtMoney(o.balanceDue)} outstanding · ${ap.reason}`); return resolve(pickupCtx(o));
+  soStamp(o, `Step 2 · PAYMENT BYPASS approved by ${ap.by} · ${fmtMoney(o.balanceDue)} outstanding${o.invoiceSentAt ? '' : ' · invoice never sent'} · ${ap.reason}`); return resolve(pickupCtx(o));
+}
+// Step 2 — gate reads the QBO balance (not just the local ledger). A payment QBO knows about and we don't is applied (webhook reconciled); a balance QBO still shows blocks the gate.
+export async function pickupCheckInvoice(id: string): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); const at = new Date().toISOString();
+  if (o.zeroBalance) { d.invoiceCheck = { at, invoiceSentAt: o.invoiceSentAt, localBalance: o.balanceDue, qboBalance: null, qboStatus: 'excluded' }; soStamp(o, 'Step 2 · invoice gate · zero balance — excluded from QBO, nothing to read'); return resolve(pickupCtx(o)); }
+  let qboStatus: PickupInvoiceCheck['qboStatus'] = 'ok'; let qboBalance: number | null = null;
+  try { const r = await qboReadBalance(id); qboBalance = r.balanceDue; if (Math.round(r.balanceDue) !== Math.round(o.balanceDue)) qboStatus = 'mismatch'; } catch { qboStatus = 'unavailable'; }
+  d.invoiceCheck = { at, invoiceSentAt: o.invoiceSentAt, localBalance: o.balanceDue, qboBalance, qboStatus };
+  soStamp(o, `Step 2 · invoice gate · ${o.invoiceSentAt ? `sent ${o.invoiceSends.length}×` : 'NOT SENT'} · QBO balance ${qboBalance === null ? 'unavailable' : fmtMoney(qboBalance)} · local ${fmtMoney(o.balanceDue)} · ${qboStatus}`);
+  return resolve(pickupCtx(o));
 }
 // Step 3 — resend rotates the code: the old one dies immediately (safer; the station explains a stale email instead of accepting it)
 export async function pickupResendCode(id: string, channel: 'email' | 'sms'): Promise<PickupContext> {
@@ -2379,27 +2436,74 @@ export async function pickupResendCode(id: string, channel: 'email' | 'sms'): Pr
   soStamp(o, `Step 3 · code rotated → generation ${gen} · ${channel.toUpperCase()} to ${o.pickupResends[o.pickupResends.length - 1].to}${smsId ? ` · ${smsId}` : ''} · previous code void`); soTotals(o);
   return resolve(pickupCtx(o));
 }
-// QR payload = RSPU:<SO>:<code> (also accepts the bare code). Same rotation-aware check for scanned, typed and simulated input.
+// QR payload = RSPU:<SO>:<code> (also accepts the bare code). Same rotation-aware check for scanned, typed and simulated input. 3 wrong codes → 10-minute lockout on code / QR entry (proxy + reverse QR stay open).
 export async function pickupVerifyCode(id: string, raw: string, via: 'qr_scan' | 'code'): Promise<PickupContext> {
   const o = getSO(id); const d = pickupDraftOf(o);
+  const lock = pickupLockOf(o); if (lock) throw new Error(`Code entry locked after ${PICKUP_CODE_MAX_FAILS} wrong codes — ${Math.ceil(lock.secondsLeft / 60)} min left. Use proxy + ID or reverse QR, or wait.`);
   const payload = raw.trim(); const m = /^RSPU:([^:]+):(.+)$/i.exec(payload);
-  if (m && normPickupCode(m[1]) !== normPickupCode(o.number)) { soStamp(o, `Step 3 · verify FAILED · ${via} · QR belongs to ${m[1]}`); throw new Error(`That QR is for ${m[1]}, not ${o.number}`); }
+  const failed = (why: string): never => {
+    d.codeAttempts = (d.codeAttempts ?? 0) + 1; soStamp(o, `Step 3 · verify FAILED · ${via} · ${why} · attempt ${d.codeAttempts}/${PICKUP_CODE_MAX_FAILS}`);
+    if (d.codeAttempts >= PICKUP_CODE_MAX_FAILS) { const until = new Date(Date.now() + PICKUP_LOCKOUT_MS).toISOString(); o.pickupLock = { until, at: new Date().toISOString(), attempts: d.codeAttempts }; d.codeAttempts = 0; soStamp(o, `Step 3 · CODE ENTRY LOCKED for ${PICKUP_LOCKOUT_MS / 60_000} min · ${PICKUP_CODE_MAX_FAILS} wrong codes · until ${new Date(until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`); appendAudit({ type: 'sales', stationName: actor().station, userShortName: actor().user?.shortName, detail: `${o.number} · Pickup code entry LOCKED (${PICKUP_CODE_MAX_FAILS} wrong codes) · ${PICKUP_LOCKOUT_MS / 60_000} min` }); throw new Error(`${PICKUP_CODE_MAX_FAILS} wrong codes — code entry is locked for ${PICKUP_LOCKOUT_MS / 60_000} minutes. Proxy + ID and reverse QR still work.`); }
+    throw new Error(`${why} (${PICKUP_CODE_MAX_FAILS - d.codeAttempts} tr${PICKUP_CODE_MAX_FAILS - d.codeAttempts === 1 ? 'y' : 'ies'} left before lockout)`);
+  };
+  if (m && normPickupCode(m[1]) !== normPickupCode(o.number)) return failed(`That QR is for ${m[1]}, not ${o.number}`);
   const code = normPickupCode(m ? m[2] : payload);
   if (!code) throw new Error('Scan or type the code');
   if (!o.pickupCode) throw new Error('No code on record — resend one or use proxy verification');
-  if (normPickupCode(o.pickupCode) === code) { d.verify = { method: via, at: new Date().toISOString(), codeUsed: o.pickupCode }; soStamp(o, `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL[via]} · generation ${o.pickupCodeGeneration ?? 1}`); return resolve(pickupCtx(o)); }
+  if (normPickupCode(o.pickupCode) === code) { d.verify = { method: via, at: new Date().toISOString(), codeUsed: o.pickupCode }; d.codeAttempts = 0; o.pickupLock = undefined; soStamp(o, `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL[via]} · generation ${o.pickupCodeGeneration ?? 1}`); return resolve(pickupCtx(o)); }
   const old = (o.pickupCodeHistory ?? []).find((h) => normPickupCode(h.code) === code);
-  soStamp(o, `Step 3 · verify FAILED · ${via} · ${old ? `stale code (generation ${old.generation})` : 'no match'}`);
-  if (old) throw new Error(`That code was replaced on ${new Date(old.replacedAt ?? old.issuedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} (generation ${old.generation} of ${o.pickupCodeGeneration ?? 1}) — ask the client for the newest message, or resend`);
-  throw new Error('Code does not match this order');
+  if (old) return failed(`That code was replaced on ${new Date(old.replacedAt ?? old.issuedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} (generation ${old.generation} of ${o.pickupCodeGeneration ?? 1}) — ask the client for the newest message, or resend`);
+  return failed('Code does not match this order');
 }
-// Proxy = weakest path (no client-side proof): name + government ID photo + a manager's approval, all on the record
-export async function pickupVerifyProxy(id: string, proxyName: string, idPhoto: PackagePhoto | undefined, approval: ManagerApprovalInput): Promise<PickupContext> {
-  const o = getSO(id); const d = pickupDraftOf(o);
-  if (!proxyName.trim()) throw new Error('Proxy full name is required'); if (!idPhoto) throw new Error('Photograph the proxy’s government ID');
+// Proxy = weakest path (no client-side proof): name + government ID photo + a manager's approval — unless the person is on the client's authorized-pickup list (then the client pre-approved; ID photo still required, logged as authorized).
+export async function pickupVerifyProxy(id: string, proxyName: string, idPhoto: PackagePhoto | undefined, approval: ManagerApprovalInput | undefined, authorizedId?: string): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); const c = byId(fx.clients, o.clientId);
+  const auth = authorizedId ? (c.authorizedPickups ?? []).find((p) => p.id === authorizedId) : undefined; if (authorizedId && !auth) throw new Error('That person is not on the client’s authorized list');
+  const name = auth?.name ?? proxyName.trim(); if (!name) throw new Error('Proxy full name is required'); if (!idPhoto) throw new Error('Photograph the proxy’s government ID');
+  if (auth) { d.verify = { method: 'proxy', at: new Date().toISOString(), proxyName: name, proxyIdPhoto: idPhoto, proxyAuthorizedId: auth.id }; soStamp(o, `Step 3 · authorized pickup person · ${name}${auth.relation ? ` (${auth.relation})` : ''} · on the client's list since ${new Date(auth.addedAt).toLocaleDateString()} · ID photographed · no manager approval needed`); return resolve(pickupCtx(o)); }
+  if (!approval) throw new Error('A manager must approve — this person is not on the client’s authorized-pickup list');
   const ap = approveAsManager(approval);
-  d.verify = { method: 'proxy', at: new Date().toISOString(), proxyName: proxyName.trim(), proxyIdPhoto: idPhoto, proxyApproval: ap };
-  soStamp(o, `Step 3 · proxy release approved by ${ap.by} · ${proxyName.trim()} · ID photographed · ${ap.reason}`); return resolve(pickupCtx(o));
+  d.verify = { method: 'proxy', at: new Date().toISOString(), proxyName: name, proxyIdPhoto: idPhoto, proxyApproval: ap };
+  soStamp(o, `Step 3 · proxy release approved by ${ap.by} · ${name} · NOT on the authorized list · ID photographed · ${ap.reason}`); return resolve(pickupCtx(o));
+}
+// Authorized pickup persons live on the client record (Client 360 card + portal Account); the station reads the list at step 3
+export async function addAuthorizedPickup(clientId: string, input: { name: string; relation?: string; phone?: string }, via: AuthorizedPickup['via'] = 'staff'): Promise<Client> {
+  const c = byId(fx.clients, clientId); const name = input.name.trim(); if (name.length < 3) throw new Error('Full name is required');
+  if ((c.authorizedPickups ?? []).some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new Error(`${name} is already on the list`);
+  const a = actor(); const p: AuthorizedPickup = { id: newId('ap'), name, relation: input.relation?.trim() || undefined, phone: input.phone?.trim() || undefined, addedAt: new Date().toISOString(), addedBy: a.by, via };
+  c.authorizedPickups = [...(c.authorizedPickups ?? []), p];
+  appendAudit({ type: 'sales', stationName: a.station, userShortName: a.user?.shortName, detail: `${fullNameOf(c)} · authorized pickup person added · ${name}${p.relation ? ` (${p.relation})` : ''} · via ${via}` });
+  return resolve({ ...c });
+}
+export async function removeAuthorizedPickup(clientId: string, personId: string, via: AuthorizedPickup['via'] = 'staff'): Promise<Client> {
+  const c = byId(fx.clients, clientId); const p = (c.authorizedPickups ?? []).find((x) => x.id === personId); if (!p) throw new Error('Not on the list');
+  c.authorizedPickups = (c.authorizedPickups ?? []).filter((x) => x.id !== personId); const a = actor();
+  appendAudit({ type: 'sales', stationName: a.station, userShortName: a.user?.shortName, detail: `${fullNameOf(c)} · authorized pickup person removed · ${p.name} · via ${via}` });
+  return resolve({ ...c });
+}
+export async function portalAddAuthorizedPickup(clientId: string, input: { name: string; relation?: string; phone?: string }): Promise<Client> { requireStepUp(clientId, STEP_UP_ACTION.pickupPerson(clientId)); return asClient(clientId, () => addAuthorizedPickup(clientId, input, 'portal')); }
+export async function portalRemoveAuthorizedPickup(clientId: string, personId: string): Promise<Client> { return asClient(clientId, () => removeAuthorizedPickup(clientId, personId, 'portal')); }
+
+// ≥ $10k second factor (gap 4): the counter pushes a confirmation to the PAIRED kiosk — one-time code to the client's phone (MOCK SMS) typed on the kiosk, or a client-operated ID photo on the kiosk camera. Fallback = reverse QR.
+export async function pickupKioskPushOtp(id: string): Promise<PickupContext> {
+  const o = getSO(id); pickupDraftOf(o); const k = pairedKioskOf(); if (!k) throw new Error('This station has no paired kiosk (Setup → Stations) — use the reverse-QR fallback');
+  const c = byId(fx.clients, o.clientId); const code = String(Math.floor(100000 + Math.random() * 900000)); const now = Date.now();
+  const r = sendSms(c.phone, `RolliWorks: your pickup confirmation code is ${code}. Enter it on the kiosk at the counter. Expires in 5 minutes.`); if (r.status === 'failed') throw new Error('No usable mobile number on file — use the client-operated ID photo or reverse QR');
+  o.pickupKioskOtp = { code, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + PICKUP_KIOSK_OTP_TTL_MS).toISOString(), kioskId: k.id, maskedTo: r.maskedTo };
+  soStamp(o, `Step 3 · value tier ≥ ${fmtMoney(PICKUP_HIGH_VALUE_USD)} · one-time code pushed to ${k.name} · SMS to ${r.maskedTo} (vonage-mock ${r.id})`); return resolve(pickupCtx(o));
+}
+export async function pickupKioskConfirmOtp(id: string, typed: string): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); const otp = o.pickupKioskOtp; if (!otp) throw new Error('No code was pushed — push one first');
+  if (new Date(otp.expiresAt).getTime() < Date.now()) { o.pickupKioskOtp = undefined; throw new Error('That code expired — push a new one'); }
+  if (typed.replace(/\D/g, '') !== otp.code) { soStamp(o, 'Step 3 · kiosk one-time code WRONG'); throw new Error('Code does not match — the client re-reads the SMS'); }
+  const k = readStations().find((s) => s.id === otp.kioskId); o.pickupKioskOtp = undefined;
+  await asClient(o.clientId, async () => { d.secondFactor = { method: 'kiosk_otp', at: new Date().toISOString(), kioskId: otp.kioskId, kioskName: k?.name, otpLast2: otp.code.slice(-2) }; soStamp(o, `Step 3 · second factor · client confirmed on ${k?.name ?? 'kiosk'} · one-time code ••••${otp.code.slice(-2)}`); });
+  return resolve(pickupCtx(o));
+}
+export async function pickupKioskIdPhoto(id: string, photo: PackagePhoto): Promise<PickupContext> {
+  const o = getSO(id); const d = pickupDraftOf(o); const k = pairedKioskOf(); if (!k) throw new Error('This station has no paired kiosk (Setup → Stations) — use the reverse-QR fallback');
+  await asClient(o.clientId, async () => { d.secondFactor = { method: 'kiosk_id_photo', at: new Date().toISOString(), kioskId: k.id, kioskName: k.name, idPhoto: photo }; soStamp(o, `Step 3 · second factor · client-operated ID photo on ${k.name} · manager-only, purged with the warranty window`); });
+  return resolve(pickupCtx(o));
 }
 // Reverse QR: the STATION shows a QR; the client's phone opens /rc/pickup/<token> and taps Confirm. Single-use, 10 min, bound to this SO + station.
 export async function pickupIssueReverseQr(id: string): Promise<PickupContext> {
@@ -2418,8 +2522,9 @@ export async function portalConfirmPickup(token: string): Promise<PortalPickupCo
   const o = soByReverseToken(token); const r = o.reverseQr!;
   if (r.usedAt) throw new Error('This link was already used'); if (new Date(r.expiresAt).getTime() < Date.now()) throw new Error('This link expired — ask the counter to show a new QR');
   const now = new Date().toISOString(); r.usedAt = now; r.confirmedAt = now;
-  if (o.pickupDraft) o.pickupDraft.verify = { method: 'reverse_qr', at: now, reverseToken: token };
-  await asClient(o.clientId, async () => { soStamp(o, `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL.reverse_qr} · client confirmed on their phone`); });
+  // Primary identity already captured (code / QR / proxy) on a ≥ $10k order → the phone confirmation is the SECOND factor (fallback to the kiosk); otherwise it is the identity itself
+  if (o.pickupDraft) { if (o.pickupDraft.verify && pickupValueTierSync(o).high) o.pickupDraft.secondFactor = { method: 'reverse_qr', at: now }; else o.pickupDraft.verify = { method: 'reverse_qr', at: now, reverseToken: token }; }
+  await asClient(o.clientId, async () => { soStamp(o, o.pickupDraft?.secondFactor?.method === 'reverse_qr' && o.pickupDraft.secondFactor.at === now ? 'Step 3 · second factor · client confirmed on their phone (reverse QR fallback)' : `Step 3 · identity verified · ${PICKUP_VERIFY_LABEL.reverse_qr} · client confirmed on their phone`); });
   emitPickup(o.id, 'reverse_confirmed'); return portalGetPickupConfirm(token);
 }
 export async function portalDeclinePickup(token: string): Promise<PortalPickupConfirm> {
@@ -2453,13 +2558,15 @@ export async function pickupOverrideSerial(id: string, approval: ManagerApproval
 }
 // Dev-only helper so "Simulate scan" exercises the exact same verify path as a real decode (the UI hides it outside dev builds)
 export async function pickupDevQrPayload(id: string): Promise<string> { if (!import.meta.env.DEV) throw new Error('Not available'); const o = getSO(id); return resolve(o.pickupCode ? `RSPU:${o.number}:${o.pickupCode}` : ''); }
+export async function pickupDevKioskOtp(id: string): Promise<string> { if (!import.meta.env.DEV) throw new Error('Not available'); return resolve(getSO(id).pickupKioskOtp?.code ?? ''); }
 
 export const pickupSummaryLine = (s: PickupSession, clientName?: string): string => {
-  const who = s.proxyName ? `proxy ${s.proxyName}` : clientName ?? 'client';
+  const who = s.proxyName ? `${s.proxyAuthorizedId ? 'authorized person' : 'proxy'} ${s.proxyName}` : clientName ?? 'client';
   const via = s.adminOverride ? 'ADMIN MARK' : s.verifyMethod ? PICKUP_VERIFY_LABEL[s.verifyMethod] : s.codeUsed ? 'code' : 'proxy';
+  const second = s.secondFactor ? `2nd factor ${PICKUP_SECOND_FACTOR_LABEL[s.secondFactor.method]}` : s.valueTier?.high ? '≥ $10k tier' : null;
   const serial = s.serialCheck ? (s.serialCheck.override ? `serial ${s.serialCheck.result} — overridden by ${s.serialCheck.override.by}` : `serial ${s.serialCheck.result}${s.serialCheck.source === 'mock' ? ' (MOCK)' : ''}`) : null;
   const ev = s.evidenceStatus === 'bypassed' ? 'released without camera evidence' : s.evidenceStatus ? `evidence ${s.frames?.length ?? 0}/${s.framesExpected ?? PICKUP_FRAMES}${s.evidenceStatus === 'pending' ? ' pending' : s.evidenceStatus === 'incomplete' ? ' INCOMPLETE' : ''}` : null;
-  return ['Released to ' + who, `via ${via}`, serial, s.paymentBypass ? `PAYMENT BYPASS ${s.paymentBypass.by}` : null, ev].filter(Boolean).join(' · ');
+  return ['Released to ' + who, `via ${via}`, second, serial, s.paymentBypass ? `PAYMENT BYPASS ${s.paymentBypass.by}` : null, ev].filter(Boolean).join(' · ');
 };
 export interface ConfirmPickupInput { firstFrame?: PackagePhoto; cameraBypass?: ManagerApprovalInput; lineQty?: Record<string, number> }
 // Step 5 — commit. "Done" needs frame 1 from the client camera (or a manager-approved camera bypass); frames 2–6 keep arriving over the next 60 s.
@@ -2475,8 +2582,11 @@ export async function confirmPickup(id: string, input: ConfirmPickupInput = {}):
   const fully = o.lines.every((l) => l.pickedUpQty >= l.qty);
   const frames: PickupFrame[] = input.firstFrame ? [{ id: newId('pf'), seq: 1, at: now, dataUrl: input.firstFrame.dataUrl, cameraRole: 'client', station: a.station }] : [];
   const plus = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
-  o.pickupSession = { id: newId('pks'), at: now, by: a.by, station: a.station, codeUsed: d.verify!.codeUsed, proxyName: d.verify!.proxyName, proxyIdPhoto: d.verify!.proxyIdPhoto, proxyApproval: d.verify!.proxyApproval, verifyMethod: d.verify!.method, itemConfirmed: d.itemConfirmed, intakePhoto: d.intakePhoto, handbackPhoto: d.handbackPhoto, photos: d.handbackPhoto ? [d.handbackPhoto] : [], serialCheck: d.serialCheck, paymentBypass: d.paymentBypass, bypassReason: d.paymentBypass?.reason, cameraBypass, lineQty, frames, framesExpected: PICKUP_FRAMES, evidenceStatus: cameraBypass ? 'bypassed' : 'pending', evidenceStartedAt: cameraBypass ? undefined : now, retention: { framesUntil: plus(PICKUP_RETENTION.framesDays), idPhotoUntil: d.verify!.proxyIdPhoto ? plus(PICKUP_RETENTION.idPhotoDays) : undefined, policy: PICKUP_RETENTION.policy }, codeGeneration: o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0) };
-  o.channel = 'pickup'; o.pickupCode = undefined; o.pickupDraft = undefined; o.reverseQr = undefined;
+  const idPhoto = d.verify!.proxyIdPhoto ?? d.secondFactor?.idPhoto;
+  // Reolink NVR clip reference (MOCK): the hand-over window on the counter channel, retained 90 days like the frames — Keeper writes the real clip id from the NVR API
+  const reolink: ReolinkClipRef | undefined = cameraBypass ? undefined : { nvr: 'reolink-nvr-01 (MOCK)', channel: `ch-${a.station.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, clipFrom: new Date(Date.now() - 30_000).toISOString(), clipTo: new Date(Date.now() + PICKUP_FRAME_WINDOW_MS + 30_000).toISOString(), clipRef: `RL-${now.slice(0, 10).replace(/-/g, '')}-${o.number.replace(/\D/g, '')}`, retainUntil: plus(PICKUP_RETENTION.framesDays) };
+  o.pickupSession = { id: newId('pks'), at: now, by: a.by, station: a.station, codeUsed: d.verify!.codeUsed, proxyName: d.verify!.proxyName, proxyIdPhoto: d.verify!.proxyIdPhoto, proxyApproval: d.verify!.proxyApproval, proxyAuthorizedId: d.verify!.proxyAuthorizedId, verifyMethod: d.verify!.method, itemConfirmed: d.itemConfirmed, intakePhoto: d.intakePhoto, handbackPhoto: d.handbackPhoto, photos: d.handbackPhoto ? [d.handbackPhoto] : [], serialCheck: d.serialCheck, paymentBypass: d.paymentBypass, bypassReason: d.paymentBypass?.reason, cameraBypass, lineQty, frames, framesExpected: PICKUP_FRAMES, evidenceStatus: cameraBypass ? 'bypassed' : 'pending', evidenceStartedAt: cameraBypass ? undefined : now, retention: { framesUntil: plus(PICKUP_RETENTION.framesDays), idPhotoUntil: idPhoto ? plus(SERVICE_WARRANTY_DAYS) : undefined, idPhotoRule: idPhoto ? `manager-only · purged when the ${SERVICE_WARRANTY_DAYS}-day service warranty closes` : undefined, policy: PICKUP_RETENTION.policy }, codeGeneration: o.pickupCodeGeneration ?? (o.pickupCode ? 1 : 0), openedVia: d.openedVia, invoiceCheck: d.invoiceCheck, valueTier: pickupValueTierSync(o), secondFactor: d.secondFactor, reolink };
+  o.channel = 'pickup'; o.pickupCode = undefined; o.pickupDraft = undefined; o.reverseQr = undefined; o.pickupLock = undefined; o.pickupKioskOtp = undefined;
   if (fully) { o.status = 'picked_up'; o.pickedUpAt = now; if (!o.fulfilledAt) o.fulfilledAt = now; } else o.status = 'partial_fulfilled';
   soTotals(o);
   if (o.pickupSession.paymentBypass) logBypass({ kind: 'payment_release', orderId: o.id, jobNumber: o.number, reason: `${o.pickupSession.paymentBypass.reason} · approved by ${o.pickupSession.paymentBypass.by}`, context: { invoiceAmount: o.total, minutesSincePayment: minutesSincePayment(o), detail: `released at pickup station · ${fmtMoney(o.pickupSession.paymentBypass.amount)} outstanding` } });
@@ -2498,7 +2608,7 @@ export async function pickupAppendFrame(id: string, dataUrl: string): Promise<Pi
 }
 // Dead USB camera / closed tab → the strip never finishes. 90 s after Done the record is flagged and MH gets a Hitlist pin (ruling: a message is fine, cams are flaky).
 export const pickupEvidenceSweep = (): number => {
-  let n = 0;
+  let n = 0; pickupIdPhotoPurgeSweep();
   for (const o of store.salesOrders) {
     const s = o.pickupSession; if (!s || s.evidenceStatus !== 'pending' || !s.evidenceStartedAt) continue;
     if (Date.now() - new Date(s.evidenceStartedAt).getTime() < PICKUP_EVIDENCE_TIMEOUT_MS) continue;
@@ -2511,6 +2621,20 @@ export const pickupEvidenceSweep = (): number => {
 };
 // Job timeline + any other reader derive the release line LIVE from the session (frames keep arriving after the close transition was written)
 export const jobReleaseLineSync = (jobId: string): { text: string; soId: string; soNumber: string } | undefined => { const o = store.salesOrders.find((x) => x.jobId === jobId && x.pickupSession); return o?.pickupSession ? { text: pickupSummaryLine(o.pickupSession, clientName(o.clientId)), soId: o.id, soNumber: o.number } : undefined; };
+// ID photos (proxy / kiosk) are MANAGER-ONLY reads and are purged when the warranty window closes — the purge drops the pixels, keeps the fact that one was taken
+export const pickupIdPhotoPurgeSweep = (): number => {
+  let n = 0;
+  for (const o of store.salesOrders) {
+    const s = o.pickupSession; const r = s?.retention; if (!s || !r?.idPhotoUntil || r.idPhotoPurgedAt) continue; if (new Date(r.idPhotoUntil).getTime() > Date.now()) continue;
+    if (!s.proxyIdPhoto && !s.secondFactor?.idPhoto) continue;
+    s.proxyIdPhoto = undefined; if (s.secondFactor) s.secondFactor = { ...s.secondFactor, idPhoto: undefined }; r.idPhotoPurgedAt = new Date().toISOString(); n++;
+    appendAudit({ type: 'sales', stationName: 'System', userShortName: undefined, detail: `${o.number} · pickup ID photo PURGED · warranty window closed ${new Date(r.idPhotoUntil).toLocaleDateString()}` });
+  }
+  return n;
+};
+export const canSeeIdPhotosSync = (): boolean => (currentUserSync()?.accessTier === 'manager');
+// Dev: pull the purge date to now so the rule is visible in the prototype (never in Keeper)
+export async function pickupDevPurgeIdPhotoNow(id: string): Promise<SalesOrderWithRefs> { if (!import.meta.env.DEV) throw new Error('Not available'); const o = getSO(id); if (o.pickupSession?.retention?.idPhotoUntil) o.pickupSession.retention.idPhotoUntil = new Date(Date.now() - 1000).toISOString(); pickupIdPhotoPurgeSweep(); return resolve(soRefs(o)); }
 export async function getPickupSession(id: string): Promise<PickupSession | undefined> { pickupEvidenceSweep(); return resolve(getSO(id).pickupSession); }
 export async function getOpenEvidenceCaptures(): Promise<{ order: SalesOrderWithRefs; session: PickupSession }[]> { pickupEvidenceSweep(); return resolve(store.salesOrders.filter((o) => o.pickupSession?.evidenceStatus === 'pending').map((o) => ({ order: soRefs(o), session: o.pickupSession! }))); }
 // Admin overrides (pack: allowed with an audit log; privileged roles) — manager tier
@@ -3133,7 +3257,7 @@ export async function portalGetEstimateByLink(token: string): Promise<{ estimate
 export async function portalGetPartsByLink(token: string): Promise<{ parts: PortalPartsView; link: ClientLink }> { const l = await resolveClientLink(token); if (l.type !== 'parts') throw new Error(LINK_EXPIRED_COPY); return resolve({ parts: await portalGetPartsRequest(l.clientId, l.objectId), link: l }); }
 // Step-up from a LINK (no session): the code goes to the email the link was sent to
 export async function rcRequestStepUp(clientId: string, action: string): Promise<{ challengeId: string; maskedEmail: string; expiresAt: string }> { const c = byId(fx.clients, clientId); return rcRequestCode(c.email, { purpose: 'stepup', action }); }
-export const STEP_UP_ACTION = { approveEstimate: (id: string) => `approve-estimate:${id}`, approveParts: (id: string) => `approve-parts:${id}`, payBalance: (id: string) => `pay-balance:${id}` };
+export const STEP_UP_ACTION = { approveEstimate: (id: string) => `approve-estimate:${id}`, approveParts: (id: string) => `approve-parts:${id}`, payBalance: (id: string) => `pay-balance:${id}`, pickupPerson: (clientId: string) => `pickup-person:${clientId}` };
 
 // Per-document gating by type — token documents (report, inspection form) can stay public links; identity-bound pages always need the account
 export type RcDocType = 'estimate' | 'invoice' | 'watch' | 'messages' | 'report' | 'inspection_form';

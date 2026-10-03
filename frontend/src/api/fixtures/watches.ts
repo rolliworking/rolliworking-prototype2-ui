@@ -60,6 +60,7 @@ export const watches: Watch[] = [
   { id: 'w-pu4', clientId: 'c-07', brand: 'Rolex', model: 'GMT-Master II', reference: '126710GRNR', serial: 'D7H2K9W4', dial: 'Black', bracelet: 'Jubilee', status: 'awaiting_pickup', receivedAt: daysAgo(24) },
   { id: 'w-pu5', clientId: 'c-08', brand: 'Rolex', model: 'Yacht-Master 40', reference: '126622', serial: 'F3R9Q6N1', dial: 'Slate', bracelet: 'Oyster', status: 'awaiting_pickup', receivedAt: daysAgo(19) },
   { id: 'w-pu6', clientId: 'c-17', brand: 'Rolex', model: 'Datejust 36', reference: '126234', serial: 'A9T4M2K8', dial: 'Silver', bracelet: 'Jubilee', status: 'awaiting_pickup', receivedAt: daysAgo(17) },
+  { id: 'w-pu9', clientId: 'c-21', brand: 'Rolex', model: 'Cosmograph Daytona', reference: '116500LN', serial: 'M4D7Y2T1', dial: 'White', bracelet: 'Oyster', status: 'awaiting_pickup', receivedAt: daysAgo(22) },
   { id: 'w-pu7', clientId: 'c-19', brand: 'Tudor', model: 'Black Bay GMT', reference: 'M79830RB-0001', serial: 'B6N1R8V3', dial: 'Black', bracelet: 'Steel', status: 'released', receivedAt: daysAgo(30) },
   // Long-term storage fixtures (MH 2026-10-02): finished, invoiced > 90 days, unpaid — two on MH's card, one already in the LTS safe
   { id: 'w-lt1', clientId: 'c-22', brand: 'Rolex', model: 'Datejust 41', reference: '126334', serial: 'K8M2R7T1', dial: 'Blue', bracelet: 'Jubilee', status: 'awaiting_pickup', receivedAt: daysAgo(140) },
