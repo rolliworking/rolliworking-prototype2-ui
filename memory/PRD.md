@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-10-02 (Bonus targets — Phase 3)  
+**Last updated**: 2026-10-02 (Safes vs insurance — ad-hoc, after Bonus targets)  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -674,4 +674,12 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - **Seeds (Oct 2)**: MAM on pace ($985 / $9k), JV reached (Aug–Oct $39k, tiers → 125 % $3,000 projected), Dre behind (3 / 40; Aug paid, Sep $300 unpaid), MM Sep–Oct on pace ($50k / $90k, payout hidden), Leo hidden from staff. Sep closed: MAM missed, Dre + Leo reached. Nov 1 closes October for everyone.
 - Open for MH: Saturdays as working days (Setup toggle), holiday exclusions, payroll export beyond CSV / QBO posting on Mark paid.
 - Next: **STOP — wait for MH to paste `EMERGENT-PICKUP-STATION-2026-10-01.md`** (exact gate order + wording), then build only the seven ⚠ GAP items in SPEC-PICKUP-STATION.md; docs delta for LTS + Pickup.
+
+### Safes vs insurance (2026-10-02; MH owning ruling D-425 → DECISIONS D-488…D-494; tested iteration_83: 18/19 → the one finding fixed + self-verified)
+- `api/safes.ts`: containers as data (Main $250k · FD $50k · LTS $100k · Intake shelf **inside FD**), node → parent map (safe trays → Main; fd_safe/finished/pre_approval → FD; lts_safe → LTS; shelf bins → shelf; benches/floor = none), `getSafesBoardSync` (value on hand per safe incl. nested containers, under / near ≥85% / OVER / no_limit, totals, unvalued counts), value chain appraisal → `Job.declaredValue` / inbound shipment → ref typical (comps, else `REF_TYPICAL`) → unvalued; component split (bracelet = `Job.braceletValue` → `BRACELET_CONFIG` → 0; head = watch − bracelet; carrier head → case; band-only = bracelet only); packages valued by tracking/estimate. Standing pins `safe-over:<key>:mh|vc` (MH + Vienna, auto-resolve) + `SafesOverCard` on MH hitlist + `SAFES_ALERT_EVENT` toast on the scan that leaves a destination safe over; `registerDaySweep` so `/today` sees pins. New station node **`main_safe`** (STORAGE row) = Main safe general tray / "Move…" destination.
+- Screens: `/setup/containers` (owner: add/edit, limit required for safes — blank → error, 0 allowed; re-parent any node; self-nesting guard), `/analytics` Safes card + drawer (items by value, source labels, "— · counted with the head", Move… → `/assign?dest=<scanNode>&item=<job#>` — arms only, hint banner, scan list never pre-filled). Access: MH + Vienna (`canSeeSafes`).
+- Seeds: `seedAssetValues` extended (23 jobs declared; bracelets E02021 $3.2k · E02033 $2.4k · E02063 $2.1k · E02017 $650; sh-11 Kowalski E01055 arrived $3.9k). Opening state: Main $154,100 under · **FD $153,050 OVER +$103,050** · LTS $12,500; exactly 3 unvalued (E02024 case, E02020 band, SUB-26-0311).
+- Docs: `KEEPER-HANDOFF/specs/SPEC-SAFES-INSURANCE.md`, DECISIONS D-488…D-494, 00-INDEX / 01-ROUTE-MAP / 10-NOT-KEEPER rows, `_gen.py` regenerated + synced.
+- OPEN for MH: uncased watch — case vs movement split of the head share (stand-in: case carries); MH hitlist "Client asset value on hand" tile keeps its own insured-only rule; finished pieces seeded in the FD safe (re-parent in Setup if they wait in Main); NEAR 85% as a Setup value?
+- Next: paste `EMERGENT-PICKUP-STATION-2026-10-01.md` → build only the seven ⚠ GAP rows (Gate 2, manager bypass, ID retention, reverse QR display, value-tier kiosk confirmation …).
 

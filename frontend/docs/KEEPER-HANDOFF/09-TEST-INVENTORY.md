@@ -805,3 +805,25 @@ _Action items raised (fixed in the following commit unless noted in SESSION-LOG)
 
 _Issues reported in this iteration (all fixed by the following commit unless noted in SESSION-LOG):_
 - App header during tests: Banner reads 'PROTOTYPE — FAKE DATA · LIVE API' even though localStorage.rollisuite.api.mode is set to 'mock' before sign-in. Data is correct (template counts match mock seed) so this may be cosmetic only, but the mode toggle may not re-initialize on soft nav.
+
+## Iteration 82
+
+_Phase 3 Bonus Targets feature tested end-to-end. T1 (access gating) verified for MH and Vienna; Walter verification deferred due to Cloudflare 429 rate-limit after multiple sign-outs (role allow-list confirmed indirectly via nav items + Vienna's bonus-plans-restricted). T2 seeded cards, summary strip, and closed-period table all exact matches. T3 as-of time travel (10-20, 11-01, type-in Oct 2) all match. T4 drawer opens with correct actual/wd/status/weeks (5 rows incl. 4 marked data-future) and MH close-early footer. T5 close-early flow works (confirm disabled → enabled → row created with early chip + reason, card removed). T6 Mark paid + hitlist card + CSV download (bonus-results-asof-2026-…_
+
+
+## Iteration 83
+
+_RolliSuite — Safes vs Insurance (D-425) frontend-only verification. T1 Analytics card, T2 Drawer+value sources, T3 Move arms destination only, T4 FD->Main pins clear, T5 Tipping toast+pins reappear, T6 Bench exclusion, T7 Setup/Containers, T8 Access (Vienna via UI + Walter via code), T9 Regression smoke — all pass except one minor validation bug in Container form (empty safe limit)._
+
+- [ ] T1_card: {"safes-card": true, "safes-card-over-flag": true, "c-main": {"status": "under", "value": "$154,100", "limit": "$250,000", "pct": "61.6%", "count": 21, "unvalued": "2 unvalued"}, "c-fd": {"status": "over", "value": "$153,050", "limit": "$50,000", "pct": "306.1
+- [ ] T2_fd_drawer: {"data-count": 23, "first_item": "safe-item-j-11:head (E02021 Daytona $28,500 declared at intake)", "pkg_pk02": "SUB-26-0312 $3,900 Shelf BIN-02 declared at intake", "pkg_pk01_unvalued": true, "non_carrying_case_j-21:case": "\u2014 \u00b7 counted with the head
+- [ ] T3_move: {"targets_text": "to Main safe / LTS safe / cancel (FD excluded)", "url": "/assign?dest=main_safe&item=E02021", "hint": "destination Main safe is armed \u2014 scan the ticket for E02021 below", "bulk_rows": 0, "bulk_count": "0", "fd_unchanged": "$153,050", "no
+- [ ] T4_fd_to_main_and_lts: {"scan_placeholder_main": "Scan labels for Main safe \u00b7 E02016 \u00b7 BAND-E02031", "bulk_count_before_commit": "6 (one of 7 labels blocked by gate rules \u2014 expected per agent note)", "assign_msg": "6/6 moved \u2192 Main safe", "after_main_move": {"fd"
+- [ ] T5_tipping_pins: {"scan_placeholder_fd": "Scan labels for Front desk safe \u00b7 E02016 \u00b7 BAND-E02031", "hitlist_mh_has_fdover": true, "hitlist_mh_safes-over-card": true, "hitlist_mh_safes-over-row-c-fd": true, "hitlist_vienna_has_fdover": true, "note": "Verified from the
+- [ ] T6_bench_exclusion: {"main_before": "$154,100", "main_after": "$147,700 (\u2212$6,400 exact)", "scan_placeholder_wm": "Scan labels for Assign watchmaker \u00b7 E02016 \u00b7 BAND-E02031", "assign_msg": "1/1 moved \u2192 WM Bench 3", "j-12:head_removed_from_main": true, "j-12:band
+- [ ] T7_containers: {"rows_present": {"c-main": "$250,000", "c-fd": "$50,000", "c-lts": "$100,000", "c-shelf": "no limit (Intake shelf)"}, "blank_name_error": "Name the container \u2713", "empty_safe_limit_error": "MISSING (BUG \u2014 saved with $0 limit instead)", "add_msg": "Ad
+- [ ] T8_access: {"vienna_sidebar_analytics": true, "vienna_safes-card_renders": true, "vienna_fd_value": "$153,050", "vienna_setup_containers_restricted": true, "walter_restricted": "Code-verified: src/api/safes.ts canSeeSafes = u.id === OWNER_USER_ID || u.id === 'u-vienna';
+- [ ] T9_regression: {"bonus-analytics-page_renders_below_safes": true, "hitlist_michael_has_Appointments_LTS_Bonus": true, "shipping_inbound_loads": true, "jobs_j-11_loads_with_E02021": true}
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- Fix ContainersPage save validation: when kind=safe and insurance limit is blank/0, render container-error 'Safes need an insurance limit' and block the save. Currently the save succeeds with $0 limit (observed as a new row 'Safe 2 · $0' in the Containers table, with Analytics totals_insured unchange
