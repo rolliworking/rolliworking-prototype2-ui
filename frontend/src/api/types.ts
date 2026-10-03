@@ -20,7 +20,15 @@ export interface User {
   limits?: UserLimits;
   disabled?: { at: string; by: string; reason: string };
   createdFrom?: string;
+  // Setup → Staff (D-495): contact + department + invite. A user with an open invite cannot sign in until they activate with the 6-digit code.
+  email?: string;
+  phone?: string;
+  departmentCode?: string;
+  invite?: StaffInvite;
 }
+
+export type InviteChannel = 'email' | 'sms';
+export interface StaffInvite { code: string; issuedAt: string; expiresAt: string; channel: InviteChannel; issuedBy: string; generation: number; usedAt?: string; attempts: number }
 
 // Limits drawer (Access control): scope inside a tier — tier itself stays separate from the org tree
 export interface UserLimits { lockedStations: string[]; partsCategories: string[]; pricing: 'full' | 'cost_only' | 'none' }
@@ -32,6 +40,9 @@ export interface Station {
   receptionMode?: boolean;
   deviceType?: 'desktop' | 'pad' | 'kiosk';
   cameraRole?: 'counter' | 'client'; // Pickup Station: counter cam = item/QR/hand-back shots · client cam = the 6-frame hand-over strip
+  pairedKioskId?: string; // Setup → Stations (D-496): the check-in / confirm kiosk this counter pushes to — data-driven, never hardcoded
+  clockPoint?: boolean; // Time Clock: this station is also a clock-in point (NFC tag / pad)
+  notes?: string;
 }
 
 export type CameraStatus = 'captured' | 'no_camera' | 'denied';
@@ -238,6 +249,7 @@ export interface CatalogService {
   dept: DeptCode;
   rate: number;
   type: LineType;
+  routeDept?: string; // Setup → Departments: a routing-only department (e.g. EN Engraving) this SKU sends the job to — the W·B·P dots stay on `dept`
 }
 
 export interface QuoteContext {
@@ -1239,12 +1251,17 @@ export interface TimingInput { readings: TimingReading[]; liftAngle: number; pow
 export interface NfcTag { id: string; label: string; division: Division; url: string }
 export type PunchKind = 'in' | 'out';
 export type PunchFlag = 'offsite' | 'no_gps' | 'synced_late' | 'kiosk' | 'correction';
-export type PunchSource = 'nfc' | 'kiosk' | 'manager' | 'seed';
+// 'rgtime' = migrated from the retired RGTime PWA (history kept, original origin in `via`) · 'pad' = the Time Clock pad (Touch ID / PIN)
+export type PunchSource = 'nfc' | 'kiosk' | 'manager' | 'seed' | 'rgtime' | 'pad';
+export type PunchMethod = 'tap' | 'pin' | 'touch_id' | 'manager';
 export interface Punch {
   id: string; userId: string; kind: PunchKind; at: string; tagId: string; location: string; division: Division; simulated: boolean;
-  source?: PunchSource; flags?: PunchFlag[]; geo?: { lat: number; lng: number; distanceM: number } | null; recordedAt?: string;
+  source?: PunchSource; via?: PunchSource; method?: PunchMethod; flags?: PunchFlag[]; geo?: { lat: number; lng: number; distanceM: number } | null; recordedAt?: string;
   correctionOf?: string; reason?: string; by?: string; queued?: boolean;
 }
+// A clock-in point: a physical NFC tag or a station flagged `clockPoint` in Setup → Stations. Tag URLs stay /rg/clock?station=<id> (redirected) so printed tags keep working.
+export interface ClockPoint { id: string; label: string; division: Division; kind: 'tag' | 'station'; url: string }
+export interface TimeBoardRow { user: User; onClock: boolean; since?: string; sinceLocation?: string; todayHours: number; lastPunch?: Punch; presence: 'away' | 'with_client' | 'at_bench'; presenceDetail: string }
 export interface ClockState { user: User; onClock: boolean; since?: string; sinceLocation?: string; todayPunches: Punch[]; todayHours: number }
 export interface WeekDay { date: string; hours: number; punches: Punch[]; open: boolean; flagged: boolean }
 export interface WeekRow { user: User; days: WeekDay[]; total: number; openNow: boolean }

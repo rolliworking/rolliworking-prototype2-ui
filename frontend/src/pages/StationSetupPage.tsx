@@ -3,11 +3,11 @@ import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { Division } from '@/api/client';
+import * as org from '@/api/org';
 import { useAuth } from '@/auth/AuthContext';
 import { PrototypeBanner } from '@/components/layout/AppShell';
 import { useAsync } from '@/hooks/useAsync';
 
-const DIV_LABEL: Record<Division, string> = { rolliworks: 'Rolliworks', rollishop: 'RolliShop' };
 const DIV_CLS: Record<Division, string> = { rolliworks: 'bg-moss-50 text-moss-800 border-moss-200', rollishop: 'bg-amber-50 text-amber-800 border-amber-200' };
 
 export default function StationSetupPage() {
@@ -110,7 +110,7 @@ export default function StationSetupPage() {
                 >
                   <input type="radio" name="station" data-testid={`station-option-${s.id}`} checked={stationId === s.id} onChange={() => setStationId(s.id)} className="accent-ink" />
                   <span className="flex-1">{s.name}</span>
-                  <span className={`rounded-sm border px-1 py-0.5 text-[10px] font-semibold ${DIV_CLS[s.division ?? 'rolliworks']}`}>{DIV_LABEL[s.division ?? 'rolliworks']}</span>
+                  <span className={`rounded-sm border px-1 py-0.5 text-[10px] font-semibold ${DIV_CLS[s.division ?? 'rolliworks']}`}>{api.entityName(s.division ?? 'rolliworks')}</span>
                 </label>
               ))}
             </div>
@@ -131,8 +131,7 @@ export default function StationSetupPage() {
                   onChange={(e) => setNewDiv(e.target.value as Division)}
                   className="h-8 rounded-sm border border-line bg-canvas px-2 text-[12px] focus:outline-none"
                 >
-                  <option value="rolliworks">Rolliworks</option>
-                  <option value="rollishop">RolliShop</option>
+                  {org.getEntitiesSync().map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
                 <button type="button" data-testid="station-new-save" onClick={addNew} className="h-8 rounded-sm bg-ink px-3 text-xs font-medium text-white">
                   Add

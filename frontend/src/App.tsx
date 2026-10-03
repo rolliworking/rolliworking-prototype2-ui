@@ -11,7 +11,6 @@ import ClientsPage from '@/pages/clients/ClientsPage';
 import Client360Page from '@/pages/clients/Client360Page';
 import InboxPage from '@/pages/InboxPage';
 import RcShell from '@/rc/RcShell';
-import RgShell from '@/pages/rg/RgShell';
 import RwShell, { RwRestricted } from '@/pages/rw/RwShell';
 import RwJobsPage from '@/pages/rw/RwJobsPage';
 import RwJobPage from '@/pages/rw/RwJobPage';
@@ -41,12 +40,9 @@ import AllJobsPage from '@/pages/jobs/AllJobsPage';
 import { IntakeAwaitingApprovalPage, IntakeInspectionFormStep, IntakeInspectionListPage, IntakePhotosPage } from '@/pages/intake/IntakeStepPages';
 import RcInspectionFormPage from '@/pages/rc/RcInspectionFormPage';
 import QboSetupPage from '@/pages/rs/QboSetupPage';
-import RgHomePage from '@/pages/rg/RgHomePage';
-import RgClockPage from '@/pages/rg/RgClockPage';
-import RgManagerPage from '@/pages/rg/RgManagerPage';
-import RgWeekPage from '@/pages/rg/RgWeekPage';
-import RgKioskPage from '@/pages/rg/RgKioskPage';
 import KioskPage from '@/pages/kiosk/KioskPage';
+import TimeClockPage from '@/pages/time/TimeClockPage';
+import TimeClockPad from '@/pages/time/TimeClockPad';
 import WmKioskPage from '@/pages/kiosk/WmKioskPage';
 import PayPage from '@/pages/PayPage';
 import RequestsPage from '@/pages/RequestsPage';
@@ -71,6 +67,7 @@ import RateCardPage from '@/pages/setup/RateCardPage';
 import TemplatesPage from '@/pages/setup/TemplatesPage';
 import BonusPlansPage from '@/pages/setup/BonusPlansPage';
 import ContainersPage from '@/pages/setup/ContainersPage';
+import OrganisationPage from '@/pages/setup/OrganisationPage';
 import AnalyticsPage from '@/pages/analytics/AnalyticsPage';
 import { SAFES_ALERT_EVENT } from '@/api/safes';
 import Dashboard from '@/pages/Dashboard';
@@ -149,6 +146,13 @@ function RwRoleGuard({ pad, band, children }: { pad?: boolean; band?: boolean; c
   return children;
 }
 
+// /rg → Time Clock: tag URLs (/rg/clock?station=…) keep their query, manager/week land on the desktop board
+function RgRedirect() {
+  const { pathname, search } = useLocation();
+  const to = pathname.startsWith('/rg/manager') ? '/time' : pathname.startsWith('/rg/week') ? '/time?tab=week' : `/time/pad${search}`;
+  return <Navigate to={to} replace />;
+}
+
 function TierGate() {
   const { user } = useAuth();
   const { pathname } = useLocation();
@@ -218,14 +222,9 @@ export default function App() {
             <Route path="hitlist/:slug/team" element={<TeamHitlistPage />} />
             <Route path="*" element={<Navigate to="/rw" replace />} />
           </Route>
-          {/* E13 — RGTime phone time-clock (own remembered session) and the public walk-in kiosk (no session, no chrome) */}
-          <Route path="/rg/kiosk" element={<RgKioskPage />} />
-          <Route path="/rg" element={<RgShell />}>
-            <Route index element={<RgHomePage />} />
-            <Route path="clock" element={<RgClockPage />} />
-            <Route path="week" element={<RgWeekPage />} />
-            <Route path="manager" element={<RgManagerPage />} />
-          </Route>
+          {/* Time Clock pad (wall iPad + NFC tag taps). RGTime is retired: every /rg URL redirects here with its query string so printed tags keep working (D-498). */}
+          <Route path="/time/pad" element={<TimeClockPad />} />
+          <Route path="/rg/*" element={<RgRedirect />} />
           <Route path="/kiosk" element={<KioskPage />} />
           <Route path="/pay/:token" element={<PayPage />} />
           <Route path="/rc" element={<RcShell />}>
@@ -299,6 +298,7 @@ export default function App() {
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:id" element={<Client360Page />} />
               <Route path="/calls" element={<CallsPage />} />
+              <Route path="/time" element={<TimeClockPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/setup/access" element={<AccessControlPage />} />
               <Route path="/setup/inspection" element={<InspectionSetupPage />} />
@@ -306,6 +306,7 @@ export default function App() {
               <Route path="/setup/templates" element={<TemplatesPage />} />
               <Route path="/setup/bonus-plans" element={<BonusPlansPage />} />
               <Route path="/setup/containers" element={<ContainersPage />} />
+              <Route path="/setup/org" element={<OrganisationPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/analytics/bonuses" element={<AnalyticsPage />} />
               <Route path="/wm-kiosk" element={<WmKioskPage />} />

@@ -32,7 +32,7 @@ export const tasks: Task[] = [
   { id: 't-mh-06', title: 'Approve Q4 parts budget for the band room', assignedTo: { type: 'user', shortName: 'MH' }, createdBy: 'JV', dueAt: daysFromNow(2, 12), status: 'open', createdAt: daysAgo(0, 10), station: 'Workshop pad', division: 'rolliworks' },
   { id: 't-mh-07', title: 'Interview WM 4 candidate — Thursday 3 PM', assignedTo: { type: 'user', shortName: 'MH' }, createdBy: 'Vienna', dueAt: daysFromNow(3, 15), status: 'open', createdAt: daysAgo(1, 11), station: 'Front Desk 1', division: 'rolliworks' },
   { id: 't-mh-08', title: 'Reply to Genève Polissage on the CHF price list', assignedTo: { type: 'user', shortName: 'MH' }, createdBy: 'Chyna', dueAt: daysFromNow(4, 10), status: 'open', createdAt: daysAgo(2, 14), station: 'Front Desk 2', division: 'rolliworks' },
-  { id: 't-mh-09', title: 'Set the real shop geofence coordinates in RGTime', assignedTo: { type: 'user', shortName: 'MH' }, createdBy: 'MH', status: 'open', createdAt: daysAgo(4, 9), station: 'Front Desk 1', division: 'rolliworks' },
+  { id: 't-mh-09', title: 'Set the real shop geofence coordinates in the Time clock', assignedTo: { type: 'user', shortName: 'MH' }, createdBy: 'MH', status: 'open', createdAt: daysAgo(4, 9), station: 'Front Desk 1', division: 'rolliworks' },
   { id: 't-mh-10', title: 'Pick the M3KE embed mode — new tab or iframe', assignedTo: { type: 'user', shortName: 'MH' }, createdBy: 'MH', status: 'open', createdAt: daysAgo(5, 9), station: 'Front Desk 1', division: 'rolliworks' },
 ];
 

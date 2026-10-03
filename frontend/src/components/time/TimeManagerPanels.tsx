@@ -1,53 +1,18 @@
 import { ChevronLeft, ChevronRight, Copy, Download, LocateFixed } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import type { Division, Punch, PunchKind, RgFlagRow, RgSettings, User, WeekView } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { fmtDate, fmtTime } from '@/lib/format';
-import { FlagChips, PinPad } from './RgBits';
-import { useRg } from './RgShell';
+import { FlagChips } from './TimeBits';
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-type Div = Division | 'all';
-const DIVS: { key: Div; label: string }[] = [{ key: 'all', label: 'All' }, { key: 'rolliworks', label: 'Rolliworks' }, { key: 'rollishop', label: 'RolliShop' }];
+export type Div = Division | 'all';
+export const DIVS = (): { key: Div; label: string }[] => [{ key: 'all', label: 'All' }, { key: 'rolliworks', label: api.entityName('rolliworks') }, { key: 'rollishop', label: api.entityName('rollishop') }];
 const toLocalInput = (iso: string) => { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const field = 'rounded-md border border-line bg-surface px-2 py-1.5 text-xs';
 
-// Manager view (concierge+, Q56): everyone's grid · flags · append-only corrections · payroll CSV · geofence + stations
-export default function RgManagerPage() {
-  const { user } = useRg();
-  const [mgr, setMgr] = useState<User | null>(null);
-  return <div data-testid="rg-manager-page" className="space-y-3">{mgr ? <ManagerView mgr={mgr} /> : <ManagerGate preselect={user} onVerified={setMgr} />}</div>;
-}
-
-function ManagerGate({ preselect, onVerified }: { preselect: User; onVerified: (u: User) => void }) {
-  const staff = api.rgAllStaff().filter((u) => !!u.accessTier);
-  const [userId, setUserId] = useState(staff.some((u) => u.id === preselect.id) ? preselect.id : ''); const [err, setErr] = useState<string | null>(null);
-  const go = useCallback((secret: string) => api.rgVerifyManager(userId, secret.trim()).then(onVerified).catch((x) => setErr(x.message)), [userId, onVerified]);
-  return <div data-testid="rg-manager-gate" className="space-y-3 rounded-lg border border-line bg-surface p-4">
-    <h1 className="text-base font-semibold text-ink">Manager view</h1>
-    <p className="text-xs text-ink-500">Card + PIN, concierge tier and up — even on a remembered phone.</p>
-    <div className="grid grid-cols-2 gap-2">{staff.map((u) => <button key={u.id} data-testid={`rg-mgr-card-${u.id}`} onClick={() => setUserId(u.id)} className={`rounded-md border p-2 text-left text-xs ${userId === u.id ? 'border-ink bg-canvas' : 'border-line hover:bg-canvas'}`}><div className="font-semibold">{u.shortName}</div><div className="text-ink-500">{u.dutyLabel}</div></button>)}</div>
-    {userId && <PinPad testId="rg-mgr-password" onSubmit={go} error={err} />}
-  </div>;
-}
-
-function ManagerView({ mgr }: { mgr: User }) {
-  const [tab, setTab] = useState<'week' | 'flags' | 'export' | 'settings'>('week'); const [division, setDivision] = useState<Div>('all'); const [tick, setTick] = useState(0);
-  const bump = () => setTick((t) => t + 1);
-  return <div className="space-y-3">
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex gap-1 rounded-md border border-line bg-surface p-0.5 text-xs">{(['week', 'flags', 'export', 'settings'] as const).map((t) => <button key={t} data-testid={`rg-mgr-tab-${t}`} onClick={() => setTab(t)} className={`rounded px-2 py-1 capitalize ${tab === t ? 'bg-ink text-white' : 'text-ink-600 hover:bg-canvas'}`}>{t}</button>)}</div>
-      <select data-testid="rg-week-division" value={division} onChange={(e) => setDivision(e.target.value as Div)} className={field}>{DIVS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select>
-    </div>
-    {tab === 'week' && <WeekGrid mgr={mgr} division={division} tick={tick} onChange={bump} />}
-    {tab === 'flags' && <Flags mgr={mgr} division={division} tick={tick} onChange={bump} />}
-    {tab === 'export' && <Export division={division} />}
-    {tab === 'settings' && <Settings mgr={mgr} />}
-  </div>;
-}
-
-function WeekGrid({ mgr, division, tick, onChange }: { mgr: User; division: Div; tick: number; onChange: () => void }) {
+export function WeekGrid({ mgr, division, tick, onChange }: { mgr: User; division: Div; tick: number; onChange: () => void }) {
   const [offset, setOffset] = useState(0); const [view, setView] = useState<WeekView | null>(null); const [openDay, setOpenDay] = useState<string | null>(null);
   useEffect(() => { api.getWeekHours(division, offset).then(setView); }, [division, offset, tick]);
   const detail = view && openDay ? view.rows.flatMap((r) => r.days.filter((d) => `${r.user.id}:${d.date}` === openDay).map((d) => ({ r, d })))[0] : undefined;
@@ -73,7 +38,7 @@ function WeekGrid({ mgr, division, tick, onChange }: { mgr: User; division: Div;
 
 function DayDetail({ mgr, user, date, punches, hours, open, onChange }: { mgr: User; user: User; date: string; punches: Punch[]; hours: number; open: boolean; onChange: () => void }) {
   const [editing, setEditing] = useState<Punch | null>(null); const [adding, setAdding] = useState(false); const [err, setErr] = useState<string | null>(null);
-  const stations = api.getNfcTags().filter((t) => user.division === 'both' || t.division === user.division);
+  const stations = api.getClockPointsSync().filter((t) => user.division === 'both' || t.division === user.division);
   return <div data-testid="rg-day-detail" className="rounded-lg border border-line bg-surface">
     <div className="flex items-center justify-between border-b border-line px-3 py-2 text-xs"><span className="font-semibold text-ink">{user.shortName} · {fmtDate(`${date}T12:00:00`)}</span><span className="text-ink-500">{hours.toFixed(2)} h{open ? ' · open' : ''}</span></div>
     <ul className="divide-y divide-line/70 text-xs">{punches.map((p) => <li key={p.id} data-testid={`rg-detail-punch-${p.id}`} className="space-y-1 px-3 py-1.5">
@@ -108,7 +73,7 @@ function CorrectionForm({ title, at, kind, stations, error, onSubmit, onCancel }
 }
 
 const FLAG_TITLE: Record<RgFlagRow['kind'], string> = { offsite: 'Offsite punch', synced_late: 'Synced late', missed_out: 'Missed clock-out', correction: 'Correction', no_gps: 'No GPS' };
-function Flags({ mgr, division, tick, onChange }: { mgr: User; division: Div; tick: number; onChange: () => void }) {
+export function Flags({ mgr, division, tick, onChange }: { mgr: User; division: Div; tick: number; onChange: () => void }) {
   const [rows, setRows] = useState<RgFlagRow[]>([]); const [resolving, setResolving] = useState<RgFlagRow | null>(null); const [err, setErr] = useState<string | null>(null);
   useEffect(() => { api.rgGetFlags(division).then(setRows); }, [division, tick]);
   return <div data-testid="rg-flags" className="rounded-lg border border-line bg-surface">
@@ -124,21 +89,21 @@ function Flags({ mgr, division, tick, onChange }: { mgr: User; division: Div; ti
   </div>;
 }
 
-function Export({ division }: { division: Div }) {
+export function Export({ division }: { division: Div }) {
   const d = (n: number) => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString().slice(0, 10); };
   const [from, setFrom] = useState(d(14)); const [to, setTo] = useState(d(0)); const [preview, setPreview] = useState<string | null>(null);
   const build = () => api.rgPayrollCsv(from, to, division);
-  const download = () => { const csv = build(); setPreview(csv); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `rgtime-payroll-${from}-${to}.csv`; a.click(); };
+  const download = () => { const csv = build(); setPreview(csv); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `timeclock-payroll-${from}-${to}.csv`; a.click(); };
   const totals = preview?.split('\n').filter((l) => l.startsWith('"TOTAL')) ?? [];
   return <div data-testid="rg-export" className="space-y-3 rounded-lg border border-line bg-surface p-3 text-xs">
     <div className="font-semibold text-ink">Payroll export · CSV</div>
     <div className="flex flex-wrap items-center gap-2"><label>From <input data-testid="rg-export-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} /></label><label>To <input data-testid="rg-export-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className={field} /></label><Button variant="primary" data-testid="rg-export-download" onClick={download}><Download size={12} /> Download</Button></div>
-    <p className="text-[10px] text-ink-400">One row per paired shift · station · flags (offsite, synced_late, correction, missing_out) · correction reason + who · per-person totals at the bottom. {DIVS.find((x) => x.key === division)?.label}.</p>
+    <p className="text-[10px] text-ink-400">One row per paired shift · station · flags (offsite, synced_late, correction, missing_out) · correction reason + who · per-person totals at the bottom. {DIVS().find((x) => x.key === division)?.label}.</p>
     {totals.length > 0 && <ul data-testid="rg-export-totals" className="divide-y divide-line/70 rounded-md border border-line">{totals.map((l) => { const c = l.split('","'); return <li key={l} className="flex justify-between px-2 py-1"><span>{c[0].replace(/^"/, '')}</span><span className="font-mono">{c[4]} h{c[6] && ` · ${c[6]}`}</span></li>; })}</ul>}
   </div>;
 }
 
-function Settings({ mgr }: { mgr: User }) {
+export function Settings({ mgr }: { mgr: User }) {
   const [s, setS] = useState<RgSettings>(api.rgGetSettings()); const [msg, setMsg] = useState<string | null>(null);
   const save = (patch: Partial<RgSettings>) => { setS((x) => ({ ...x, ...patch })); return api.rgSaveSettings(patch, mgr.shortName).then((n) => { setS(n); setMsg('Saved'); window.dispatchEvent(new Event('rg-settings')); setTimeout(() => setMsg(null), 2000); }); };
   const locate = () => navigator.geolocation?.getCurrentPosition((p) => void save({ shopLat: p.coords.latitude, shopLng: p.coords.longitude }), () => setMsg('Location unavailable'));
@@ -156,9 +121,9 @@ function Settings({ mgr }: { mgr: User }) {
       <div className="flex flex-wrap gap-3 border-t border-line pt-2 text-[11px]"><label className="inline-flex items-center gap-1"><input data-testid="rg-set-sim-offsite" type="checkbox" checked={s.simulateOffsite} onChange={(e) => void save({ simulateOffsite: e.target.checked })} /> simulate offsite (dev)</label><label className="inline-flex items-center gap-1"><input data-testid="rg-set-sim-offline" type="checkbox" checked={s.simulateOffline} onChange={(e) => void save({ simulateOffline: e.target.checked })} /> simulate no signal (dev)</label></div>
     </div>
     <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
-      <div className="font-semibold text-ink">Stations · write these URLs to the NFC tags</div>
-      <ul className="divide-y divide-line/70">{api.getNfcTags().map((t) => { const url = `${window.location.origin}/rg/clock?station=${t.id}`; return <li key={t.id} data-testid={`rg-station-${t.id}`} className="flex items-center gap-2 py-1.5"><span className="font-semibold text-ink">{t.label}</span><span className="text-ink-500">{api.RG_DIVISION_LABEL[t.division]}</span><span className="ml-auto truncate font-mono text-[10px] text-ink-500">{url}</span><button data-testid={`rg-station-copy-${t.id}`} onClick={() => void copy(url)} className="rounded-sm border border-line p-1 hover:bg-canvas"><Copy size={11} /></button></li>; })}</ul>
-      <p className="text-[10px] text-ink-400">Kiosk fallback for staff without a phone: <span className="font-mono">/rg/kiosk</span> on the wall iPad, station-locked.</p>
+      <div className="font-semibold text-ink">Clock points · NFC tags + stations flagged “clock point” in Setup → Organisation → Stations</div>
+      <ul className="divide-y divide-line/70">{api.getClockPointsSync().map((t) => { const url = `${window.location.origin}${t.url}`; const legacy = `${window.location.origin}/rg/clock?station=${t.id}`; return <li key={t.id} data-testid={`rg-station-${t.id}`} data-kind={t.kind} className="flex items-center gap-2 py-1.5"><span className="font-semibold text-ink">{t.label}</span><span className="text-ink-500">{api.entityName(t.division)}</span><span className="rounded-sm bg-canvas px-1 text-[9px] uppercase text-ink-400">{t.kind}</span><span className="ml-auto truncate font-mono text-[10px] text-ink-500" title={`Printed RGTime tags (${legacy}) redirect here`}>{url}</span><button data-testid={`rg-station-copy-${t.id}`} onClick={() => void copy(url)} className="rounded-sm border border-line p-1 hover:bg-canvas"><Copy size={11} /></button></li>; })}</ul>
+      <p className="text-[10px] text-ink-400">Tags already written with <span className="font-mono">/rg/clock?station=…</span> keep working — every /rg URL redirects to the Time Clock pad with the same station. Wall iPad: <span className="font-mono">/time/pad</span>, station-locked.</p>
     </div>
   </div>;
 }

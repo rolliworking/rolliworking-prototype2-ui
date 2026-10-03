@@ -1,4 +1,5 @@
 import * as api from '@/api/client';
+import type { Division } from '@/api/client';
 import { Bot, MonitorSmartphone, Plus, UserRound } from 'lucide-react';
 import { SimulateCallMenu } from '@/components/layout/CallPop';
 import { IntercomButton } from '@/components/layout/IntercomPanel';
@@ -11,7 +12,6 @@ import { ViewAsPicker } from './ViewAs';
 import { useQuickAdd } from '@/components/today/QuickAddOverlay';
 import { useCompanion } from '@/components/companion/CompanionPanel';
 
-const DIVISION_LABEL: Record<string, string> = { rolliworks: 'Rolliworks', rollishop: 'RolliShop' };
 const DIVISION_CLS: Record<string, string> = {
   rolliworks: 'bg-moss-50 text-moss-800 border-moss-300',
   rollishop:  'bg-amber-50 text-amber-800 border-amber-300',
@@ -56,7 +56,7 @@ export const TopBar = () => {
           <MonitorSmartphone size={12} className="text-ink-400" />
           {station?.name}
           <span className={`rounded-sm border px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${DIVISION_CLS[div]}`}>
-            {DIVISION_LABEL[div]}
+            {api.entityName(div as Division)}
           </span>
           {api.isReceptionMode() && (
             <span data-testid="header-reception-badge" data-source={api.receptionSource() ?? undefined} title="Reception mode — station flag: search shows no in-house badge or estimate numbers (?reception=0 to clear for this session)" className="rounded-sm border border-amber-400 bg-amber-50 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">

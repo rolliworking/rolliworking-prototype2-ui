@@ -166,7 +166,7 @@ const Overlay = ({ onClose }: { onClose: () => void }) => {
     if (e.key === 'Escape') { onClose(); }
   };
 
-  const divLabel = sessionDiv === 'rolliworks' ? 'Rolliworks' : 'RolliShop';
+  const divLabel = api.entityName(sessionDiv);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 pt-[18vh]" onClick={(e) => e.target === e.currentTarget && onClose()}>

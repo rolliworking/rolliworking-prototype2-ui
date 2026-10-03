@@ -51,7 +51,7 @@ function Thread({ t, run, onFolder, panelOpen, onPanel, actions }: { t: ThreadVi
   const copy = async (m: ConvMessage) => { const plain = `${m.by} · ${fmtDate(m.at)} ${fmtTime(m.at)}\n${m.text}`; try { await navigator.clipboard.writeText(plain); } catch { /* clipboard blocked */ } setCopied(m.id); window.setTimeout(() => setCopied(null), 1500); };
   // Share with staff → the bubble's one-shot composer opens with the client's message QUOTED + thread link; recipients picked there; logged on the thread after send
   const share = (m: ConvMessage) => window.dispatchEvent(new CustomEvent<BubbleComposeDetail>(BUBBLE_COMPOSE_EVENT, { detail: { share: { conversationId: c.id, messageId: m.id, quote: hl.quoteClientMessage(m, c.id), photo: m.photos?.[0], jobId: c.anchor?.kind === 'job' ? c.anchor.id : undefined, clientName: m.by } } }));
-  const signature = `— ${user?.shortName ?? 'Front desk'}, ${c.division === 'rollishop' ? 'Rollishop' : 'Rolliworks'}`;
+  const signature = `— ${user?.shortName ?? 'Front desk'}, ${api.entityName(c.division)}`;
   const channel = api.replyChannelSync(c.id);
   return <div data-testid="thread-view" className="flex h-full flex-col gap-2">
     <div data-testid="thread-header" className="sticky top-0 z-10 rounded-md border border-line bg-surface p-3 shadow-sm" {...rowProps(c.id)}>

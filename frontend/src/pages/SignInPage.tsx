@@ -8,6 +8,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { PrototypeBanner } from '@/components/layout/AppShell';
 import { SignInPanel } from '@/components/auth/SignInPanel';
 import { StaffCard } from '@/components/auth/StaffCard';
+import { StaffInviteActivate } from '@/components/auth/StaffInviteActivate';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtLongDate } from '@/lib/format';
 
@@ -56,6 +57,9 @@ export default function SignInPage() {
 
             <div>
               {selected ? (
+                selected.invite && !selected.invite.usedAt ? (
+                  <StaffInviteActivate key={selected.id} user={selected} onBack={() => setSelected(null)} onDone={() => navigate(homeRouteFor(selected), { replace: true })} />
+                ) : (
                 <SignInPanel
                   key={selected.id}
                   user={selected}
@@ -63,6 +67,7 @@ export default function SignInPage() {
                   onBack={() => setSelected(null)}
                   onDone={() => navigate(selected.id === api.OWNER_USER_ID ? '/choose-view' : homeRouteFor(selected), { replace: true })}
                 />
+                )
               ) : (
                 <div data-testid="sign-in-empty" className="grid h-full min-h-[240px] place-items-center rounded-md border border-dashed border-ink-300/70 text-center text-xs text-ink-400">
                   Select your card to continue.

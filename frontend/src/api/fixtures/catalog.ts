@@ -23,4 +23,6 @@ export const catalog: CatalogService[] = [
   { id: 'svc-20', name: 'Platinum bezel refinish', dept: 'PM', rate: 650, type: 'service' },
   { id: 'svc-21', name: 'Gold case re-plate', dept: 'PM', rate: 900, type: 'service' },
   { id: 'svc-22', name: 'Insured return shipping', dept: 'W', rate: 35, type: 'shipping' },
+  // Routing-only department: the dots stay W, the job also lands in the Engraving queue (Setup → Departments)
+  { id: 'svc-23', name: 'Caseback engraving — up to 2 lines', dept: 'W', rate: 180, type: 'service', routeDept: 'EN' },
 ];

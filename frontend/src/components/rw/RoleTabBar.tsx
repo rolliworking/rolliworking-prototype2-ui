@@ -1,4 +1,4 @@
-import { ClipboardCheck, Hammer, ListChecks, Camera, MessageSquare, Users, ListOrdered, MousePointerClick, Truck } from 'lucide-react';
+import { ClipboardCheck, Clock3, Hammer, ListChecks, Camera, MessageSquare, Users, ListOrdered, MousePointerClick, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import * as hl from '@/api/hitlist';
@@ -14,10 +14,11 @@ export const roleTabs = (u: User): Tab[] => {
   const hit: Tab = { key: 'hitlist', label: 'Hitlist', to: `/rw/hitlist/${slug}`, icon: ListChecks, match: (p) => p.startsWith('/rw/hitlist/') && !p.endsWith('/team') };
   const photos: Tab = { key: 'photos', label: 'Photos', to: '/rw/evidence', icon: Camera };
   const msgs: Tab = { key: 'messages', label: 'Messages', to: '/rw/messages', icon: MessageSquare };
-  if (k === 'watchmaker') return [{ key: 'bench', label: 'Bench', to: '/rw/bench', icon: Hammer }, hit, photos, msgs];
-  if (k === 'band_tech') return [{ key: 'band', label: 'Band pad', to: '/rw/band', icon: Hammer }, hit, photos, msgs];
+  const clock: Tab = { key: 'clock', label: 'Clock', to: '/time/pad', icon: Clock3 };
+  if (k === 'watchmaker') return [{ key: 'bench', label: 'Bench', to: '/rw/bench', icon: Hammer }, hit, photos, msgs, clock];
+  if (k === 'band_tech') return [{ key: 'band', label: 'Band pad', to: '/rw/band', icon: Hammer }, hit, photos, msgs, clock];
   const pad = u.roles.some((r) => r === 'band_tech' || r === 'polisher') && !u.roles.includes('watchmaker') && !u.roles.includes('supervisor') ? '/rw/band' : '/rw/pad';
-  return [{ key: 'pad', label: 'Pad', to: pad, icon: ClipboardCheck, match: (p) => p === '/rw/pad' || p === '/rw/band' }, { key: 'team', label: 'Team hitlist', to: `/rw/hitlist/${slug}/team`, icon: Users }, { key: 'queue', label: 'Queue', to: '/rw/queue', icon: ListOrdered }, { key: 'assign', label: 'Assign', to: '/rw/assign', icon: MousePointerClick }, { key: 'vendors', label: 'Vendors', to: '/rw/concierge', icon: Truck }, msgs];
+  return [{ key: 'pad', label: 'Pad', to: pad, icon: ClipboardCheck, match: (p) => p === '/rw/pad' || p === '/rw/band' }, { key: 'team', label: 'Team hitlist', to: `/rw/hitlist/${slug}/team`, icon: Users }, { key: 'queue', label: 'Queue', to: '/rw/queue', icon: ListOrdered }, { key: 'assign', label: 'Assign', to: '/rw/assign', icon: MousePointerClick }, { key: 'vendors', label: 'Vendors', to: '/rw/concierge', icon: Truck }, msgs, clock];
 };
 export const ROLE_TABBAR_H = 64;
 export const RoleTabBar = () => {

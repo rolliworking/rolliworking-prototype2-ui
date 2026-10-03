@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { useMemo, useState } from 'react';
 import * as api from '@/api/client';
+import * as org from '@/api/org';
 import type { JobWithRefs } from '@/api/client';
 import { JobCard } from '@/components/jobs/JobBits';
 import { FilterChip } from '@/components/ui/Button';
@@ -28,7 +29,11 @@ export const JobTabs = ({ tab, jobs }: { tab: Exclude<JobTab, 'all'>; jobs: JobW
   const inTab = useMemo(() => jobs.filter((j) => tabOf(j) === tab), [jobs, tab]);
   const techs = useMemo(() => api.getDivisionStaff(api.getSessionDivision()).map((u) => u.shortName), []);
   const shown = inTab.filter((j) => lane === 'all' || laneOf(j) === lane);
-  if (tab !== 'progress') return <div data-testid={`jobs-tab-${tab}`} className="flex gap-2 overflow-x-auto pb-3">{TAB_LANES[tab].map((l) => <Column key={l} id={l} title={LANE_LABEL[l]} jobs={inTab.filter((j) => laneOf(j) === l)} tone={l === 'on_hold' ? 'rose' : undefined} />)}</div>;
+  if (tab !== 'progress') {
+    // Routing-only departments (Setup → Departments, e.g. EN Engraving): the job ALSO appears in that queue and keeps its W·B·P dots (D-497)
+    const routed = tab === 'queue' ? org.getDepartmentsSync().filter((d) => d.active && !d.dotLeg).map((d) => ({ d, jobs: inTab.filter((j) => org.routeDepartmentsSync(j.lines).some((x) => x.code === d.code)) })).filter((r) => r.jobs.length) : [];
+    return <div data-testid={`jobs-tab-${tab}`} className="flex gap-2 overflow-x-auto pb-3">{TAB_LANES[tab].map((l) => <Column key={l} id={l} title={LANE_LABEL[l]} jobs={inTab.filter((j) => laneOf(j) === l)} tone={l === 'on_hold' ? 'rose' : undefined} />)}{routed.map(({ d, jobs: js }) => <Column key={d.code} id={`dept-${d.code}`} title={`${d.queue} · ${d.code}`} jobs={js} tone="amber" />)}</div>;
+  }
   const byTech = (t: string) => shown.filter((j) => (t === 'unassigned' ? j.assignees.length === 0 : j.assignees.includes(t)));
   const cols = ['unassigned', ...techs].filter((t) => tech === 'all' || tech === t);
   return <div data-testid="jobs-tab-progress">

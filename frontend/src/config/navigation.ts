@@ -25,7 +25,7 @@ import { PhoneCall,
   ClipboardCheck,
   BookOpen,
   Users,
-  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound, Globe, Target } from 'lucide-react';
+  MessagesSquare, MousePointerClick, Hand, ShieldAlert, Building2, CalendarDays, Camera, KeyRound, Globe, Target, Clock3 } from 'lucide-react';
 import { OWNER_USER_ID, accessOverrideSync, type AccessTier, type User } from '@/api/client';
 import { BONUS_ANALYTICS_USER_IDS } from '@/api/bonus';
 
@@ -62,6 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'inbox', label: 'Inbox', path: '/inbox', icon: MessagesSquare, tiers: ALL, built: true, blurb: 'One general inbox: every client thread lands in All, unowned — tag, don’t assign; pin; Quoted / Answered; one-click archive. Internal tree (staff messages) and Calls alongside.' },
   { key: 'requests', label: 'Requests', path: '/requests', icon: MessageSquarePlus, tiers: ALL, built: true, blurb: 'RQ submissions before an estimate exists — an unowned pool: client, dots, source, age, optional tags (right-click); row click opens the thread + submission.' },
   { key: 'today', label: 'Hitlist', path: '/today', icon: ListChecks, tiers: ALL, pinned: true, built: true, blurb: 'Your personal work queue — bookmarkable at /hitlist/{you}: inbox, pinned, derived rows, tasks. Supervisors get a team rollup.' },
+  { key: 'time', label: 'Time clock', path: '/time', icon: Clock3, tiers: ALL, built: true, blurb: 'One time clock for the building (replaces RGTime): who’s in, week grid, flags + corrections, payroll CSV, geofence, clock points; the wall pad lives at /time/pad.' },
   { key: 'inbound', label: 'Shipping', path: '/shipping/inbound', icon: Truck, tiers: ALL, group: 'intake', built: true, blurb: 'Pre-arrival shipping: label requests, outstanding labels, in transit, delivered-unscanned. Track a package for a caller.' },
   { key: 'intake', label: 'Intake', path: '/intake', icon: Inbox, tiers: ALL, group: 'intake', built: true, blurb: 'Receive packages, log drop-offs and open new service tickets.' },
   { key: 'estimates', label: 'Estimates', path: '/estimates', icon: FileText, tiers: ALL, group: 'intake', built: true, blurb: 'Quotes awaiting approval and approved work.' },

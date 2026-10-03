@@ -106,7 +106,7 @@ export const StaffHitListModal = ({ onClose }: { onClose: () => void }) => {
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
-  const divLabel = sessionDiv === 'rolliworks' ? 'Rolliworks' : 'RolliShop';
+  const divLabel = api.entityName(sessionDiv);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-canvas" data-testid="staff-hitlist-modal">

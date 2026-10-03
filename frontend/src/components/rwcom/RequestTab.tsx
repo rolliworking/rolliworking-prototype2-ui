@@ -60,7 +60,7 @@ export const RequestTab = ({ state, update, entity, goTab }: { state: RwState; u
       const legDepts: DeptCode[] = Array.from(new Set(wm8.LEGS.filter((l) => legs.includes(l.key)).flatMap((l) => (l.dept ? [l.dept] : []))));
       const pk: PackagePhoto[] = photos.map((p, i) => ({ id: `web-${Date.now().toString(36)}-${i}`, source: 'camera', dataUrl: p.dataUrl, slot: `web-${p.key}`, note: photoTitle(p.key) }));
       const res = await api.submitWebRequest({ brand: entity, legs: legLabels, legDepts, model: [brand, model.trim()].filter(Boolean).join(' ') || undefined, ref: row?.ref ?? (ref.trim() || undefined), serialMasked: serial.trim() ? maskSerial(serial) : undefined, bracelet: bracelet.trim() || undefined, condition, notes: notes.trim() || undefined, photos: pk, firstName: contact.firstName, lastName: contact.lastName, email: contact.email, phone: contact.phone.trim() || undefined, handover, typical: typicalLine ?? undefined, claimCode: state.claim });
-      wm8.instrument({ tab: 'request', kind: 'submit', device, detail: `submit-web-request → ${res.request.number} · ${res.possibleExisting ? 'existing client' : 'new client'} · ${pk.length} photo(s) · ${api.RG_DIVISION_LABEL[entity]}` });
+      wm8.instrument({ tab: 'request', kind: 'submit', device, detail: `submit-web-request → ${res.request.number} · ${res.possibleExisting ? 'existing client' : 'new client'} · ${pk.length} photo(s) · ${api.entityName(entity)}` });
       setResult(res);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not send'); } finally { setBusy(false); }
   };
@@ -105,7 +105,7 @@ export const RequestTab = ({ state, update, entity, goTab }: { state: RwState; u
         <div className="mt-4"><RwField label="How will the watch reach us?"><div className="grid grid-cols-2 gap-2"><Choice big testId="request-handover-drop_off" on={handover === 'drop_off'} onClick={() => setHandover('drop_off')}>Drop off<span className="mt-0.5 block text-xs opacity-70">At the shop — we’ll suggest times</span></Choice><Choice big testId="request-handover-ship" on={handover === 'ship'} onClick={() => setHandover('ship')}>Ship it<span className="mt-0.5 block text-xs opacity-70">Insured label from us</span></Choice></div></RwField></div>
       </RwCard>
       {err && <p data-testid="request-error" className="text-sm text-rose-700">{err}</p>}
-      <div className="flex flex-wrap items-center gap-3"><RwBtn data-testid="request-submit" disabled={busy} onClick={() => void submit()}><Send size={15} /> {busy ? 'Sending…' : 'Send request'}</RwBtn><span className="text-xs text-rc-muted">Goes to the {api.RG_DIVISION_LABEL[entity]} team {MOCK_BADGE}</span></div>
+      <div className="flex flex-wrap items-center gap-3"><RwBtn data-testid="request-submit" disabled={busy} onClick={() => void submit()}><Send size={15} /> {busy ? 'Sending…' : 'Send request'}</RwBtn><span className="text-xs text-rc-muted">Goes to the {api.entityName(entity)} team {MOCK_BADGE}</span></div>
     </div>
   );
 };

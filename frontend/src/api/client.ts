@@ -4,6 +4,7 @@ import * as fx from './fixtures';
 import * as rb from './requestBuilder';
 import { fillSummaryTemplate, localSummaryFields, readSerials } from './ai';
 import { sendSms } from './telephony';
+import { entityNameSync } from './org';
 import type {
   ComponentKey,
   CompletionsReport,
@@ -242,7 +243,7 @@ const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toD
 const readStations = (): Station[] => {
   const saved = readJson<Station[] | null>(KEYS.stations, null);
   // Backfill division for stations saved before the division feature was added
-  if (saved) return [...saved, ...fx.stations.filter((f) => !saved.some((x) => x.id === f.id))].map((s) => ({ ...s, division: s.division ?? 'rolliworks', receptionMode: s.receptionMode ?? fx.stations.find((f) => f.id === s.id)?.receptionMode, deviceType: s.deviceType ?? fx.stations.find((f) => f.id === s.id)?.deviceType }));
+  if (saved) return [...saved, ...fx.stations.filter((f) => !saved.some((x) => x.id === f.id))].map((s) => { const f = fx.stations.find((x) => x.id === s.id); return { ...s, division: s.division ?? 'rolliworks', receptionMode: s.receptionMode ?? f?.receptionMode, deviceType: s.deviceType ?? f?.deviceType, pairedKioskId: s.pairedKioskId ?? f?.pairedKioskId, clockPoint: s.clockPoint ?? f?.clockPoint }; });
   // Seed-only stations added after this device saved its registry (WM 1–8 pads, kiosks) are merged in by id
 
   writeJson(KEYS.stations, fx.stations);
@@ -4223,7 +4224,7 @@ export async function renderTemplate(conversationId: string, key: TemplateKey, s
 export async function renderTemplateForEstimate(estimateId: string, shopDefault = false, key: TemplateKey = 'estimate_sent'): Promise<RenderedTemplate & { vals: Record<string, string> }> { const e = getEst(estimateId); const ctx = { clientId: e.clientId, anchor: { kind: 'estimate' as const, id: e.id } }; return resolve({ ...(() => { const r = renderWith(key, ctx, shopDefault); return { ...r, subject: clientRefSubject(r.subject, e.clientRef) }; })(), vals: mergeValues(ctx) }); }
 export async function mergeValuesForConversation(conversationId: string): Promise<Record<string, string>> { return resolve(mergeValues(convOf(conversationId))); }
 // The client sees the replier's NAME on every message — "— Vienna, Rolliworks" (appended unless the reply already signs off)
-const signed = (text: string, by: string, div: Division) => { const t = text.trim(); const sig = `— ${by}, ${div === 'rollishop' ? 'Rollishop' : 'Rolliworks'}`; return /—\s*[A-Z][a-z]+,\s*Rolli(works|shop)\s*$/.test(t) || t.endsWith(sig) ? t : `${t}\n\n${sig}`; };
+const signed = (text: string, by: string, div: Division) => { const t = text.trim(); const sig = `— ${by}, ${entityNameSync(div)}`; return /—\s*[A-Z][a-z]+,\s*Rolli(works|shop)\s*$/i.test(t) || t.endsWith(sig) ? t : `${t}\n\n${sig}`; };
 // Reply channel follows the client's last inbound message: portal thread → portal reply (lands in RolliConnect Messages), anything else → email. Never SMS. (MH 2026-10-02)
 export const replyChannelSync = (conversationId: string): ReplyChannel => { const last = cx.messages.filter((m) => m.conversationId === conversationId && m.direction === 'in').sort((a, b) => b.at.localeCompare(a.at))[0]; return last?.source === 'portal' ? 'portal' : 'email'; };
 export async function replyInThread(id: string, input: { text: string; subject?: string; templateKey?: TemplateKey; photos?: PackagePhoto[] }): Promise<ConvMessage> {
@@ -4374,19 +4375,29 @@ export async function recordTimingTest(jobId: string, input: TimingInput): Promi
 }
 
 // ---- E13 RGTime `/rg` — NFC-tap time-clock (phone PWA). In Keeper RGTime owns staff identity (D-026); here it reads the same `users` fixture. ------
-import type { ClockState, KioskDetails, KioskResult, KioskSubmission, NfcTag, Punch, PunchFlag, PunchKind, RequestRow, RgFlagRow, RgSettings, WeekDay, WeekRow, WeekView } from './types';
+import type { ClockPoint, ClockState, KioskDetails, KioskResult, KioskSubmission, NfcTag, Punch, PunchFlag, PunchKind, PunchMethod, RequestRow, RgFlagRow, RgSettings, TimeBoardRow, WeekDay, WeekRow, WeekView } from './types';
 export { KIOSK_SERVICES, KIOSK_BRANDS, RG_DIVISION_LABEL } from './fixtures';
+// Entity names come from Setup → Organisation (./org.ts) — never from string literals (D-495)
+export const entityName = (d: Division | 'both'): string => (d === 'both' ? `${entityNameSync('rolliworks')} + ${entityNameSync('rollishop')}` : entityNameSync(d));
+export const orgBridge = {
+  stations: () => readStations(), writeStations: (list: Station[]) => writeJson(KEYS.stations, list), users: () => fx.users, addUser: (u: User) => { fx.users.push(u); },
+  isManager: () => currentUserSync()?.accessTier === 'manager', actor: () => actor(), newId, queueOutbox: (e: OutboxEmail) => queueOutbox(e), catalogRouteDept: (catalogId: string) => rs.catalog.find((c) => c.id === catalogId)?.routeDept,
+  audit: (detail: string) => { const a = actor(); return appendAudit({ type: 'setup', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); },
+};
 // /rg persists locally (device-bound punches, offline queue, settings) so a real NFC tap — a fresh page load every time — toggles in/out correctly. The rest of the app stays in-memory.
 const RG_KEYS = { punches: 'rollisuite.rg.punches', settings: 'rollisuite.rg.settings', queue: 'rollisuite.rg.queue', kioskStation: 'rollisuite.rg.kioskStation' };
 export const RG_DEFAULT_SETTINGS: RgSettings = { shopLat: 40.759, shopLng: -73.9845, radiusM: 150, simulateOffsite: false, simulateOffline: false };
 const rgSeedIds = new Set(fx.punches.map((p) => p.id));
+// Time Clock migration (MH 2026-10-02): RGTime is retired — every punch recorded before the first Time Clock load is stamped source 'rgtime' (origin kept in `via`), so history and presence stay intact
+const TIME_MIGRATED_AT = (() => { const k = 'rollisuite.time.migratedAt'; const v = localStorage.getItem(k); if (v) return v; const now = new Date().toISOString(); localStorage.setItem(k, now); return now; })();
+const migrateRg = (p: Punch): Punch => (p.source === 'rgtime' || (p.recordedAt ?? p.at) >= TIME_MIGRATED_AT && !rgSeedIds.has(p.id) ? p : { ...p, via: p.source ?? 'nfc', source: 'rgtime' });
 const rg = {
-  punches: [...fx.punches.map((p): Punch => ({ ...p })), ...readJson<Punch[]>(RG_KEYS.punches, []).filter((p) => !rgSeedIds.has(p.id))],
+  punches: [...fx.punches.map((p): Punch => migrateRg({ ...p })), ...readJson<Punch[]>(RG_KEYS.punches, []).filter((p) => !rgSeedIds.has(p.id)).map(migrateRg)],
   queue: readJson<Punch[]>(RG_KEYS.queue, []),
   settings: { ...RG_DEFAULT_SETTINGS, ...readJson<Partial<RgSettings>>(RG_KEYS.settings, {}) } as RgSettings,
 };
 const rgPersist = () => { writeJson(RG_KEYS.punches, rg.punches.filter((p) => !rgSeedIds.has(p.id))); writeJson(RG_KEYS.queue, rg.queue); };
-const RG_STATION = 'Phone (RGTime PWA)';
+const RG_STATION = 'Time clock';
 const rgAudit = (u: User | undefined, detail: string, type: 'rgtime' | 'sign_in' | 'sign_in_failed' | 'sign_out' = 'rgtime') => appendAudit({ type, stationName: RG_STATION, userShortName: u?.shortName, userDisplayName: u?.displayName, method: type === 'sign_in' || type === 'sign_in_failed' ? 'password_photo' : undefined, detail });
 const dayKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const todayKey = () => dayKey(new Date().toISOString());
@@ -4409,22 +4420,24 @@ const rgSecretOk = (u: User, secret: string) => secret === u.password || (secret
 // Device ↔ employee binding: name + PIN (or password) once; every later visit already knows who you are
 export async function rgSignIn(userId: string, secret: string): Promise<User> {
   const u = byId(fx.users, userId);
-  if (!rgSecretOk(u, secret)) { rgAudit(u, 'RGTime device binding failed · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
-  localStorage.setItem(KEYS.rgSession, u.id); rgAudit(u, 'RGTime · this phone now remembers ' + u.shortName, 'sign_in'); return resolve(u);
+  if (!rgSecretOk(u, secret)) { rgAudit(u, 'Time clock device binding failed · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
+  localStorage.setItem(KEYS.rgSession, u.id); rgAudit(u, 'Time clock · this device now remembers ' + u.shortName, 'sign_in'); return resolve(u);
 }
-export async function rgSignOut(): Promise<void> { const u = rgGetSession(); localStorage.removeItem(KEYS.rgSession); if (u) rgAudit(u, 'RGTime sign-out · phone forgotten', 'sign_out'); return resolve(undefined); }
+export async function rgSignOut(): Promise<void> { const u = rgGetSession(); localStorage.removeItem(KEYS.rgSession); if (u) rgAudit(u, 'Time clock · this device forgot', 'sign_out'); return resolve(undefined); }
 // Manager view is concierge+ (Q56): card + PIN/password, even on a remembered phone
 export async function rgVerifyManager(userId: string, secret: string): Promise<User> {
   const u = byId(fx.users, userId);
-  if (!rgSecretOk(u, secret)) { rgAudit(u, 'RGTime manager view · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
-  rgAudit(u, 'RGTime manager view opened'); return resolve(u);
+  if (!rgSecretOk(u, secret)) { rgAudit(u, 'Time clock manager view · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
+  rgAudit(u, 'Time clock manager view opened'); return resolve(u);
 }
 export const getNfcTags = (): NfcTag[] => fx.nfcTags.map((t) => ({ ...t }));
-export const getNfcTag = (id: string): NfcTag | undefined => fx.nfcTags.find((t) => t.id === id);
+// Clock points = NFC tags + stations flagged `clockPoint` in Setup → Stations (one list for the pad lock, manager corrections and the tag URL table)
+export const getClockPointsSync = (): ClockPoint[] => [...fx.nfcTags.map((t): ClockPoint => ({ id: t.id, label: t.label, division: t.division, kind: 'tag', url: `/time/pad?station=${t.id}` })), ...readStations().filter((s) => s.clockPoint).map((s): ClockPoint => ({ id: s.id, label: s.name, division: s.division, kind: 'station', url: `/time/pad?station=${s.id}` }))];
+export const getNfcTag = (id: string): NfcTag | undefined => { const t = fx.nfcTags.find((x) => x.id === id); if (t) return t; const s = readStations().find((x) => x.id === id && x.clockPoint); return s ? { id: s.id, label: s.name, division: s.division, url: `/time/pad?station=${s.id}` } : undefined; };
 export const rgGetSettings = (): RgSettings => ({ ...rg.settings });
 export async function rgSaveSettings(patch: Partial<RgSettings>, by?: string): Promise<RgSettings> {
   rg.settings = { ...rg.settings, ...patch }; writeJson(RG_KEYS.settings, rg.settings);
-  if (patch.shopLat !== undefined || patch.shopLng !== undefined || patch.radiusM !== undefined) rgAudit(fx.users.find((u) => u.shortName === by), `RGTime geofence set · ${rg.settings.shopLat.toFixed(5)}, ${rg.settings.shopLng.toFixed(5)} · ${rg.settings.radiusM} m`);
+  if (patch.shopLat !== undefined || patch.shopLng !== undefined || patch.radiusM !== undefined) rgAudit(fx.users.find((u) => u.shortName === by), `Time clock geofence set · ${rg.settings.shopLat.toFixed(5)}, ${rg.settings.shopLng.toFixed(5)} · ${rg.settings.radiusM} m`);
   return resolve({ ...rg.settings });
 }
 export const rgIsOffline = () => (typeof navigator !== 'undefined' && !navigator.onLine) || rg.settings.simulateOffline;
@@ -4441,23 +4454,24 @@ export async function getClockState(userId: string): Promise<ClockState> {
   const onClock = last?.kind === 'in'; const { hours } = summarizeDay(todayPunches, true);
   return resolve({ user, onClock, since: onClock ? last.at : undefined, sinceLocation: onClock ? last.location : undefined, todayPunches, todayHours: hours });
 }
-export interface PunchOptions { simulated?: boolean; geo?: { lat: number; lng: number } | null; source?: 'nfc' | 'kiosk'; userId?: string }
+export interface PunchOptions { simulated?: boolean; geo?: { lat: number; lng: number } | null; source?: 'nfc' | 'kiosk' | 'pad'; method?: PunchMethod; userId?: string }
 // The whole product: tag → one button → punch. Geofence flags (never rejects); no signal → queued locally with the true timestamp
 export async function punchClock(stationId: string, opts: PunchOptions | boolean = {}): Promise<Punch> {
   const o: PunchOptions = typeof opts === 'boolean' ? { simulated: opts } : opts;
-  const u = o.userId ? byId(fx.users, o.userId) : rgGetSession(); if (!u) throw new Error('Sign in to RGTime on this phone first');
+  const u = o.userId ? byId(fx.users, o.userId) : rgGetSession(); if (!u) throw new Error('This device does not know you yet — pick your name and PIN once');
+  if (u.disabled) throw new Error(`Account disabled — ${u.disabled.reason}`); if (u.invite && !u.invite.usedAt) throw new Error('Account not activated — sign in at a station with your invite code first');
   const tag = getNfcTag(stationId); if (!tag) throw new Error('Unknown station — this NFC tag is not registered');
-  if (u.division !== 'both' && u.division !== tag.division) throw new Error(`${u.shortName} is ${fx.RG_DIVISION_LABEL[u.division]} staff — this tag belongs to ${fx.RG_DIVISION_LABEL[tag.division]}`);
+  if (u.division !== 'both' && u.division !== tag.division) throw new Error(`${u.shortName} is ${entityNameSync(u.division)} staff — this tag belongs to ${entityNameSync(tag.division)}`);
   const last = rgLast(u.id); const kind: PunchKind = last?.kind === 'in' ? 'out' : 'in';
   const flags: PunchFlag[] = []; let geo: Punch['geo'] = null;
   if (o.source === 'kiosk') flags.push('kiosk');
   else if (o.geo) { const distanceM = rg.settings.simulateOffsite ? 2_340 : rgDistanceM(o.geo.lat, o.geo.lng); geo = { ...o.geo, distanceM }; if (distanceM > rg.settings.radiusM) flags.push('offsite'); }
   else if (rg.settings.simulateOffsite) { geo = { lat: 40.7794, lng: -73.9632, distanceM: 2_340 }; flags.push('offsite'); }
   else flags.push('no_gps');
-  const p: Punch = { id: newId('pu'), userId: u.id, kind, at: new Date().toISOString(), tagId: tag.id, location: tag.label, division: tag.division, simulated: !!o.simulated, source: o.source ?? 'nfc', flags: flags.length ? flags : undefined, geo };
+  const p: Punch = { id: newId('pu'), userId: u.id, kind, at: new Date().toISOString(), tagId: tag.id, location: tag.label, division: tag.division, simulated: !!o.simulated, source: o.source ?? 'nfc', method: o.method ?? (o.source === 'nfc' || !o.source ? 'tap' : 'pin'), flags: flags.length ? flags : undefined, geo };
   if (rgIsOffline()) { rg.queue.push(p); rgPersist(); return { ...p, queued: true }; }
   p.recordedAt = p.at; rg.punches.push(p); rgPersist();
-  rgAudit(u, `Clock ${kind.toUpperCase()} · ${tag.label} · ${fx.RG_DIVISION_LABEL[tag.division]}${flags.includes('offsite') ? ` · OFFSITE ${geo?.distanceM} m` : ''}${flags.includes('kiosk') ? ' · kiosk' : ''}${o.simulated ? ' · simulated tap (prototype)' : ' · NFC tap'}`);
+  rgAudit(u, `Clock ${kind.toUpperCase()} · ${tag.label} · ${entityNameSync(tag.division)}${flags.includes('offsite') ? ` · OFFSITE ${geo?.distanceM} m` : ''}${p.source === 'pad' ? ` · Time Clock pad · ${p.method === 'touch_id' ? 'Touch ID' : 'PIN'}` : flags.includes('kiosk') ? ' · kiosk' : ''}${o.simulated ? ' · simulated tap (prototype)' : p.source === 'nfc' ? ' · NFC tap' : ''}`);
   return { ...p };
 }
 // Connectivity back → queued punches land with their true `at`, marked synced-late (recordedAt = now)
@@ -4474,6 +4488,17 @@ export const rgSetKioskStation = (id: string) => localStorage.setItem(RG_KEYS.ki
 export async function rgKioskPunch(userId: string, pin: string, stationId: string): Promise<Punch> {
   const u = byId(fx.users, userId); if (pin !== u.pin) { rgAudit(u, 'Kiosk punch · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); }
   return punchClock(stationId, { source: 'kiosk', userId });
+}
+// Time Clock pad (replaces RGTime kiosk + phone): PIN or a Touch ID assertion the pad already verified via WebAuthn
+export async function rgPadPunch(userId: string, stationId: string, auth: { pin?: string; touchId?: boolean }): Promise<Punch> {
+  const u = byId(fx.users, userId);
+  if (!auth.touchId) { if (!auth.pin || auth.pin !== u.pin) { rgAudit(u, 'Time Clock pad · incorrect PIN', 'sign_in_failed'); throw new Error('Incorrect PIN'); } }
+  return punchClock(stationId, { source: 'pad', method: auth.touchId ? 'touch_id' : 'pin', userId });
+}
+// Desktop board: everyone in the division (or all), on-clock state + derived presence — the same facts the directory dots read
+export async function getTimeBoard(division: Division | 'all'): Promise<TimeBoardRow[]> {
+  const rows = await Promise.all(rgStaffFor(division).filter((u) => !u.disabled).map(async (u): Promise<TimeBoardRow> => { const s = await getClockState(u.id); const last = rgLast(u.id); const pr = staffPresenceSync(u); return { user: u, onClock: s.onClock, since: s.since, sinceLocation: s.sinceLocation, todayHours: s.todayHours, lastPunch: last, presence: pr.state, presenceDetail: pr.detail }; }));
+  return resolve(rows.sort((a, b) => Number(b.onClock) - Number(a.onClock) || a.user.shortName.localeCompare(b.user.shortName)));
 }
 const rgStaffFor = (division: Division | 'all') => (division === 'all' ? [...fx.users] : getDivisionStaff(division));
 const weekDays = (weekOffset: number) => { const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + weekOffset * 7); const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return dayKey(d.toISOString()); }); const end = new Date(start); end.setDate(start.getDate() + 6); return { start, end, days }; };
@@ -4557,7 +4582,7 @@ const KIOSK_STATION = 'Kiosk';
 const normEmail = (s: string) => s.trim().toLowerCase();
 const normPhone = (s: string) => s.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
 const nextRequestNumber = () => `RQ-26-${String(Math.max(...store.requests.map((r) => Number(r.number.split('-')[2]) || 0)) + 1).padStart(4, '0')}`;
-const kioskSummary = (k: Pick<KioskDetails, 'services' | 'notes'>, brand: Division) => `Kiosk check-in (${fx.RG_DIVISION_LABEL[brand]}) · ${k.services.length ? k.services.map((s) => fx.KIOSK_SERVICES.find((x) => x.key === s)!.label).join(', ') : 'no service selected'}${k.notes ? ` · “${k.notes}”` : ''}`;
+const kioskSummary = (k: Pick<KioskDetails, 'services' | 'notes'>, brand: Division) => `Kiosk check-in (${entityNameSync(brand)}) · ${k.services.length ? k.services.map((s) => fx.KIOSK_SERVICES.find((x) => x.key === s)!.label).join(', ') : 'no service selected'}${k.notes ? ` · “${k.notes}”` : ''}`;
 const newKioskClient = (k: Pick<KioskDetails, 'firstName' | 'lastName' | 'email' | 'phone'>): Client => { const c: Client = { id: newId('c'), firstName: k.firstName, lastName: k.lastName, email: k.email, phone: k.phone, street: '', city: '', state: '', type: 'retail', since: new Date().toISOString() }; fx.clients.push(c); return c; };
 const kioskAudit = (detail: string) => appendAudit({ type: 'kiosk', stationName: KIOSK_STATION, detail });
 export async function submitKioskCheckIn(input: KioskSubmission): Promise<KioskResult> {
@@ -4574,7 +4599,7 @@ export async function submitKioskCheckIn(input: KioskSubmission): Promise<KioskR
   const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'kiosk', status: 'new', summary: kioskSummary(details, input.brand), createdAt: at, createdBy: 'Kiosk', station: KIOSK_STATION, division: input.brand, kiosk: details };
   store.requests.unshift(r);
   // Requests are intake records, not conversations (MH 2026-10-02): no Inbox row — the Requests page is the record
-  kioskAudit(`${r.number} · ${firstName} ${lastName} · ${fx.RG_DIVISION_LABEL[input.brand]} · ${details.services.length} service(s)${matched ? ` · possible match ${client.firstName} ${client.lastName} on ${matchedOn.join(' + ')}` : ' · new client'}`);
+  kioskAudit(`${r.number} · ${firstName} ${lastName} · ${entityNameSync(input.brand)} · ${details.services.length} service(s)${matched ? ` · possible match ${client.firstName} ${client.lastName} on ${matchedOn.join(' + ')}` : ' · new client'}`);
   return resolve({ request: { ...r }, client, possibleExisting: !!matched });
 }
 // ---- rolliworks.com structured service submission (SUB- · source = web). PROTOTYPE: the public form is emulated at /rwcom; KEEPER: the real site posts here. ----
@@ -4588,7 +4613,7 @@ export async function submitWebRequest(input: WebRequestInput): Promise<WebReque
   const matched = fx.clients.find((c) => normEmail(c.email) === email) ?? (input.phone && normPhone(input.phone).length >= 10 ? fx.clients.find((c) => normPhone(c.phone) === normPhone(input.phone!)) : undefined);
   const client = matched ?? newKioskClient({ firstName, lastName, email, phone: input.phone?.trim() ?? '' });
   const at = new Date().toISOString();
-  const summary = `Web request (${fx.RG_DIVISION_LABEL[input.brand]}) · ${input.legs.join(', ')}${input.model ? ` · ${input.model}` : ''}${input.ref ? ` · ref ${input.ref}` : ''}${input.bracelet ? ` · ${input.bracelet}` : ''}${input.condition.length ? ` · ${input.condition.join(', ')}` : ''}${input.notes ? ` · “${input.notes.trim()}”` : ''} · ${input.handover === 'ship' ? 'will ship' : 'will drop off'}${input.typical ? ` · ${input.typical}` : ''}${input.claimCode ? ` · claim ${input.claimCode}` : ''}`;
+  const summary = `Web request (${entityNameSync(input.brand)}) · ${input.legs.join(', ')}${input.model ? ` · ${input.model}` : ''}${input.ref ? ` · ref ${input.ref}` : ''}${input.bracelet ? ` · ${input.bracelet}` : ''}${input.condition.length ? ` · ${input.condition.join(', ')}` : ''}${input.notes ? ` · “${input.notes.trim()}”` : ''} · ${input.handover === 'ship' ? 'will ship' : 'will drop off'}${input.typical ? ` · ${input.typical}` : ''}${input.claimCode ? ` · claim ${input.claimCode}` : ''}`;
   const photos = input.photos.map((p) => ({ ...p, stage: 0, origin: 'web' as const, controlled: false }));
   const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'web', status: 'new', summary, createdAt: at, createdBy: 'rolliworks.com', station: 'rolliworks.com', division: input.brand, legs: input.legDepts, photos };
   store.requests.unshift(r);
@@ -6762,7 +6787,7 @@ export type PricingLimit = UserLimits['pricing'];
 export const PRICING_LIMITS: { key: PricingLimit; label: string }[] = [{ key: 'full', label: 'Full pricing (cost + sell)' }, { key: 'cost_only', label: 'Cost only — no sell prices' }, { key: 'none', label: 'No pricing' }];
 export const DEFAULT_LIMITS: UserLimits = { lockedStations: [], partsCategories: [], pricing: 'full' };
 export const limitsOf = (u: User): UserLimits => u.limits ?? DEFAULT_LIMITS;
-const assertEnabled = (u: User, stationName: string, method: AuditEvent['method']) => { if (u.disabled) { appendAudit({ type: 'sign_in_failed', stationName, userShortName: u.shortName, userDisplayName: u.displayName, method, detail: `Account disabled · ${u.disabled.reason}` }); throw new Error(`Account disabled — ${u.disabled.reason}. Ask MH to re-enable it.`); } };
+const assertEnabled = (u: User, stationName: string, method: AuditEvent['method']) => { if (u.invite && !u.invite.usedAt) { appendAudit({ type: 'sign_in_failed', stationName, userShortName: u.shortName, userDisplayName: u.displayName, method, detail: 'Account not activated · open invite' }); throw new Error('This account has not been activated yet — tap “I have an invite code” and enter the 6-digit code from your invite.'); } if (u.disabled) { appendAudit({ type: 'sign_in_failed', stationName, userShortName: u.shortName, userDisplayName: u.displayName, method, detail: `Account disabled · ${u.disabled.reason}` }); throw new Error(`Account disabled — ${u.disabled.reason}. Ask MH to re-enable it.`); } };
 export const isDisabledSync = (u: User) => !!u.disabled;
 // Org tree
 export const managerOf = (userId: string): User | undefined => { const u = fx.users.find((x) => x.id === userId); return u?.reportsTo ? fx.users.find((x) => x.id === u.reportsTo) : undefined; };

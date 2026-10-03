@@ -7,10 +7,10 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import * as hl from '@/api/hitlist';
+import * as org from '@/api/org';
 import { useAuth } from '@/auth/AuthContext';
 import { Button, PageHeader } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Table, Td, Th } from '@/components/ui/Table';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtTime } from '@/lib/format';
 
@@ -140,30 +140,16 @@ export default function SetupPage() {
         </Card>
       </div>
 
-      <Card title="Staff & prototype credentials" subtitle="Duty labels are display only — access is governed by tier" bodyClassName="p-0" testId="setup-staff-card">
-        <Table>
-          <thead>
-            <tr>
-              <Th>Staff</Th>
-              <Th>Duty label</Th>
-              <Th>Access tier</Th>
-              <Th>Password (mock)</Th>
-              <Th>PIN (mock)</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {(users ?? []).map((u) => (
-              <tr key={u.id} data-testid={`setup-user-${u.firstName}`}>
-                <Td className="font-medium text-ink">{u.displayName}</Td>
-                <Td className="text-ink-500">{u.dutyLabel}</Td>
-                <Td className="capitalize">{u.accessTier}</Td>
-                <Td className="font-mono text-xs">{u.password}</Td>
-                <Td className="font-mono text-xs">{u.pin}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+      <Card title="Organisation & staff" subtitle="Entities · departments (W · B · P · PM · CM · Engraving) · stations + kiosk pairing · org tree · staff with invite codes" testId="setup-org-card" action={<Link to="/setup/org" data-testid="setup-open-org" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Organisation <ArrowRight size={12} /></Link>}>
+        <div className="flex flex-wrap gap-1.5 text-[11px]" data-testid="setup-org-summary">
+          {org.getEntitiesSync().map((e) => <Link key={e.id} to="/setup/org?tab=entities" data-testid={`setup-org-entity-${e.id}`} className="rounded-sm border border-line bg-canvas px-2 py-0.5 text-ink-700 hover:border-ink-300">{e.name} <span className="font-mono text-ink-400">{e.shortName}</span></Link>)}
+          <Link to="/setup/org?tab=departments" data-testid="setup-org-departments" className="rounded-sm border border-line bg-canvas px-2 py-0.5 text-ink-700 hover:border-ink-300">{org.getDepartmentsSync().filter((d) => d.active).length} departments</Link>
+          <Link to="/setup/org?tab=stations" data-testid="setup-org-stations" className="rounded-sm border border-line bg-canvas px-2 py-0.5 text-ink-700 hover:border-ink-300">{org.getStationsSync().length} stations</Link>
+          <Link to="/setup/org?tab=staff" data-testid="setup-org-staff" className="rounded-sm border border-line bg-canvas px-2 py-0.5 text-ink-700 hover:border-ink-300">{(users ?? []).length} staff · {(users ?? []).filter((u) => u.invite && !u.invite.usedAt).length} invited · {(users ?? []).filter((u) => u.disabled).length} disabled</Link>
+        </div>
+        <p className="mt-2 text-xs text-ink-500">Staff credentials are the person's own (set on first sign-in from the invite code). Prototype seed accounts keep <span className="font-mono">firstname123</span> / <span className="font-mono">1234</span>.</p>
       </Card>
+      <Card title="Time clock" subtitle="Replaces RGTime · NFC tag tap or wall pad (Touch ID / PIN) · who’s in · week grid · flags + append-only corrections · payroll CSV · geofence · clock points" testId="setup-time-card" action={<Link to="/time?tab=settings" data-testid="setup-open-time" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Time clock → Settings <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">Old RGTime history is kept (source <span className="font-mono">rgtime</span>); printed tags written with <span className="font-mono">/rg/clock?station=…</span> redirect to the pad. Wall pad: <Link to="/time/pad" data-testid="setup-open-time-pad" className="underline">/time/pad</Link>. Mark a station as a clock point in Organisation → Stations.</p></Card>
       <Card title="Inspection" subtitle="Variant sets (per ref × component) · guided shot lists · findings tags · WatchM8 export" testId="setup-inspection-card" action={<Link to="/setup/inspection" data-testid="setup-open-inspection" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Inspection <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">Every inspection produces per-component opinion labels attached to guided photos. Opinions are revisable; nothing is a verdict. Exemplars are our own photos only.</p></Card>
       <Card title="Rate card" subtitle="Ref (or BAND) · legs · material · type · construction → price or range · typical days · versioned" testId="setup-rate-card-card" action={<Link to="/setup/rate-card" data-testid="setup-open-rate-card" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Rate card <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">One quote key shared by the portal request line, the estimate line and this table. Trade auto-quote accounts are quoted the moment every line resolves here; a request line without a rate links straight back to add one.</p></Card>
       {api.isOwnerSync() && <Card title="Bonus plans" subtitle="Owner only · one plan per person · basis = the report it reads · flat payout or tiers · Show to staff → progress card on their Hitlist" testId="setup-bonus-card" action={<Link to="/setup/bonus-plans" data-testid="setup-open-bonus-plans" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Open Setup → Bonus plans <ArrowRight size={12} /></Link>}><p className="text-xs text-ink-500">Working-day pacing (Mon–Fri by default, Setup value), automatic close at period end, early close with a reason, Mark paid + CSV on <Link to="/analytics" data-testid="setup-open-bonus-analytics" className="underline">Analytics</Link> (MH + Operations Manager).</p></Card>}

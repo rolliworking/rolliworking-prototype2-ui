@@ -51,7 +51,7 @@ export default function TodayPage({ forUser }: { forUser?: User }) {
   // "Staff hit lists" is available to managers and concierge (admin-assistants) per ruling
   const canViewStaffHitLists = !!user && (user.accessTier === 'manager' || user.roles.includes('concierge'));
   const switchable = canViewStaffHitLists ? api.getDivisionStaff(station?.division ?? 'rolliworks') : [];
-  const divLabel = station?.division === 'rollishop' ? 'RolliShop' : 'Rolliworks';
+  const divLabel = api.entityName(station?.division ?? 'rolliworks');
   const home = hl.getHomeScreen(me.id);
 
   const say = (m: string) => { setFlash(m); window.setTimeout(() => setFlash(null), 3000); };

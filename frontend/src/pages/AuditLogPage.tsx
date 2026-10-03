@@ -84,7 +84,7 @@ export default function AuditLogPage() {
         <FilterChip active={filter === 'sales'} onClick={() => setFilter('sales')} testId="audit-filter-sales">Sales</FilterChip>
         <FilterChip active={filter === 'portal'} onClick={() => setFilter('portal')} testId="audit-filter-portal">RolliConnect</FilterChip>
         <FilterChip active={filter === 'kiosk'} onClick={() => setFilter('kiosk')} testId="audit-filter-kiosk">Kiosk</FilterChip>
-        <FilterChip active={filter === 'rgtime'} onClick={() => setFilter('rgtime')} testId="audit-filter-rgtime">RGTime</FilterChip>
+        <FilterChip active={filter === 'rgtime'} onClick={() => setFilter('rgtime')} testId="audit-filter-rgtime">Time clock</FilterChip>
       </div>
 
       <Card bodyClassName="p-0">
