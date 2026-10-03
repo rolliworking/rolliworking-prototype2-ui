@@ -357,7 +357,9 @@ export default function App() {
               <Route path="/accounting" element={<AccountingPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/integrations/quickbooks" element={<QboSetupPage />} />
-              <Route path="/integrations/watchm8" element={<Wm8SetupPage />} />
+              {/* WatchM8 lives under Setup so the owner-only prod rule inherits from the Setup tree (MH 2026-10-03); the old path redirects. */}
+              <Route path="/setup/integrations/watchm8" element={<Wm8SetupPage />} />
+              <Route path="/integrations/watchm8" element={<Navigate to="/setup/integrations/watchm8" replace />} />
               <Route path="/help" element={<HelpPage />} />
               <Route path="/sales" element={<SalesOrdersPage />} />
               <Route path="/sales/new" element={<SalesOrderDetailPage />} />

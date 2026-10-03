@@ -1,6 +1,6 @@
 # RolliSuite — Product Requirements Document
 
-**Last updated**: 2026-10-02 (Safes vs insurance — ad-hoc, after Bonus targets)  
+**Last updated**: 2026-10-03 (Docs pass — Step 6 of the Setup-Org · Time Clock · Intercom · Pickup v2 · Custody audit · Data classes batch)  
 **Status**: Active prototype (fake data, no backend)
 
 ---
@@ -683,3 +683,16 @@ ServiceRequest { id, number, clientId, watchId, source, status, messages, closed
 - OPEN for MH: uncased watch — case vs movement split of the head share (stand-in: case carries); MH hitlist "Client asset value on hand" tile keeps its own insured-only rule; finished pieces seeded in the FD safe (re-parent in Setup if they wait in Main); NEAR 85% as a Setup value?
 - Next: paste `EMERGENT-PICKUP-STATION-2026-10-01.md` → build only the seven ⚠ GAP rows (Gate 2, manager bypass, ID retention, reverse QR display, value-tier kiosk confirmation …).
 
+
+### Docs pass — Step 6 of the 2026-10-03 batch (2026-10-03; documentation + one route move; self-verified via `/app/memory/tools/smoke_wm8_route.py`)
+- Steps 1–5 of MH's build order (React.lazy infra · Intercom multi-ring + Calls simulator · seven Pickup GAP rows · Custody audit + −1 reveal · Photo data classes + WatchM8 toggle) were built and tested in the previous forks (iterations 84–86). This fork finished **Step 6 — Docs**.
+- **New KEEPER specs**: `specs/SPEC-PICKUP-V2.md` (seven gap rows, KEEPER D-414), plus the three written last fork (`SPEC-SETUP-ORG`, `SPEC-TIME-CLOCK`, `SPEC-CUSTODY-AUDIT`) re-headed with exact KEEPER numbers. `SPEC-PICKUP-STATION.md` gap table flipped to ✓ closed → V2.
+- **MH numbering ruling (by subject)** applied as one `↳ D-5xx → KEEPER D-4yy` line per Emergent decision in `docs/DECISIONS.md` (D-495…D-518): D-426 time clock + Setup → Staff · D-427 orgs / entities + stations · D-428 photo data classes · D-429 departments · D-430 export switch / log · D-414 pickup · D-432 custody audit · D-405 Calls simulator (NOT-KEEPER); intercom multi-ring = no KEEPER ruling (15-UI-CONVENTIONS owns it); D-431 / D-433 unused by this batch.
+- **Naming per KEEPER**: custody record = `custody_events` with `source scan | audit | backfill`, the audit session is only the wrapper (04 + SPEC-CUSTODY-AUDIT). **Route move**: WatchM8 setup now at **`/setup/integrations/watchm8`** (under Setup so the owner-only prod rule inherits); `/integrations/watchm8` → `<Navigate>` redirect; Setup card, Integrations tile and Inspection Data-out links updated; `smoke_dataclass.py` path updated.
+- KEEPER files: 00 (file rows, Refresh 2026-10-03, vocabulary — RGTime retired), 01 (routes **[10-03]** `/time`, `/time/pad`, `/rg/*` redirects, `/setup/org`, `/setup/custody`, `/setup/integrations/watchm8`; UNGUARDED re-check), 04 (2026-10-03 entity table), 10 (2026-10-03 scaffolding), 12 (§10 + drift), 15 (**[10-03]** rows), `_gen.py` (module tags for the new blocks, audit families 66–72) → 02/05/08/09 regenerated (990 exports), `source/` re-copied, `frontend/docs` in sync (81 files). `docs/SESSION-LOG.md` entry added.
+- **User action**: Save to GitHub.
+
+## Pending / next (2026-10-03)
+- (P2) Prune legacy `/rg` pages + `RG_*` helpers once the `/rg*` redirects are confirmed on the real printed tags.
+- OPEN for MH (from the specs): warranty window for ID-photo retention (365 d prototype) · −1 at pickup hard stop vs manager override · who may run / close a custody audit (any staff today) · CM department label · real shop lat/lng for the Time Clock geofence · kiosk second factor when the client has no mobile number · payroll CSV columns.
+- Backlog unchanged: public `/track/:token` (P1), Sales vs Completions remainder (P1), Front Desk Kiosk vs RS Intake clarity (P2), amber items in DECISIONS.

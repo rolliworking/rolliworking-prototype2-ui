@@ -1,4 +1,4 @@
-# 12 — ROLES AND ACCESS (as implemented, 2026-09-29; v2 addenda 2026-10-02 marked **[v2]**)
+# 12 — ROLES AND ACCESS (as implemented, 2026-09-29; v2 addenda 2026-10-02 marked **[v2]**; 2026-10-03 addenda marked **[10-03]** — §10)
 
 Code is truth. Every name below is a real identifier in `/app/frontend/src`. Where the seed or behaviour disagrees with MH's corrections it is flagged **⚠ DRIFT** and left.
 
@@ -54,7 +54,7 @@ Guards live in `src/App.tsx`: `RequireAuth`, `TierGate` (`canAccess(navItem, use
 ## 6. Sessions (division wall: `inMyDivision.*` in `client.ts` — estimates/SOs/packages inherit the linked job's division, default rolliworks; `both` users see all; other-entity detail throws "Not in your division")
 - Real sign-in = `localStorage['rollisuite.prototype.currentUserId']` (device-bound, one user per device at a time; PIN fast-switch replaces it). `signOut` clears it and the View-as key.
 - **Single-session enforcement (one device per person): not built** ⚠ DRIFT — the same account can be signed in on two devices; nothing invalidates the other.
-- RGTime (`/rg`) keeps its own remembered phone session; RolliConnect keeps `rcSession`; kiosks have no session.
+- ~~RGTime (`/rg`) keeps its own remembered phone session~~ **[10-03]** RGTime is retired (D-498 → KEEPER D-426): `/rg*` redirects to the Time Clock; the pad keeps a per-device remembered binding for NFC taps (`rollisuite.rg.session`); RolliConnect keeps `rcSession`; kiosks have no session.
 
 ## 7. View-as (D-385, amended 2026-09-29) — owner only
 - **No credential of the viewed user is ever involved.** View-as is impersonation by MH's own signed-in session: picking a tile on `/choose-view` (or the top-bar picker) switches the view immediately — no password, no PIN, no Touch ID, no station token; the viewed user's real session is never touched. Kiosk tiles open the kiosk screen under MH's session, no station token entry.
@@ -104,6 +104,26 @@ Stations: `st-01 Front Desk 1` (reception ✔, default pre-registered), `st-02 F
 | Hitlist **Views** / team | `canViewHitlist` (tree-based since G6) | — |
 | Inbox tag / pin / archive / share | any Inbox user (ALL tier); Portal tab = `canClientComms` | tags are pointers, not permissions (D-443) |
 
+## 10. Added 2026-10-03 — Organisation · Time Clock · Intercom · Pickup v2 · Custody audit · Data classes **[10-03]**
+KEEPER ruling in the last column (`02-DECISIONS-CONSOLIDATED.md` `↳` lines).
+
+| check / screen | tier / guard | what it gates | KEEPER |
+|---|---|---|---|
+| `/setup/org` (Entities · Departments · Stations · Org tree · Staff) | manager (TierGate MGR via `/setup`); every write audited `settings` | organisation data; dot-leg departments immutable (`saveDepartment` throws on a leg change) | D-427 · D-429 (D-495…D-497) |
+| **Disable / re-enable an account** (`setStaffDisabled` → `staff-account-<id>`, reason required) | **owner only** (`isOwnerSync`); managers see the read-only row + owner-only note | disabled people leave sign-in cards, pickers, assignee lists; every sign-in method refused with the reason (`assertEnabled`) | D-426 (D-500) |
+| **Invited, not yet activated** (`User.invite` without `usedAt`) | `assertEnabled` refuses password / PIN / Touch ID → "This account has not been activated yet…"; activation = `activateStaffInvite(userId, code, password, pin)` from the sign-in card (`MAX_INVITE_ATTEMPTS 5` → locked until resend, `INVITE_TTL_H 72`) | first sign-in sets the person's own credentials | D-426 (D-500) |
+| `/time` (sidebar **Time clock**, `tiers: ALL`) | concierge tier = **Who's in + own week** (`time-my-week`); corrections / flags / export / settings = manager tier (`rgCorrectPunch`, `rgAddPunch`, `rgSaveSettings` throw otherwise) | time records | D-426 (D-498 · D-499) |
+| `/time/pad` (wall iPad + NFC tap) — **outside `RequireAuth`** | lock to a clock-point station = **any manager PIN** (`verifySupervisorPin`); a punch = that person's PIN or Touch ID (platform authenticator, prototype verification); remembered NFC device = one-button confirm; **auth expected: station token** | punches (`rgPadPunch`, `rgKioskPunch`) | D-426 (D-499) |
+| Intercom (Inbox → Intercom section; RW shell header) | any signed-in station; presets edited in Setup → Stations (manager); built-ins editable, not removable (`deleteIntercomPreset` throws) | ring / group call / page; zones | no KEEPER ruling (`15-UI-CONVENTIONS.md`); Calls simulator D-405 (D-501) |
+| **Pickup v2 — Gate 2** `pickupCheckInvoice` + `pickupApproveBypass` | balance / mismatch / unsent invoice block for everyone; bypass = **second-person rule** (`approveAsManager`: active manager tier, ≠ runner, PIN, reason) | release past a balance | D-414 (D-503) |
+| **Pickup v2 — proxy vs authorized** `pickupVerifyProxy(id, name, idPhoto, approval?, authorizedId?)` | on `Client.authorizedPickups` → **no manager approval**, ID photo required; otherwise manager approval (second-person) | identity at step 3 | D-414 (D-506) |
+| **Authorized persons — who may edit the list** | staff: any signed-in RS user on Client 360 (`addAuthorizedPickup` / `removeAuthorizedPickup`, audited); client: `/rc/account` with a **step-up grant** (`portalAddAuthorizedPickup` → `requireStepUp(STEP_UP_ACTION.pickupPerson)`), removal without step-up | the list the station trusts | D-414 (D-506) |
+| **Pickup v2 — kiosk second factor** `pickupKioskPushOtp` / `pickupKioskConfirmOtp` / `pickupKioskIdPhoto` | runs under the client's identity (`asClient`) — the kiosk is the client's device; the counter cannot type the code for them in the real build (prototype shows an inline kiosk frame, NOT-KEEPER) | ≥ $10k release | D-414 (D-505) |
+| **Identity photos** `canSeeIdPhotosSync()` = `accessTier === 'manager'` | **data-layer strip** for everyone else (`soRefs` drops `proxyIdPhoto` / `secondFactor.idPhoto`; `staffPhotos` / `exportSafePhotos` drop identity rows); never in a portal read or export view; purged by `pickupIdPhotoPurgeSweep` after the warranty window | reads | D-428 · D-414 (D-515 · D-508) |
+| **Custody audit** (`/setup/custody`, `/rw/pad` Audit, every −1 chip) | any signed-in staff may start / scan / close an audit and backfill (every step audited, **not tier-gated** — OPEN for MH); a −1 part is a **hard stop** at pickup / ship until backfilled | custody ledger writes | D-432 (D-509…D-513) |
+| **WatchM8 export switch** `/setup/integrations/watchm8` (under Setup; `/integrations/watchm8` redirects) | page = manager tier (Setup tree); **prod row = owner only AND a non-empty agreement ref** (`canToggle.prod`), staging / dev = manager; class toggles: specimen flips, operational / identity locked OFF; every flip = `settings` audit row | what may leave RS | D-430 (D-516 · D-517) |
+| Export run / ack / clear (`wm8-run`, `wm8-ack`, `wm8-clear-log`) | manager tier; a run is refused while the current env switch is OFF; **clear log is dev-only** (NOT-KEEPER — the log is append-only) | export log | D-430 (D-518) |
+
 ### ⚠ DRIFT remaining (2026-09-29 fix batch cleared: `band_tech` kind, dead WM branch in `auditScopeFor`, `RwPadPage` comment, `safe-jv`, reception idle sign-out, item 7 guards, MM = WM-room supervisor)
 - Concierge tier name (`accessTier: 'concierge'`) still covers watchmakers, band techs and MM — rename to `bench` in KEEPER; MM's "no $" rides on that tier.
 - Division wall applies to the MOCK path only; rows served by the live staging API carry no division and are shown to everyone (Q102).
@@ -114,4 +134,8 @@ Stations: `st-01 Front Desk 1` (reception ✔, default pre-registered), `st-02 F
 - **[v2]** `UserLimits.lockedStations` / `partsCategories` are recorded but not enforced on the Assign maps or Parts (Q99 open).
 - **[v2]** `/rw/inspect?rig=kiosk` trusts a query flag for `controlled` shots; `pickupAppendFrame` is callable by any staff session (auth expected: station).
 - **[v2]** Legacy per-person Inbox plumbing (`assignConversation`, `getStaffInboxRows`, `getColleagueInbox`, `threadsNeedingReplyForUser`) still exported — delete.
-- **[v2]** Authorized pickup persons do not exist on the client record (proxy pickup is ad-hoc + manager) — ⚠ GAP in `specs/SPEC-PICKUP-STATION.md`.
+- **[v2]** ~~Authorized pickup persons do not exist on the client record (proxy pickup is ad-hoc + manager)~~ — **closed 2026-10-03** (`Client.authorizedPickups`, D-506 → KEEPER D-414, `specs/SPEC-PICKUP-V2.md`).
+- **[10-03]** `/time/pad` sits outside `RequireAuth` (wall iPad / NFC tap); the lock is any manager PIN and the punch is the person's PIN / Touch ID — **auth expected: station token** (D-384 pattern), same gap as `/kiosk`, `/wm-kiosk`.
+- **[10-03]** Custody audit start / close / backfill are audited but **not tier-gated** (any signed-in staff) — OPEN for MH (`specs/SPEC-CUSTODY-AUDIT.md`).
+- **[10-03]** The WatchM8 setup page is manager tier because it lives under Setup; only the **prod row** is owner-gated (by ruling D-516). `wm8-clear-log` exists in the prototype — the Keeper log is append-only.
+- **[10-03]** `canSeeIdPhotosSync()` keys on `accessTier === 'manager'`, so supervisor-tier MM cannot see identity photos (intended) but a RolliShop manager (Walter) can see a Rolliworks proxy ID when the division wall is bypassed on the live path (Q102 pattern).

@@ -32,25 +32,25 @@ Generated from `AuditEventType` in `types.ts` and every `appendAudit({ type: …
 | `station_reset` | `resetDeviceRegistration` | All only |
 | `intake` | `commitArrivals`, `shipStamp`, `stamp` | Intake |
 | `estimate` | `closeRequest`, `convertLegacy`, `estStamp`, `overrideSoScanGate`, `setKioskRequired`, `writeClientRef` | Estimates |
-| `job` | `addJobAddon`, `addSwoLine`, `advanceSwo`, `binEvent`, `bulkCommit`, `conciergeBridge`, `confirmJobAddon`, `createHubShipment`, `createSwoHub`, `createSwoOutboundLabel`, `enterStorageSync`, `finishAudit`, `gateScanJob`, `jobStamp`, `leaveStorageSync`, `logBypass`, `padSendBack`, `padSetTech`, `printSwoLabel`, `receiveSwoLine`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox`, `updateSwoHub` | Jobs (with task, pin, parts) |
+| `job` | `addJobAddon`, `addSwoLine`, `advanceSwo`, `binEvent`, `bulkCommit`, `conciergeBridge`, `confirmJobAddon`, `createHubShipment`, `createSwoHub`, `createSwoOutboundLabel`, `custodyBridge`, `enterStorageSync`, `finishAudit`, `gateScanJob`, `jobStamp`, `leaveStorageSync`, `logBypass`, `padSendBack`, `padSetTech`, `printSwoLabel`, `receiveSwoLine`, `saveShopWorkOrder`, `scanTech`, `sendBackSwo`, `startAudit`, `undoOutbox`, `updateSwoHub` | Jobs (with task, pin, parts) |
 | `task` | `taskStamp` | All only |
 | `pin` | `dismissPinned`, `hitlistBridge`, `pinToHitList` | All only |
-| `sales` | `convertLegacy`, `pickupEvidenceSweep`, `soStamp` | Sales |
+| `sales` | `addAuthorizedPickup`, `convertLegacy`, `pickupEvidenceSweep`, `pickupIdPhotoPurgeSweep`, `pickupVerifyCode`, `removeAuthorizedPickup`, `soStamp` | Sales |
 | `parts` | `approvalAction`, `partsStamp` | All only |
 | `portal` | `portalStamp`, `replyToClient` | RolliConnect |
 | `purchasing` | `rsStamp` | All only |
 | `inventory` | `invBridge`, `pickAction` | All only |
-| `setup` | `addGradeCategory`, `saveRateCardRow`, `setAuditStaleDays`, `toggleGradeCategory` | All only |
+| `setup` | `addGradeCategory`, `orgBridge`, `saveRateCardRow`, `setAuditStaleDays`, `toggleGradeCategory` | All only |
 | `evidence` | (stamp helper — see below) | All only |
 | `labels` | (stamp helper — see below) | All only |
 | `accounting` | `baStamp`, `deleteSalesOrder`, `qboLog`, `zeroBalanceNoSync` | All only |
 | `companion` | `cpStamp` | All only |
 | `comms` | `callsBridge`, `clearMessage`, `cxStamp`, `deletePersonalTemplate`, `exitViewAsClient`, `learnDialVariant`, `learnInspectionNote`, `portalAskArrived`, `saveInspectionForm`, `savePersonalTemplate`, `setClientRating`, `startViewAsClient`, `submitClientReview` | All only |
 | `rollitime` | `rtStamp`, `setTechGoal` | All only |
-| `rgtime` | `rgAudit` | RGTime |
+| `rgtime` | `rgAudit` | RGTime (type kept — the Time Clock replaced the RGTime PWA 2026-10-03, D-498) |
 | `kiosk` | `kioskAudit`, `markRequestNotified`, `resolveKioskMatch`, `saveBenchSettings`, `submitBuilderRequest`, `submitWebRequest` | Kiosk |
 | `appointments` | `auditAppointments` | All only |
-| `settings` | `accessLog`, `bonusBridge`, `rcResetAccount`, `safesBridge`, `setAccessOverride`, `setFeatureFlag`, `setLtsThresholdDays`, `setRcDocAccess` | All only |
+| `settings` | `accessLog`, `bonusBridge`, `rcResetAccount`, `safesBridge`, `setAccessOverride`, `setFeatureFlag`, `setLtsThresholdDays`, `setRcDocAccess`, `wm8Bridge` | All only |
 | `shipping` | `portalCreateLabel` | All only |
 | `view_as_started` | `startViewAs` | All only |
 | `session_continued_as_self` | `continueAsSelf` | All only |
@@ -130,3 +130,17 @@ None of these added an enum value — they ride on `sales` / `job` / `comms` / `
 | 63 | access control (owner) | `settings` (`appendAudit`) + `AccessChange` log | `setAccessOverride`, `setUserEnabled`, `setUserLimits`, `createUserFromTemplate` | `{by: MH, whom, screen?, from, to, reason?, limits?, template_from?}` (D-391, D-398…D-401) |
 | 64 | system pins (auto-PO · approvals to send · pickup evidence / item / declined) | `pin` (row via `upsertSystemPin`, no `appendAudit`) | `autoPoSweepSync`, `approvalsToSendSweepSync`, `pickupEvidenceSweep`, `pickupAbort`, `portalDeclinePickup` | `{key, priority, standing, assigned_to, link, dismiss_reason?}` — upsert by key; dismiss of a standing pin needs a reason (D-417, D-418) |
 | 65 | rate card edit | `setup` | `saveRateCardRow` | `{row, key, version_before, version_after, by}` (D-472) |
+
+## 2026-10-03 event families (Setup → Organisation · Time Clock · Intercom · Pickup v2 · Custody audit · Data classes; numbering continues: 66+)
+
+Still no new enum values — these ride on `settings` / `sales` / `job` / `sign_in*` / `rgtime` or on store-local ledgers (`custody.ts events`, `watchm8Export.ts log`, `soStamp`). `⚠ DRIFT` → own `type` per family in KEEPER. The KEEPER ruling each family implements is named (MH numbering by subject, 2026-10-03).
+
+| # | family | prototype type | emitted by | payload KEEPER needs |
+|---|---|---|---|---|
+| 66 | organisation edits (entity · department · station) | `settings` (`appendAudit`) | `org.saveEntity`, `saveDepartment`, `toggleDepartment`, `saveStation`, `saveIntercomPreset` / `deleteIntercomPreset` (presets: no row ⚠) | `{kind entity\|department\|station\|preset, id, before, after, by, at}`; dot-leg changes are refused, not logged (KEEPER D-427 · D-429) |
+| 67 | staff invite lifecycle | `settings` + Sent row (MOCK delivery) + `sign_in_failed` | `org.createStaff`, `resendInvite`, `activateStaffInvite`, `setStaffDisabled`, `assertEnabled` | `{user, code_generation, channel, issued_by, expires_at, attempts, locked_at?, activated_at?}`; disable `{user, by: MH, reason}`; refused sign-ins while invited / disabled (KEEPER D-426) |
+| 68 | time clock punch · correction · flag · settings | `rgtime` (`rgAudit`) + `sign_in` on the pad lock | `rgPadPunch`, `rgKioskPunch`, `rgSyncQueue` (synced_late), `rgCorrectPunch`, `rgAddPunch`, `rgResolveFlag`, `rgSaveSettings` | `{user, kind in\|out, at, recorded_at, station\|tag, source nfc\|pad\|kiosk\|manager\|rgtime, method tap\|pin\|touch_id\|manager, flags[], geo?, correction_of?, reason?}` — corrections are new rows (KEEPER D-426) |
+| 69 | intercom group call · page | — (in memory `history` / `pageLog`) | `intercom.ring` (several targets / preset), `hangUp`, `pageAll` | `{call, from_station, targets[], joined[], skipped[], started_at, ended_at}`; page `{by, zone, text, at}` (no KEEPER ruling; Daily.co seam) |
+| 70 | pickup v2 facts (any-reference open · QBO read · lockout · second factor · authorized person · Reolink · ID purge) | `sales` (`soStamp`, `appendAudit` on LOCKED / PURGED) + `settings` for authorized-list edits | `pickupResolveReference` (via stamp on open), `pickupCheckInvoice`, `pickupVerifyCode` (attempt n/3, LOCKED), `pickupKioskPushOtp` / `pickupKioskConfirmOtp` / `pickupKioskIdPhoto`, `pickupVerifyProxy` (authorized vs approved), `addAuthorizedPickup` / `removeAuthorizedPickup` / `portalAddAuthorizedPickup`, `confirmPickup` (reolink), `pickupIdPhotoPurgeSweep` | `{so, opened_via, invoice_sent_at, qbo_balance, qbo_status, code_attempts, lock_until?, value_tier{item, invoice, total, high}, second_factor{method, kiosk}, authorized_id?, reolink{nvr, channel, from, to, clip_ref}, id_photo_purged_at}` — closes the family-60 note "failed verifies MUST be counted" (KEEPER D-414) |
+| 71 | custody events · audit sessions · backfill · −1 at invoice | `job` (`appendAudit` on start / close / stub / backfill) + **`custody_events` ledger** (`custody.ts`) + `sales` stamp `custodyAtInvoice` | `startCustodyAudit`, `pauseCustodyAudit`, `resumeCustodyAudit`, `auditPickNode`, `custodyAuditScan`, `custodyAuditStub`, `closeAuditNode`, `closeCustodyAudit`, `backfillCustody`, `onPartMoved` (scan rows), `sendInvoice` (minus_one flag) | `custody_events {item_key, job, part, to_node, bin?, source scan\|audit\|backfill, by, station, at, why?, audit_id?}` (append-only — THE record); audit `{id, scope, status, nodes[], result{unaccounted[], found_no_job[]}}`; invoice `{so, custody_at_invoice, minus_one_parts[]}` (KEEPER D-432) |
+| 72 | photo data class · WatchM8 switch · export log | `settings` (`appendAudit` on every flip / ref change) + **`export_log` ledger** (`watchm8Export.ts`) | `addJobPhoto` (class at write), `wm8.setEnvSwitch`, `setAgreementRef`, `setClassToggle`, `runExport`, `ackExport`, `clearLog` (dev) | photo `{photo, data_class operational\|specimen\|identity, slot, by}`; switch `{env, enabled, agreement_ref, by, at}`; log `{seq, env, type label\|photo, object, hash, licence_version, agreement_ref, exported_at, by, acked_at?}` (KEEPER D-428 · D-430) |

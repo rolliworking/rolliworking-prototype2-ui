@@ -45,11 +45,11 @@ async def main():
         await signin(page, "mm", "mm123"); await page.wait_for_timeout(600); print("MM landed:", page.url)
         await nav(page, "/rw/jobs/j-pu8"); await page.wait_for_timeout(1500)
         print("MM rw job photos card:", await T(page, "rw-job-photos").count(), "| classes:", await classes(page), "| identity badge:", await page.locator("[data-testid^='photo-identity-']").count(), "| identity chip filter present:", await T(page, "photo-class-identity").count(), "| job-photo-ph-id-so-pu8:", await T(page, "job-photo-ph-id-so-pu8").count())
-        await nav(page, "/integrations/watchm8"); await page.wait_for_timeout(1000); print("MM wm8 page:", await T(page, "wm8-setup-page").count(), "| body:", (await page.inner_text("body"))[:60].replace("\n", " "))
+        await nav(page, "/setup/integrations/watchm8"); await page.wait_for_timeout(1000); print("MM wm8 page:", await T(page, "wm8-setup-page").count(), "| body:", (await page.inner_text("body"))[:60].replace("\n", " "))
         # ---- MH owner: prod guard
         await nav(page, "/"); await page.wait_for_timeout(800); await T(page, "switch-user-button").click(); await page.wait_for_timeout(300); await T(page, "switch-user-other").click(); await page.wait_for_timeout(1000)
         await signin(page, "michael", "michael123"); await page.wait_for_timeout(400)
-        await nav(page, "/integrations/watchm8"); await page.wait_for_timeout(1000)
+        await nav(page, "/setup/integrations/watchm8"); await page.wait_for_timeout(1000)
         print("MH prod switch enabled:", not await T(page, "wm8-switch-prod").is_disabled())
         await T(page, "wm8-switch-prod").click(); await page.wait_for_timeout(600); print("MH prod ON without ref → error:", (await page.inner_text("body")).count("agreement ref") > 0, "| prod on:", await T(page, "wm8-env-prod").get_attribute("data-on"))
         await T(page, "wm8-ref-prod").fill("WM8-AGR-2026-001"); await T(page, "wm8-ref-prod").blur(); await page.wait_for_timeout(500)

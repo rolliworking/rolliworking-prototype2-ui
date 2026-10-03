@@ -827,3 +827,26 @@ _RolliSuite — Safes vs Insurance (D-425) frontend-only verification. T1 Analyt
 
 _Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
 - Fix ContainersPage save validation: when kind=safe and insurance limit is blank/0, render container-error 'Safes need an insurance limit' and block the save. Currently the save succeeds with $0 limit (observed as a new row 'Safe 2 · $0' in the Containers table, with Analytics totals_insured unchange
+
+## Iteration 84
+
+_Phase 'Organisation & staff + Time Clock' testing. T1,T2,T3,T5,T6,T7,T10,T11,T12,T14 PASS. T4 FAIL (routed EN column missing on Jobs Queue). T8/T9 could not be fully executed due to the preview being Cloudflare-rate-limited during the 'Switch user → sign-in-as-PR / sign-in-as-MH' SPA flow; the components and testids however exist and T9 verified Vienna does NOT see disable buttons (owner-only text visible)._
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- FIX T4: routing-only EN column not showing on /jobs?tab=queue for job E02025. Verify (a) catalog svc-23.routeDept='EN' is loaded in rs.catalog, (b) jobs.ts j-15 line keeps catalogId:'svc-23' through the client.ts jobs mapping, (c) routeDepartmentsSync returns EN. Add a defensive unit check (console.
+- Verify T8 end-to-end (invite activation panel at /sign-in → staff-card-priya) and T9 (MH disable Leo) in a non-rate-limited window; both features' testids are present but the testing session hit Cloudflare 429 after Switch user. From static review the StaffInviteActivate panel exists (invite-activat
+
+## Iteration 85
+
+_Frontend-only testing of Pickup Station v2 (7 GAP items) + Jobs Queue EN column regression. Ran two Playwright scripts in mock mode as Vienna. Overall PASS. T1 EN column (regression) now PASS — amber column renders, count=1, E02025 appears in both EN column and approved lane. All seven GAP flows work: open-by-reference (job/so/RSPU/unknown), QBO balance read + reread + bypass (excluding Vienna from approver list), 'invoice not sent' label + send-invoice flip, 6-digit code + stale-code warning ('replaced on … generation 1 of 2'), 3-fail → 10-min lockout, authorized-pickup-person flow + manager approval for non-listed proxy, ≥$10k 2nd-factor kiosk/reverse-QR path (invoice total correctly reads…_
+
+
+_Action items raised (fixed in the following commit unless noted in SESSION-LOG):_
+- LOW: Add an 'Authorized pickup persons' card on /clients/c-17 (Client 360) listing fixtures from client.authorizedPickups (Folake Adeyemi · spouse for c-17). Expose data-testid containing 'authorized'.
+- DOC-only (optional): Either update the task note on T2c to say gate 3 is pre-verified only when the SO is below the $10k tier, or (if desired) have gate-3 render data-ok=true for the base qr_scan verify and introduce a separate pickup-gate-sf for 2nd factor. Current behavior is consistent with how s
+
+## Iteration 86
+
+_Independent frontend verification of Step 5 (Photo data classes + WatchM8 seam controls). All T1–T8 scenarios in the review request pass end-to-end. Mock mode, SPA navigation (one full load per user session), tested as Vienna (manager), MM (supervisor tier) and MH (owner)._
+
