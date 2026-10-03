@@ -55,6 +55,7 @@
 | `specs/SPEC-PICKUP-STATION.md` **[v2]** | Pickup Station five gated steps — **BUILT** + gap check (✓ / ⚠ GAP) against MH's gate list; the ⚠ GAP rows are MH's next paste |
 | `specs/SPEC-LONG-TERM-STORAGE.md` **[v2]** | Long-term storage — **PLANNED**; one-paragraph summary + the pieces it will add; full text arrives with the build |
 | `specs/SPEC-BONUS-TARGETS.md` **[2026-10-02]** | Bonus targets — **BUILT**: view seam (`v_bonus_*`, invoice vs completed date), bases incl. Joseph = Band Room − Matthew, working-day pacing (Setup value), automatic EOM close + early close, Mark paid, CSV, staff card, NOT-KEEPER "As of" |
+| `specs/SPEC-SAFES-INSURANCE.md` **[2026-10-02]** | Safes vs insurance — **BUILT** (owning ruling D-425 → D-488…D-494): containers as data with limits + policy refs, node → parent, value on hand per safe (appraisal → declared → ref typical → unvalued; head = watch − bracelet; bench = no safe; unopened packages in FD), Analytics card + drawer + Move…, standing MH/VC pins + station toast |
 | `modules/inbox-v2.md` **[v2]** | one general Inbox: flat list, Portal · Team · Calls · Views, tags-not-assignment, job-card slide-out + quick actions, reply channel, context chip, share with staff, Requests ≠ Inbox |
 | `modules/request-builder.md` **[v2]** | Request Builder (client · trade · staff), quote key, rate card, outcomes Auto-quoted / Estimate queued / Draft, rw.com landing |
 | `modules/calls-telephony.md` **[v2]** | Vonage MOCK: live-call state machine, screen-pop card, dispositions → pending add-on, call ledger, `/calls`, SMS seam |

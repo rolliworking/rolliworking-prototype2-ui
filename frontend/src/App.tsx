@@ -70,7 +70,9 @@ import RequestNewPage from '@/pages/RequestNewPage';
 import RateCardPage from '@/pages/setup/RateCardPage';
 import TemplatesPage from '@/pages/setup/TemplatesPage';
 import BonusPlansPage from '@/pages/setup/BonusPlansPage';
-import BonusAnalyticsPage from '@/pages/analytics/BonusAnalyticsPage';
+import ContainersPage from '@/pages/setup/ContainersPage';
+import AnalyticsPage from '@/pages/analytics/AnalyticsPage';
+import { SAFES_ALERT_EVENT } from '@/api/safes';
 import Dashboard from '@/pages/Dashboard';
 import EstimateCreatePage from '@/pages/estimates/EstimateCreatePage';
 import EstimateDetailPage from '@/pages/estimates/EstimateDetailPage';
@@ -169,6 +171,8 @@ const RtRedirect = () => { const { jobId } = useParams(); return <Navigate to={`
 const MessagesAllRedirect = () => { const [p] = useSearchParams(); return <Navigate to={`/inbox?section=staff&staff=${encodeURIComponent(p.get('staff') ?? 'all')}${p.get('msg') ? `&msg=${p.get('msg')}` : ''}`} replace />; };
 
 export default function App() {
+  // Safes vs insurance: the scan that tips a safe over its limit shows a non-blocking warning wherever the staffer is
+  useEffect(() => { const h = (e: Event) => toast.warn((e as CustomEvent<string>).detail); window.addEventListener(SAFES_ALERT_EVENT, h); return () => window.removeEventListener(SAFES_ALERT_EVENT, h); }, []);
   return (
     <BrowserRouter>
       <ToastHost />
@@ -301,7 +305,9 @@ export default function App() {
               <Route path="/setup/rate-card" element={<RateCardPage />} />
               <Route path="/setup/templates" element={<TemplatesPage />} />
               <Route path="/setup/bonus-plans" element={<BonusPlansPage />} />
-              <Route path="/analytics/bonuses" element={<BonusAnalyticsPage />} />
+              <Route path="/setup/containers" element={<ContainersPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/analytics/bonuses" element={<AnalyticsPage />} />
               <Route path="/wm-kiosk" element={<WmKioskPage />} />
               <Route path="/setup/audit-log" element={<AuditLogPage />} />
               <Route path="/bench" element={<BenchPage />} />

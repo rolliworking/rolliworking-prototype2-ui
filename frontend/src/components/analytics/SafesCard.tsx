@@ -1,0 +1,60 @@
+import clsx from 'clsx';
+import { ArrowRight, Lock, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import * as sf from '@/api/safes';
+import type { SafeItem, SafeRow, SafeStatus, SafesBoard } from '@/api/safes';
+import { Card } from '@/components/ui/Card';
+import { RightSheet } from '@/components/ui/RightSheet';
+import { fmtDate, fmtMoney } from '@/lib/format';
+
+// Analytics card "Safes vs insurance" — one row per safe (items · value on hand · limit · % · bar with the limit tick · status), totals, row → drawer (items by value, Move…)
+const STATUS: Record<SafeStatus, { label: string; tone: string; bar: string }> = {
+  under: { label: 'Under', tone: 'bg-moss-50 text-moss-700 ring-moss-100', bar: 'bg-moss' },
+  near: { label: 'Near limit', tone: 'bg-amber-50 text-amber-800 ring-amber-200', bar: 'bg-amber-500' },
+  over: { label: 'OVER', tone: 'bg-rose-600 text-white ring-rose-600', bar: 'bg-rose-600' },
+  no_limit: { label: 'No limit', tone: 'bg-canvas text-ink-500 ring-line', bar: 'bg-ink-300' },
+};
+export const SafeStatusChip = ({ r, testId }: { r: SafeRow; testId?: string }) => <span data-testid={testId} data-status={r.status} className={clsx('inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset', STATUS[r.status].tone)}>{r.status === 'over' ? <ShieldAlert size={11} /> : r.status === 'under' ? <ShieldCheck size={11} /> : null}{STATUS[r.status].label}{r.status === 'over' && <span className="font-mono"> · +{fmtMoney(r.overage)}</span>}</span>;
+// Bar = value vs limit, limit tick at 100 % (scale runs to 125 % so an overage is visible)
+const LimitBar = ({ r, testId }: { r: SafeRow; testId?: string }) => { const scale = 125; const w = r.limit ? Math.min(100, (r.pct ?? 0) / (scale / 100)) : 0; return <div data-testid={testId} data-pct={r.pct} className="relative h-2.5 w-full overflow-hidden rounded-full bg-canvas ring-1 ring-inset ring-line"><div className={clsx('h-full rounded-full transition-[width] duration-500', STATUS[r.status].bar)} style={{ width: `${w}%` }} />{r.limit !== undefined && <div className="absolute inset-y-0 w-0.5 bg-ink" style={{ left: `${100 / (scale / 100)}%` }} title={`Limit ${fmtMoney(r.limit)}`} />}</div>; };
+const SOURCE_LABEL: Record<SafeItem['source'], string> = { appraisal: 'appraisal', declared: 'declared at intake', typical: 'ref typical value', bracelet_config: 'bracelet configuration', with_head: 'counted with the head', unknown: 'unvalued' };
+
+const SafeDrawer = ({ r, board, onClose }: { r: SafeRow; board: SafesBoard; onClose: () => void }) => {
+  const nav = useNavigate(); const [moving, setMoving] = useState<string | null>(null); const targets = board.safes.filter((s) => s.container.key !== r.container.key && s.container.scanNode);
+  return <RightSheet testId="safe-drawer" kind={r.container.key} onClose={onClose} title={<span className="inline-flex items-center gap-2"><Lock size={13} /> {r.container.label} <span className="font-normal text-ink-500">· {r.count} item{r.count === 1 ? '' : 's'} · {fmtMoney(r.value)}{r.limit !== undefined && ` of ${fmtMoney(r.limit)}`}</span><SafeStatusChip r={r} testId="safe-drawer-status" /></span>}>
+    <div className="rounded-md bg-surface p-3 text-xs shadow-card"><LimitBar r={r} testId="safe-drawer-bar" /><div className="mt-2 flex flex-wrap items-center gap-x-4 text-[11px] text-ink-600"><span>Policy <b className="font-mono">{r.container.policyRef ?? '—'}</b></span>{r.children.length > 0 && <span>Includes {r.children.map((c) => c.label).join(' · ')}</span>}{r.unvalued > 0 && <span data-testid="safe-drawer-unvalued" className="text-amber-800">{r.unvalued} item{r.unvalued === 1 ? '' : 's'} unvalued</span>}<span className="ml-auto text-ink-400">Custody changes only on the scan — Move… arms the destination on Assign / Move</span></div></div>
+    <ul data-testid="safe-drawer-items" data-count={r.items.length} className="divide-y divide-line/70 rounded-md bg-surface shadow-card">
+      {r.items.map((it) => <li key={it.id} data-testid={`safe-item-${it.id}`} data-unvalued={it.unvalued || undefined} className="px-3 py-2 text-xs">
+        <div className="flex items-center gap-2"><Link to={it.link} className="font-mono font-semibold text-ink hover:underline">{it.jobNumber}</Link><span className="text-ink-700">{it.client}</span><span className="text-ink-500">· {it.watch}{it.reference && ` ${it.reference}`}</span><span className="rounded-sm bg-canvas px-1 text-[10px] text-ink-600 ring-1 ring-line">{it.partLabel}</span><span className={clsx('ml-auto font-mono font-semibold', it.unvalued ? 'text-amber-800' : it.source === 'with_head' ? 'text-ink-300' : 'text-ink')}>{it.unvalued ? 'unvalued' : it.source === 'with_head' ? '—' : fmtMoney(it.value)}</span></div>
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-500"><span>{it.nodeLabel}</span><span>· {SOURCE_LABEL[it.source]}</span>{it.since && <span>· since {fmtDate(it.since)}</span>}
+          {it.part !== 'package' && (moving === it.id ? <span data-testid={`safe-item-move-targets-${it.id}`} className="ml-auto inline-flex items-center gap-1">to {targets.map((t) => <button key={t.container.key} type="button" data-testid={`safe-item-move-${it.id}-${t.container.key}`} onClick={() => nav(`/assign?dest=${t.container.scanNode}&item=${encodeURIComponent(it.jobNumber)}`)} className="rounded-full border border-line bg-surface px-2 py-0.5 font-medium text-ink-700 hover:border-ink-400">{t.container.label}</button>)}<button type="button" onClick={() => setMoving(null)} className="text-ink-400 hover:text-ink">cancel</button></span>
+            : <button type="button" data-testid={`safe-item-move-open-${it.id}`} onClick={() => setMoving(it.id)} className="ml-auto inline-flex items-center gap-1 font-medium text-brand hover:underline">Move… <ArrowRight size={10} /></button>)}
+        </div>
+      </li>)}
+      {!r.items.length && <li className="px-3 py-4 text-xs text-ink-400">Nothing in this safe.</li>}
+    </ul>
+  </RightSheet>;
+};
+
+export const SafesCard = () => {
+  const [board, setBoard] = useState<SafesBoard | null>(null); const [open, setOpen] = useState<string | null>(null);
+  const load = useCallback(() => sf.getSafesBoard().then(setBoard), []);
+  useEffect(() => { void load(); const h = () => void load(); window.addEventListener(sf.SAFES_ALERT_EVENT, h); return () => window.removeEventListener(sf.SAFES_ALERT_EVENT, h); }, [load]);
+  if (!board) return null; const sel = board.safes.find((r) => r.container.key === open) ?? board.others.find((r) => r.container.key === open);
+  return <>
+    <Card testId="safes-card" bodyClassName="p-0" className={clsx('border-l-[3px]', board.anyOver ? 'border-rose-600' : 'border-moss')} title={<span className="inline-flex items-center gap-2"><Lock size={13} /> Safes vs insurance {board.anyOver && <span data-testid="safes-card-over-flag" className="rounded-sm bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">over limit</span>}</span>} subtitle="Value on hand per safe = everything scanned into that safe or any container inside it · item value = appraisal → declared at intake → ref typical value → unvalued · pieces on a bench or out with a vendor are in no safe" action={<Link to="/setup/containers" data-testid="safes-card-setup" className="text-xs font-medium text-brand hover:underline">Setup → Containers</Link>}>
+      <table className="w-full text-xs"><thead><tr className="text-left text-[10px] uppercase tracking-wide text-ink-400"><th className="px-4 py-1.5">Safe</th><th className="py-1.5 text-right">Items</th><th className="py-1.5 text-right">Value on hand</th><th className="py-1.5 text-right">Limit</th><th className="py-1.5 text-right">%</th><th className="w-1/4 py-1.5 pl-4">vs limit</th><th className="py-1.5 pl-3">Status</th><th className="py-1.5 pr-4" /></tr></thead>
+        <tbody data-testid="safes-rows">{board.safes.map((r) => <tr key={r.container.key} data-testid={`safe-row-${r.container.key}`} data-status={r.status} onClick={() => setOpen(r.container.key)} className="cursor-pointer border-t border-line/70 hover:bg-canvas/70">
+          <td className="px-4 py-2"><div className="font-semibold text-ink">{r.container.label}</div><div className="text-[10px] text-ink-400">{r.container.policyRef ?? 'no policy ref'}{r.children.length > 0 && ` · incl. ${r.children.map((c) => c.label).join(', ')}`}</div></td>
+          <td data-testid={`safe-row-count-${r.container.key}`} className="py-2 text-right font-mono">{r.count}</td><td data-testid={`safe-row-value-${r.container.key}`} className="py-2 text-right font-mono font-semibold text-ink">{fmtMoney(r.value)}</td><td data-testid={`safe-row-limit-${r.container.key}`} className="py-2 text-right font-mono text-ink-600">{r.limit !== undefined ? fmtMoney(r.limit) : '—'}</td><td data-testid={`safe-row-pct-${r.container.key}`} className={clsx('py-2 text-right font-mono', r.status === 'over' ? 'font-semibold text-rose-700' : r.status === 'near' ? 'text-amber-800' : 'text-ink-600')}>{r.pct !== undefined ? `${r.pct}%` : '—'}</td>
+          <td className="py-2 pl-4"><LimitBar r={r} testId={`safe-row-bar-${r.container.key}`} /></td><td className="py-2 pl-3"><SafeStatusChip r={r} testId={`safe-row-status-${r.container.key}`} /></td>
+          <td className="py-2 pr-4 text-right text-[11px]">{r.unvalued > 0 && <span data-testid={`safe-row-unvalued-${r.container.key}`} className="rounded-sm bg-amber-50 px-1.5 py-0.5 text-amber-800 ring-1 ring-amber-200">{r.unvalued} unvalued</span>}</td>
+        </tr>)}</tbody>
+        <tfoot><tr data-testid="safes-totals" className="border-t-2 border-ink/20 bg-canvas/60 font-semibold text-ink"><td className="px-4 py-2">All safes · {board.totals.safes}</td><td data-testid="safes-totals-count" className="py-2 text-right font-mono">{board.totals.count}</td><td data-testid="safes-totals-value" className="py-2 text-right font-mono">{fmtMoney(board.totals.value)}</td><td data-testid="safes-totals-insured" className="py-2 text-right font-mono">{fmtMoney(board.totals.insured)}</td><td className="py-2 text-right font-mono text-ink-500">{board.totals.insured ? Math.round((board.totals.value / board.totals.insured) * 100) : 0}%</td><td className="py-2 pl-4 text-[11px] font-normal text-ink-500">headroom <b data-testid="safes-totals-headroom" className="font-mono text-ink">{fmtMoney(board.totals.headroom)}</b>{board.totals.over > 0 && <> · over <b data-testid="safes-totals-over" className="font-mono text-rose-700">{fmtMoney(board.totals.over)}</b></>}</td><td className="py-2 pl-3 text-[11px] font-normal text-ink-500">{board.totals.unvalued > 0 ? `${board.totals.unvalued} unvalued` : 'all valued'}</td><td /></tr></tfoot>
+      </table>
+      {board.others.length > 0 && <div data-testid="safes-others" className="flex flex-wrap items-center gap-x-4 border-t border-line px-4 py-2 text-[11px] text-ink-500">Not insured as a safe: {board.others.map((r) => <button key={r.container.key} type="button" data-testid={`safe-other-${r.container.key}`} onClick={() => setOpen(r.container.key)} className="hover:text-ink hover:underline">{r.container.label} · {r.count} · <span className="font-mono">{fmtMoney(r.value)}</span>{r.unvalued ? ` · ${r.unvalued} unvalued` : ''}</button>)}</div>}
+    </Card>
+    {sel && <SafeDrawer r={sel} board={board} onClose={() => setOpen(null)} />}
+  </>;
+};

@@ -31,6 +31,10 @@ export const RW_STATIONS: RwStation[] = [
   { key: 'jv_bench', label: "JV's bench", lane: 'shared', order: 2 },
   // Long-term storage safe (MH 2026-10-02) — unpaid finished jobs past the Setup threshold; custody root VC; scan-only in and out
   { key: 'lts_safe', label: 'Long-term storage', lane: 'shared', order: 3 },
+  // Front desk safe (2026-10-02) — physical safe at reception; a tray node under the FD safe container (Setup → Containers)
+  { key: 'fd_safe', label: 'Front desk safe', lane: 'shared', order: 4 },
+  // Main safe general tray (D-425) — where "Move…" from the Safes card lands finished / overflow pieces; a tray node under the Main safe container
+  { key: 'main_safe', label: 'Main safe', lane: 'shared', order: 5 },
   { key: 'final_assembly', label: 'Final assembly', lane: 'shared', order: 13 },
   { key: 'testing', label: 'Testing', lane: 'shared', order: 14 },
   { key: 'finished', label: 'Finished', lane: 'shared', order: 15 },

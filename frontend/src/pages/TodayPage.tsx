@@ -14,6 +14,7 @@ import { WaitingOnList } from '@/components/today/TodayBits';
 import { PinForm, PinModal, PinnedList } from '@/components/today/PinBits';
 import { LtsCard } from '@/components/today/LtsCard';
 import { BonusProgressCard, BonusResultsCard } from '@/components/today/BonusCards';
+import { SafesOverCard } from '@/components/today/SafesOverCard';
 import { StaffHitListModal } from '@/components/today/StaffHitListModal';
 import { Card } from '@/components/ui/Card';
 import { FilterChip, PageHeader } from '@/components/ui/Button';
@@ -87,6 +88,7 @@ export default function TodayPage({ forUser }: { forUser?: User }) {
           <div className="border-t border-line px-4 py-3"><PinForm me={me.shortName} onPinned={() => { say('Pinned'); void load(); }} /></div>
         </Card>
       </div>
+      {own && api.isOwnerSync() && <SafesOverCard />}
       {own && api.isOwnerSync() && <LtsCard />}
       {own && api.isOwnerSync() && <BonusResultsCard />}
       <BonusProgressCard userId={me.id} />

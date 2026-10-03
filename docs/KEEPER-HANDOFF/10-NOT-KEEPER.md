@@ -130,3 +130,13 @@ State machines and guards (`source/STATE-MACHINES.md`), field lists and validati
 | Seeded monthly totals spread across Mon–Fri dates (`MONTHLY`, `MONTHLY_TECH`, `spreadMoney/spreadCount`) | `api/bonus.ts` | the real `v_bonus_*` SQL views (`SELECT date, amount, ref …`) behind `viewRows()` |
 | Plans / early-close / paid maps in memory | `api/bonus.ts` | `bonus_plan`, `bonus_period_close`, `bonus_payment` tables; results stay derived |
 | `OPS_MANAGER_USER_ID = 'u-vienna'` constant for the analytics allow-list | `api/bonus.ts`, `config/navigation.ts NavItem.only` | a role / permission (`bonus.analytics`) in Access control |
+
+## Added 2026-10-02 (Safes vs insurance)
+
+| prototype piece | where | Keeper replacement |
+|---|---|---|
+| `BRACELET_CONFIG` regex table (President · Jubilee · Oyster · Titanium · strap → $) and `REF_TYPICAL` reference → $ map | `api/safes.ts` | `ref_bracelet_value` / `ref_typical_value` tables (or the reference service); live comps (D-085) already win when present |
+| `seedAssetValues` stamping `Job.declaredValue` / `Job.braceletValue` (+ synthetic arrived inbound shipments `1Z<job#>SEED`) | `api/client.ts` | the intake form / inbound label capture those two fields |
+| In-memory `containers` + `parents` maps; `registerDaySweep(getSafesBoardSync)` to materialise pins before `/today` reads | `api/safes.ts` | `container`, `location_node` tables; a move trigger / service evaluates the destination safe and upserts the standing hitlist items |
+| `OPS_SHORT = 'Vienna'`, `canSeeSafes` user-id allow-list | `api/safes.ts` | a permission (`safes.analytics`) in Access control |
+

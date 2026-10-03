@@ -30,6 +30,10 @@ export const NODES: MapNode[] = [
   { id: 'jv_bench', keys: ['jv_bench'], label: "JV's bench", row: 'bin', col: 4, sub: 'JV bin by day · custody JV workshop' },
   // Long-term storage safe (MH 2026-10-02) — same safe class as the main safe, custody root VC; finished + unpaid past the Setup threshold; scan-only in and out
   { id: 'lts_safe', keys: ['lts_safe'], label: 'Long-term storage', row: 'lts', col: 3, lock: true, owner: 'Vienna', sub: 'unpaid past threshold · scan ticket or BIN-JV · custody VC' },
+  // Front desk safe (2026-10-02 Safes vs insurance) — reception safe for drop-offs and finished pieces; destination for "Move…" from the Safes card
+  { id: 'fd_safe', keys: ['fd_safe'], label: 'Front desk safe', row: 'lts', col: 5, lock: true, owner: 'Chyna', sub: 'drop-offs · finished pieces at the desk · insured as FD safe' },
+  // Main safe general tray (D-425) — plain ticket scan; destination for "Move…" off an over-limit FD safe
+  { id: 'main_safe', keys: ['main_safe'], label: 'Main safe', row: 'lts', col: 1, lock: true, owner: 'Vienna', sub: 'general tray · finished / overflow pieces · insured as Main safe' },
 ];
 const ROW_INDEX: Record<MapRow, number> = { wat: 1, wat_ramp: 2, bra: 3, bra_ramp: 4, bin: 5, lts: 6 };
 const TRACK_LINES: string[][] = [['pre_approval', 'pre_queue', 'assign_wm', 'uncase', 'movement', 'parts', 'recase', 'safe_head'], ['band_pre', 'assign_band', 'band_qc', 'safe_band'], ['vc_safe', 'jv_bench']];

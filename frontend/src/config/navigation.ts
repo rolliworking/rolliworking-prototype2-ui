@@ -88,7 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'labels', label: 'Labels', path: '/labels', icon: Tag, tiers: ALL, built: true, blurb: 'Bag tags, shipping labels and QR codes.' },
   { key: 'wm-kiosk', label: 'WM Photo Kiosk', path: '/wm-kiosk', icon: Camera, tiers: ALL, built: true, blurb: 'Watchmaker-room shared photo station — required 4-step set + ad-hoc photos with @-mentions.' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: BarChart3, tiers: MGR, built: true, blurb: 'Revenue, throughput and turnaround reporting.' },
-  { key: 'bonuses', label: 'Bonuses', path: '/analytics/bonuses', icon: Target, tiers: MGR, only: BONUS_ANALYTICS_USER_IDS, built: true, blurb: 'Bonus targets (MH + Operations Manager): actual vs target, working-day pace, projected payout, EOM close, Mark paid, CSV.' },
+  { key: 'analytics', label: 'Analytics', path: '/analytics', icon: Target, tiers: MGR, only: BONUS_ANALYTICS_USER_IDS, built: true, blurb: 'Owner / Operations Manager analytics: Safes vs insurance (value on hand per safe vs limit, over-limit alerts) and Bonus targets (pace, projected payout, EOM close, Mark paid, CSV).' },
   { key: 'accounting', label: 'Accounting', path: '/accounting', icon: Landmark, tiers: MGR, built: true, blurb: 'QuickBooks sync, ledgers and reconciliation.' },
   { key: 'rwcom', label: 'rw.com', path: '/rwcom', icon: Globe, tiers: MGR, built: true, blurb: 'Emulator of the public rolliworks.com flows — identify · check · request — with a phone/desktop frame. NOT-KEEPER: in KEEPER this is the public site, not an RS screen.' },
   { key: 'setup', label: 'Setup', path: '/setup', icon: Settings, tiers: MGR, built: true, blurb: 'Users, departments, templates and preferences.' },

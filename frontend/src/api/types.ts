@@ -306,6 +306,8 @@ export interface Job {
   id: string;
   number: string;
   targetDate?: string; // client promise date at job level (falls back to the estimate's targetDate); changed only via a logged promise-date change
+  declaredValue?: number; // Safes vs insurance (D-425): value declared at intake (drop-off form / inbound label) — step 2 of the item-value chain after a final appraisal
+  braceletValue?: number; // D-425: bracelet value declared at intake — bracelet share when the bracelet is its own component (else the bracelet configuration table, else 0 = counted with the head)
   clientId: string;
   watchId: string;
   estimateId?: string;
@@ -1268,7 +1270,9 @@ export type RwLane = 'head' | 'band' | 'shared';
 export type RwStationKey = 'pre_approval' | 'pre_queue' | 'wm_bench_1' | 'wm_bench_2' | 'wm_bench_3' | 'uncase' | 'mgr_safe_polish_in' | 'polish_room' | 'mgr_safe_polish_out' | 'movement_service' | 'parts_approval' | 'recase_test' | 'into_safe_head' | 'safe_await_band'
   | 'band_pre_queue' | 'band_assign' | 'band_mgr_safe_in' | 'refinish' | 'band_mgr_safe_out' | 'band_qc' | 'into_safe_band' | 'safe_await_head' | 'final_assembly' | 'testing' | 'finished'
   | 'vc_safe' | 'jv_bench' // JV bin: Vienna's safe overnight · JV's bench by day
-  | 'lts_safe'; // Long-term storage safe (custody root VC) — unpaid finished jobs past the Setup threshold, scan-only in and out
+  | 'lts_safe' // Long-term storage safe (custody root VC) — unpaid finished jobs past the Setup threshold, scan-only in and out
+  | 'fd_safe' // Front desk safe (2026-10-02 Safes vs insurance) — drop-offs / finished pieces at the desk; child of the FD safe container
+  | 'main_safe'; // Main safe general tray (D-425) — finished pieces / overflow moved off the FD safe; plain ticket scan, no BIN-JV; child of the Main safe container
 // Lock = the item is physically in a manager's safe (custody-holding point), never an abstract gate
 export const isSafeStation = (k: RwStationKey): boolean => k.includes('safe');
 export type GateDirection = 'in' | 'out';

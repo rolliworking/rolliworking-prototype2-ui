@@ -42,6 +42,8 @@ const pull = async (jobId: string) => {
 };
 
 const appraisals: Appraisal[] = [];
+// Safes vs insurance (2026-10-02): first step of the item-value chain — a FINAL appraisal with a confirmed value wins over declared / typical values
+export const appraisalValueSync = (jobId: string): number | null => { const a = appraisals.filter((x) => x.jobId === jobId && x.status === 'final' && x.value !== null).sort((x, y) => (y.signedAt ?? '').localeCompare(x.signedAt ?? ''))[0]; return a?.value ?? null; };
 export async function listAppraisals(jobId?: string): Promise<Appraisal[]> { return appraisals.filter((a) => !jobId || a.jobId === jobId).map((a) => ({ ...a })); }
 export async function getAppraisal(id: string): Promise<Appraisal> { const a = appraisals.find((x) => x.id === id); if (!a) throw new Error('Appraisal not found'); return { ...a }; }
 export async function createAppraisal(jobId: string): Promise<Appraisal> {
