@@ -381,7 +381,7 @@ export interface JobComponent {
   containerKey?: string; binOrigin?: string; // JV bin: inside the bin now · last bin this part rode in (out with team)
 }
 export type PartStatus = 'not_started' | 'in_progress' | 'waiting' | 'reunited' | 'fulfilled';
-export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo' | 'container' | 'lts'; note?: string }
+export interface PartMove { at: string; by: string; from?: RwStationKey; to?: RwStationKey; status: PartStatus; via: 'drag' | 'scan' | 'bulk_assign' | 'wm' | 'pad' | 'station' | 'system' | 'audit_correction' | 'undo' | 'container' | 'lts' | 'custody_audit' | 'custody_backfill'; note?: string }
 export interface TechCompletionRow { tech: string; months: Record<string, { total: number; byDept: Record<DeptCode, number> }>; total: number }
 export interface CompletionsReport { months: string[]; rows: TechCompletionRow[]; generatedAt: string }
 
@@ -504,6 +504,8 @@ export interface PackageScan { id: string; kind: PackageScanKind; at: string; by
 
 // One photo pipeline (D-390): every entry point (pad camera, WM kiosk, inspection cameras, auth capture, desktop attach) writes through `addJobPhoto`
 export type PhotoType = 'intake' | 'bench' | 'post_work' | 'inspection';
+// Data class (MH 2026-10-03) — by PURPOSE, not rig: operational (shop record, never exported) · specimen (corpus: controlled rig shots, exemplars, stage-0 web/widget submissions — the only WatchM8-exportable class) · identity (government ID, pickup proxy / kiosk ID — manager tier only, never portal, never export, purged with the warranty window)
+export type PhotoDataClass = 'operational' | 'specimen' | 'identity';
 export interface PackagePhoto {
   id: string;
   source: 'webcam' | 'upload' | 'camera';
@@ -516,6 +518,7 @@ export interface PackagePhoto {
   stage?: number; // 0 = pre-inspection (client-captured on rolliworks.com) · 1+ = shop stages
   origin?: 'web' | 'kiosk' | 'portal' | 'shop';
   controlled?: boolean; // false = client's own phone/webcam, no controlled lighting
+  dataClass?: PhotoDataClass; // set at every write seam; legacy seeds resolve through `photoDataClass()`
 }
 
 export interface Package {
@@ -731,7 +734,7 @@ export interface PickupSession extends Stamp {
 }
 
 // One row per "Send invoice" — what the client was told at that moment (the link itself always shows the LIVE balance)
-export interface InvoiceSend { at: string; by: string; total: number; balanceDue: number; emailId: string }
+export interface InvoiceSend { at: string; by: string; total: number; balanceDue: number; emailId: string; custodyAtInvoice?: 'ok' | 'minus_one'; minusOneParts?: string[] }
 // Public mock hosted-payment page payload (Intuit placeholder)
 export interface PayPage { order: SalesOrderWithRefs; paid: number; sends: InvoiceSend[]; merchant: string; mock: true }
 
@@ -1193,7 +1196,7 @@ export interface EvidenceItem extends Stamp {
 export interface ReportRow { label: string; values: Record<string, number | string> }
 export interface Report { key: string; title: string; columns: string[]; rows: ReportRow[]; note: string; generatedAt: string }
 export interface QboQueueRow { salesOrderId: string; number: string; client: string; total: number; qboInvoiceId?: string; syncState: 'not_queued' | 'queued' | 'pushed_stub' | 'error_stub' | 'excluded_no_sync'; exclusion?: string; at: string }
-export interface IntegrationTile { key: 'qbo' | 'shipping' | 'rollitime' | 'email'; name: string; health: 'not_connected' | 'stub'; blurb: string; lastCheck: string }
+export interface IntegrationTile { key: 'qbo' | 'shipping' | 'rollitime' | 'email' | 'watchm8'; name: string; health: 'not_connected' | 'stub'; blurb: string; lastCheck: string }
 
 // ---- E10 Companion panel (scripted assistant) ------------------------------------------------------
 export interface ModelReference { id: string; model: string; aliases: string[]; yearFrom: number; yearTo: number; reference: string; brand: 'Rolex' | 'Tudor' }
@@ -1326,7 +1329,7 @@ export interface PartSuggestion { part: Part; score: number; reason: 'recent' | 
 export type SendBackReason = 'rework' | 'waiting_on_part' | 'failed_qc' | 'other';
 export interface PadCard { job: JobWithRefs; stage: JobStatus; stageLabel: string; canAdvance: boolean; canSendBack: boolean; parts: FloorDot[]; photos: number; pendingParts: number }
 export interface RoomSummary { jobsInRoom: number; waitingOnParts: number; waitingOnApproval: number; picksRemaining: number; shortsToday: number }
-export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection' | 'completed'; photoType?: PhotoType; at: string; by: string; unlocked: boolean }
+export interface JobPhotoView { id: string; url: string; slot: string; kind: 'intake' | 'inspection' | 'completed'; photoType?: PhotoType; at: string; by: string; unlocked: boolean; dataClass: PhotoDataClass }
 
 // ---- Job messages — threaded, internal-only board ON the job; @mentions route by tier (hit list vs bench Messages) ----
 export interface JobMessage extends Stamp { id: string; jobId: string; parentId?: string; text: string; mentions: string[]; notify: string[]; photo?: PackagePhoto; readBy: string[] }

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { CallsSection } from '@/components/clients/CallLedger';
+import { AuthorizedPickupSection } from '@/components/clients/AuthorizedPickupSection';
 import { ClientHeader } from '@/components/clients/ClientHeader';
 import { EstimatesSection, InvoicesSection, JobsSection } from '@/components/clients/RecordSections';
 import { EvidenceSection } from '@/components/jobs/EvidencePanel';
@@ -42,6 +43,7 @@ export default function Client360Page() {
           <CallsSection clientId={data.client.id} phone={data.client.phone} />
           <RequestsSection requests={data.requests} watches={data.watches} reload={reload} />
           <NotesTasksSection notes={data.notes} tasks={data.tasks} />
+          <AuthorizedPickupSection clientId={data.client.id} people={data.client.authorizedPickups ?? []} reload={reload} />
           <CustodySection custody={data.custody} />
           <EmailsSection emails={data.emails} clientId={data.client.id} />
         </div>

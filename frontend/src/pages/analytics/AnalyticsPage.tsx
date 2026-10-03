@@ -1,6 +1,7 @@
 import { useAuth } from '@/auth/AuthContext';
 import * as sf from '@/api/safes';
 import { SafesCard } from '@/components/analytics/SafesCard';
+import { CustodyCoverageCard } from '@/components/custody/CustodyCoverage';
 import { PageHeader } from '@/components/ui/Button';
 import BonusAnalyticsPage from '@/pages/analytics/BonusAnalyticsPage';
 
@@ -11,6 +12,7 @@ export default function AnalyticsPage() {
   return <div data-testid="analytics-page" className="space-y-6">
     <PageHeader title="Analytics" subtitle="Owner / Operations Manager view — what is on the premises against what is insured, and where every bonus plan stands" />
     <SafesCard />
+    <CustodyCoverageCard withList />
     <div id="bonuses" className="border-t border-line pt-4"><BonusAnalyticsPage /></div>
   </div>;
 }

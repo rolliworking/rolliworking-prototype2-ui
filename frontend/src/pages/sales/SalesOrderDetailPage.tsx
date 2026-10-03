@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { LegacyBanner } from '@/components/LegacyBits';
 import { SoPrintButton } from '@/components/sales/SoPrint';
+import { CustodyChip } from '@/components/custody/CustodyChip';
 import { PickupSessionCard } from '@/components/sales/PickupSessionCard';
 import type { Address, Client, SOLineInput, SalesOrderWithRefs } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
@@ -118,6 +119,7 @@ export default function SalesOrderDetailPage() {
             ) : o && <SOLinesTable order={o} showFulfil />}
             {!editing && o?.memo && <p className="border-t border-line px-4 py-2 text-xs text-ink-500">Memo: {o.memo}</p>}
           </Card>
+          {o?.jobId && !isNew && <div data-testid="so-custody-strip" className="flex flex-wrap items-center gap-2 rounded-md bg-surface px-4 py-2 text-xs shadow-card"><span className="font-semibold text-ink">Custody · {o.job?.number}</span>{api.custodyBridge.parts(api.custodyBridge.allJobs().find((j) => j.id === o.jobId)!).map((p) => <span key={p.key} className="inline-flex items-center gap-1"><span className="text-ink-500">{api.custodyBridge.partLabel(p.key)}</span><CustodyChip jobId={o.jobId!} part={p.key} onFixed={() => void load()} /></span>)}</div>}
           {o && <Card title="Payments" subtitle="Stub ledger — no processor; partial allowed" testId="so-payments-card"><MoneyStrip order={o} /><div className="mt-3"><PaymentsList order={o} /></div>{o.zeroBalance && <div data-testid="so-zero-balance-detail" className="mt-3 rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900"><div className="font-semibold">Zero balance — no QBO sync · {api.ZERO_REASON_LABEL[o.zeroBalance.reason]} · {fmtMoneyCents(o.zeroBalance.amount)}</div><div className="mt-0.5">{o.zeroBalance.notes}</div><div className="mt-0.5 text-[11px] text-amber-800/80">by {o.zeroBalance.by} · {o.zeroBalance.station} · {fmtDate(o.zeroBalance.at)} · excluded from QuickBooks revenue · completion credit unaffected</div></div>}</Card>}
           {o && o.status !== 'draft' && o.status !== 'cancelled' && <Card title="Payment link" subtitle="One link per order, minted once — the page behind it always shows the LIVE balance (edit-after-send safe)" testId="so-paylink-card">
             <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -126,7 +128,7 @@ export default function SalesOrderDetailPage() {
               <span data-testid="so-pay-link-live" className="ml-auto rounded-sm bg-canvas px-1.5 py-0.5 text-[11px] text-ink-700">live · total {fmtMoneyCents(o.total)} · balance {fmtMoneyCents(o.balanceDue)}</span>
             </div>
             <ul data-testid="so-invoice-sends" className="mt-2 divide-y divide-line/60 text-xs">
-              {o.invoiceSends.map((sd, i) => <li key={sd.emailId} data-testid={`so-invoice-send-${i + 1}`} className="flex items-center gap-2 py-1"><Send size={11} className="text-ink-400" /><span className="text-ink">Send #{i + 1}</span><span className="text-ink-500">{fmtDate(sd.at)} {fmtTime(sd.at)} · {sd.by}</span><span className="ml-auto tabular text-ink-500">told: total {fmtMoneyCents(sd.total)} · balance {fmtMoneyCents(sd.balanceDue)}{sd.total !== o.total && <span className="ml-1 rounded-sm bg-amber-50 px-1 text-amber-800">now {fmtMoneyCents(o.total)}</span>}</span></li>)}
+              {o.invoiceSends.map((sd, i) => <li key={sd.emailId} data-testid={`so-invoice-send-${i + 1}`} className="flex items-center gap-2 py-1"><Send size={11} className="text-ink-400" /><span className="text-ink">Send #{i + 1}</span><span className="text-ink-500">{fmtDate(sd.at)} {fmtTime(sd.at)} · {sd.by}</span><span className="ml-auto tabular text-ink-500">told: total {fmtMoneyCents(sd.total)} · balance {fmtMoneyCents(sd.balanceDue)}{sd.total !== o.total && <span className="ml-1 rounded-sm bg-amber-50 px-1 text-amber-800">now {fmtMoneyCents(o.total)}</span>}</span>{sd.custodyAtInvoice && <span data-testid={`so-invoice-send-custody-${i + 1}`} data-flag={sd.custodyAtInvoice} className={sd.custodyAtInvoice === 'minus_one' ? 'rounded-sm bg-rose-600 px-1 text-[10px] font-semibold text-white' : 'rounded-sm bg-moss-50 px-1 text-[10px] text-moss-800'}>{sd.custodyAtInvoice === 'minus_one' ? `custody backfilled at invoice? no · −1 ${sd.minusOneParts?.join(', ').toLowerCase()}` : 'custody ok at invoice'}</span>}</li>)}
               {!o.invoiceSends.length && <li className="py-1 text-ink-400">Not sent yet — “Send invoice” queues the email with a Pay button.</li>}
             </ul>
           </Card>}

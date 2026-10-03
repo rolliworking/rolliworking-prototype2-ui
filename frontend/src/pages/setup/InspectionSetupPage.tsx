@@ -2,6 +2,7 @@ import { ArrowLeft, Check, Database, GitMerge, Layers, RefreshCw, Sparkles, Tags
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as il from '@/api/inspectionLabels';
+import * as wm8 from '@/api/watchm8Export';
 import type { LabelComponent } from '@/api/inspectionLabels';
 import { useAuth } from '@/auth/AuthContext';
 import { Button, PageHeader } from '@/components/ui/Button';
@@ -16,7 +17,7 @@ export default function InspectionSetupPage() {
   il.ensureSeed(); const { user } = useAuth(); const manager = user?.accessTier === 'manager'; const [tick, setTick] = useState(0); const bump = () => setTick((t) => t + 1);
   const [ref, setRef] = useState(il.allVariantSets()[0]?.ref ?? ''); const [comp, setComp] = useState<LabelComponent>('dial'); const set = il.variantSetFor(ref, comp);
   const [promote, setPromote] = useState<Record<string, { key: string; tells: string }>>({}); const [merge, setMerge] = useState<Record<string, string>>({}); const [lists, setLists] = useState<Partial<Record<LabelComponent, string>>>({});
-  const refs = Array.from(new Set(il.allVariantSets().map((v) => v.ref))); const quality = il.labelQuality(); const wm8 = il.watchm8Export();
+  const refs = Array.from(new Set(il.allVariantSets().map((v) => v.ref))); const quality = il.labelQuality(); const wm8Rows = il.watchm8Export(); const wm8On = wm8.wm8SwitchOnSync();
   return <div data-testid="inspection-setup-page" data-tick={tick} className="space-y-4">
     <Link to="/setup" className="inline-flex h-8 items-center gap-1 text-xs text-ink-500 hover:text-ink"><ArrowLeft size={12} /> Setup</Link>
     <PageHeader title="Setup · Inspection" subtitle="Variant sets · guided shot lists · findings tags · WatchM8 export (read-only). Exemplars are our own photos — job id, chosen by, date, version; replacing keeps history." />
@@ -45,9 +46,9 @@ export default function InspectionSetupPage() {
         </Card>
       </div>
     </div>
-    <Card title="Data out · WatchM8 export" subtitle={<span className="inline-flex items-center gap-2"><Database size={12} /> Read-only from RS · every opinion label + photo ids · also mirrored to m3ke as <code>inspection_opinion</code> · label quality: {quality.submitted} blind 2nd opinions · {quality.agree} agree · {quality.disagree} disagree{quality.rate !== null ? ` · ${quality.rate}% agreement` : ''}</span>} bodyClassName="p-0" testId="wm8-card">
-      <Table><thead><tr><Th>When</Th><Th>Job</Th><Th>Ref · era</Th><Th>Component</Th><Th>Opinion</Th><Th>Variant</Th><Th>Tags</Th><Th className="text-right">Photos (controlled)</Th><Th>By</Th><Th>Flags</Th></tr></thead>
-        <tbody>{wm8.map((r) => <tr key={r.id} data-testid={`wm8-${r.id}`}><Td className="text-xs text-ink-500">{fmtDate(r.at)}</Td><Td className="font-mono text-xs">{r.jobNumber}</Td><Td className="font-mono text-xs">{r.ref} · {r.serialEra}</Td><Td className="text-xs">{il.componentLabel(r.component)}</Td><Td className="text-xs">{il.opinionLabel(r.opinion)} · {r.confidence}</Td><Td className="font-mono text-xs">{r.variant ?? '—'}</Td><Td className="font-mono text-[11px]">{r.tags.map((t) => `#${t}`).join(' ') || '—'}</Td><Td className="text-right text-xs tabular">{r.photoIds.length} ({r.controlledPhotos})</Td><Td className="text-xs">{r.by} · r{r.revision}</Td><Td className="text-[10px] uppercase text-ink-500">{[r.secondOpinion && '2nd', r.specimen && 'specimen'].filter(Boolean).join(' · ')}</Td></tr>)}</tbody></Table>
+    <Card title="Data out · WatchM8 export" subtitle={<span className="inline-flex items-center gap-2"><Database size={12} /> Read-only from RS · every opinion label + SPECIMEN photo ids only (operational / identity never listed) · also mirrored to m3ke as <code>inspection_opinion</code> · label quality: {quality.submitted} blind 2nd opinions · {quality.agree} agree · {quality.disagree} disagree{quality.rate !== null ? ` · ${quality.rate}% agreement` : ''}</span>} bodyClassName="p-0" testId="wm8-card" action={<Link to="/integrations/watchm8" data-testid="wm8-seam-link" className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${wm8On ? 'bg-moss-50 text-moss-700' : 'bg-ink/90 text-white'}`}>{wm8On ? `export ON · ${wm8.envLabel(wm8.currentWm8Env())}` : 'export switch OFF — nothing has left'} · controls →</Link>}>
+      <Table><thead><tr><Th>When</Th><Th>Job</Th><Th>Ref · era</Th><Th>Component</Th><Th>Opinion</Th><Th>Variant</Th><Th>Tags</Th><Th className="text-right">Specimen photos (excluded)</Th><Th>By</Th><Th>Flags</Th></tr></thead>
+        <tbody>{wm8Rows.map((r) => <tr key={r.id} data-testid={`wm8-${r.id}`}><Td className="text-xs text-ink-500">{fmtDate(r.at)}</Td><Td className="font-mono text-xs">{r.jobNumber}</Td><Td className="font-mono text-xs">{r.ref} · {r.serialEra}</Td><Td className="text-xs">{il.componentLabel(r.component)}</Td><Td className="text-xs">{il.opinionLabel(r.opinion)} · {r.confidence}</Td><Td className="font-mono text-xs">{r.variant ?? '—'}</Td><Td className="font-mono text-[11px]">{r.tags.map((t) => `#${t}`).join(' ') || '—'}</Td><Td className="text-right text-xs tabular">{r.photoIds.length} ({r.excludedPhotos})</Td><Td className="text-xs">{r.by} · r{r.revision}</Td><Td className="text-[10px] uppercase text-ink-500">{[r.secondOpinion && '2nd', r.specimen && 'specimen'].filter(Boolean).join(' · ')}</Td></tr>)}</tbody></Table>
     </Card>
     <p className="inline-flex items-center gap-1 text-[11px] text-ink-400"><Layers size={11} /> Seam flagged in docs/KEEPER-HANDOFF/11-INTEGRATIONS.md as <b>WatchM8</b> · <TagsIcon size={11} /> tags render inline as chips inside notes on every row.</p>
   </div>;

@@ -30,7 +30,7 @@ export async function startAuthSession(jobId: string): Promise<AuthSession> { co
 export async function recordAuthShot(sessionId: string, shot: Omit<AuthShot, 'at' | 'by'>): Promise<AuthSession> {
   const s = sessions.find((x) => x.id === sessionId); if (!s) throw new Error('Session not found'); const a = b.actor();
   const full: AuthShot = { ...shot, at: new Date().toISOString(), by: a.by }; const i = s.shots.findIndex((x) => x.step === shot.step); if (i >= 0) s.shots[i] = full; else s.shots.push(full);
-  const j = b.job(s.jobId); if (j) addJobPhotoSync(j, { id: b.newId('aph'), dataUrl: shot.dataUrl, slot: `auth-${shot.step}`, fileName: `Auth · ${AUTH_STEPS.find((x) => x.key === shot.step)?.label}`, photoType: 'inspection', at: full.at, by: a.by, station: a.station, replaceSlot: true, stamp: false });
+  const j = b.job(s.jobId); if (j) addJobPhotoSync(j, { id: b.newId('aph'), dataUrl: shot.dataUrl, slot: `auth-${shot.step}`, fileName: `Auth · ${AUTH_STEPS.find((x) => x.key === shot.step)?.label}`, photoType: 'inspection', dataClass: 'specimen', at: full.at, by: a.by, station: a.station, replaceSlot: true, stamp: false });
   if (shot.flag !== 'authentic') b.jobStamp(s.jobId, `Authentication flag · ${AUTH_STEPS.find((x) => x.key === shot.step)?.label} → ${shot.flag.toUpperCase()}${shot.note ? ` — ${shot.note}` : ''}`);
   if (s.shots.length === AUTH_STEPS.length && !s.completedAt) { s.completedAt = full.at; b.jobStamp(s.jobId, `Authentication capture complete · 11 steps · ${s.shots.filter((x) => x.flag !== 'authentic').length} flagged`); }
   return { ...s, shots: [...s.shots] };

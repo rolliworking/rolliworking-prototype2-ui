@@ -7,6 +7,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { canSupervise } from '@/config/roles';
 import { ClientRequestModal } from '@/components/jobs/ClientRequests';
 import { AuditPanel } from '@/components/rw/AuditPanel';
+import { CustodyAuditPanel } from '@/components/custody/CustodyAuditPanel';
 import { Toast } from '@/components/rw/pad/PadBits';
 import { PadBin } from '@/components/rw/pad/PadBin';
 import { PadComms } from '@/components/rw/pad/PadComms';
@@ -25,7 +26,7 @@ const NO_SCAN: Tab[] = ['audit', 'dashboard', 'team', 'comms', 'bin'];
 export default function RwPadPage({ room = 'wm' }: { room?: PadRoom }) {
   const { user } = useAuth(); const isManager = !!user && canSupervise(user);
   // Non-manager cards land on the read-only Parts Request History only — PROVISIONAL: what Concierge (Chyna) should see on the pad is an OPEN QUESTION for MH (ties to Q91)
-  const [tab, setTab] = useState<Tab>(isManager ? 'dashboard' : 'review');
+  const [tab, setTab] = useState<Tab>(isManager ? 'dashboard' : 'review'); const [auditMode, setAuditMode] = useState<'stage' | 'custody'>('stage');
   useEffect(() => { if (!isManager) setTab('review'); }, [isManager]); const [cards, setCards] = useState<PadCard[]>([]); const [sum, setSum] = useState<RoomSummary | null>(null); const [reqs, setReqs] = useState<PartsRequestWithRefs[]>([]); const [queue, setQueue] = useState<Queue | null>(null); const [bin, setBin] = useState<BinView | null>(null);
   const [ctx, setCtx] = useState<PadPartsContext | null>(null); const [hit, setHit] = useState<string | null>(null); const [alert, setAlert] = useState<ClientRequestAlert | null>(null); const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'learn' | 'err' } | null>(null);
   const hasBin = room === 'band' && isManager; // JV's bin lives on the band / polish room pad
@@ -57,7 +58,9 @@ export default function RwPadPage({ room = 'wm' }: { room?: PadRoom }) {
       {tab === 'review' && <PadReview q={queue} say={say} reload={() => void load()} isManager={!!isManager} />}
       {tab === 'team' && <PadTeam room={room} onChanged={() => void load()} />}
       {tab === 'comms' && <PadComms say={say} />}
-      {tab === 'audit' && <div data-testid="pad-audit"><AuditPanel big scope={room === 'band' ? 'band' : api.auditScopeFor(user)} onFinished={(s) => say(s.missing.length ? `${s.locationLabel}: ${s.missing.length} MISSING — pinned to the manager hit list` : `${s.locationLabel} audited clean`, s.missing.length ? 'err' : 'ok')} /></div>}
+      {tab === 'audit' && <div data-testid="pad-audit-mode" className="mb-3 flex gap-2">{(['stage', 'custody'] as const).map((m) => <button key={m} type="button" data-testid={`pad-audit-mode-${m}`} aria-pressed={auditMode === m} onClick={() => setAuditMode(m)} className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${auditMode === m ? 'bg-amber-400 text-[#161b22]' : 'border border-white/15 text-slate-200 hover:bg-white/10'}`}>{m === 'stage' ? 'Stage / bin audit' : 'Custody audit · scan to build custody'}</button>)}</div>}
+      {tab === 'audit' && auditMode === 'custody' && <div data-testid="pad-custody-audit" className="rounded-2xl bg-surface p-4 text-ink"><CustodyAuditPanel /></div>}
+      {tab === 'audit' && auditMode === 'stage' && <div data-testid="pad-audit"><AuditPanel big scope={room === 'band' ? 'band' : api.auditScopeFor(user)} onFinished={(s) => say(s.missing.length ? `${s.locationLabel}: ${s.missing.length} MISSING — pinned to the manager hit list` : `${s.locationLabel} audited clean`, s.missing.length ? 'err' : 'ok')} /></div>}
     </main>
     <nav data-testid="pad-tabbar" className="fixed inset-x-0 bottom-16 z-40 border-t border-white/10 bg-[#0b0f14]/95 px-4 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 backdrop-blur">
       <div className="mx-auto grid max-w-4xl gap-2" style={{ gridTemplateColumns: `repeat(${tabs.length + (isManager ? 2 : 1)}, minmax(0, 1fr))` }}>

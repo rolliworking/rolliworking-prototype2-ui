@@ -1,5 +1,6 @@
 import { appraisalValueSync } from './appraisals';
 import { onPartMoved, registerDaySweep, registerWatchValue, safesBridge as b, OWNER_USER_ID } from './client';
+import { custodyCurrentSync, registerCustodyValue, registerSafeFor } from './custody';
 import type { ComponentKey, Job, JobComponent, RwStationKey, Watch } from './types';
 
 // ---- Safes vs insurance (MH 2026-10-02, D-425) — container hierarchy + value on hand per safe, computed HERE (D-420), never summed in a page ----
@@ -18,7 +19,7 @@ export type ValueSource = 'appraisal' | 'declared' | 'typical' | 'bracelet_confi
 export interface SafeItem { id: string; jobId?: string; jobNumber: string; client: string; watch: string; reference: string; part: ComponentKey | 'package'; partLabel: string; node: string; nodeLabel: string; container: string; value: number; source: ValueSource; unvalued: boolean; since?: string; link: string }
 export type SafeStatus = 'under' | 'near' | 'over' | 'no_limit';
 export interface SafeRow { container: SafeContainer; items: SafeItem[]; count: number; value: number; limit?: number; pct?: number; status: SafeStatus; overage: number; headroom: number; unvalued: number; children: SafeContainer[] }
-export interface SafesBoard { safes: SafeRow[]; others: SafeRow[]; totals: { safes: number; count: number; value: number; insured: number; headroom: number; over: number; unvalued: number }; anyOver: boolean; loose: number }
+export interface SafesBoard { safes: SafeRow[]; others: SafeRow[]; totals: { safes: number; count: number; value: number; insured: number; headroom: number; over: number; unvalued: number }; anyOver: boolean; loose: number; notOnHand: { count: number; value: number; items: SafeItem[] } }
 
 export const NEAR_PCT = 85;
 export const SAFES_ALERT_EVENT = 'safes:alert';
@@ -68,23 +69,27 @@ export const watchValueSync = (j: Job): { value: number | null; source: ValueSou
 
 // ---- items in containers ----
 const PART_LABEL: Record<ComponentKey, string> = { head: 'Watch head', case: 'Case', band: 'Bracelet' };
+// Items with NO real custody event (custody.ts) are NOT ON HAND: they leave the safe they were believed in and count as −1 client assets on the board
+let notOnHandItems: SafeItem[] = [];
 const itemsSync = (): SafeItem[] => {
-  b.seedAssets(); const out: SafeItem[] = [];
+  b.seedAssets(); const out: SafeItem[] = []; notOnHandItems = [];
   for (const j of b.openJobs()) {
     const w = watchOf(j); const c = b.clients().find((x) => x.id === j.clientId); const client = c ? `${c.firstName} ${c.lastName}` : '—'; const watch = w ? `${w.brand} ${w.model}` : '—';
-    const all = b.parts(j); const placed = all.map((p: JobComponent) => ({ p, station: b.placement(j, p).station })).filter((x) => parents.has(x.station));
+    const all = b.parts(j); const located = all.map((p: JobComponent) => ({ p, station: b.placement(j, p).station, onHand: custodyCurrentSync(j, p).onHand }));
+    const placed = located.filter((x) => parents.has(x.station) || !x.onHand);
     if (!placed.length) continue;
     const wv = watchValueSync(j); const bs = braceletShare(j, w); const has = (k: ComponentKey) => all.some((p) => p.key === k); const bandOnly = has('band') && !has('head') && !has('case');
     // Head share = watch − bracelet share when the bracelet is its own component with a known value. Carried by the head when it is in a safe, else by the
     // case (uncased watch: case at a gate, movement on a bench — the case is the insured object in the safe). Never by the band; a band-only job holds just the bracelet.
     const headShare = wv.value === null ? null : has('band') && bs ? Math.max(0, wv.value - bs.value) : wv.value;
     const carrier: ComponentKey | undefined = bandOnly ? undefined : placed.some((x) => x.p.key === 'head') ? 'head' : placed.some((x) => x.p.key === 'case') ? 'case' : undefined;
-    for (const { p, station } of placed) {
+    for (const { p, station, onHand } of placed) {
       let value = 0; let source: ValueSource = 'with_head'; let unvalued = false;
       if (p.key === 'band') { if (bs) { value = bs.value; source = bs.source; } else if (bandOnly) { unvalued = true; source = 'unknown'; } }
       else if (p.key === carrier) { if (headShare === null) { unvalued = true; source = 'unknown'; } else { value = headShare; source = wv.source; } }
       const last = p.history?.[p.history.length - 1];
-      out.push({ id: `${j.id}:${p.key}`, jobId: j.id, jobNumber: j.number, client, watch, reference: w?.reference ?? '', part: p.key, partLabel: PART_LABEL[p.key], node: station, nodeLabel: b.stationLabel(station), container: parents.get(station)!, value, source, unvalued, since: last?.at, link: `/jobs/${j.id}` });
+      const item: SafeItem = { id: `${j.id}:${p.key}`, jobId: j.id, jobNumber: j.number, client, watch, reference: w?.reference ?? '', part: p.key, partLabel: PART_LABEL[p.key], node: station, nodeLabel: b.stationLabel(station), container: parents.get(station) ?? '', value, source, unvalued, since: last?.at, link: `/jobs/${j.id}` };
+      if (!onHand) notOnHandItems.push(item); else out.push(item);
     }
   }
   // Unopened packages on the intake shelf — value = the matched label request's declared value (by tracking #, else by the estimate), else unknown
@@ -104,7 +109,7 @@ const rowFor = (c: SafeContainer, items: SafeItem[]): SafeRow => {
 export const getSafesBoardSync = (): SafesBoard => {
   const items = itemsSync(); const rows = containers.map((c) => rowFor(c, items)); const safes = rows.filter((r) => r.container.kind === 'safe'); const others = rows.filter((r) => r.container.kind !== 'safe' && !ancestors(r.container.parent).some((k) => containerOf(k)?.kind === 'safe'));
   const insured = safes.reduce((t, r) => t + (r.limit ?? 0), 0); const value = safes.reduce((t, r) => t + r.value, 0);
-  const board: SafesBoard = { safes, others, totals: { safes: safes.length, count: safes.reduce((t, r) => t + r.count, 0), value, insured, headroom: safes.reduce((t, r) => t + r.headroom, 0), over: safes.reduce((t, r) => t + r.overage, 0), unvalued: safes.reduce((t, r) => t + r.unvalued, 0) }, anyOver: safes.some((r) => r.status === 'over'), loose: 0 };
+  const board: SafesBoard = { safes, others, totals: { safes: safes.length, count: safes.reduce((t, r) => t + r.count, 0), value, insured, headroom: safes.reduce((t, r) => t + r.headroom, 0), over: safes.reduce((t, r) => t + r.overage, 0), unvalued: safes.reduce((t, r) => t + r.unvalued, 0) }, anyOver: safes.some((r) => r.status === 'over'), loose: 0, notOnHand: { count: notOnHandItems.length, value: notOnHandItems.reduce((t, it) => t + it.value, 0), items: [...notOnHandItems].sort((x, y) => y.value - x.value) } };
   syncPins(board); return board;
 };
 export async function getSafesBoard(): Promise<SafesBoard> { return getSafesBoardSync(); }
@@ -144,3 +149,5 @@ export const safeForNodeSync = (node: RwStationKey | string): SafeContainer | un
 // Hitlist pins must exist before /today reads the pinned layer — recompute the board inside the day sweeps (getToday → runDaySweeps)
 registerDaySweep(() => { getSafesBoardSync(); });
 registerWatchValue(watchValueSync); // Pickup Station ≥ $10k value tier reads the same chain
+registerCustodyValue(watchValueSync); // −1 client asset rows carry the same value
+registerSafeFor((node) => safeForNodeSync(node)?.key); // custody audit scope "a safe" = that safe's trays

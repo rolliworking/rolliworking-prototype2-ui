@@ -119,4 +119,5 @@ export const integrations: IntegrationTile[] = [
   { key: 'shipping', name: 'Shipping provider', health: 'stub', blurb: 'Mock carrier seam issues SVG labels and fake tracking. No rates, no pickups.', lastCheck: daysAgo(0, 8) },
   { key: 'rollitime', name: 'RolliTime', health: 'stub', blurb: 'Timing bench runs inside this prototype at /rt (manual Witschi-style entry). No timing-machine import is wired.', lastCheck: daysAgo(0, 8) },
   { key: 'email', name: 'Email (Sent record)', health: 'stub', blurb: 'All client email lands in the Sent and never sends.', lastCheck: daysAgo(0, 8) },
+  { key: 'watchm8', name: 'WatchM8 corpus feed', health: 'stub', blurb: 'Specimen-class photos + opinion labels OUT to WatchM8. Export switch per environment, default OFF — nothing has left.', lastCheck: daysAgo(0, 8) },
 ];

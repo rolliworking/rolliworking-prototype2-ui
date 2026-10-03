@@ -11,6 +11,7 @@ import RwShell, { RwRestricted } from '@/pages/rw/RwShell';
 import { SAFES_ALERT_EVENT } from '@/api/safes';
 import { ActionPlaceholder, NotFound, RestrictedPage, SectionPlaceholder } from '@/pages/Placeholders';
 import '@/api/inventoryReports';
+import '@/api/custody';
 import { ViewAsBanner } from '@/components/layout/ViewAs';
 
 // Route chunks (2026-10-03): every page is its own chunk, so a cold load fetches the shell + ONE page instead of ~400 source modules (the preview proxy 429s on the unbundled dev load). Per-element Suspense keeps the shells mounted while a chunk loads.
@@ -55,6 +56,7 @@ const IntakeInspectionListPage = named(() => import('@/pages/intake/IntakeStepPa
 const IntakePhotosPage = named(() => import('@/pages/intake/IntakeStepPages'), 'IntakePhotosPage');
 const RcInspectionFormPage = lz(() => import('@/pages/rc/RcInspectionFormPage'));
 const QboSetupPage = lz(() => import('@/pages/rs/QboSetupPage'));
+const Wm8SetupPage = lz(() => import('@/pages/rs/Wm8SetupPage'));
 const KioskPage = lz(() => import('@/pages/kiosk/KioskPage'));
 const TimeClockPage = lz(() => import('@/pages/time/TimeClockPage'));
 const TimeClockPad = lz(() => import('@/pages/time/TimeClockPad'));
@@ -82,6 +84,7 @@ const RateCardPage = lz(() => import('@/pages/setup/RateCardPage'));
 const TemplatesPage = lz(() => import('@/pages/setup/TemplatesPage'));
 const BonusPlansPage = lz(() => import('@/pages/setup/BonusPlansPage'));
 const ContainersPage = lz(() => import('@/pages/setup/ContainersPage'));
+const CustodySetupPage = lz(() => import('@/pages/setup/CustodySetupPage'));
 const OrganisationPage = lz(() => import('@/pages/setup/OrganisationPage'));
 const AnalyticsPage = lz(() => import('@/pages/analytics/AnalyticsPage'));
 const Dashboard = lz(() => import('@/pages/Dashboard'));
@@ -324,6 +327,7 @@ export default function App() {
               <Route path="/setup/templates" element={<TemplatesPage />} />
               <Route path="/setup/bonus-plans" element={<BonusPlansPage />} />
               <Route path="/setup/containers" element={<ContainersPage />} />
+              <Route path="/setup/custody" element={<CustodySetupPage />} />
               <Route path="/setup/org" element={<OrganisationPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/analytics/bonuses" element={<AnalyticsPage />} />
@@ -353,6 +357,7 @@ export default function App() {
               <Route path="/accounting" element={<AccountingPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/integrations/quickbooks" element={<QboSetupPage />} />
+              <Route path="/integrations/watchm8" element={<Wm8SetupPage />} />
               <Route path="/help" element={<HelpPage />} />
               <Route path="/sales" element={<SalesOrdersPage />} />
               <Route path="/sales/new" element={<SalesOrderDetailPage />} />

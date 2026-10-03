@@ -84,6 +84,7 @@ import type {
   PackageScan,
   PackagePhoto,
   PhotoType,
+  PhotoDataClass,
   PackageSource,
   PackageStatus,
   PackageWithRefs,
@@ -529,6 +530,7 @@ export async function getEstimatesForClient(clientId: string): Promise<EstimateW
 
 const jobRefs = (j: Job): JobWithRefs => ({
   ...j,
+  photos: staffPhotos(j.photos),
   components: ensureComponents(j),
   client: byId(fx.clients, j.clientId),
   watch: byId(store.watches, j.watchId),
@@ -1620,13 +1622,24 @@ export const PHOTO_TYPES: { key: PhotoType; label: string; blurb: string }[] = [
   { key: 'post_work', label: 'Post-work', blurb: 'After-work / completed evidence' },
   { key: 'inspection', label: 'Inspection', blurb: 'Dual-camera inspection + guided authentication capture' },
 ];
-export interface AddJobPhotoInput { dataUrl: string; photoType: PhotoType; slot?: string; fileName?: string; source?: PackagePhoto['source']; note?: string; id?: string; by?: string; station?: string; at?: string; replaceSlot?: boolean; stamp?: string | false }
+export interface AddJobPhotoInput { dataUrl: string; photoType: PhotoType; slot?: string; fileName?: string; source?: PackagePhoto['source']; note?: string; id?: string; by?: string; station?: string; at?: string; replaceSlot?: boolean; stamp?: string | false; dataClass?: PhotoDataClass }
+// ---- Photo data classes (MH 2026-10-03) — by purpose, not rig. Hard filters live HERE, never in a screen.
+export const PHOTO_CLASSES: { key: PhotoDataClass; label: string; blurb: string; exportable: boolean }[] = [
+  { key: 'operational', label: 'Operational', blurb: 'Shop record — intake, bench, hand-back, ad-hoc. Never leaves RolliSuite (portal only when unlocked).', exportable: false },
+  { key: 'specimen', label: 'Specimen', blurb: 'Corpus — controlled inspection-rig shots, exemplars, stage-0 web / widget submissions. The ONLY class WatchM8 may receive.', exportable: true },
+  { key: 'identity', label: 'Identity', blurb: 'Government ID — pickup proxy / kiosk ID. Manager tier only, never the portal, never an export, purged with the warranty window.', exportable: false },
+];
+export const photoDataClass = (p: { dataClass?: PhotoDataClass; stage?: number; controlled?: boolean; slot?: string }): PhotoDataClass => p.dataClass ?? (p.stage === 0 || p.controlled === true || /^(insp|auth)-/.test(p.slot ?? '') ? 'specimen' : 'operational');
+export const isIdentityPhoto = (p: { dataClass?: PhotoDataClass; stage?: number; controlled?: boolean; slot?: string }) => photoDataClass(p) === 'identity';
+// Portal / export view: identity never crosses. Staff view: identity for manager tier only.
+export const exportSafePhotos = <T extends { dataClass?: PhotoDataClass; stage?: number; controlled?: boolean; slot?: string }>(xs: T[]): T[] => xs.filter((p) => !isIdentityPhoto(p));
+export const staffPhotos = <T extends { dataClass?: PhotoDataClass; stage?: number; controlled?: boolean; slot?: string }>(xs: T[]): T[] => (canSeeIdPhotosSync() ? xs : exportSafePhotos(xs));
 export const addJobPhotoSync = (j: Job, p: AddJobPhotoInput): PackagePhoto & Stamp => {
   const a = actor();
   if (p.replaceSlot && p.slot) j.photos = j.photos.filter((x) => x.slot !== p.slot);
-  const photo: PackagePhoto & Stamp = { id: p.id ?? newId('ph'), source: p.source ?? 'camera', dataUrl: p.dataUrl, slot: p.slot, fileName: p.fileName, photoType: p.photoType, note: p.note, clientVisible: false, at: p.at ?? new Date().toISOString(), by: p.by ?? a.by, station: p.station ?? a.station };
+  const photo: PackagePhoto & Stamp = { id: p.id ?? newId('ph'), source: p.source ?? 'camera', dataUrl: p.dataUrl, slot: p.slot, fileName: p.fileName, photoType: p.photoType, note: p.note, clientVisible: false, dataClass: p.dataClass ?? 'operational', at: p.at ?? new Date().toISOString(), by: p.by ?? a.by, station: p.station ?? a.station };
   j.photos.unshift(photo);
-  if (p.stamp !== false) jobStamp(j, p.stamp ?? `Photo added · ${PHOTO_TYPES.find((t) => t.key === p.photoType)!.label}${p.slot ? ` · ${p.slot}` : ''} · locked (private)`);
+  if (p.stamp !== false) jobStamp(j, p.stamp ?? `Photo added · ${PHOTO_TYPES.find((t) => t.key === p.photoType)!.label}${p.slot ? ` · ${p.slot}` : ''} · ${photo.dataClass} · locked (private)`);
   return photo;
 };
 export async function addJobPhoto(jobId: string, p: AddJobPhotoInput): Promise<PackagePhoto & Stamp> { return resolve(addJobPhotoSync(getJobRow(jobId), p)); }
@@ -1995,7 +2008,9 @@ const soTotals = (o: SalesOrder) => {
 };
 const soRefs = (o: SalesOrder): SalesOrderWithRefs => {
   const job = o.jobId ? store.jobs.find((j) => j.id === o.jobId) ?? null : null;
-  return { ...o, client: byId(fx.clients, o.clientId), job, watch: job ? byId(store.watches, job.watchId) : null };
+  // Identity class never reaches a non-manager screen — the ID photo is stripped in the data layer, the "ID photographed" fact stays (retention row)
+  const s = o.pickupSession; const session = s && !canSeeIdPhotosSync() && (s.proxyIdPhoto || s.secondFactor?.idPhoto) ? { ...s, proxyIdPhoto: undefined, secondFactor: s.secondFactor ? { ...s.secondFactor, idPhoto: undefined } : undefined } : s;
+  return { ...o, pickupSession: session, client: byId(fx.clients, o.clientId), job, watch: job ? byId(store.watches, job.watchId) : null };
 };
 const getSO = (id: string) => byId(store.salesOrders, id);
 const soStamp = (o: SalesOrder, detail: string) => {
@@ -2141,8 +2156,11 @@ export async function sendInvoice(id: string): Promise<SalesOrderWithRefs> {
   const a = actor(); const url = payLinkUrl(o); const emailId = `ob-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
   const c = byId(fx.clients, o.clientId);
   queueOutbox({ id: emailId, to: c.email, toName: `${c.firstName} ${c.lastName}`, relatedRef: o.number, status: 'pending', payLink: payLinkPath(o), subject: `Your invoice — ${o.number}`, body: `Hello ${c.firstName},\n\nYour invoice ${o.number} is ready.\n\nTotal ${fmtMoney(o.total)}${o.payments.length ? ` · paid so far ${fmtMoney(o.total - o.balanceDue)}` : ''} · balance due ${fmtMoney(o.balanceDue)}.\n\n[ PAY INVOICE ]  ${url}\n(MOCK PAYMENT PAGE — placeholder for the Intuit hosted payment page; no card is charged. The page always shows the live balance, so if we adjust the invoice the same link stays valid.)\n\nYou can also pay from RolliConnect under this watch.\n\nYour watch's service records: ${window.location.origin}${soRecordsLink(o)}\n\nOrder: ${o.number}${o.jobId ? ` · Job ${byId(store.jobs, o.jobId).number}` : ''}\n\n— Rolliworks`, createdAt: new Date().toISOString(), createdBy: a.by, station: a.station });
-  o.invoiceSentAt = new Date().toISOString(); o.invoiceSends.push({ at: o.invoiceSentAt, by: a.by, total: o.total, balanceDue: o.balanceDue, emailId }); soTotals(o);
-  soStamp(o, `Invoice sent · ${fmtMoney(o.total)} · balance ${fmtMoney(o.balanceDue)} · pay link ${payLinkPath(o)} (send #${o.invoiceSends.length})`);
+  // −1 reveal (MH 2026-10-03): an invoice never waits for custody, but the Sent record says whether every client asset had a real custody scan; VC gets a hitlist item until it is backfilled
+  const minus = o.jobId ? minusOneItemsSync(o.jobId) : [];
+  o.invoiceSentAt = new Date().toISOString(); o.invoiceSends.push({ at: o.invoiceSentAt, by: a.by, total: o.total, balanceDue: o.balanceDue, emailId, custodyAtInvoice: minus.length ? 'minus_one' : 'ok', minusOneParts: minus.length ? minus.map((m) => m.partLabel) : undefined }); soTotals(o);
+  soStamp(o, `Invoice sent · ${fmtMoney(o.total)} · balance ${fmtMoney(o.balanceDue)} · pay link ${payLinkPath(o)} (send #${o.invoiceSends.length})${minus.length ? ` · custody backfilled at invoice? NO — ${minus.map((m) => m.partLabel.toLowerCase()).join(', ')} −1` : ''}`);
+  if (minus.length) upsertSystemPin(`custody-minus1-invoice:${o.id}`, { title: `−1 at invoice · ${o.number} · ${minus.map((m) => m.partLabel.toLowerCase()).join(', ')} not on hand`, subtitle: `Invoice went out with ${minus.length} client asset${minus.length === 1 ? '' : 's'} missing a real custody scan (${minus[0].jobNumber}) — add to custody at the node it is at`, assignedTo: { type: 'user', shortName: 'Vienna' }, priority: 'high', standing: true, link: `/sales/${o.id}` });
   if (o.jobId) jobStamp(byId(store.jobs, o.jobId), `Invoice ${o.number} sent · pay link emailed`);
   return resolve(soRefs(o));
 }
@@ -2345,6 +2363,7 @@ export async function getApprovingManagers(): Promise<User[]> { const a = actor(
 
 const pickupBlockers = (o: SalesOrder): string[] => {
   const d = o.pickupDraft; const out: string[] = [];
+  { const m1 = o.jobId ? minusOneItemsSync(o.jobId) : []; if (m1.length) out.push(`Step 1 · −1 client asset — ${m1.map((m) => m.partLabel.toLowerCase()).join(', ')} not on hand (no real custody scan) — add to custody at the node it is at first`); }
   if (!d?.itemConfirmed) out.push('Step 1 · item not confirmed against the intake photos');
   if (!d?.paymentBypass) {
     if (!o.invoiceSentAt && !o.zeroBalance) out.push('Step 2 · invoice has not been sent — send it (the client must have the invoice before the hand-over)');
@@ -2460,6 +2479,7 @@ export async function pickupVerifyProxy(id: string, proxyName: string, idPhoto: 
   const o = getSO(id); const d = pickupDraftOf(o); const c = byId(fx.clients, o.clientId);
   const auth = authorizedId ? (c.authorizedPickups ?? []).find((p) => p.id === authorizedId) : undefined; if (authorizedId && !auth) throw new Error('That person is not on the client’s authorized list');
   const name = auth?.name ?? proxyName.trim(); if (!name) throw new Error('Proxy full name is required'); if (!idPhoto) throw new Error('Photograph the proxy’s government ID');
+  idPhoto = { ...idPhoto, dataClass: 'identity', clientVisible: false };
   if (auth) { d.verify = { method: 'proxy', at: new Date().toISOString(), proxyName: name, proxyIdPhoto: idPhoto, proxyAuthorizedId: auth.id }; soStamp(o, `Step 3 · authorized pickup person · ${name}${auth.relation ? ` (${auth.relation})` : ''} · on the client's list since ${new Date(auth.addedAt).toLocaleDateString()} · ID photographed · no manager approval needed`); return resolve(pickupCtx(o)); }
   if (!approval) throw new Error('A manager must approve — this person is not on the client’s authorized-pickup list');
   const ap = approveAsManager(approval);
@@ -2502,7 +2522,8 @@ export async function pickupKioskConfirmOtp(id: string, typed: string): Promise<
 }
 export async function pickupKioskIdPhoto(id: string, photo: PackagePhoto): Promise<PickupContext> {
   const o = getSO(id); const d = pickupDraftOf(o); const k = pairedKioskOf(); if (!k) throw new Error('This station has no paired kiosk (Setup → Stations) — use the reverse-QR fallback');
-  await asClient(o.clientId, async () => { d.secondFactor = { method: 'kiosk_id_photo', at: new Date().toISOString(), kioskId: k.id, kioskName: k.name, idPhoto: photo }; soStamp(o, `Step 3 · second factor · client-operated ID photo on ${k.name} · manager-only, purged with the warranty window`); });
+  const idPhoto: PackagePhoto = { ...photo, dataClass: 'identity', clientVisible: false };
+  await asClient(o.clientId, async () => { d.secondFactor = { method: 'kiosk_id_photo', at: new Date().toISOString(), kioskId: k.id, kioskName: k.name, idPhoto }; soStamp(o, `Step 3 · second factor · client-operated ID photo on ${k.name} · manager-only, purged with the warranty window`); });
   return resolve(pickupCtx(o));
 }
 // Reverse QR: the STATION shows a QR; the client's phone opens /rc/pickup/<token> and taps Confirm. Single-use, 10 min, bound to this SO + station.
@@ -2594,6 +2615,8 @@ export async function confirmPickup(id: string, input: ConfirmPickupInput = {}):
   const summary = pickupSummaryLine(o.pickupSession, fullNameOf(byId(fx.clients, o.clientId)));
   soStamp(o, `${fully ? 'PICKED UP' : 'Partial pickup'} · ${summary}`);
   if (fully) closeCustody(o, summary);
+  // Identity class rides the job's photo pipeline too (one pipeline, D-390) — manager-only in every grid, purged with the warranty window
+  if (idPhoto && o.jobId) { const j = byId(store.jobs, o.jobId); addJobPhotoSync(j, { id: `ph-id-${o.id}`, dataUrl: idPhoto.dataUrl, source: idPhoto.source, slot: `pickup-id-${d.verify!.method === 'proxy' ? 'proxy' : 'kiosk'}`, fileName: d.verify!.method === 'proxy' ? `Proxy ID · ${d.verify!.proxyName ?? 'proxy'}` : 'Client ID · kiosk second factor', photoType: 'post_work', dataClass: 'identity', at: now, by: a.by, station: a.station, stamp: `ID photo filed · identity class · manager-only · purged when the warranty window closes (${o.number})` }); }
   soEmail(o, fully ? 'Thank you — your watch is home' : 'Partial pickup recorded', fully ? 'Your watch was handed back at the counter today. Thank you for trusting us with it.' : 'Part of your order was collected today; the remaining items will be ready shortly.');
   resolveSystemPin(`pickup-item:${o.id}`, 'pickup completed');
   return resolve(soRefs(o));
@@ -2628,15 +2651,18 @@ export const pickupIdPhotoPurgeSweep = (): number => {
     const s = o.pickupSession; const r = s?.retention; if (!s || !r?.idPhotoUntil || r.idPhotoPurgedAt) continue; if (new Date(r.idPhotoUntil).getTime() > Date.now()) continue;
     if (!s.proxyIdPhoto && !s.secondFactor?.idPhoto) continue;
     s.proxyIdPhoto = undefined; if (s.secondFactor) s.secondFactor = { ...s.secondFactor, idPhoto: undefined }; r.idPhotoPurgedAt = new Date().toISOString(); n++;
+    const j = o.jobId ? store.jobs.find((x) => x.id === o.jobId) : undefined; if (j && j.photos.some(isIdentityPhoto)) { j.photos = j.photos.filter((p) => !isIdentityPhoto(p)); jobStamp(j, `Identity photo purged · warranty window closed · ${o.number}`); }
     appendAudit({ type: 'sales', stationName: 'System', userShortName: undefined, detail: `${o.number} · pickup ID photo PURGED · warranty window closed ${new Date(r.idPhotoUntil).toLocaleDateString()}` });
   }
   return n;
 };
 export const canSeeIdPhotosSync = (): boolean => (currentUserSync()?.accessTier === 'manager');
+// Seed: SO-26-0117 (E02097) was released to a proxy — the ID photo sits on the session AND the job's photo pipeline as identity class (manager-only, purged with the warranty window)
+(() => { const o = store.salesOrders.find((x) => x.id === 'so-pu8'); const j = store.jobs.find((x) => x.id === 'j-pu8'); const idp = o?.pickupSession?.proxyIdPhoto; if (!o || !j || !idp || j.photos.some((p) => p.id === 'ph-id-so-pu8')) return; j.photos.unshift({ id: 'ph-id-so-pu8', source: idp.source, dataUrl: idp.dataUrl, slot: 'pickup-id-proxy', fileName: `Proxy ID · ${o.pickupSession!.proxyName}`, photoType: 'post_work', clientVisible: false, dataClass: 'identity', at: o.pickupSession!.at, by: o.pickupSession!.by, station: o.pickupSession!.station }); })();
 // Dev: pull the purge date to now so the rule is visible in the prototype (never in Keeper)
 export async function pickupDevPurgeIdPhotoNow(id: string): Promise<SalesOrderWithRefs> { if (!import.meta.env.DEV) throw new Error('Not available'); const o = getSO(id); if (o.pickupSession?.retention?.idPhotoUntil) o.pickupSession.retention.idPhotoUntil = new Date(Date.now() - 1000).toISOString(); pickupIdPhotoPurgeSweep(); return resolve(soRefs(o)); }
-export async function getPickupSession(id: string): Promise<PickupSession | undefined> { pickupEvidenceSweep(); return resolve(getSO(id).pickupSession); }
-export async function getOpenEvidenceCaptures(): Promise<{ order: SalesOrderWithRefs; session: PickupSession }[]> { pickupEvidenceSweep(); return resolve(store.salesOrders.filter((o) => o.pickupSession?.evidenceStatus === 'pending').map((o) => ({ order: soRefs(o), session: o.pickupSession! }))); }
+export async function getPickupSession(id: string): Promise<PickupSession | undefined> { pickupEvidenceSweep(); return resolve(soRefs(getSO(id)).pickupSession); }
+export async function getOpenEvidenceCaptures(): Promise<{ order: SalesOrderWithRefs; session: PickupSession }[]> { pickupEvidenceSweep(); return resolve(store.salesOrders.filter((o) => o.pickupSession?.evidenceStatus === 'pending').map((o) => { const order = soRefs(o); return { order, session: order.pickupSession! }; })); }
 // Admin overrides (pack: allowed with an audit log; privileged roles) — manager tier
 export async function adminMarkComplete(id: string, mode: FulfillmentChannel, note: string): Promise<SalesOrderWithRefs> {
   const o = getSO(id);
@@ -3328,10 +3354,10 @@ const STAFF_ONLY_PHOTO = /hidden serial|parts grading|workbench|^parts$|other/i;
 const photoRow = (id: string, url: string, label: string, at: string): PortalPhoto => ({ id, url, label, at });
 export const portalPhotoSections = (clientId: string, jobId: string): PortalPhotoSections => {
   const j = requireOwner(clientId, store.jobs.find((x) => x.id === jobId), 'job');
-  const fixture = fx.jobPhotos.filter((p) => p.jobId === jobId && !STAFF_ONLY_PHOTO.test(p.slot));
+  const fixture = exportSafePhotos(fx.jobPhotos.filter((p) => p.jobId === jobId && !STAFF_ONLY_PHOTO.test(p.slot)));
   const pkg = store.packages.find((p) => p.id === j.packageId);
-  const arrivalAll = [...(pkg?.photos ?? []).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Arrival', pkg!.arrivedAt)), ...fixture.filter((p) => p.kind === 'intake').map((p) => photoRow(p.id, p.url, p.slot, p.at))];
-  const conditionAll = [...fixture.filter((p) => p.kind === 'inspection').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...j.photos.filter((p) => !STAFF_ONLY_PHOTO.test(p.slot ?? '')).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Inspection', p.at))];
+  const arrivalAll = [...exportSafePhotos(pkg?.photos ?? []).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Arrival', pkg!.arrivedAt)), ...fixture.filter((p) => p.kind === 'intake').map((p) => photoRow(p.id, p.url, p.slot, p.at))];
+  const conditionAll = [...fixture.filter((p) => p.kind === 'inspection').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...exportSafePhotos(j.photos).filter((p) => !STAFF_ONLY_PHOTO.test(p.slot ?? '')).map((p) => photoRow(p.id, p.dataUrl, p.slot ?? 'Inspection', p.at))];
   const completedAll = [...fixture.filter((p) => p.kind === 'completed').map((p) => photoRow(p.id, p.url, p.slot, p.at)), ...rs.evidence.filter((e) => e.jobId === jobId && e.slot !== 'hidden_serial' && e.slot !== 'parts_grading').map((e) => photoRow(e.id, e.photo.dataUrl, EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label, e.at))];
   // Private by default — only photos a staff member unlocked reach the client
   const open = (xs: PortalPhoto[]) => xs.filter((p) => isPhotoUnlocked(p.id));
@@ -3406,9 +3432,9 @@ const portalStatusFor = (w: Watch, job: Job | undefined, est: Estimate | undefin
 
 const portalDocs = (jobs: Job[], ests: Estimate[], sos: SalesOrder[]): PortalDocument[] => {
   const docs: PortalDocument[] = [];
-  jobs.forEach((j) => j.photos.filter((p) => isPhotoUnlocked(p.id)).forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
+  jobs.forEach((j) => exportSafePhotos(j.photos).filter((p) => isPhotoUnlocked(p.id)).forEach((p) => docs.push({ id: `doc-${p.id}`, kind: 'photo', title: `Inspection photo · ${j.number}`, at: p.at, dataUrl: p.dataUrl })));
   jobs.forEach((j) => rs.evidence.filter((e) => e.jobId === j.id).forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'photo', title: `Service evidence · ${EVIDENCE_SLOTS.find((s) => s.key === e.slot)!.label}${e.depthRating ? ` · ${e.depthRating}` : ''}${e.grades ? ` · ${e.grades.join(', ')}` : ''} · ${j.number}`, at: e.at, dataUrl: e.photo.dataUrl })));
-  store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => p.photos.forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
+  store.packages.filter((p) => jobs.some((j) => j.packageId === p.id)).forEach((p) => exportSafePhotos(p.photos).forEach((ph, i) => docs.push({ id: `doc-${p.id}-${i}`, kind: 'photo', title: `Arrival photo · ${p.subNumber}`, at: p.arrivedAt, dataUrl: ph.dataUrl })));
   ests.filter((e) => e.status !== 'draft').forEach((e) => docs.push({ id: `doc-${e.id}`, kind: 'estimate', legacy: !!e.legacy, title: `Estimate ${e.number}${e.revision > 1 ? ` (rev ${e.revision})` : ''}`, at: e.updatedAt, path: `/rc/estimates/${e.id}` }));
   sos.filter((o) => o.status !== 'draft' && o.status !== 'cancelled').forEach((o) => {
     docs.push({ id: `doc-${o.id}`, kind: 'invoice', legacy: !!o.legacy, title: `Invoice ${o.number}`, at: o.orderDate, path: `/rc/invoices/${o.id}` });
@@ -4422,8 +4448,8 @@ export async function issueInspectionReport(jobId: string, grades: { component: 
 }
 export async function portalGetInspectionReport(token: string): Promise<PortalInspectionReport> {
   const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid');
-  const job = getJobRow(r.jobId); const end = chainEnd(r);
-  return resolve({ decision: rp.decisions.find((d) => d.reportId === r.id), report: r, watch: byId(store.watches, r.watchId), client: byId(fx.clients, r.clientId), job, estimate: r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined, photos: job.photos.filter((p) => !r.photoIds.length || r.photoIds.includes(p.id)), newerToken: end.id !== r.id ? end.token : undefined });
+  const job = getJobRow(r.jobId); const end = chainEnd(r); const safe = exportSafePhotos(job.photos);
+  return resolve({ decision: rp.decisions.find((d) => d.reportId === r.id), report: r, watch: byId(store.watches, r.watchId), client: byId(fx.clients, r.clientId), job: { ...job, photos: safe }, estimate: r.estimateId ? store.estimates.find((e) => e.id === r.estimateId) : undefined, photos: safe.filter((p) => !r.photoIds.length || r.photoIds.includes(p.id)), newerToken: end.id !== r.id ? end.token : undefined });
 }
 export async function portalDecideInspectionReport(token: string, decision: 'approve' | 'decline', reason?: string, input?: DecisionInput): Promise<PortalInspectionReport> {
   const r = rp.reports.find((x) => x.token === token); if (!r) throw new Error('This report link is not valid');
@@ -4738,7 +4764,7 @@ export async function submitWebRequest(input: WebRequestInput): Promise<WebReque
   const client = matched ?? newKioskClient({ firstName, lastName, email, phone: input.phone?.trim() ?? '' });
   const at = new Date().toISOString();
   const summary = `Web request (${entityNameSync(input.brand)}) · ${input.legs.join(', ')}${input.model ? ` · ${input.model}` : ''}${input.ref ? ` · ref ${input.ref}` : ''}${input.bracelet ? ` · ${input.bracelet}` : ''}${input.condition.length ? ` · ${input.condition.join(', ')}` : ''}${input.notes ? ` · “${input.notes.trim()}”` : ''} · ${input.handover === 'ship' ? 'will ship' : 'will drop off'}${input.typical ? ` · ${input.typical}` : ''}${input.claimCode ? ` · claim ${input.claimCode}` : ''}`;
-  const photos = input.photos.map((p) => ({ ...p, stage: 0, origin: 'web' as const, controlled: false }));
+  const photos = input.photos.map((p) => ({ ...p, stage: 0, origin: 'web' as const, controlled: false, dataClass: 'specimen' as const }));
   const r: ServiceRequest = { id: newId('rq'), number: nextRequestNumber(), clientId: client.id, source: 'web', status: 'new', summary, createdAt: at, createdBy: 'rolliworks.com', station: 'rolliworks.com', division: input.brand, legs: input.legDepts, photos };
   store.requests.unshift(r);
   // No Inbox row: the Requests page is the record; the Inbox gets a row only when the client writes on it (MH 2026-10-02)
@@ -5038,7 +5064,7 @@ const bypasses: BypassEvent[] = [
 const minutesSincePayment = (o: SalesOrder): number | undefined => { const last = [...(o.payments ?? [])].sort((a, b) => b.at.localeCompare(a.at))[0]; return last ? Math.max(0, Math.round((Date.now() - new Date(last.at).getTime()) / 60_000)) : undefined; };
 const logBypass = (e: Omit<BypassEvent, 'id' | 'by' | 'station' | 'at'>) => { const a = actor(); const row: BypassEvent = { id: newId('byp'), by: a.by, station: a.station, at: new Date().toISOString(), ...e }; bypasses.unshift(row); appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, detail: `BYPASS · ${row.kind.replace(/_/g, ' ')} · ${row.jobNumber ?? ''} · ${row.reason}` }); return row; };
 export interface AssetValueRow { jobId: string; jobNumber: string; client: string; watch: string; holders: string[]; value: number; source: 'insurance' | 'dropoff' | 'none' }
-export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[]; zeroBalances: ZeroBalanceRow[] }
+export interface Hitlist { assetTotal: number; assets: AssetValueRow[]; bypasses: BypassEvent[]; zeroBalances: ZeroBalanceRow[]; minusOne: MinusOneItem[] }
 // Owner-only: the bypass feed tracks staff who may themselves hold manager access, so it is MH's account specifically — not the manager tier
 // Seed (once): insured declared values for a spread of in-custody jobs via arrived inbound shipments; two jobs came in as drop-offs (no insurance → $0)
 let assetSeeded = false; const DROPOFF_SEED = new Set(['E02012', 'E02024', 'E02020']);
@@ -5053,7 +5079,8 @@ export async function getHitlist(): Promise<Hitlist> {
   seedAssetValues(); seedSwo(); const people = (await getCustodyByPerson()).filter((g) => !g.tech.startsWith('vendor:')); const byJob = new Map<string, AssetValueRow>(); // off-premises with an outsource vendor → not on hand (same rule as shipped to client)
   people.forEach((g) => g.items.forEach((it) => { let row = byJob.get(it.jobId); if (!row) { const j = getJobRow(it.jobId); const pk = j.packageId ? store.packages.find((p) => p.id === j.packageId) : undefined; const sh = shp.rows.find((r) => r.estimateId === j.estimateId && r.direction === 'inbound' && (r.trackingNumber || r.stage === 'arrived')); const value = sh?.declaredValue ?? 0; row = { jobId: j.id, jobNumber: j.number, client: `${it.clientLastName}`, watch: it.watchLabel, holders: [], value, source: sh ? 'insurance' : pk?.source === 'walk_in' || DROPOFF_SEED.has(j.number) ? 'dropoff' : 'none' }; byJob.set(it.jobId, row); } if (!row.holders.includes(g.name)) row.holders.push(g.name); }));
   const assets = [...byJob.values()].sort((a, b) => b.value - a.value);
-  return resolve({ assetTotal: assets.reduce((t, r) => t + r.value, 0), assets, bypasses: [...bypasses].sort((a, b) => b.at.localeCompare(a.at)), zeroBalances: zeroBalanceLog() });
+  const minusOne = store.jobs.filter((j) => j.status !== 'closed').flatMap((j) => minusOneItemsSync(j.id));
+  return resolve({ assetTotal: assets.reduce((t, r) => t + r.value, 0), assets, bypasses: [...bypasses].sort((a, b) => b.at.localeCompare(a.at)), zeroBalances: zeroBalanceLog(), minusOne });
 }
 export async function getGateScans(jobId?: string): Promise<GateScan[]> { return resolve(gateScans.filter((g) => !jobId || g.jobId === jobId)); }
 export const POLISHERS = ['Walter', 'JV', 'Leo'];
@@ -5188,7 +5215,7 @@ export async function pickAction(taskId: string, action: 'picked' | 'short' | 'f
   else { if (!location?.trim()) throw new Error('Type the actual location'); if (part) part.location = location.trim(); t.location = location.trim(); t.status = 'open'; t.note = 'found elsewhere'; appendAudit({ type: 'inventory', stationName: a.station, userShortName: a.user?.shortName, detail: `${part?.name ?? 'part'} relocated → ${location.trim()}` }); }
   return resolve(pickView(t));
 }
-export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => ({ ...p, unlocked: isPhotoUnlocked(p.id) })), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, photoType: p.photoType, at: p.at, by: p.by, unlocked: isPhotoUnlocked(p.id) }))]); }
+export async function getJobPhotoViews(jobId: string): Promise<JobPhotoView[]> { const j = getJobRow(jobId); return resolve(staffPhotos([...fx.jobPhotos.filter((p) => p.jobId === jobId).map(({ jobId: _j, ...p }) => ({ ...p, dataClass: photoDataClass(p), unlocked: isPhotoUnlocked(p.id) })), ...j.photos.map((p, i) => ({ id: p.id, url: p.dataUrl, slot: p.slot ?? p.fileName ?? `Job photo ${i + 1}`, kind: 'inspection' as const, photoType: p.photoType, at: p.at, by: p.by, unlocked: isPhotoUnlocked(p.id), dataClass: photoDataClass(p) }))])); }
 // Pad camera — photo binds to the open job (job ↔ watch identity), stamped who / when / slot. Client sees only client-visible slots.
 export const PHOTO_SLOTS: { key: string; label: string; clientVisible: boolean }[] = [{ key: 'workbench', label: 'Workbench', clientVisible: false }, { key: 'movement', label: 'Movement', clientVisible: true }, { key: 'dial', label: 'Dial', clientVisible: true }, { key: 'caseback', label: 'Caseback', clientVisible: true }, { key: 'bracelet', label: 'Bracelet', clientVisible: true }, { key: 'parts', label: 'Parts', clientVisible: false }, { key: 'other', label: 'Other', clientVisible: false }];
 export async function capturePadPhoto(jobId: string, dataUrl: string, slotKey: string): Promise<JobWithRefs> {
@@ -6339,6 +6366,17 @@ export const safesBridge = {
   upsertSystemPin: (...a: Parameters<typeof upsertSystemPin>) => upsertSystemPin(...a), resolveSystemPin: (...a: Parameters<typeof resolveSystemPin>) => resolveSystemPin(...a), actor: () => actor(), isOwner: isOwnerSync, newId,
   audit: (detail: string) => { const a = actor(); return appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, onBehalfOf: 'onBehalfOf' in a ? a.onBehalfOf : undefined, detail }); },
 };
+// ---- Custody bridge (./custody.ts) — the REAL custody ledger (audit / backfill / scan). client.ts asks it for −1 items through the registered check (module order) ----
+export interface MinusOneItem { jobId: string; jobNumber: string; part: ComponentKey; partLabel: string; legacy?: string }
+let custodyCheckFn: ((jobId: string) => MinusOneItem[]) | null = null;
+export const registerCustodyCheck = (fn: (jobId: string) => MinusOneItem[]) => { custodyCheckFn = fn; };
+export const minusOneItemsSync = (jobId: string): MinusOneItem[] => (custodyCheckFn ? custodyCheckFn(jobId) : []);
+export const custodyBridge = {
+  ...safesBridge, allJobs: () => store.jobs, salesOrders: () => store.salesOrders, jobStamp: (j: Job, text: string) => jobStamp(j, text), station: (k: RwStationKey) => stationOf(k), partLabel: (k: ComponentKey) => PART_LABEL[k],
+  move: (j: Job, c: JobComponent, to: RwStationKey, via: PartMove['via'], note: string) => recordMove(j, c, to, statusForStation(to, c.partStatus ?? 'in_progress'), via, note),
+  isManager: () => currentUserSync()?.accessTier === 'manager', opsShort: 'Vienna', registerDaySweep: (fn: () => void) => registerDaySweep(fn), onPartMoved,
+  jobAudit: (detail: string) => { const a = actor(); return appendAudit({ type: 'job', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); },
+};
 // ---- Appraisal bridge (./appraisals.ts) ----
 // D-085: insured (declared) values from OUTBOUND shipments of the same reference — never service invoice amounts
 const insuredComps = (reference: string): { value: number; date: string; ref: string }[] => {
@@ -6352,6 +6390,8 @@ export const appraisalBridge = { insuredComps, jobDivision: (id: string): Divisi
 // Bench events land on the job as a note (visible on the job page) as well as in the audit log
 export const benchBridge = { m3ke: (e: M3keEvent) => { m3ke.events.push(e); }, job: (id: string) => store.jobs.find((j) => j.id === id), watch: (id?: string) => store.watches.find((w) => w.id === id), decode: (serial: string, ref?: string) => decodeSerial(serial, ref), actor: () => actor(), newId, jobStamp: (jobId: string, detail: string) => { const j = store.jobs.find((x) => x.id === jobId); if (!j) return; jobStamp(j, detail); const a = actor(); j.notes.unshift({ id: newId('n'), text: detail, at: new Date().toISOString(), by: a.by, station: a.station }); } };
 export const auditAppointments = (detail: string) => appendAudit({ type: 'appointments', stationName: actor().station, userShortName: actor().user?.shortName, detail });
+// ---- WatchM8 export seam bridge (./watchm8Export.ts) ----
+export const wm8Bridge = { actor: () => actor(), isOwner: () => isOwnerSync(), isManager: () => currentUserSync()?.accessTier === 'manager', readJson, writeJson, settingsAudit: (detail: string) => { const a = actor(); appendAudit({ type: 'settings', stationName: a.station, userShortName: a.user?.shortName, userDisplayName: a.user?.displayName, detail }); }, jobPhotos: (jobId: string) => store.jobs.find((j) => j.id === jobId)?.photos ?? [] };
 export interface ApptRefLookup { ref: string; clientId: string; clientName: string; email: string; phone: string; watch?: string; kind: 'estimate' | 'sales_order' }
 // Drop-off books against an estimate #; pick-up against a sales order # (or the SO's job #)
 export const lookupApptRef = (type: 'drop_off' | 'pick_up', raw: string): ApptRefLookup | null => {

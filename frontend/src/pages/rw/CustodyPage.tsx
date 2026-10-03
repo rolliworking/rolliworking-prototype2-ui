@@ -5,6 +5,7 @@ import * as api from '@/api/client';
 import type { CustodyByPerson, CustodyItem } from '@/api/client';
 import { PART_NAME, PartDot } from '@/components/rw/RwBits';
 import { DeptBadge, StatusPill } from '@/components/ui/Pills';
+import { UnaccountedList } from '@/components/custody/CustodyCoverage';
 import { useAsync } from '@/hooks/useAsync';
 import { fmtDate, fmtTime } from '@/lib/format';
 
@@ -56,7 +57,8 @@ export default function CustodyPage() {
   const { data } = useAsync(() => api.getCustodyByPerson());
   if (!data) return null;
   return <div data-testid="custody-page" className="space-y-4">
-    <div><h1 className="text-xl font-semibold tracking-tight text-ink">Custody</h1><p className="mt-0.5 text-xs text-ink-500">Who physically holds what right now — every watch head, case and bracelet logged to a person, same data as the Shop Floor board and the custody log. Counts are scannable closed; click a name to open their list, a row for detail.</p></div>
+    <div className="flex items-end justify-between gap-4"><div><h1 className="text-xl font-semibold tracking-tight text-ink">Custody</h1><p className="mt-0.5 text-xs text-ink-500">Who physically holds what right now — every watch head, case and bracelet logged to a person, same data as the Shop Floor board and the custody log. Counts are scannable closed; click a name to open their list, a row for detail.</p></div><Link to="/setup/custody" data-testid="custody-open-audit" className="shrink-0 text-xs font-medium text-brand hover:underline">Custody audit mode →</Link></div>
+    <section data-testid="custody-minus1-section" className="rounded-md border border-rose-200 bg-rose-50/40 p-3"><div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-rose-700">Not on hand · −1 client assets (no real custody scan)</div><UnaccountedList compact /></section>
     <div data-testid="custody-grid" className="grid items-start gap-3 md:grid-cols-2">{data.map((g) => <Person key={g.tech} g={g} />)}</div>
     {!data.length && <p className="text-sm text-ink-500">Nobody is holding anything right now.</p>}
   </div>;

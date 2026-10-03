@@ -1,5 +1,6 @@
 import { addJobPhotoSync, benchBridge as b } from './client';
 import * as hl from './hitlist';
+import type { PhotoDataClass } from './types';
 
 // ---- INSPECTION LABELS (MH 2026-09-30) — scantron opinion rows ↔ guided per-component photos ↔ findings tags. Opinions are revisable; nothing here is a verdict.
 // Every label carries {jobId, component, opinion, confidence, variant, tags[], notes, ref, serialEra, model, by, at, station, revision}. Data out = m3ke `inspection_opinion` + a read-only WatchM8 export record (11-INTEGRATIONS: WatchM8 seam).
@@ -37,7 +38,7 @@ export const shotLists: Record<LabelComponent, ShotDef[]> = {
 export const setShotList = (c: LabelComponent, labels: string[]) => { shotLists[c] = labels.filter((l) => l.trim()).map((l) => { const prev = shotLists[c].find((s) => s.label === l); return prev ?? shot(l); }); };
 
 // Every photo: unprocessed original + display version, tagged {jobId, component, shotName, station, cameraId, lightingPreset, by, at}; controlled = fixed kiosk / inspection-station rig (the training set); bench-pad ad-hoc = false
-export interface InspectionShot { id: string; jobId: string; component: LabelComponent; shotKey: string; shotName: string; station: string; cameraId: string; lightingPreset: string; by: string; at: string; originalUrl: string; displayUrl: string; controlled: boolean; retakes: number; adHoc?: boolean; tags: string[] }
+export interface InspectionShot { id: string; jobId: string; component: LabelComponent; shotKey: string; shotName: string; station: string; cameraId: string; lightingPreset: string; by: string; at: string; originalUrl: string; displayUrl: string; controlled: boolean; retakes: number; adHoc?: boolean; tags: string[]; dataClass: PhotoDataClass }
 const shots: InspectionShot[] = [];
 const CONTROLLED_STATION = /kiosk|inspection|photo station|camera/i;
 export const isControlledStation = (station: string) => CONTROLLED_STATION.test(station);
@@ -64,13 +65,13 @@ export const allTags = () => tags.map((t) => ({ ...t }));
 const bumpTags = (c: LabelComponent, list: string[]) => list.forEach((t) => { const x = tags.find((y) => y.component === c && y.tag === t); if (x) x.uses += 1; else addTag(c, t); });
 
 // ---- Variant sets — per ref × component; exemplars are OUR photos only (job id, chosen by, date, version; replaceable, history kept)
-export interface Exemplar { id: string; url: string; jobId: string; shot: string; chosenBy: string; at: string; version: number }
+export interface Exemplar { id: string; url: string; jobId: string; shot: string; chosenBy: string; at: string; version: number; dataClass: 'specimen' }
 export interface Variant { key: string; tells: string; exemplars: Exemplar[]; history: Exemplar[] }
 export interface VariantSet { id: string; ref: string; component: LabelComponent; variants: Variant[] }
 export interface VariantCandidate { id: string; ref: string; component: LabelComponent; jobId: string; photoUrl?: string; by: string; at: string; note?: string; status: 'pending' | 'promoted' | 'rejected'; promotedAs?: string }
 const pic = (seed: string) => `https://picsum.photos/seed/${seed}/320/240`;
 const TOP_REFS = ['126334', '126610LN', '126710BLRO', '228238', 'M79030N-0001', '5513', '279174', '124300', '126711CHNR', '278274'];
-const mkVariant = (ref: string, c: LabelComponent, key: string, tells: string, n: number): Variant => ({ key, tells, exemplars: Array.from({ length: n }, (_, i) => ({ id: `ex-${ref}-${c}-${key}-${i}`, url: pic(`${ref}-${c}-${key}-${i}`), jobId: ['j-08', 'j-r1', 'j-30', 'j-04'][i % 4], shot: c === 'dial' ? 'coronet_logo_at_12' : 'numerals_macro', chosenBy: 'MH', at: new Date(Date.now() - (30 + i * 7) * 864e5).toISOString(), version: 1 })), history: [] });
+const mkVariant = (ref: string, c: LabelComponent, key: string, tells: string, n: number): Variant => ({ key, tells, exemplars: Array.from({ length: n }, (_, i) => ({ id: `ex-${ref}-${c}-${key}-${i}`, url: pic(`${ref}-${c}-${key}-${i}`), jobId: ['j-08', 'j-r1', 'j-30', 'j-04'][i % 4], shot: c === 'dial' ? 'coronet_logo_at_12' : 'numerals_macro', chosenBy: 'MH', at: new Date(Date.now() - (30 + i * 7) * 864e5).toISOString(), version: 1, dataClass: 'specimen' })), history: [] });
 const DIAL_TELLS = ['Flat coronet, tight SWISS MADE spacing', 'Taller coronet, T<25 flanking, thicker plots', 'Laser-cut plots, wider text at 6', 'Service dial — Super-LumiNova, crisp printing'];
 const INSERT_TELLS = ['Fat font numerals, pearl flush', 'Thin font, raised pearl', 'Ceramic — platinum-filled numerals'];
 const variantSets: VariantSet[] = TOP_REFS.flatMap((ref) => [
@@ -87,13 +88,13 @@ export const allCandidates = () => [...candidates];
 export const promoteCandidate = (id: string, key: string, tells: string) => {
   const c = candidates.find((x) => x.id === id); if (!c) return; const a = b.actor();
   let set = variantSetFor(c.ref, c.component); if (!set) { set = { id: `vs-${c.ref}-${c.component}`, ref: c.ref, component: c.component, variants: [] }; variantSets.push(set); }
-  set.variants.push({ key, tells, exemplars: c.photoUrl ? [{ id: b.newId('ex'), url: c.photoUrl, jobId: c.jobId, shot: 'candidate', chosenBy: a.by, at: new Date().toISOString(), version: 1 }] : [], history: [] });
+  set.variants.push({ key, tells, exemplars: c.photoUrl ? [{ id: b.newId('ex'), url: c.photoUrl, jobId: c.jobId, shot: 'candidate', chosenBy: a.by, at: new Date().toISOString(), version: 1, dataClass: 'specimen' }] : [], history: [] });
   c.status = 'promoted'; c.promotedAs = key; labels.filter((l) => l.variantCandidateId === id).forEach((l) => { l.variant = key; });
 };
 export const rejectCandidate = (id: string) => { const c = candidates.find((x) => x.id === id); if (c) c.status = 'rejected'; };
 export const replaceExemplar = (setId: string, key: string, exemplarId: string, url: string, jobId: string) => {
   const v = variantSets.find((s) => s.id === setId)?.variants.find((x) => x.key === key); if (!v) return; const i = v.exemplars.findIndex((e) => e.id === exemplarId); if (i < 0) return;
-  const old = v.exemplars[i]; v.history.unshift(old); v.exemplars[i] = { id: b.newId('ex'), url, jobId, shot: old.shot, chosenBy: b.actor().by, at: new Date().toISOString(), version: old.version + 1 };
+  const old = v.exemplars[i]; v.history.unshift(old); v.exemplars[i] = { id: b.newId('ex'), url, jobId, shot: old.shot, chosenBy: b.actor().by, at: new Date().toISOString(), version: old.version + 1, dataClass: 'specimen' };
 };
 
 // ---- Labels (all revisions kept) + blind second opinions
@@ -143,9 +144,11 @@ export const listProgress = (jobId: string, c: LabelComponent) => { const list =
 export interface RecordShotInput { jobId: string; component: LabelComponent; shotKey: string; dataUrl: string; cameraId: string; lightingPreset?: string; controlled?: boolean; adHoc?: boolean }
 export const recordShot = (i: RecordShotInput): InspectionShot => {
   const a = b.actor(); const def = shotLists[i.component].find((d) => d.key === i.shotKey); const prev = i.adHoc ? null : shotFor(i.jobId, i.component, i.shotKey); const controlled = i.controlled ?? isControlledStation(a.station); const at = new Date().toISOString();
-  const s: InspectionShot = { id: prev?.id ?? b.newId('ish'), jobId: i.jobId, component: i.component, shotKey: i.shotKey, shotName: def?.label ?? (i.adHoc ? 'Ad-hoc' : i.shotKey), station: a.station, cameraId: i.cameraId, lightingPreset: i.lightingPreset ?? (controlled ? 'station-fixed' : 'ambient'), by: a.by, at, originalUrl: i.dataUrl, displayUrl: i.dataUrl, controlled, retakes: prev ? prev.retakes + 1 : 0, adHoc: i.adHoc, tags: latestFor(i.jobId, i.component)?.tags ?? [] };
+  // Data class by purpose: a guided shot on the controlled rig is corpus (specimen); a bench ad-hoc shot stays operational — it carries labels but never leaves
+  const dataClass: PhotoDataClass = controlled ? 'specimen' : 'operational';
+  const s: InspectionShot = { id: prev?.id ?? b.newId('ish'), jobId: i.jobId, component: i.component, shotKey: i.shotKey, shotName: def?.label ?? (i.adHoc ? 'Ad-hoc' : i.shotKey), station: a.station, cameraId: i.cameraId, lightingPreset: i.lightingPreset ?? (controlled ? 'station-fixed' : 'ambient'), by: a.by, at, originalUrl: i.dataUrl, displayUrl: i.dataUrl, controlled, retakes: prev ? prev.retakes + 1 : 0, adHoc: i.adHoc, tags: latestFor(i.jobId, i.component)?.tags ?? [], dataClass };
   if (prev) shots[shots.indexOf(prev)] = s; else shots.push(s);
-  const j = b.job(i.jobId); if (j) addJobPhotoSync(j, { id: s.id, dataUrl: i.dataUrl, slot: `insp-${i.component}-${i.shotKey}`, fileName: `${componentLabel(i.component)} · ${s.shotName}${controlled ? '' : ' · ad-hoc'}`, photoType: 'inspection', at, by: a.by, station: a.station, replaceSlot: !i.adHoc, stamp: false });
+  const j = b.job(i.jobId); if (j) addJobPhotoSync(j, { id: s.id, dataUrl: i.dataUrl, slot: `insp-${i.component}-${i.shotKey}`, fileName: `${componentLabel(i.component)} · ${s.shotName}${controlled ? '' : ' · ad-hoc'}`, photoType: 'inspection', dataClass, at, by: a.by, station: a.station, replaceSlot: !i.adHoc, stamp: false });
   const p = listProgress(i.jobId, i.component); if (p.complete && !prev) b.jobStamp(i.jobId, `Guided shots complete · ${componentLabel(i.component)} · ${p.total} shots · ${controlled ? 'controlled rig' : 'bench ad-hoc'}`);
   return s;
 };
@@ -163,20 +166,21 @@ export const waiveSpecimen = (jobId: string, reason: string) => { const a = b.ac
 export const setOfferToAcquire = (jobId: string, on: boolean) => { if (on === acquire.has(jobId)) return; if (on) acquire.add(jobId); else acquire.delete(jobId); const j = b.job(jobId); b.jobStamp(jobId, on ? 'Offer to acquire — flagged for MH' : 'Offer to acquire — withdrawn'); if (on) void hl.sendMessage({ to: { type: 'user', shortName: 'MH' }, text: `Offer to acquire? ${j?.number ?? jobId} — not-genuine component(s) marked at inspection. Decide before release.`, jobId }); };
 export const pickupGate = (jobId: string) => { const s = specimenStatus(jobId); return s.required && !s.done && !s.waived ? s : null; };
 
-// ---- Data out — WatchM8 export (read-only from RS)
-export interface WatchM8Record { id: string; labelId: string; jobId: string; jobNumber: string; ref: string; serialEra: string; model: string; component: LabelComponent; opinion: Opinion; confidence: Confidence; variant?: string; tags: string[]; photoIds: string[]; controlledPhotos: number; by: string; at: string; revision: number; secondOpinion: boolean; specimen: boolean }
-export const watchm8Export = (jobId?: string): WatchM8Record[] => labels.filter((l) => !jobId || l.jobId === jobId).map((l) => { const ph = shotsFor(l.jobId, l.component); return { id: `wm8-${l.id}`, labelId: l.id, jobId: l.jobId, jobNumber: b.job(l.jobId)?.number ?? l.jobId, ref: l.ref, serialEra: l.serialEra, model: l.model, component: l.component, opinion: l.opinion, confidence: l.confidence, variant: l.variant, tags: l.tags, photoIds: ph.map((p) => p.id), controlledPhotos: ph.filter((p) => p.controlled).length, by: l.by, at: l.at, revision: l.revision, secondOpinion: !!l.secondOpinion, specimen: !!l.specimen }; }).sort((a, b2) => b2.at.localeCompare(a.at));
+// ---- Data out — WatchM8 export (read-only from RS). Class filter lives here: only SPECIMEN photos are listed; operational / identity never appear in a record.
+export interface WatchM8Record { id: string; labelId: string; jobId: string; jobNumber: string; ref: string; serialEra: string; model: string; component: LabelComponent; opinion: Opinion; confidence: Confidence; variant?: string; tags: string[]; photoIds: string[]; controlledPhotos: number; excludedPhotos: number; by: string; at: string; revision: number; secondOpinion: boolean; specimen: boolean }
+export const watchm8Export = (jobId?: string): WatchM8Record[] => labels.filter((l) => !jobId || l.jobId === jobId).map((l) => { const all = shotsFor(l.jobId, l.component); const ph = all.filter((p) => p.dataClass === 'specimen'); return { id: `wm8-${l.id}`, labelId: l.id, jobId: l.jobId, jobNumber: b.job(l.jobId)?.number ?? l.jobId, ref: l.ref, serialEra: l.serialEra, model: l.model, component: l.component, opinion: l.opinion, confidence: l.confidence, variant: l.variant, tags: l.tags, photoIds: ph.map((p) => p.id), controlledPhotos: ph.filter((p) => p.controlled).length, excludedPhotos: all.length - ph.length, by: l.by, at: l.at, revision: l.revision, secondOpinion: !!l.secondOpinion, specimen: !!l.specimen }; }).sort((a, b2) => b2.at.localeCompare(a.at));
+export const specimenShots = (): InspectionShot[] => shots.filter((s) => s.dataClass === 'specimen');
 
 // ---- Seed (lazy — needs the job store): j-08 all Genuine – original, dial MK4 by MH (sure) · j-r1 Dial = Counterfeit by MH (likely, #lume #font) + blind second opinion MM = Aftermarket (disagreement) · j-30 Bezel = Genuine – service replacement. Guided lists complete on all three; one bench ad-hoc dial photo (j-r1) controlled=false.
 let seeded = false;
-const seedShotList = (jobId: string, c: LabelComponent, by: string, station: string, daysAgo: number) => shotLists[c].forEach((d, i) => { shots.push({ id: `ish-${jobId}-${c}-${d.key}`, jobId, component: c, shotKey: d.key, shotName: d.label, station, cameraId: d.cam === 'ipevo' ? 'IPEVO V4K' : 'HY-3307 microscope', lightingPreset: 'station-fixed', by, at: new Date(Date.now() - daysAgo * 864e5 + i * 45e3).toISOString(), originalUrl: pic(`insp-${jobId}-${c}-${d.key}`), displayUrl: pic(`insp-${jobId}-${c}-${d.key}`), controlled: true, retakes: 0, tags: [] }); });
+const seedShotList = (jobId: string, c: LabelComponent, by: string, station: string, daysAgo: number) => shotLists[c].forEach((d, i) => { shots.push({ id: `ish-${jobId}-${c}-${d.key}`, jobId, component: c, shotKey: d.key, shotName: d.label, station, cameraId: d.cam === 'ipevo' ? 'IPEVO V4K' : 'HY-3307 microscope', lightingPreset: 'station-fixed', by, at: new Date(Date.now() - daysAgo * 864e5 + i * 45e3).toISOString(), originalUrl: pic(`insp-${jobId}-${c}-${d.key}`), displayUrl: pic(`insp-${jobId}-${c}-${d.key}`), controlled: true, retakes: 0, tags: [], dataClass: 'specimen' }); });
 const seedLabel = (jobId: string, c: LabelComponent, input: OpinionInput, by: string, station: string, daysAgo: number, extra: Partial<OpinionLabel> = {}) => { const l = mkLabel(jobId, c, input, { by, station, at: new Date(Date.now() - daysAgo * 864e5).toISOString(), ...extra }); labels.push(l); return l; };
 export const ensureSeed = () => {
   if (seeded || !b.job('j-08')) return; seeded = true;
   const stationA = 'Inspection Station 1', stationK = 'Watchmaker Room Kiosk';
   for (const [jobId, by, days] of [['j-08', 'MH', 12], ['j-r1', 'MH', 3], ['j-30', 'MM', 1]] as const) COMPONENTS.filter((c) => shotLists[c.key].length).forEach((c) => seedShotList(jobId, c.key, by, jobId === 'j-30' ? stationK : stationA, days));
   // one bench-pad ad-hoc dial photo on j-r1 — controlled=false, not training data
-  shots.push({ id: 'ish-j-r1-dial-adhoc', jobId: 'j-r1', component: 'dial', shotKey: 'adhoc_1', shotName: 'Ad-hoc · lume under UV', station: 'Bench 1 iPad', cameraId: 'iPad rear', lightingPreset: 'ambient', by: 'Leo', at: new Date(Date.now() - 2.5 * 864e5).toISOString(), originalUrl: pic('insp-j-r1-dial-adhoc'), displayUrl: pic('insp-j-r1-dial-adhoc'), controlled: false, retakes: 0, adHoc: true, tags: [] });
+  shots.push({ id: 'ish-j-r1-dial-adhoc', jobId: 'j-r1', component: 'dial', shotKey: 'adhoc_1', shotName: 'Ad-hoc · lume under UV', station: 'Bench 1 iPad', cameraId: 'iPad rear', lightingPreset: 'ambient', by: 'Leo', at: new Date(Date.now() - 2.5 * 864e5).toISOString(), originalUrl: pic('insp-j-r1-dial-adhoc'), displayUrl: pic('insp-j-r1-dial-adhoc'), controlled: false, retakes: 0, adHoc: true, tags: [], dataClass: 'operational' });
   COMPONENTS.forEach((c) => seedLabel('j-08', c.key, { opinion: c.key === 'movement' ? 'na' : 'genuine_original', confidence: 'sure', variant: c.key === 'dial' ? 'MK4' : undefined, tags: c.key === 'dial' ? ['coronet', 'printing'] : [] }, 'MH', stationA, 12));
   COMPONENTS.forEach((c) => seedLabel('j-r1', c.key, c.key === 'dial' ? { opinion: 'counterfeit', confidence: 'likely', variant: 'Unsure', tags: ['lume', 'font'], notes: 'Lume plots sit proud and the 6 o’clock text is heavier than the MK2 exemplar. Would not stake the shop on it — second pair of eyes please.' } : { opinion: c.key === 'movement' ? 'undetermined' : 'genuine_original', confidence: c.key === 'movement' ? 'unsure' : 'sure', tags: [] }, 'MH', stationA, 3, c.key === 'dial' ? { specimen: true } : {}));
   secondOpinions.push({ id: 'so-01', jobId: 'j-r1', component: 'dial', requestedBy: 'MH', at: new Date(Date.now() - 2.9 * 864e5).toISOString() });
@@ -184,4 +188,9 @@ export const ensureSeed = () => {
   Object.assign(secondOpinions[0], { submittedBy: 'MM', submittedAt: mm.at, labelId: mm.id, agree: false });
   COMPONENTS.forEach((c) => seedLabel('j-30', c.key, { opinion: c.key === 'bezel' ? 'genuine_service' : c.key === 'movement' ? 'na' : 'genuine_original', confidence: c.key === 'bezel' ? 'sure' : 'likely', variant: c.key === 'bezel' ? 'MK3' : c.key === 'dial' ? 'MK1' : undefined, tags: c.key === 'bezel' ? ['numeral-font', 'pearl'] : [] }, 'MM', stationK, 1));
   labels.forEach((l) => shotsFor(l.jobId, l.component).forEach((s) => { s.tags = l.tags; }));
+  // The j-30 bezel shot list also rides the job's photo pipeline (specimen class) so the staff grid shows the class split
+  const j30 = b.job('j-30'); if (j30) shotsFor('j-30', 'bezel').forEach((s) => { if (!j30.photos.some((p) => p.id === s.id)) addJobPhotoSync(j30, { id: s.id, dataUrl: s.displayUrl, slot: `insp-bezel-${s.shotKey}`, fileName: `Bezel insert · ${s.shotName}`, photoType: 'inspection', dataClass: 'specimen', at: s.at, by: s.by, station: s.station, stamp: false }); });
 };
+
+// Eager: the module is only ever loaded by screens that need the seed, and the job store exists by then
+ensureSeed();

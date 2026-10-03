@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { Check, RefreshCw, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
+import { CustodyChip } from '@/components/custody/CustodyChip';
 import type { PackagePhoto, PickupContext } from '@/api/client';
 import { MoneyStrip, PaymentModal, SOLinesTable } from '@/components/sales/SalesBits';
 import { Button } from '@/components/ui/Button';
@@ -15,7 +16,7 @@ type StepProps = { ctx: PickupContext; refresh: (c: PickupContext) => void; onNe
 export const StepItem = ({ ctx, refresh, onNext, onBack, onStopped, fail }: StepProps) => {
   const [sel, setSel] = useState<PackagePhoto | undefined>(ctx.intakePhotos[0]);
   const [live, setLive] = useState<PackagePhoto | null>(null);
-  const o = ctx.order; const w = o.watch;
+  const o = ctx.order; const w = o.watch; const minus = o.job ? api.minusOneItemsSync(o.job.id) : [];
   const same = () => api.pickupConfirmItem(o.id, sel?.id).then((c) => { refresh(c); onNext(); }).catch(fail);
   return (
     <Card title="Step 1 · Customer / item" subtitle={`${w ? `${w.brand} ${w.model} · ref ${w.reference} · serial ${w.serial}` : 'no watch on record'} · compare the piece on the counter with what we photographed at intake`} testId="pickup-item-card">
@@ -30,10 +31,11 @@ export const StepItem = ({ ctx, refresh, onNext, onBack, onStopped, fail }: Step
           {live ? <div className="mt-1"><img data-testid="pickup-item-live" src={live.dataUrl} alt="counter" className="aspect-[4/3] w-full rounded-sm object-cover ring-1 ring-line" /><Button size="sm" className="mt-1.5" data-testid="pickup-item-retake" onClick={() => setLive(null)}>Retake</Button></div> : <CameraPane role="counter" label="Live" testId="pickup-item-cam" placeholderLabel={`Counter · ${w ? `${w.brand} ${w.model}` : 'item'}`} onShot={setLive} className="mt-1" />}
         </div>
       </div>
+      {o.job && minus.length > 0 && <div className="mt-3"><GateBanner tone="block" testId="pickup-custody-gate"><div className="flex flex-wrap items-center gap-2">Gate 1 · custody: {minus.length} client asset{minus.length === 1 ? '' : 's'} on {o.job.number} {minus.length === 1 ? 'has' : 'have'} no real custody scan — add to custody at the node it is at before the hand-over.{minus.map((m) => <CustodyChip key={m.part} jobId={o.job!.id} part={m.part} onFixed={() => api.getPickupContext(o.id).then(refresh).catch(fail)} />)}</div></GateBanner></div>}
       {o.pickupDemo === 'item_mismatch' && <GateBanner tone="warn" testId="pickup-item-demo">Demo fixture: the piece on the counter will not match the intake photo — stop with “Not the same item”.</GateBanner>}
       <div className="mt-3 flex items-center justify-between">
         <div className="flex gap-2"><Button onClick={onBack}>Back</Button><StopPickup step="step 1 · item" testId="pickup-item-stop" label="Not the same item" onStop={(r) => api.pickupAbort(o.id, 'step 1 · item mismatch', r).then(onStopped)} /></div>
-        <Button variant="primary" data-testid="pickup-item-same" onClick={same}><Check size={13} /> Same item — continue</Button>
+        <Button variant="primary" data-testid="pickup-item-same" disabled={minus.length > 0} title={minus.length ? 'Custody gate: −1 client asset — add to custody first' : undefined} onClick={same}><Check size={13} /> Same item — continue</Button>
       </div>
     </Card>
   );

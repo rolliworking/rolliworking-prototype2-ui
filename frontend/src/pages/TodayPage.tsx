@@ -15,6 +15,7 @@ import { PinForm, PinModal, PinnedList } from '@/components/today/PinBits';
 import { LtsCard } from '@/components/today/LtsCard';
 import { BonusProgressCard, BonusResultsCard } from '@/components/today/BonusCards';
 import { SafesOverCard } from '@/components/today/SafesOverCard';
+import { CustodyCoverageHitlistCard } from '@/components/custody/CustodyCoverage';
 import { StaffHitListModal } from '@/components/today/StaffHitListModal';
 import { Card } from '@/components/ui/Card';
 import { FilterChip, PageHeader } from '@/components/ui/Button';
@@ -89,6 +90,7 @@ export default function TodayPage({ forUser }: { forUser?: User }) {
         </Card>
       </div>
       {own && api.isOwnerSync() && <SafesOverCard />}
+      {own && api.isOwnerSync() && <CustodyCoverageHitlistCard />}
       {own && api.isOwnerSync() && <LtsCard />}
       {own && api.isOwnerSync() && <BonusResultsCard />}
       <BonusProgressCard userId={me.id} />

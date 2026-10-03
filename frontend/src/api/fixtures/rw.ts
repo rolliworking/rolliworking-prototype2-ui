@@ -98,7 +98,8 @@ export const recentPartChoices: { reference: string; partId: string; at: string 
 ];
 
 const img = (seed: string) => `https://picsum.photos/seed/${seed}/640/480`;
-const ph = (id: string, jobId: string, slot: string, kind: JobPhotoView['kind'], seed: string, d: number, by: string): Omit<JobPhotoView, 'unlocked'> & { jobId: string } => ({ id, jobId, slot, kind, url: img(seed), at: daysAgo(d, 10), by });
+// Seeded staff photos are condition records → operational. Specimen rides the guided-shot seam (inspectionLabels), identity the pickup pipeline.
+const ph = (id: string, jobId: string, slot: string, kind: JobPhotoView['kind'], seed: string, d: number, by: string): Omit<JobPhotoView, 'unlocked'> & { jobId: string } => ({ id, jobId, slot, kind, url: img(seed), at: daysAgo(d, 10), by, dataClass: 'operational' });
 export const jobPhotos: (Omit<JobPhotoView, 'unlocked'> & { jobId: string })[] = [
   // Robert Calloway — R1 full set (arrival · condition · completed) + one staff-only; R3 arrival + condition only + one staff-only
   ph('ph-r1-1', 'j-r1', 'Full watch', 'intake', 'rw-cal-sub-1', 375, 'Vienna'), ph('ph-r1-2', 'j-r1', 'Caseback', 'intake', 'rw-cal-sub-2', 375, 'Vienna'),

@@ -10,6 +10,7 @@ import { AddOnsPanel } from '@/components/jobs/AddOnsPanel';
 import { AppraisalsPanel } from '@/components/jobs/AppraisalsPanel';
 import { BenchTestsPanel } from '@/components/jobs/BenchTestsPanel';
 import { ClientRequestsPanel } from '@/components/jobs/ClientRequests';
+import { JobCustodyCard } from '@/components/custody/CustodyChip';
 import { CollapsedCard } from '@/components/jobs/CollapsedCard';
 import { EvidencePanel } from '@/components/jobs/EvidencePanel';
 import { InspectionPanel, ReviewGate } from '@/components/jobs/InspectionPanel';
@@ -61,6 +62,7 @@ export const JobDetailContent = ({ j, run, load, prs, setOpenPr, setModal, money
     <div className={embedded ? 'space-y-3' : 'grid grid-cols-[1fr_380px] gap-4'}>
       <div className={embedded ? 'space-y-3' : 'space-y-4'}>
         <Card title="Process flow" subtitle="Where each component is in the process · filled dot = here now · red ring = blocker · custody at the end comes from the custody record, never from status" testId="job-flow-card"><ProcessFlow job={j} /></Card>
+        <JobCustodyCard job={j} onChange={load} />
         <Card title="Client requests" subtitle="What the client asked for · badge on bench cards · pops on every label scan · mandatory checklist at QC" testId="job-client-requests-card" className="border-l-[3px] border-amber-400 bg-amber-50/40"><ClientRequestsPanel job={j} run={run} /></Card>
         <Card title="Add-ons since estimate" subtitle="Approved after the estimate went out · client-approved parts requests + estimate-revision lines (derived) · manual rows flagged + audited" testId="job-addons-card"><AddOnsPanel job={j} run={run} /></Card>
         <CollapsedCard title="Original estimate" subtitle={j.estimate ? `${j.estimate.number} · ${j.lines.length} line${j.lines.length === 1 ? '' : 's'}${money ? ` · ${fmtMoneyCents(j.total)}` : ''}` : `${j.lines.length} line${j.lines.length === 1 ? '' : 's'} · job opened without an estimate`} action={j.estimate ? <Link to={`/estimates/${j.estimate.id}`} data-testid="original-estimate-link" className="text-xs text-brand hover:underline">Open {j.estimate.number} →</Link> : undefined} testId="job-original-estimate"><div className="-m-4"><LinesTable job={j} /></div></CollapsedCard>

@@ -2,6 +2,7 @@ import { Mail, Search, Tag, Truck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
+import { CustodyChip } from '@/components/custody/CustodyChip';
 import type { Address, MockShipment, PackagePhoto, SalesOrderWithRefs, ShipCarrier } from '@/api/client';
 import { Provisional } from '@/components/estimates/EstimateBits';
 import { PhotoCapture } from '@/components/intake/ReceiveBits';
@@ -85,6 +86,7 @@ export default function ShipStationPage() {
       {order && step === 1 && (
         <div className="grid grid-cols-[1fr_380px] gap-4">
           <Card title={`Tracking · ${order.number}`} subtitle="Ship-to, carrier, declared value → mock label" testId="ship-tracking-card">
+            {order.jobId && <div data-testid="ship-custody-strip" className="mb-3 flex flex-wrap items-center gap-2 text-xs"><span className="font-semibold text-ink">Custody</span>{api.custodyBridge.parts(api.custodyBridge.allJobs().find((j) => j.id === order.jobId)!).map((p) => <CustodyChip key={p.key} jobId={order.jobId!} part={p.key} />)}</div>}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1 text-xs text-ink-500">Ship-to address{(['name', 'street', 'city', 'state'] as (keyof Address)[]).map((k) => <input key={k} data-testid={`ship-addr-${k}`} value={addr[k]} onChange={(e) => setAddr({ ...addr, [k]: e.target.value })} placeholder={k} className={`${field} block w-full`} />)}
                 <Button size="sm" data-testid="ship-request-info" onClick={async () => { try { await api.requestShippingInfo(order.id); await refreshOrder(); setError(null); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } }}><Mail size={12} /> Request shipping info (Sent)</Button>{order.shippingInfoRequestedAt && <span className="ml-2 text-[11px] text-moss-700">requested</span>}
